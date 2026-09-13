@@ -1,6 +1,7 @@
 package de.subhransu.openrouter.springai.garage.scenes;
 
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
+import de.subhransu.openrouter.springai.garage.GarageCosts;
 import de.subhransu.openrouter.springai.garage.evidence.EvidenceLevel;
 import de.subhransu.openrouter.springai.garage.evidence.GarageFeature;
 import de.subhransu.openrouter.springai.garage.evidence.GarageTransportEvidence;
@@ -11,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.stereotype.Component;
 
@@ -50,10 +52,17 @@ public final class AttributionScene extends GarageSceneSupport {
     Prompt prompt =
         new Prompt(
             new UserMessage("Reply with exactly: attribution headers checked"), options);
+    ChatResponse syncResponse;
+    List<ChatResponse> streamResponses;
     try (GarageTransportEvidence.Scope ignored =
         context.transportEvidence().activate(operationId, id())) {
-      context.chatModel().call(prompt);
-      context.chatModel().stream(prompt).collectList().block(Duration.ofMinutes(2));
+      syncResponse = context.chatModel().call(prompt);
+      streamResponses =
+          context.chatModel().stream(prompt).collectList().block(Duration.ofMinutes(2));
+    }
+    context.telemetry().awaitObservationsFor(operationId, Duration.ofSeconds(1));
+    if (streamResponses == null) {
+      streamResponses = List.of();
     }
     List<Map<String, Object>> requests = context.transportEvidence().forOperation(operationId);
     List<String> failures = new ArrayList<>();
@@ -70,6 +79,10 @@ public final class AttributionScene extends GarageSceneSupport {
     Map<String, Object> details = new LinkedHashMap<>();
     details.put("requests", requests);
     details.put("valuesRetained", false);
+    details.put(
+        "costUsd",
+        GarageCosts.usage(syncResponse.getMetadata().getUsage())
+            + GarageCosts.stream(streamResponses));
     context.evidence().record(
         feature, operationId, mode, EvidenceLevel.EXECUTED, "transports", List.of("sync", "stream"));
     context.evidence().record(

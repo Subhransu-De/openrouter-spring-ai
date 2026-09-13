@@ -39,14 +39,29 @@ public final class GarageReportWriter {
   }
 
   public ReportPaths write(
-      Path runDirectory, GarageCommand command, List<SceneResult> results) throws IOException {
+      Path runDirectory, GarageCommand command, List<SceneResult> results,
+      List<String> incompleteFeatures) throws IOException {
     Files.createDirectories(runDirectory);
     List<Map<String, Object>> featureEvidence = this.evidence.featureSnapshot();
     List<Map<String, Object>> registry = registry(featureEvidence);
+    double recordedCostUsd = this.evidence.recordedCostUsd();
+    boolean budgetExceeded =
+        command.maxCostUsd() != null && recordedCostUsd > command.maxCostUsd() + 0.000000001;
     Map<String, Object> run = new LinkedHashMap<>();
     run.put("application", "garage");
     run.put("createdAt", Instant.now().toString());
-    run.put("status", results.stream().allMatch(result -> result.status() == SceneResult.Status.PASSED) ? "passed" : "failed");
+    run.put(
+        "status",
+        results.stream().allMatch(result -> result.status() == SceneResult.Status.PASSED)
+                && incompleteFeatures.isEmpty()
+                && !budgetExceeded
+            ? "passed"
+            : "failed");
+    run.put("recordedCostUsd", recordedCostUsd);
+    run.put("maxCostUsd", command.maxCostUsd());
+    run.put("costBudgetExceeded", budgetExceeded);
+    run.put("incompleteFeatures", incompleteFeatures);
+    run.put("costsByOperation", this.evidence.costSnapshot());
     run.put("command", commandEvidence(command));
     run.put("scenes", results.stream().map(SceneResult::asMap).toList());
     run.put("featureRegistry", registry);
@@ -61,7 +76,11 @@ public final class GarageReportWriter {
         .writerWithDefaultPrettyPrinter()
         .writeValue(json.toFile(), this.evidence.sanitizeForEvidence(run));
     Path report = runDirectory.resolve("capability-report.md");
-    Files.writeString(report, markdown(command, results, registry), StandardCharsets.UTF_8);
+    Files.writeString(report,
+        "# Run status: " + run.get("status") + "\n\n"
+            + "Required features lacking complete evidence: " + incompleteFeatures + "\n\n"
+            + markdown(command, results, registry),
+        StandardCharsets.UTF_8);
     Path readme = runDirectory.resolve("README.md");
     Files.writeString(
         readme,
@@ -104,9 +123,12 @@ public final class GarageReportWriter {
   private Map<String, Object> commandEvidence(GarageCommand command) {
     Map<String, Object> values = new LinkedHashMap<>();
     values.put("topic", "[REDACTED]");
-    values.put("auto", command.auto());
     values.put("full", command.full());
     values.put("offlineContracts", command.offlineContracts());
+    values.put("capabilities", command.capabilities());
+    values.put("imageSurface", command.imageSurface());
+    values.put("imageQuality", command.imageQuality());
+    values.put("maxCostUsd", command.maxCostUsd());
     values.put("foremanModel", command.foremanModel());
     values.put("specialistModel", command.specialistModel());
     values.put("fallbackModels", command.fallbackModels());
@@ -120,8 +142,18 @@ public final class GarageReportWriter {
     StringBuilder report = new StringBuilder();
     report.append("# Garage capability report\n\n");
     report.append("- Created: ").append(Instant.now()).append('\n');
+    report.append("- Capabilities: `").append(command.capabilities()).append("`\n");
     report.append("- Request modes: `").append(command.requestModes()).append("`\n");
     report.append("- Selected scenes: `").append(command.sceneIds()).append("`\n");
+    report.append("- Image surface: `").append(command.imageSurface()).append("`\n");
+    report.append("- Recorded inference cost: `$ ")
+        .append(
+            String.format(
+                java.util.Locale.ROOT, "%.8f", this.evidence.recordedCostUsd()))
+        .append("`\n");
+    report.append("- Cost ceiling: `")
+        .append(command.maxCostUsd() != null ? "$ " + command.maxCostUsd() : "not configured")
+        .append("`\n");
     report.append("- Sensitive prompt/topic text retained: `no`\n\n");
     report.append("## Scene results\n\n");
     report.append("| Scene | Mode | Status | Duration (ms) | Error |\n");
@@ -147,7 +179,7 @@ public final class GarageReportWriter {
     }
     report.append("\n## Deliberately deferred library surface\n\n");
     report.append("- OpenRouter server web search and citation annotations.\n");
-    report.append("- Image/audio modalities, embeddings, and model catalogue clients.\n");
+    report.append("- Audio/video modalities and model catalogue clients.\n");
     return report.toString();
   }
 

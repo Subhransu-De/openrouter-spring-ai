@@ -2,6 +2,7 @@ package de.subhransu.openrouter.springai.garage.scenes;
 
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
+import de.subhransu.openrouter.springai.garage.GarageCosts;
 import de.subhransu.openrouter.springai.garage.GarageResponses;
 import de.subhransu.openrouter.springai.garage.evidence.EvidenceLevel;
 import de.subhransu.openrouter.springai.garage.evidence.GarageFeature;
@@ -99,12 +100,13 @@ public final class DigitalInspectionScene extends GarageSceneSupport {
           details);
     }
 
-    List<ServiceInspection> inspections = new ArrayList<>();
+    List<InspectionCall> calls = new ArrayList<>();
     try (GarageTransportEvidence.Scope ignored =
         context.transportEvidence().activate(operationId, id())) {
-      inspections.add(call(context, responseFormatOptions));
-      inspections.add(call(context, outputSchemaOptions));
+      calls.add(call(context, responseFormatOptions));
+      calls.add(call(context, outputSchemaOptions));
     }
+    List<ServiceInspection> inspections = calls.stream().map(InspectionCall::inspection).toList();
     List<String> failures = new ArrayList<>();
     inspections.forEach(
         inspection -> {
@@ -122,6 +124,7 @@ public final class DigitalInspectionScene extends GarageSceneSupport {
     details.put("typedInspections", inspections);
     details.put("observations", context.telemetry().observationsFor(operationId));
     details.put("transport", context.transportEvidence().forOperation(operationId));
+    details.put("costUsd", calls.stream().mapToDouble(InspectionCall::costUsd).sum());
     context.evidence().record(
         feature, operationId, mode, EvidenceLevel.EXECUTED, "variants", details.get("variants"));
     context.evidence().record(
@@ -142,7 +145,7 @@ public final class DigitalInspectionScene extends GarageSceneSupport {
         details);
   }
 
-  private ServiceInspection call(SceneContext context, OpenRouterChatOptions options) throws Exception {
+  private InspectionCall call(SceneContext context, OpenRouterChatOptions options) throws Exception {
     Prompt prompt =
         new Prompt(
             List.of(
@@ -150,8 +153,12 @@ public final class DigitalInspectionScene extends GarageSceneSupport {
                 new UserMessage("Inspect this vehicle report: " + context.command().topic())),
             options);
     ChatResponse response = context.chatModel().call(prompt);
-    return context.objectMapper().readValue(GarageResponses.text(response), ServiceInspection.class);
+    ServiceInspection inspection =
+        context.objectMapper().readValue(GarageResponses.text(response), ServiceInspection.class);
+    return new InspectionCall(inspection, GarageCosts.usage(response.getMetadata().getUsage()));
   }
+
+  private record InspectionCall(ServiceInspection inspection, double costUsd) {}
 
   public record ServiceInspection(
       String vehicle,

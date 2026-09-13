@@ -1,0 +1,118 @@
+name: Garage nightly low-cost compatibility
+
+on:
+  schedule:
+    # 00:20 IST. GitHub schedules use UTC.
+    - cron: "50 18 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: garage-nightly
+  cancel-in-progress: false
+
+jobs:
+  changes:
+    name: Check for a new default-branch commit
+    runs-on: ubuntu-latest
+    outputs:
+      should-run: ${{ steps.gate.outputs.should-run }}
+    steps:
+      - name: Compare with the previous successful run
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "should-run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          previous_sha=$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/garage-nightly.yml/runs?branch=$DEFAULT_BRANCH&status=success&per_page=1" \
+            --jq '.workflow_runs[0].head_sha // ""')
+          if [[ -z "$previous_sha" || "$previous_sha" != "$GITHUB_SHA" ]]; then
+            echo "should-run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should-run=false" >> "$GITHUB_OUTPUT"
+            echo "No default-branch commits since the previous successful nightly run." \
+              >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  garage:
+    name: Garage nightly text and embeddings
+    needs: changes
+    if: needs.changes.outputs.should-run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Java
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+
+      - name: Build Garage without credentials
+        run: mvn -B -pl openrouter-spring-ai-samples -am -DskipTests package
+
+      - name: Require the scoped nightly key
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_CI_NIGHTLY_KEY }}
+        run: |
+          if [[ -z "$OPENROUTER_API_KEY" ]]; then
+            echo "OPENROUTER_CI_NIGHTLY_KEY is not configured." >&2
+            exit 1
+          fi
+
+      - name: Run Garage text, embedding and vision checks
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_CI_NIGHTLY_KEY }}
+        run: |
+          jar_path=$(find openrouter-spring-ai-samples/target -maxdepth 1 -type f \
+            -name 'openrouter-spring-ai-samples-*.jar' ! -name '*.original' -print -quit)
+          test -n "$jar_path"
+          java -jar "$jar_path" \
+            --text --embedding --vision \
+            --foreman-model=google/gemini-2.5-flash-lite \
+            --specialist-model=google/gemini-2.5-flash-lite \
+            --embedding-model=openai/text-embedding-3-small \
+            --vision-model=google/gemini-2.5-flash-lite \
+            --fallback-models=google/gemini-2.5-flash-lite \
+            --request-mode=both \
+            --max-completion-tokens=192 \
+            --specialist-max-completion-tokens=128 \
+            --reasoning-effort=low \
+            --provider-sort=price \
+            --provider-order= \
+            --provider-ignore= \
+            --provider-quantizations= \
+            --max-cost-usd=0.002 \
+            --output=garage-output
+
+      - name: Add capability report to job summary
+        if: always()
+        run: |
+          report=$(find garage-output -type f -name capability-report.md -print -quit 2>/dev/null || true)
+          if [[ -n "$report" ]]; then
+            cat "$report" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload sanitized Garage evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: garage-nightly-${{ github.run_id }}
+          path: |
+            garage-output/**/capability-report.md
+            garage-output/**/garage-run.json
+            garage-output/**/README.md
+          if-no-files-found: ignore
+          retention-days: 30

@@ -258,7 +258,7 @@ the non-chat surfaces: an embeddings triage matcher, a digital inspection bay th
 bundled dashboard photo (image input, both request modes), and a paint bay that generates
 images through the Image API (sync and streaming) and chat-completions modalities.
 
-It doubles as the library's live test harness. With `--auto`, the run asserts its own structural
+It doubles as the library's live test harness. Every run asserts its own structural
 outcome (service record written, every required tool actually invoked, usage metadata present,
 non-empty final answer, and streaming signals when requested) and fails loudly otherwise — these
 assertions have caught real bugs that the model's confident prose hid, like tools being silently
@@ -268,10 +268,39 @@ finding becomes a replayable unit test.
 ```bash
 mvn -pl openrouter-spring-ai-samples package
 OPENROUTER_API_KEY=$(cat openrouter.key) java -jar openrouter-spring-ai-samples/target/*.jar \
-    --topic="1987 diesel pickup, hard cold starts" --full --auto
+    --topic="1987 diesel pickup, hard cold starts" --full
 ```
 
-Each run writes `capability-report.md`, `garage-run.json`, and `run.json` evidence.
+Select capabilities independently of the pipeline schedule:
+
+```bash
+java -jar garage.jar --text
+java -jar garage.jar --embedding
+java -jar garage.jar --text --embedding --vision
+java -jar garage.jar --image --image-surface=sync
+```
+
+Here `garage.jar` stands for the packaged samples JAR. `--vision` checks image input;
+`--image` generates images (sync by default; `streaming`, `chat`, and `all` are also
+available). `--text` selects text, tools, streaming, and offline text contracts in both
+request modes; `--request-mode=chat` narrows it. `--full` additionally includes routing
+and all modalities. With no selection flags, the original service-story demo runs.
+`--scene=<ids>` can narrow a capability suite; selected modality flags require
+`modality-bays` in that list. `--offline-contracts` runs only local contracts.
+
+Models and spending settings are independent: use `--foreman-model`, `--specialist-model`,
+`--embedding-model`, `--vision-model`, `--image-model`, and `--max-cost-usd` as appropriate.
+The capability flags do not imply free models or a spending cap. Completion limits and
+provider preferences are explicit options shown by `--help`. Cost limits are checked
+after execution and do not prevent already-issued requests from charging.
+
+The PR workflow selects a smaller text suite with a free model and a zero recorded-cost
+threshold. Nightly uses `--text --embedding --vision` with a USD 0.002 threshold; weekly
+uses `--image` with a USD 0.05 threshold and rotates the image interface. Scheduling and
+model selection live in the workflows, not schedule-named application profiles.
+`--auto` remains accepted as a deprecated no-op; failures always return a nonzero exit code.
+
+Each scene run writes `capability-report.md`, `garage-run.json`, and a bundle `README.md`.
 
 ## Maven and Gradle builds
 

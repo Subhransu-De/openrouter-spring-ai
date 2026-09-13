@@ -6,8 +6,10 @@ import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.PASSED;
 import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.STATUS;
 
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
+import de.subhransu.openrouter.springai.garage.GarageCosts;
 import de.subhransu.openrouter.springai.garage.GarageModalityBays;
 import de.subhransu.openrouter.springai.garage.cli.GarageCommand;
+import de.subhransu.openrouter.springai.garage.cli.GarageCommand.ImageSurface;
 import de.subhransu.openrouter.springai.garage.evidence.EvidenceLevel;
 import de.subhransu.openrouter.springai.garage.evidence.GarageFeature;
 import java.time.Duration;
@@ -61,27 +63,39 @@ public final class ModalityBaysScene extends GarageSceneSupport {
             context.outputDirectory(),
             command.embeddingModel(),
             command.visionModel(),
-            command.imageModel());
+            command.imageModel(),
+            command.imageQuality());
 
     boolean modeIndependentBays =
         context.requestMode() == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS
             || !command.requestModes().contains(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS);
 
     Map<GarageFeature, List<Map<String, Object>>> probesByFeature = new LinkedHashMap<>();
-    if (modeIndependentBays) {
+    if (modeIndependentBays && command.runsEmbeddings()) {
       probesByFeature.put(
           GarageFeature.EMBEDDINGS, List.of(bays.runTriageMatcher(command.topic())));
     }
-    probesByFeature.put(
-        GarageFeature.IMAGE_INPUT,
-        List.of(bays.runDigitalInspection(context.requestMode())));
-    if (modeIndependentBays) {
+    if (command.runsImageInput()) {
+      probesByFeature.put(
+          GarageFeature.IMAGE_INPUT,
+          List.of(bays.runDigitalInspection(context.requestMode())));
+    }
+    if (modeIndependentBays && command.runsImageGeneration()) {
       probesByFeature.put(
           GarageFeature.IMAGE_GENERATION,
-          List.of(
-              bays.runPaintBay(command.topic()),
-              bays.runStreamingPaintBay(command.topic()),
-              bays.runChatPaintBay(command.topic())));
+          switch (command.imageSurface()) {
+            case SYNC -> List.of(bays.runPaintBay(command.topic()));
+            case STREAMING -> List.of(bays.runStreamingPaintBay(command.topic()));
+            case CHAT -> List.of(bays.runChatPaintBay(command.topic()));
+            case ALL ->
+                List.of(
+                    bays.runPaintBay(command.topic()),
+                    bays.runStreamingPaintBay(command.topic()),
+                    bays.runChatPaintBay(command.topic()));
+            case NONE ->
+                throw new IllegalStateException(
+                    "unreachable image surface: " + ImageSurface.NONE);
+          });
     }
 
     List<Map<String, Object>> probes = new ArrayList<>();
@@ -110,6 +124,7 @@ public final class ModalityBaysScene extends GarageSceneSupport {
       boolean featurePassed = true;
       for (Map<String, Object> probe : entry.getValue()) {
         probes.add(probe);
+        context.evidence().recordCost(operationId, GarageCosts.usageMaps(probe));
         log.info("{} [{}]: {}", probe.get(BAY), probe.get("model"), probe.get(STATUS));
         if (!PASSED.equals(probe.get(STATUS))) {
           featurePassed = false;
@@ -133,6 +148,7 @@ public final class ModalityBaysScene extends GarageSceneSupport {
 
     Map<String, Object> details = new LinkedHashMap<>();
     details.put("probes", probes);
+    details.put("costUsd", GarageCosts.usageMaps(probes));
     return SceneResult.passed(
         id(),
         operationId,

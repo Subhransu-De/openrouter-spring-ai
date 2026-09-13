@@ -2,6 +2,7 @@ package de.subhransu.openrouter.springai.garage.scenes;
 
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
+import de.subhransu.openrouter.springai.garage.GarageCosts;
 import de.subhransu.openrouter.springai.garage.GarageResponses;
 import de.subhransu.openrouter.springai.garage.GarageTools;
 import de.subhransu.openrouter.springai.garage.evidence.EvidenceLevel;
@@ -74,6 +75,7 @@ public final class StreamingDispatchScene extends GarageSceneSupport {
 
     List<Map<String, Object>> toolInvocations = List.of();
     int toolStreamEvents = 0;
+    double toolStreamCost = 0.0;
     if (context.requestMode() == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS) {
       GarageTools tools =
           new GarageTools(
@@ -125,6 +127,7 @@ public final class StreamingDispatchScene extends GarageSceneSupport {
             context.chatClient().prompt(toolPrompt).stream().chatResponse().collectList().block(TIMEOUT);
       }
       toolStreamEvents = toolChunks != null ? toolChunks.size() : 0;
+      toolStreamCost = toolChunks != null ? GarageCosts.stream(toolChunks) : 0.0;
       toolInvocations = tools.invocations();
     }
 
@@ -136,7 +139,8 @@ public final class StreamingDispatchScene extends GarageSceneSupport {
         toolInvocations.stream()
             .filter(item -> "lookup_service_bulletin".equals(item.get("tool")))
             .count();
-    List<Map<String, Object>> observations = context.telemetry().observationsFor(operationId);
+    List<Map<String, Object>> observations =
+        context.telemetry().awaitObservationsFor(operationId, Duration.ofSeconds(1));
     List<String> failures = new ArrayList<>();
     if (plainChunks.isEmpty() || visibleCharacters + reasoningCharacters == 0) {
       failures.add("plain stream produced no visible or reasoning signal");
@@ -162,6 +166,7 @@ public final class StreamingDispatchScene extends GarageSceneSupport {
             : "unsupported-in-responses-mode");
     details.put("observations", observations);
     details.put("transport", context.transportEvidence().forOperation(operationId));
+    details.put("costUsd", GarageCosts.stream(plainChunks) + toolStreamCost);
     context.evidence().recordAll(
         applicable, operationId, mode, EvidenceLevel.EXECUTED, "stream", details);
     context.evidence().recordAll(

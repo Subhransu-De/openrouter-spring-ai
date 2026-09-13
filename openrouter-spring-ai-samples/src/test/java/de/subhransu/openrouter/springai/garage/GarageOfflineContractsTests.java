@@ -25,7 +25,6 @@ class GarageOfflineContractsTests {
     try (ConfigurableApplicationContext ignored =
         application.run(
             "--offline-contracts",
-            "--auto",
             "--output=" + this.output.toAbsolutePath(),
             "--topic=offline contract test")) {
       Path runDirectory;

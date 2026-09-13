@@ -5,6 +5,7 @@ on:
     branches:
       - main
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - "**"
 
@@ -167,28 +168,85 @@ jobs:
       - name: Gradle test
         run: gradle --no-daemon check
 
-  native-image:
-    name: Build garage native image
+  garage-pr-free:
+    name: Garage free live compatibility
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     needs:
       - maven-test
       - gradle-test
+    timeout-minutes: 20
+    concurrency:
+      group: garage-pr-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Set up GraalVM
-        uses: graalvm/setup-graalvm@v1
+      - name: Set up Java
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
-          distribution: graalvm
+          distribution: temurin
           java-version: "25"
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache: maven
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6.3.0
+      - name: Build Garage without credentials
+        run: mvn -B -pl openrouter-spring-ai-samples -am -DskipTests package
+
+      - name: Require the scoped free-inference key
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_CI_FREE_KEY }}
+        run: |
+          if [[ -z "$OPENROUTER_API_KEY" ]]; then
+            echo "OPENROUTER_CI_FREE_KEY is not configured." >&2
+            exit 1
+          fi
+
+      - name: Run Garage free text checks
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_CI_FREE_KEY }}
+        run: |
+          jar_path=$(find openrouter-spring-ai-samples/target -maxdepth 1 -type f \
+            -name 'openrouter-spring-ai-samples-*.jar' ! -name '*.original' -print -quit)
+          test -n "$jar_path"
+          java -jar "$jar_path" \
+            --text \
+            --scene=streaming-dispatch,dyno-tuning,attribution-check-in,recovery-road-test \
+            --foreman-model=nex-agi/nex-n2.5-mini:free \
+            --specialist-model=nex-agi/nex-n2.5-mini:free \
+            --fallback-models= \
+            --request-mode=both \
+            --max-completion-tokens=256 \
+            --specialist-max-completion-tokens=128 \
+            --reasoning-effort=low \
+            --provider-sort=price \
+            --provider-order= \
+            --provider-ignore= \
+            --provider-quantizations= \
+            --max-cost-usd=0 \
+            --output=garage-output
+
+      - name: Add capability report to job summary
+        if: always()
+        run: |
+          report=$(find garage-output -type f -name capability-report.md -print -quit 2>/dev/null || true)
+          if [[ -n "$report" ]]; then
+            cat "$report" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload sanitized Garage evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          gradle-version: 9.7.1
-
-      - name: Build garage native image
-        run: gradle --no-daemon :openrouter-spring-ai-samples:nativeCompile
+          name: garage-pr-${{ github.event.pull_request.number }}
+          path: |
+            garage-output/**/capability-report.md
+            garage-output/**/garage-run.json
+            garage-output/**/README.md
+          if-no-files-found: ignore
+          retention-days: 14

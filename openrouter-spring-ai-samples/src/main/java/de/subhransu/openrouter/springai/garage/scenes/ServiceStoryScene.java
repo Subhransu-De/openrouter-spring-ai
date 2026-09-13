@@ -3,6 +3,7 @@ package de.subhransu.openrouter.springai.garage.scenes;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterUsage;
+import de.subhransu.openrouter.springai.garage.GarageCosts;
 import de.subhransu.openrouter.springai.garage.GarageResponses;
 import de.subhransu.openrouter.springai.garage.GarageTools;
 import de.subhransu.openrouter.springai.garage.evidence.EvidenceLevel;
@@ -59,7 +60,8 @@ public final class ServiceStoryScene extends GarageSceneSupport {
             context.outputDirectory(),
             context.requestMode(),
             operationId,
-            id());
+            id(),
+            context.command().specialistModel());
     List<ToolCallback> callbacks =
         Arrays.stream(ToolCallbacks.from(tools))
             .map(
@@ -142,6 +144,9 @@ public final class ServiceStoryScene extends GarageSceneSupport {
     observed.put("observations", observations);
     observed.put("transport", context.transportEvidence().forOperation(operationId));
     observed.put("serviceRecord", context.outputDirectory().resolve("service-record.md").toString());
+    observed.put(
+        "costUsd",
+        GarageCosts.usage(response.getMetadata().getUsage()) + GarageCosts.usageMaps(invocations));
     context.evidence().recordAll(
         applicable, operationId, mode, EvidenceLevel.EXECUTED, "completedAt", Instant.now().toString());
     context.evidence().recordAll(

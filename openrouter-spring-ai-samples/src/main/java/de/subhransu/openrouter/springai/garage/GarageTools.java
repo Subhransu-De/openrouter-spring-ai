@@ -26,6 +26,7 @@ public final class GarageTools {
 
   private final ChatModel chatModel;
   private final GarageProperties properties;
+  private final String specialistModel;
   private final Path outputDirectory;
   private final OpenRouterRequestMode requestMode;
   private final String operationId;
@@ -38,7 +39,14 @@ public final class GarageTools {
       GarageProperties properties,
       Path outputDirectory,
       OpenRouterRequestMode requestMode) {
-    this(chatModel, properties, outputDirectory, requestMode, null, "service-story");
+    this(
+        chatModel,
+        properties,
+        outputDirectory,
+        requestMode,
+        null,
+        "service-story",
+        properties.getSpecialistModel());
   }
 
   public GarageTools(
@@ -48,8 +56,27 @@ public final class GarageTools {
       OpenRouterRequestMode requestMode,
       String operationId,
       String sceneId) {
+    this(
+        chatModel,
+        properties,
+        outputDirectory,
+        requestMode,
+        operationId,
+        sceneId,
+        properties.getSpecialistModel());
+  }
+
+  public GarageTools(
+      ChatModel chatModel,
+      GarageProperties properties,
+      Path outputDirectory,
+      OpenRouterRequestMode requestMode,
+      String operationId,
+      String sceneId,
+      String specialistModel) {
     this.chatModel = chatModel;
     this.properties = properties;
+    this.specialistModel = specialistModel;
     this.outputDirectory = outputDirectory;
     this.requestMode = requestMode;
     this.operationId = operationId;
@@ -64,7 +91,7 @@ public final class GarageTools {
   public String handToSpecialist(
       @ToolParam(description = "A narrow, self-contained job card for the specialist bay.")
           String job) {
-    String selectedModel = this.properties.getSpecialistModel();
+    String selectedModel = this.specialistModel;
     OpenRouterChatOptions options =
         OpenRouterChatOptions.builder()
             .model(selectedModel)

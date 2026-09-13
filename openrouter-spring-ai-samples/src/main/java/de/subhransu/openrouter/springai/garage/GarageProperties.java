@@ -18,7 +18,6 @@ public class GarageProperties {
   private List<String> fallbackModels = new ArrayList<>(List.of("openai/gpt-oss-20b"));
   private String topic = "a 1972 pickup with overheating, rough idle, and brake vibration";
   private Path outputDir = Path.of("outputs");
-  private boolean auto;
   private boolean stream;
   private boolean full;
   private List<OpenRouterRequestMode> requestModes =
@@ -115,14 +114,6 @@ public class GarageProperties {
 
   public void setOutputDir(Path outputDir) {
     this.outputDir = outputDir;
-  }
-
-  public boolean isAuto() {
-    return this.auto;
-  }
-
-  public void setAuto(boolean auto) {
-    this.auto = auto;
   }
 
   public boolean isStream() {

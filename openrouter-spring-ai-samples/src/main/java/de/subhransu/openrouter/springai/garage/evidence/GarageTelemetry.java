@@ -1,17 +1,21 @@
 package de.subhransu.openrouter.springai.garage.evidence;
 
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
+import de.subhransu.openrouter.springai.garage.GarageCosts;
 import io.micrometer.common.KeyValue;
 import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationHandler;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.locks.LockSupport;
 import org.springframework.ai.chat.observation.ChatModelObservationContext;
 
 /** Records completed Spring AI observations and their Micrometer timer measurements. */
@@ -19,10 +23,13 @@ public final class GarageTelemetry implements ObservationHandler<Observation.Con
 
   private static final String START_NANOS = GarageTelemetry.class.getName() + ".startNanos";
   private static final String START_INSTANT = GarageTelemetry.class.getName() + ".startInstant";
+  private static final long OBSERVATION_POLL_INTERVAL_NANOS =
+      Duration.ofMillis(5).toNanos();
 
   private final SimpleMeterRegistry meterRegistry;
   private final GarageEvidence evidence;
   private final List<Map<String, Object>> observations = new CopyOnWriteArrayList<>();
+  private final Map<String, Integer> startedObservations = new ConcurrentHashMap<>();
 
   public GarageTelemetry(SimpleMeterRegistry meterRegistry, GarageEvidence evidence) {
     this.meterRegistry = meterRegistry;
@@ -33,6 +40,13 @@ public final class GarageTelemetry implements ObservationHandler<Observation.Con
   public void onStart(Observation.Context context) {
     context.put(START_NANOS, System.nanoTime());
     context.put(START_INSTANT, Instant.now().toString());
+    if (context instanceof ChatModelObservationContext chatContext
+        && chatContext.getRequest().getOptions() instanceof OpenRouterChatOptions options) {
+      String operationId = value(options.getMetadata(), "operationId");
+      if (operationId != null) {
+        this.startedObservations.merge(operationId, 1, Integer::sum);
+      }
+    }
   }
 
   @Override
@@ -60,8 +74,12 @@ public final class GarageTelemetry implements ObservationHandler<Observation.Con
         observation.put("sceneId", sceneId);
         observation.put("openRouterOptions", optionEvidence(options));
       }
+      if (chatContext.getResponse() != null) {
+        double costUsd = GarageCosts.usage(chatContext.getResponse().getMetadata().getUsage());
+        observation.put("costUsd", costUsd);
+        this.evidence.recordCost(operationId, costUsd);
+      }
     }
-    this.observations.add(observation);
     if (operationId != null) {
       this.evidence.event(
           operationId,
@@ -69,6 +87,8 @@ public final class GarageTelemetry implements ObservationHandler<Observation.Con
           "observation.stopped",
           observation);
     }
+    // Publish completion only after both cost and event evidence have been recorded.
+    this.observations.add(observation);
   }
 
   @Override
@@ -84,6 +104,31 @@ public final class GarageTelemetry implements ObservationHandler<Observation.Con
     return this.observations.stream()
         .filter(item -> operationId.equals(item.get("operationId")))
         .toList();
+  }
+
+  /**
+   * After an operation's streams terminate, waits for every started model observation,
+   * including tool-loop rounds, to publish its evidence. Incomplete evidence fails closed.
+   */
+  public List<Map<String, Object>> awaitObservationsFor(
+      String operationId, Duration timeout) {
+    if (timeout.isNegative()) {
+      throw new IllegalArgumentException("timeout must not be negative");
+    }
+    long deadline = System.nanoTime() + timeout.toNanos();
+    List<Map<String, Object>> matching = observationsFor(operationId);
+    while (matching.size() < Math.max(1, this.startedObservations.getOrDefault(operationId, 0))) {
+      long remaining = deadline - System.nanoTime();
+      if (remaining <= 0) {
+        throw new IllegalStateException("Timed out waiting for all observations for " + operationId);
+      }
+      if (Thread.currentThread().isInterrupted()) {
+        throw new IllegalStateException("Interrupted while waiting for observations for " + operationId);
+      }
+      LockSupport.parkNanos(Math.min(remaining, OBSERVATION_POLL_INTERVAL_NANOS));
+      matching = observationsFor(operationId);
+    }
+    return matching;
   }
 
   public List<Map<String, Object>> meterSnapshot() {
@@ -118,6 +163,7 @@ public final class GarageTelemetry implements ObservationHandler<Observation.Con
 
   public void reset() {
     this.observations.clear();
+    this.startedObservations.clear();
     this.meterRegistry.clear();
   }
 

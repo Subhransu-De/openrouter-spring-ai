@@ -42,6 +42,24 @@ public record SceneResult(
       Duration duration,
       Path outputDirectory,
       Throwable failure) {
+    return failed(
+        sceneId,
+        operationId,
+        requestMode,
+        duration,
+        outputDirectory,
+        Map.of(),
+        failure);
+  }
+
+  public static SceneResult failed(
+      String sceneId,
+      String operationId,
+      OpenRouterRequestMode requestMode,
+      Duration duration,
+      Path outputDirectory,
+      Map<String, Object> details,
+      Throwable failure) {
     return new SceneResult(
         sceneId,
         operationId,
@@ -49,7 +67,7 @@ public record SceneResult(
         Status.FAILED,
         duration,
         outputDirectory,
-        Map.of(),
+        new LinkedHashMap<>(details),
         failure.getClass().getName() + ": " + failure.getMessage());
   }
 

@@ -74,6 +74,7 @@ class GarageOptionsFactoryTests {
             List.of(tool()));
 
     assertThat(this.factory.unsupportedInMode(options)).isEmpty();
+    assertThat(options.getIncludeUsage()).isNull();
   }
 
   @Test

@@ -13,6 +13,8 @@ import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingOptions;
 import de.subhransu.openrouter.springai.image.OpenRouterImageGenerationMetadata;
 import de.subhransu.openrouter.springai.image.OpenRouterImageModel;
 import de.subhransu.openrouter.springai.image.OpenRouterImageOptions;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -23,6 +25,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import javax.imageio.ImageIO;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -45,8 +48,7 @@ import org.springframework.util.StringUtils;
  * The Garage's newer bays: an embeddings-backed triage matcher, a digital inspection bay
  * that reads a real photo (image input), and a paint bay that generates images through
  * both library surfaces (the unified Image API and chat-completions modalities). Each bay
- * returns a structured evidence map; failures are recorded, never hidden, so {@code --auto}
- * can assert on them.
+ * returns a structured evidence map; failures are recorded and fail the run after reporting.
  */
 public final class GarageModalityBays {
 
@@ -67,6 +69,7 @@ public final class GarageModalityBays {
   private final String embeddingModelId;
   private final String visionModelId;
   private final String imageModelId;
+  private final String imageQuality;
 
   public GarageModalityBays(
       ChatModel chatModel,
@@ -75,7 +78,8 @@ public final class GarageModalityBays {
       Path outputDirectory,
       String embeddingModelId,
       String visionModelId,
-      String imageModelId) {
+      String imageModelId,
+      String imageQuality) {
     this.chatModel = chatModel;
     this.embeddingModel = embeddingModel;
     this.imageModel = imageModel;
@@ -83,6 +87,7 @@ public final class GarageModalityBays {
     this.embeddingModelId = embeddingModelId;
     this.visionModelId = visionModelId;
     this.imageModelId = imageModelId;
+    this.imageQuality = imageQuality;
   }
 
   /** Embeds the customer topic against the symptom catalogue and picks the closest match. */
@@ -97,6 +102,7 @@ public final class GarageModalityBays {
               new EmbeddingRequest(
                   texts,
                   OpenRouterEmbeddingOptions.builder().model(this.embeddingModelId).build()));
+      probe.put(USAGE, GarageResponses.usage(response.getMetadata().getUsage()));
 
       List<Embedding> results = response.getResults();
       float[] topicVector = results.get(0).getOutput();
@@ -116,7 +122,6 @@ public final class GarageModalityBays {
       probe.put("vectors", results.size());
       probe.put("dimensions", topicVector.length);
       probe.put("responseModel", response.getMetadata().getModel());
-      probe.put(USAGE, GarageResponses.usage(response.getMetadata().getUsage()));
       probe.put("similarities", similarities);
       probe.put("bestMatch", bestMatch);
       boolean passed = results.size() == texts.size() && topicVector.length > 0;
@@ -158,13 +163,13 @@ public final class GarageModalityBays {
               .build();
 
       ChatResponse response = this.chatModel.call(new Prompt(List.of(message), options));
+      probe.put(USAGE, GarageResponses.usage(response.getMetadata().getUsage()));
       String reply = GarageResponses.text(response);
       boolean warningRead = reply.toLowerCase(Locale.ROOT).contains("engine");
 
       probe.put("photoBytes", photo.length);
       probe.put("reply", reply);
       probe.put("warningTextRead", warningRead);
-      probe.put(USAGE, GarageResponses.usage(response.getMetadata().getUsage()));
       boolean passed = StringUtils.hasText(reply) && warningRead;
       probe.put(STATUS, passed ? PASSED : FAILED);
       if (!passed) {
@@ -184,7 +189,7 @@ public final class GarageModalityBays {
           this.imageModel.call(
               new ImagePrompt(
                   paintPrompt(topic),
-                  OpenRouterImageOptions.builder().model(this.imageModelId).n(1).build()));
+                  imageOptions()));
       recordGeneratedImage(probe, response, "paint-bay-image");
     } catch (IOException | RuntimeException ex) {
       fail(probe, ex);
@@ -205,7 +210,7 @@ public final class GarageModalityBays {
               .stream(
                   new ImagePrompt(
                       paintPrompt(topic),
-                      OpenRouterImageOptions.builder().model(this.imageModelId).n(1).build()))
+                      imageOptions()))
               .collectList()
               .block(STREAM_TIMEOUT);
       if (events == null) {
@@ -250,6 +255,10 @@ public final class GarageModalityBays {
           OpenRouterChatOptions.builder()
               .model(this.imageModelId)
               .modalities(List.of("image", "text"))
+              .imageConfig(
+                  StringUtils.hasText(this.imageQuality)
+                      ? Map.of("quality", this.imageQuality)
+                      : Map.of())
               // Generated images are billed as a large block of completion tokens; the
               // sample's default 900-token cap would truncate them.
               .maxCompletionTokens(8000)
@@ -257,11 +266,11 @@ public final class GarageModalityBays {
               .build();
       ChatResponse response =
           this.chatModel.call(new Prompt(List.of(new UserMessage(paintPrompt(topic))), options));
+      probe.put(USAGE, GarageResponses.usage(response.getMetadata().getUsage()));
 
       List<Media> media = response.getResult().getOutput().getMedia();
       probe.put("mediaCount", media.size());
       probe.put("replyText", GarageResponses.text(response));
-      probe.put(USAGE, GarageResponses.usage(response.getMetadata().getUsage()));
       if (media.isEmpty()) {
         probe.put(STATUS, FAILED);
         probe.put(ERROR, "assistant message carried no generated-image media");
@@ -276,9 +285,10 @@ public final class GarageModalityBays {
       probe.put("mimeType", image.getMimeType().toString());
       probe.put("imageBytes", bytes.length);
       probe.put("file", file.toString());
-      probe.put(STATUS, bytes.length > 0 ? PASSED : FAILED);
-      if (bytes.length == 0) {
-        probe.put(ERROR, "generated-image media decoded to zero bytes");
+      boolean validImage = recordDimensions(probe, bytes, image.getMimeType().toString());
+      probe.put(STATUS, bytes.length > 0 && validImage ? PASSED : FAILED);
+      if (bytes.length == 0 || !validImage) {
+        probe.put(ERROR, "generated-image media was empty or could not be decoded");
       }
     } catch (IOException | RuntimeException ex) {
       fail(probe, ex);
@@ -326,6 +336,10 @@ public final class GarageModalityBays {
 
   private void recordGeneratedImage(Map<String, Object> probe, ImageResponse response, String stem)
       throws IOException {
+    Object usage = response.getMetadata().get("openrouter.usage");
+    if (usage instanceof OpenRouterUsage openRouterUsage) {
+      probe.put(USAGE, GarageResponses.usage(openRouterUsage));
+    }
     ImageGeneration generation = response.getResult();
     Image image = generation != null ? generation.getOutput() : null;
     String b64Json = image != null ? image.getB64Json() : null;
@@ -346,13 +360,10 @@ public final class GarageModalityBays {
     probe.put("mediaType", mediaType);
     probe.put("imageBytes", bytes.length);
     probe.put("file", file.toString());
-    Object usage = response.getMetadata().get("openrouter.usage");
-    if (usage instanceof OpenRouterUsage openRouterUsage) {
-      probe.put(USAGE, GarageResponses.usage(openRouterUsage));
-    }
-    probe.put(STATUS, bytes.length > 0 ? PASSED : FAILED);
-    if (bytes.length == 0) {
-      probe.put(ERROR, "generated image decoded to zero bytes");
+    boolean validImage = recordDimensions(probe, bytes, mediaType);
+    probe.put(STATUS, bytes.length > 0 && validImage ? PASSED : FAILED);
+    if (bytes.length == 0 || !validImage) {
+      probe.put(ERROR, "generated image was empty or could not be decoded");
     }
   }
 
@@ -360,6 +371,80 @@ public final class GarageModalityBays {
     return "A clean, friendly workshop-poster illustration for a garage service record about: "
         + topic
         + ". Flat colors, no text.";
+  }
+
+  private OpenRouterImageOptions imageOptions() {
+    OpenRouterImageOptions.Builder options =
+        OpenRouterImageOptions.builder().model(this.imageModelId).n(1);
+    if (StringUtils.hasText(this.imageQuality)) {
+      options.quality(this.imageQuality);
+    }
+    return options.build();
+  }
+
+  boolean recordDimensions(Map<String, Object> probe, byte[] bytes, String mediaType)
+      throws IOException {
+    if ("image/svg+xml".equals(mediaType)) {
+      if (!validSvg(bytes)) {
+        return false;
+      }
+      probe.put("dimensions", "vector");
+      return true;
+    }
+    if ("image/webp".equals(mediaType) && !hasWebpSignature(bytes)) {
+      return false;
+    }
+    BufferedImage decoded = ImageIO.read(new ByteArrayInputStream(bytes));
+    if (decoded == null) {
+      return false;
+    }
+    probe.put("width", decoded.getWidth());
+    probe.put("height", decoded.getHeight());
+    return decoded.getWidth() > 0 && decoded.getHeight() > 0;
+  }
+
+  static boolean hasWebpSignature(byte[] bytes) {
+    return bytes.length > 20
+        && bytes[0] == 'R'
+        && bytes[1] == 'I'
+        && bytes[2] == 'F'
+        && bytes[3] == 'F'
+        && bytes[8] == 'W'
+        && bytes[9] == 'E'
+        && bytes[10] == 'B'
+        && bytes[11] == 'P'
+        && Integer.toUnsignedLong(java.nio.ByteBuffer.wrap(bytes, 4, 4)
+            .order(java.nio.ByteOrder.LITTLE_ENDIAN).getInt()) == bytes.length - 8L;
+  }
+
+  private boolean validSvg(byte[] bytes) {
+    try {
+      javax.xml.parsers.DocumentBuilderFactory factory = javax.xml.parsers.DocumentBuilderFactory.newInstance();
+      factory.setNamespaceAware(true);
+      factory.setFeature(javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING, true);
+      factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+      factory.setAttribute(javax.xml.XMLConstants.ACCESS_EXTERNAL_DTD, "");
+      factory.setAttribute(javax.xml.XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
+      factory.setXIncludeAware(false);
+      factory.setExpandEntityReferences(false);
+      var builder = factory.newDocumentBuilder();
+      builder.setErrorHandler(new org.xml.sax.helpers.DefaultHandler() {
+        @Override
+        public void error(org.xml.sax.SAXParseException exception) throws org.xml.sax.SAXException {
+          throw exception;
+        }
+
+        @Override
+        public void fatalError(org.xml.sax.SAXParseException exception) throws org.xml.sax.SAXException {
+          throw exception;
+        }
+      });
+      var root = builder.parse(new ByteArrayInputStream(bytes)).getDocumentElement();
+      return "svg".equals(root.getLocalName()) && "http://www.w3.org/2000/svg".equals(root.getNamespaceURI());
+    }
+    catch (javax.xml.parsers.ParserConfigurationException | org.xml.sax.SAXException | IOException ex) {
+      return false;
+    }
   }
 
   private Map<String, Object> probe(String bay, String model) {

@@ -54,7 +54,7 @@ public final class GarageOptionsFactory {
       String topic,
       ToolCallback callback) {
     return common(operationId, "streaming-dispatch", requestMode, model, List.of(), topic)
-        .maxCompletionTokens(Math.max(this.properties.getMaxCompletionTokens(), 900))
+        .maxCompletionTokens(this.properties.getMaxCompletionTokens())
         .parallelToolCalls(false)
         .toolChoice("required")
         .toolCallbacks(callback)

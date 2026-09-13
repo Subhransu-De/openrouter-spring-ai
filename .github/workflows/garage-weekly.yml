@@ -1,0 +1,108 @@
+name: Garage weekly image compatibility
+
+on:
+  schedule:
+    # 00:10 Sunday IST. GitHub schedules use UTC, so this is Saturday evening UTC.
+    - cron: "40 18 * * 6"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: garage-weekly
+  cancel-in-progress: false
+
+jobs:
+  garage:
+    name: Garage weekly image surface
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Java
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+
+      - name: Build Garage without credentials
+        run: mvn -B -pl openrouter-spring-ai-samples -am -DskipTests package
+
+      - name: Require the scoped weekly key
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_CI_WEEKLY_KEY }}
+        run: |
+          if [[ -z "$OPENROUTER_API_KEY" ]]; then
+            echo "OPENROUTER_CI_WEEKLY_KEY is not configured." >&2
+            exit 1
+          fi
+
+      - name: Select this week's image surface
+        id: rotation
+        shell: bash
+        run: |
+          week_index=$(($(date -u +%s) / 604800))
+          case $((week_index % 3)) in
+            0)
+              echo "surface=sync" >> "$GITHUB_OUTPUT"
+              echo "model=black-forest-labs/flux.2-klein-4b" >> "$GITHUB_OUTPUT"
+              echo "quality=" >> "$GITHUB_OUTPUT"
+              ;;
+            1)
+              echo "surface=streaming" >> "$GITHUB_OUTPUT"
+              echo "model=openai/gpt-image-1-mini" >> "$GITHUB_OUTPUT"
+              echo "quality=low" >> "$GITHUB_OUTPUT"
+              ;;
+            2)
+              echo "surface=chat" >> "$GITHUB_OUTPUT"
+              echo "model=google/gemini-2.5-flash-image" >> "$GITHUB_OUTPUT"
+              echo "quality=" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
+      - name: Run one Garage image-generation probe
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_CI_WEEKLY_KEY }}
+          IMAGE_SURFACE: ${{ steps.rotation.outputs.surface }}
+          IMAGE_MODEL: ${{ steps.rotation.outputs.model }}
+          IMAGE_QUALITY: ${{ steps.rotation.outputs.quality }}
+        run: |
+          jar_path=$(find openrouter-spring-ai-samples/target -maxdepth 1 -type f \
+            -name 'openrouter-spring-ai-samples-*.jar' ! -name '*.original' -print -quit)
+          test -n "$jar_path"
+          args=(
+            --image
+            --request-mode=chat
+            --max-cost-usd=0.05
+            --output=garage-output
+            "--image-surface=$IMAGE_SURFACE"
+            "--image-model=$IMAGE_MODEL"
+          )
+          if [[ -n "$IMAGE_QUALITY" ]]; then
+            args+=("--image-quality=$IMAGE_QUALITY")
+          fi
+          java -jar "$jar_path" "${args[@]}"
+
+      - name: Add capability report to job summary
+        if: always()
+        run: |
+          report=$(find garage-output -type f -name capability-report.md -print -quit 2>/dev/null || true)
+          if [[ -n "$report" ]]; then
+            cat "$report" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload sanitized Garage evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: garage-weekly-${{ github.run_id }}
+          path: |
+            garage-output/**/capability-report.md
+            garage-output/**/garage-run.json
+            garage-output/**/README.md
+          if-no-files-found: ignore
+          retention-days: 90

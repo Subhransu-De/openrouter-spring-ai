@@ -22,6 +22,7 @@ public final class GarageEvidence {
       Pattern.compile("(?i)(api[-_ ]?key[\\\"'=:\\s]+)[^,;\\s\\\"]+");
 
   private final Map<String, FeatureEvidence> featureEvidence = new ConcurrentHashMap<>();
+  private final Map<String, Double> operationCosts = new ConcurrentHashMap<>();
   private final List<Map<String, Object>> events = new CopyOnWriteArrayList<>();
 
   public String newOperation(String sceneId, String requestMode) {
@@ -96,8 +97,32 @@ public final class GarageEvidence {
     return !matching.isEmpty() && matching.stream().allMatch(FeatureEvidence::complete);
   }
 
+  public void recordCost(String operationId, double costUsd) {
+    if (operationId != null && Double.isFinite(costUsd) && costUsd > 0.0) {
+      this.operationCosts.merge(operationId, costUsd, Double::sum);
+    }
+  }
+
+  public double costFor(String operationId) {
+    return this.operationCosts.getOrDefault(operationId, 0.0);
+  }
+
+  public double recordedCostUsd() {
+    return this.operationCosts.values().stream().mapToDouble(Double::doubleValue).sum();
+  }
+
+  public Map<String, Double> costSnapshot() {
+    return this.operationCosts.entrySet().stream()
+        .sorted(Map.Entry.comparingByKey())
+        .collect(
+            LinkedHashMap::new,
+            (values, entry) -> values.put(entry.getKey(), entry.getValue()),
+            LinkedHashMap::putAll);
+  }
+
   public void reset() {
     this.featureEvidence.clear();
+    this.operationCosts.clear();
     this.events.clear();
   }
 

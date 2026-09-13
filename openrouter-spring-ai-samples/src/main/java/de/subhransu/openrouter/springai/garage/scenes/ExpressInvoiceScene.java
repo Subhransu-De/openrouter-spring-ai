@@ -1,6 +1,7 @@
 package de.subhransu.openrouter.springai.garage.scenes;
 
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
+import de.subhransu.openrouter.springai.garage.GarageCosts;
 import de.subhransu.openrouter.springai.garage.GarageResponses;
 import de.subhransu.openrouter.springai.garage.GarageTools;
 import de.subhransu.openrouter.springai.garage.evidence.EvidenceLevel;
@@ -101,6 +102,7 @@ public final class ExpressInvoiceScene extends GarageSceneSupport {
     details.put("decodedFinalOutput", decodedFinalOutput);
     details.put("modelObservationCount", observations.size());
     details.put("observations", observations);
+    details.put("costUsd", GarageCosts.usage(response.getMetadata().getUsage()));
     context.evidence().record(
         feature, operationId, mode, EvidenceLevel.EXECUTED, "tool", "generate_express_invoice");
     context.evidence().record(

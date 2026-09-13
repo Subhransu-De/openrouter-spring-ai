@@ -2,6 +2,7 @@ package de.subhransu.openrouter.springai.garage.scenes;
 
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
+import de.subhransu.openrouter.springai.garage.GarageCosts;
 import de.subhransu.openrouter.springai.garage.GarageResponses;
 import de.subhransu.openrouter.springai.garage.evidence.EvidenceLevel;
 import de.subhransu.openrouter.springai.garage.evidence.GarageFeature;
@@ -80,6 +81,7 @@ public final class RoutingLaneScene extends GarageSceneSupport {
     details.put("servedProvider", servedProvider);
     details.put("fallbackActivated", fallbackActivated);
     details.put("finishReason", GarageResponses.finishReason(response));
+    details.put("costUsd", GarageCosts.usage(response.getMetadata().getUsage()));
     details.put("requestOptions", requestEvidence);
     details.put("observations", context.telemetry().observationsFor(operationId));
     context.evidence().recordAll(

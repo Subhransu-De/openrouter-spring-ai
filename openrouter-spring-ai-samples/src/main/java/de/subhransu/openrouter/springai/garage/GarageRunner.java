@@ -143,16 +143,19 @@ final class GarageRunner implements CommandLineRunner {
     printHeader(command, selected, runDirectory);
 
     List<SceneResult> results = runScenes(command, selected, runDirectory);
+    List<String> incompleteFeatures = incompleteFeatures(command, selected);
 
     GarageReportWriter.ReportPaths reports =
-        this.reportWriter.write(runDirectory, command, results);
+        this.reportWriter.write(runDirectory, command, results, incompleteFeatures);
     log.info("\nCapability report: {}", reports.markdown().toAbsolutePath());
     log.info("Evidence bundle   : {}", reports.json().toAbsolutePath());
 
     List<SceneResult> failures =
         results.stream().filter(result -> result.status() == SceneResult.Status.FAILED).toList();
-    List<String> incompleteFeatures = incompleteFeatures(command, selected);
-    if (command.auto() && (!failures.isEmpty() || !incompleteFeatures.isEmpty())) {
+    double recordedCostUsd = this.evidence.recordedCostUsd();
+    boolean budgetExceeded =
+        command.maxCostUsd() != null && recordedCostUsd > command.maxCostUsd() + 0.000000001;
+    if (!failures.isEmpty() || !incompleteFeatures.isEmpty() || budgetExceeded) {
       throw new IllegalStateException(
           "Garage completed every selected scene but "
               + failures.size()
@@ -160,6 +163,11 @@ final class GarageRunner implements CommandLineRunner {
               + incompleteFeatures.size()
               + " features lacked complete evidence "
               + incompleteFeatures
+              + ", recorded cost was $"
+              + String.format(Locale.ROOT, "%.8f", recordedCostUsd)
+              + (command.maxCostUsd() != null
+                  ? " against a $" + command.maxCostUsd() + " ceiling"
+                  : "")
               + "; inspect "
               + reports.markdown().toAbsolutePath());
     }
@@ -170,11 +178,38 @@ final class GarageRunner implements CommandLineRunner {
       return false;
     }
     assertApiKeyConfigured();
+    List<SweepOutput> outputs = new ArrayList<>();
     if (!command.embeddingSweepModels().isEmpty()) {
-      runEmbeddingSweep(command);
+      outputs.add(
+          new SweepOutput(
+              "embedding-models",
+              "embedding-sweep.json",
+              runEmbeddingSweep(command)));
     }
     if (!command.imageSweepModels().isEmpty()) {
-      runImageSweep(command);
+      outputs.add(
+          new SweepOutput("image-models", "image-sweep.json", runImageSweep(command)));
+    }
+    List<Map<String, Object>> allResults =
+        outputs.stream().flatMap(output -> output.results().stream()).toList();
+    double recordedCostUsd = GarageCosts.usageMaps(allResults);
+    for (SweepOutput output : outputs) {
+      writeSweepDocument(command, output, recordedCostUsd);
+    }
+    long failures =
+        allResults.stream().filter(result -> !PASSED.equals(result.get(STATUS))).count();
+    boolean budgetExceeded =
+        command.maxCostUsd() != null
+            && recordedCostUsd > command.maxCostUsd() + 0.000000001;
+    if (failures > 0 || budgetExceeded) {
+      throw new IllegalStateException(
+          "Garage sweeps completed with "
+              + failures
+              + " failures and recorded cost $"
+              + String.format(Locale.ROOT, "%.8f", recordedCostUsd)
+              + (command.maxCostUsd() != null
+                  ? " against a $" + command.maxCostUsd() + " ceiling"
+                  : ""));
     }
     return true;
   }
@@ -221,12 +256,14 @@ final class GarageRunner implements CommandLineRunner {
       return result;
     } catch (Exception failure) {
       log.error("FAIL {}: {}", scene.id(), failure.getMessage());
+      String operationId = lastOperationId(scene.id(), requestMode);
       return SceneResult.failed(
           scene.id(),
-          lastOperationId(scene.id(), requestMode),
+          operationId,
           requestMode,
           Duration.between(started, Instant.now()),
           outputDirectory,
+          Map.of("costUsd", this.evidence.costFor(operationId)),
           failure);
     }
   }
@@ -240,14 +277,14 @@ final class GarageRunner implements CommandLineRunner {
    * paraphrase to rank closer than the unrelated text, so a vector that decodes but
    * carries no meaning still fails. Provider-side failures are reported, not hidden.
    */
-  private void runEmbeddingSweep(GarageCommand command) throws IOException {
+  private List<Map<String, Object>> runEmbeddingSweep(GarageCommand command) {
     log.info(
         "\n=== EMBEDDING MODEL SWEEP ({} combinations) ===\n", command.embeddingSweepModels().size());
     List<Map<String, Object>> results = new ArrayList<>();
     for (String entry : command.embeddingSweepModels()) {
       results.add(embeddingSweepResult(ModelPin.parse(entry)));
     }
-    writeSweepDocument(command, "embedding-models", "embedding-sweep.json", results);
+    return results;
   }
 
   private Map<String, Object> embeddingSweepResult(ModelPin pin) {
@@ -266,6 +303,7 @@ final class GarageRunner implements CommandLineRunner {
           this.embeddingModel.call(
               new EmbeddingRequest(
                   List.of(SWEEP_ANCHOR_TEXT, SWEEP_SIMILAR_TEXT, SWEEP_UNRELATED_TEXT), options.build()));
+      result.put(USAGE, GarageResponses.usage(response.getMetadata().getUsage()));
       float[] anchor = response.getResults().get(0).getOutput();
       double similarScore =
           GarageModalityBays.cosineSimilarity(anchor, response.getResults().get(1).getOutput());
@@ -277,7 +315,6 @@ final class GarageRunner implements CommandLineRunner {
       result.put("similarCosine", Math.round(similarScore * 10000.0) / 10000.0);
       result.put("unrelatedCosine", Math.round(unrelatedScore * 10000.0) / 10000.0);
       result.put("responseModel", response.getMetadata().getModel());
-      result.put(USAGE, GarageResponses.usage(response.getMetadata().getUsage()));
       if (!ok) {
         result.put(
             ERROR, "semantic ordering failed: similar=" + similarScore + " unrelated=" + unrelatedScore);
@@ -304,7 +341,7 @@ final class GarageRunner implements CommandLineRunner {
    * with config keys resolution, quality, aspect-ratio, and output-format. Generated
    * images and per-entry evidence land in the output root.
    */
-  private void runImageSweep(GarageCommand command) throws IOException {
+  private List<Map<String, Object>> runImageSweep(GarageCommand command) throws IOException {
     log.info("\n=== IMAGE MODEL SWEEP ({} entries) ===\n", command.imageSweepModels().size());
     Files.createDirectories(command.outputRoot());
     GarageModalityBays bays =
@@ -315,7 +352,8 @@ final class GarageRunner implements CommandLineRunner {
             command.outputRoot(),
             command.embeddingModel(),
             command.visionModel(),
-            command.imageModel());
+            command.imageModel(),
+            command.imageQuality());
 
     List<Map<String, Object>> results = new ArrayList<>();
     int index = 0;
@@ -343,22 +381,29 @@ final class GarageRunner implements CommandLineRunner {
           ok ? result.get("imageBytes") + " bytes " + result.get("mediaType") : result.get(ERROR));
     }
 
-    writeSweepDocument(command, "image-models", "image-sweep.json", results);
+    return results;
   }
 
   private void writeSweepDocument(
-      GarageCommand command, String sweep, String fileName, List<Map<String, Object>> results)
+      GarageCommand command, SweepOutput output, double recordedCostUsd)
       throws IOException {
+    List<Map<String, Object>> results = output.results();
     int passed = (int) results.stream().filter(result -> PASSED.equals(result.get(STATUS))).count();
     Files.createDirectories(command.outputRoot());
     Map<String, Object> document = new LinkedHashMap<>();
     document.put("application", "garage");
-    document.put("sweep", sweep);
+    document.put("sweep", output.sweep());
     document.put("createdAt", Instant.now().toString());
     document.put(PASSED, passed);
     document.put(FAILED, results.size() - passed);
+    document.put("recordedCostUsd", recordedCostUsd);
+    document.put("maxCostUsd", command.maxCostUsd());
+    document.put(
+        "costBudgetExceeded",
+        command.maxCostUsd() != null
+            && recordedCostUsd > command.maxCostUsd() + 0.000000001);
     document.put("results", results);
-    Path sweepJson = command.outputRoot().resolve(fileName);
+    Path sweepJson = command.outputRoot().resolve(output.fileName());
     this.objectMapper.writerWithDefaultPrettyPrinter().writeValue(sweepJson.toFile(), document);
     log.info(
         "\nSweep result: {}/{} models passed. Evidence: {}",
@@ -375,9 +420,23 @@ final class GarageRunner implements CommandLineRunner {
             .collect(Collectors.toCollection(LinkedHashSet::new));
     if (!command.requestModes().contains(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS)) {
       required.remove(GarageFeature.CHAT_COMPLETIONS_MODE);
+      // Digital inspection explicitly reports structured output as unsupported in Responses mode.
+      // Keep that outcome in the report without claiming that inference was executed.
+      required.remove(GarageFeature.STRUCTURED_OUTPUT);
+      // runScenes skips the Chat Completions-only recovery contract in Responses mode.
+      required.removeAll(GarageFeature.forScene("recovery-road-test"));
     }
     if (!command.requestModes().contains(OpenRouterRequestMode.OPENAI_RESPONSES)) {
       required.remove(GarageFeature.RESPONSES_MODE);
+    }
+    if (!command.runsEmbeddings()) {
+      required.remove(GarageFeature.EMBEDDINGS);
+    }
+    if (!command.runsImageInput()) {
+      required.remove(GarageFeature.IMAGE_INPUT);
+    }
+    if (!command.runsImageGeneration()) {
+      required.remove(GarageFeature.IMAGE_GENERATION);
     }
     List<Map<String, Object>> snapshot = this.evidence.featureSnapshot();
     return required.stream()
@@ -420,6 +479,9 @@ final class GarageRunner implements CommandLineRunner {
         Embedding model  : {}
         Vision model     : {}
         Image model      : {}
+        Capabilities     : {}
+        Image surface    : {}
+        Cost ceiling USD : {}
         Request modes    : {}
         Scenes           : {}
         Offline contracts: {}
@@ -429,6 +491,9 @@ final class GarageRunner implements CommandLineRunner {
         command.embeddingModel(),
         command.visionModel(),
         command.imageModel(),
+        command.capabilities(),
+        command.imageSurface(),
+        command.maxCostUsd(),
         command.requestModes(),
         selected.stream().map(GarageScene::id).toList(),
         command.offlineContracts(),
@@ -456,10 +521,14 @@ final class GarageRunner implements CommandLineRunner {
 
         Options:
           --list-scenes                  List scenes and feature ids
+          --text                         Text, tools, streaming and text contracts
+          --embedding                    Embedding checks only; combinable with --text
+          --vision                       Image-input understanding checks
+          --image                        Image generation (sync by default)
           --scene=<id,id>                Run selected scenes
           --offline-contracts            Run recovery + dyno contracts without an API key
           --full                         Run every scene in both request modes
-          --auto                         Fail after reporting if any selected scene fails
+          --auto                         Deprecated no-op; failed checks always fail the run
           --stream                       Add the streaming-dispatch scene
           --request-mode=<mode>          chat, responses, both, or all
           --topic=<text>                 Customer/car request to inspect
@@ -470,6 +539,16 @@ final class GarageRunner implements CommandLineRunner {
           --embedding-model=<model>      Embedding model id for the modality bays
           --vision-model=<model>         Image-input model id for the modality bays
           --image-model=<model>          Image-generation model id for the modality bays
+          --image-surface=<surface>      none, sync, streaming, chat, or all
+          --image-quality=<quality>      Optional Image API/chat image quality
+          --max-cost-usd=<amount>        Fail when recorded inference exceeds this (post-run)
+          --max-completion-tokens=<n>    Main text completion limit
+          --specialist-max-completion-tokens=<n>  Specialist completion limit
+          --reasoning-effort=<value>     Text reasoning effort
+          --provider-sort=<value>        Provider sorting preference
+          --provider-order=<ids>         Provider preference list; empty clears it
+          --provider-ignore=<ids>        Excluded providers; empty clears it
+          --provider-quantizations=<ids> Provider quantizations; empty clears them
           --embedding-sweep=<entries>    Embedding compatibility sweep; entries are
                                          comma-separated model[@providerTag] ids
           --image-sweep=<entries>        Image-model compatibility sweep; entries are
@@ -515,4 +594,7 @@ final class GarageRunner implements CommandLineRunner {
       return modelId + (providerTag != null ? "@" + providerTag : "");
     }
   }
+
+  private record SweepOutput(
+      String sweep, String fileName, List<Map<String, Object>> results) {}
 }

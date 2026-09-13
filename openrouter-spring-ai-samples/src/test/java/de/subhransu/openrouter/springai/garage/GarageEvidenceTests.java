@@ -1,6 +1,7 @@
 package de.subhransu.openrouter.springai.garage;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 
 import de.subhransu.openrouter.springai.garage.evidence.EvidenceLevel;
 import de.subhransu.openrouter.springai.garage.evidence.GarageEvidence;
@@ -15,6 +16,21 @@ import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 
 class GarageEvidenceTests {
+
+  @Test
+  void retainsIncrementalCostsByOperation() {
+    GarageEvidence evidence = new GarageEvidence();
+
+    evidence.recordCost("operation-1", 0.002);
+    evidence.recordCost("operation-1", 0.003);
+    evidence.recordCost("operation-2", 0.004);
+
+    assertThat(evidence.costFor("operation-1")).isCloseTo(0.005, within(0.000000000001));
+    assertThat(evidence.recordedCostUsd()).isCloseTo(0.009, within(0.000000000001));
+    assertThat(evidence.costSnapshot())
+        .containsExactly(
+            Map.entry("operation-1", 0.005), Map.entry("operation-2", 0.004));
+  }
 
   @Test
   void registryHasOneUniqueEntryForEveryAuditedFeature() {
