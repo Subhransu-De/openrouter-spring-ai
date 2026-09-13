@@ -138,6 +138,13 @@ gh issue view <issue-number> --json number,labels,milestone
 
 Replace conflicting type or priority labels explicitly; adding a new priority does not remove the old one. Review the complete outbound payload before writing, then read the issue back to verify its labels and milestone. Store temporary body files outside the repository, use only publishable content, and follow the required model-attribution footer for issue bodies and comments.
 
+End every agent-authored GitHub issue body and issue comment with this exact Markdown structure, replacing `<actual model slug>` with the identifier of the model writing it:
+
+```markdown
+> [!NOTE]
+> From <actual model slug>
+```
+
 ## Delivery and review
 
 - Keep changes focused on the requested outcome; preserve unrelated working-tree changes.
