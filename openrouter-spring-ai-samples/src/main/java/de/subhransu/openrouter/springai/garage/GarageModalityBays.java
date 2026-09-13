@@ -385,8 +385,11 @@ public final class GarageModalityBays {
   boolean recordDimensions(Map<String, Object> probe, byte[] bytes, String mediaType)
       throws IOException {
     if ("image/svg+xml".equals(mediaType)) {
+      if (!validSvg(bytes)) {
+        return false;
+      }
       probe.put("dimensions", "vector");
-      return bytes.length > 0;
+      return true;
     }
     if ("image/webp".equals(mediaType) && !hasWebpSignature(bytes)) {
       return false;
@@ -412,6 +415,36 @@ public final class GarageModalityBays {
         && bytes[11] == 'P'
         && Integer.toUnsignedLong(java.nio.ByteBuffer.wrap(bytes, 4, 4)
             .order(java.nio.ByteOrder.LITTLE_ENDIAN).getInt()) == bytes.length - 8L;
+  }
+
+  private boolean validSvg(byte[] bytes) {
+    try {
+      javax.xml.parsers.DocumentBuilderFactory factory = javax.xml.parsers.DocumentBuilderFactory.newInstance();
+      factory.setNamespaceAware(true);
+      factory.setFeature(javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING, true);
+      factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+      factory.setAttribute(javax.xml.XMLConstants.ACCESS_EXTERNAL_DTD, "");
+      factory.setAttribute(javax.xml.XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
+      factory.setXIncludeAware(false);
+      factory.setExpandEntityReferences(false);
+      var builder = factory.newDocumentBuilder();
+      builder.setErrorHandler(new org.xml.sax.helpers.DefaultHandler() {
+        @Override
+        public void error(org.xml.sax.SAXParseException exception) throws org.xml.sax.SAXException {
+          throw exception;
+        }
+
+        @Override
+        public void fatalError(org.xml.sax.SAXParseException exception) throws org.xml.sax.SAXException {
+          throw exception;
+        }
+      });
+      var root = builder.parse(new ByteArrayInputStream(bytes)).getDocumentElement();
+      return "svg".equals(root.getLocalName()) && "http://www.w3.org/2000/svg".equals(root.getNamespaceURI());
+    }
+    catch (javax.xml.parsers.ParserConfigurationException | org.xml.sax.SAXException | IOException ex) {
+      return false;
+    }
   }
 
   private Map<String, Object> probe(String bay, String model) {

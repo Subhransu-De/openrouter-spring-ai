@@ -176,6 +176,9 @@ public record GarageCommand(
     if (scenesExplicit && sceneIds.isEmpty()) {
       throw new IllegalArgumentException("--scene must select at least one scene");
     }
+    if (full && scenesExplicit) {
+      throw new IllegalArgumentException("--full cannot be narrowed with --scene; use capability flags instead");
+    }
     if (offlineContracts && (capabilitiesExplicit || full
         || !embeddingSweepModels.isEmpty() || !imageSweepModels.isEmpty())) {
       throw new IllegalArgumentException("--offline-contracts cannot be combined with live capabilities or sweeps");

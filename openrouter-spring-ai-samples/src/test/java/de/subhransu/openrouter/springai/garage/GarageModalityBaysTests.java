@@ -24,6 +24,20 @@ import org.springframework.ai.image.ImageResponseMetadata;
 class GarageModalityBaysTests {
 
   @Test
+  void validatesSvgDocumentsWithoutResolvingExternalEntities() throws Exception {
+    GarageModalityBays bays = new GarageModalityBays(
+        null, null, null, Path.of("target"), "embedding", "vision", "image", null);
+    String valid = "<svg xmlns='http://www.w3.org/2000/svg' width='1' height='1'><rect width='1' height='1'/></svg>";
+    assertThat(bays.recordDimensions(new LinkedHashMap<>(),
+        valid.getBytes(java.nio.charset.StandardCharsets.UTF_8), "image/svg+xml")).isTrue();
+    for (String invalid : List.of("", "arbitrary text", "<svg", "<html/>", "<svg/>",
+        "<!DOCTYPE svg [<!ENTITY x SYSTEM 'file:///synthetic-do-not-read'>]><svg xmlns='http://www.w3.org/2000/svg'>&x;</svg>")) {
+      assertThat(bays.recordDimensions(new LinkedHashMap<>(),
+          invalid.getBytes(java.nio.charset.StandardCharsets.UTF_8), "image/svg+xml")).isFalse();
+    }
+  }
+
+  @Test
   void rejectsAWebpHeaderWithoutImageData() {
     byte[] webp = {'R', 'I', 'F', 'F', 4, 0, 0, 0, 'W', 'E', 'B', 'P'};
 

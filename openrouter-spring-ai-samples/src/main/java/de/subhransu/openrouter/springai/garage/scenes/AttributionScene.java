@@ -60,6 +60,7 @@ public final class AttributionScene extends GarageSceneSupport {
       streamResponses =
           context.chatModel().stream(prompt).collectList().block(Duration.ofMinutes(2));
     }
+    context.telemetry().awaitObservationsFor(operationId, Duration.ofSeconds(1));
     if (streamResponses == null) {
       streamResponses = List.of();
     }

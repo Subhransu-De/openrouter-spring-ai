@@ -15,6 +15,12 @@ class GarageCommandTests {
   private final GarageProperties properties = new GarageProperties();
 
   @Test
+  void fullCannotBeNarrowedToASubsetOfScenes() {
+    assertThatThrownBy(() -> command("--full", "--scene=service-story"))
+        .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("--full cannot be narrowed");
+  }
+
+  @Test
   void rejectsChatImagesWhenOnlyResponsesIsSelected() {
     assertThatThrownBy(() -> command("--image", "--image-surface=chat", "--request-mode=responses"))
         .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Chat image generation requires");
