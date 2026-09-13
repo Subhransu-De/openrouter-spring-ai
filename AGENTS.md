@@ -86,6 +86,58 @@ If a mode does not support an option, preserve or add explicit validation rather
 - Keep plans, review HTML, screenshots, raw logs, and agent scratch files outside the repository. Do not stage them with product changes.
 - Use synthetic examples in publishable documentation. Private activity and session-derived information must not be published without explicit authorization for the exact information.
 
+## GitHub issue labels
+
+When creating or triaging an issue, read its body, follow-up comments, and relevant current source before selecting labels. Reuse the repository's existing labels; inspect them with `gh label list --limit 100`. Do not create synonyms or release-specific labels when an existing label or milestone fits.
+
+Apply one primary type, exactly one priority, and one or two affected areas to each actionable issue. Preserve unrelated labels when updating an issue.
+
+| Type | Use for |
+| --- | --- |
+| `bug` | Incorrect behavior in an already supported capability. |
+| `enhancement` | New capabilities, options, or convenience improvements. |
+| `documentation` | Documentation, onboarding, and explanation changes. |
+| `dependencies` | Dependency version or dependency configuration updates. |
+| `maintenance` | Internal structure, maintainability, and compatibility work. |
+| `validation` | Regression coverage, contract verification, and release evidence. |
+
+| Priority | Use for |
+| --- | --- |
+| `priority:p0` | Immediate attention: privacy exposure, unsafe execution, or another critical failure. |
+| `priority:p1` | High priority: incorrect behavior in an already supported capability. |
+| `priority:p2` | Normal priority: compatibility, operability, and validation improvements. |
+| `priority:p3` | Lower priority: optional features and convenience improvements. |
+
+Priority expresses urgency and impact; it does not assign a release candidate. Optional parity with another provider is not automatically a bug or a release blocker.
+
+| Area | Scope |
+| --- | --- |
+| `area:api` | Public API, options, protocol mapping, and compatibility. |
+| `area:tools` | Tool schemas, tool calls, and execution policy. |
+| `area:streaming` | SSE processing, lifecycle, aggregation, and cancellation. |
+| `area:multimodal` | Image, audio, video, and document input or output. |
+| `area:embeddings` | Embedding requests, metadata, dimensions, and results. |
+| `area:configuration` | Spring Boot properties, auto-configuration, and bean selection. |
+| `area:observability` | Observations, usage metadata, diagnostics, and telemetry. |
+| `area:build-release` | Builds, CI, packaging, native runtime, and release validation. |
+| `area:samples` | Sample applications, onboarding examples, and sample evidence. |
+
+- Add `needs:verification` when a report needs checking against current source or acceptance evidence is missing. Read recent fixes and issue comments before scheduling implementation. Remove it once the outstanding verification is complete; record the supporting public-source or synthetic-test evidence when updating the issue. A priority on an unverified report indicates triage urgency, not confirmation of the defect.
+- Add `release:blocker` only when the issue must be resolved before publishing its assigned milestone. Assign the milestone and explain the release gate in the issue. Remove the label if the issue is explicitly deferred and no longer blocks that milestone.
+- Use milestones to schedule release candidates. Do not encode RC versions in labels or infer a milestone solely from priority.
+- Keep workflow labels such as `duplicate`, `help wanted`, and `good first issue` when applicable; they do not replace type, priority, or area labels on actionable work.
+
+Example commands below use `<issue-number>` as a placeholder. Run them from this repository, or supply `--repo` with the intended repository:
+
+```sh
+gh issue create --title "Synthetic example: request options retain mutable state" --body-file issue.md --label "bug,priority:p1,area:api"
+gh issue edit <issue-number> --add-label "bug,priority:p1,area:api"
+gh issue edit <issue-number> --remove-label "priority:p2" --add-label "priority:p1"
+gh issue view <issue-number> --json number,labels,milestone
+```
+
+Replace conflicting type or priority labels explicitly; adding a new priority does not remove the old one. Review the complete outbound payload before writing, then read the issue back to verify its labels and milestone. Store temporary body files outside the repository, use only publishable content, and follow the required model-attribution footer for issue bodies and comments.
+
 ## Delivery and review
 
 - Keep changes focused on the requested outcome; preserve unrelated working-tree changes.
