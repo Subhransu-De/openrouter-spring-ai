@@ -22,3 +22,4 @@ outputs/
 docs/
 *.md
 !/README.md
+!/AGENTS.md
