@@ -1,4 +1,4 @@
-name: Garage weekly image compatibility
+name: Weekly Image Compatibility Tests
 
 on:
   schedule:
@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   garage:
-    name: Garage weekly image surface
+    name: Test image generation
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

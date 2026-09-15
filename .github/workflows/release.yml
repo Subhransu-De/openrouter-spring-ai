@@ -1,4 +1,4 @@
-name: Prepare Maven Central release
+name: Maven Central Release
 
 on:
   workflow_dispatch:
@@ -30,6 +30,7 @@ defaults:
 
 jobs:
   validate:
+    name: Validate release request
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
@@ -61,6 +62,7 @@ jobs:
             jq -e --arg commit "$COMMIT" 'any(.[]; .headSha == $commit)' > /dev/null
 
   test:
+    name: Verify release · Java ${{ matrix.java }}
     needs: validate
     runs-on: ubuntu-latest
     strategy:
@@ -87,6 +89,7 @@ jobs:
         run: gradle --no-daemon clean check
 
   prepare:
+    name: Prepare and upload release
     needs: test
     runs-on: ubuntu-latest
     environment: release
@@ -119,7 +122,7 @@ jobs:
           MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: |
           mvn -B -ntp -Prelease -pl '!openrouter-spring-ai-samples' "-Drevision=$VERSION" "-Dmaven.repo.local=$RUNNER_TEMP/release-repository" deploy
-      - name: Next step
+      - name: Summarize publication steps
         run: |
           echo 'Practice runs do not upload anything.'
           echo 'After an upload, review the VALIDATED deployment in Central Portal.'

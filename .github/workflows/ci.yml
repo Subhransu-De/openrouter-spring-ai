@@ -1,4 +1,4 @@
-name: CI
+name: Build, Test, and Compatibility
 
 on:
   push:
@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   release-packaging:
-    name: Release packaging and consumer tests
+    name: Verify release packaging
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -58,7 +58,7 @@ jobs:
         run: gitleaks detect --source . --verbose --redact
 
   maven-build:
-    name: Maven build Java ${{ matrix.java-version }}
+    name: Package with Maven · Java ${{ matrix.java-version }}
     runs-on: ubuntu-latest
     needs: gitleaks
 
@@ -85,7 +85,7 @@ jobs:
         run: mvn -B -Pspotless spotless:check
 
   gradle-build:
-    name: Gradle build Java ${{ matrix.java-version }}
+    name: Assemble with Gradle · Java ${{ matrix.java-version }}
     runs-on: ubuntu-latest
     needs: gitleaks
 
@@ -117,7 +117,7 @@ jobs:
         run: gradle --no-daemon checkstyleMain checkstyleTest
 
   maven-test:
-    name: Maven test Java ${{ matrix.java-version }}
+    name: Verify with Maven · Java ${{ matrix.java-version }}
     runs-on: ubuntu-latest
     needs: maven-build
 
@@ -141,7 +141,7 @@ jobs:
         run: mvn -B verify
 
   gradle-test:
-    name: Gradle test Java ${{ matrix.java-version }}
+    name: Verify with Gradle · Java ${{ matrix.java-version }}
     runs-on: ubuntu-latest
     needs: gradle-build
 
@@ -169,7 +169,7 @@ jobs:
         run: gradle --no-daemon check
 
   garage-pr-free:
-    name: Garage free live compatibility
+    name: Run free-tier compatibility tests
     if: >-
       github.event_name == 'pull_request' &&
       github.event.pull_request.draft == false &&

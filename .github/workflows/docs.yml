@@ -1,4 +1,4 @@
-name: Docs
+name: Documentation Formatting
 
 on:
   push:
@@ -18,7 +18,7 @@ on:
 
 jobs:
   format:
-    name: Check formatting
+    name: Check README formatting
     runs-on: ubuntu-latest
 
     steps:
