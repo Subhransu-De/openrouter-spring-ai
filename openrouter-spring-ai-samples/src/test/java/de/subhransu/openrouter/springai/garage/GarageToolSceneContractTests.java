@@ -17,6 +17,9 @@ import de.subhransu.openrouter.springai.api.dto.Choice;
 import de.subhransu.openrouter.springai.api.dto.Delta;
 import de.subhransu.openrouter.springai.api.dto.FunctionCall;
 import de.subhransu.openrouter.springai.api.dto.ToolCall;
+import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
+import de.subhransu.openrouter.springai.api.dto.ResponsesOutputItem;
+import de.subhransu.openrouter.springai.autoconfigure.OpenRouterChatProperties;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
 import de.subhransu.openrouter.springai.garage.cli.GarageCommand;
 import de.subhransu.openrouter.springai.garage.evidence.GarageEvidence;
@@ -31,18 +34,25 @@ import io.micrometer.core.instrument.observation.DefaultMeterObservationHandler;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
 import java.nio.file.Path;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.env.YamlPropertySourceLoader;
+import org.springframework.core.env.StandardEnvironment;
+import org.springframework.core.io.ClassPathResource;
 import reactor.core.publisher.Flux;
 
 class GarageToolSceneContractTests {
 
   @TempDir Path output;
 
-  @Test
-  void returnDirectInvoiceUsesExactlyOneModelCall() {
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.EnumSource(OpenRouterRequestMode.class)
+  void returnDirectInvoiceUsesExactlyOneModelCall(OpenRouterRequestMode mode) {
     OpenRouterApi api = mock(OpenRouterApi.class);
     when(api.chatCompletion(any()))
         .thenReturn(
@@ -71,12 +81,21 @@ class GarageToolSceneContractTests {
                         "tool_calls",
                         "tool_calls")),
                 null));
-    TestContext test = context(api, "express-invoice");
+    when(api.responses(any()))
+        .thenReturn(new ResponsesResult(
+            "invoice-1", "response", 1L, "garage/model", "completed",
+            List.of(new ResponsesOutputItem(
+                "item-1", "function_call", "completed", null, null, "call-1",
+                "generate_express_invoice",
+                "{\"item\":\"diagnostic inspection\",\"amount\":89}", null)),
+            null, null));
+    TestContext test = context(api, "express-invoice", mode);
 
     SceneResult result = new ExpressInvoiceScene().execute(test.context());
 
     assertThat(result.status()).isEqualTo(SceneResult.Status.PASSED);
-    verify(api, times(1)).chatCompletion(any());
+    verify(api, times(mode == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS ? 1 : 0)).chatCompletion(any());
+    verify(api, times(mode == OpenRouterRequestMode.OPENAI_RESPONSES ? 1 : 0)).responses(any());
   }
 
   @Test
@@ -125,6 +144,7 @@ class GarageToolSceneContractTests {
     OpenRouterChatModel model =
         OpenRouterChatModel.builder()
             .openRouterApi(api)
+            .defaultOptions(applicationChatProperties().toOptions())
             .observationRegistry(registry)
             .objectMapper(new ObjectMapper())
             .build();
@@ -148,6 +168,21 @@ class GarageToolSceneContractTests {
             telemetry,
             transport,
             registry));
+  }
+
+  private OpenRouterChatProperties applicationChatProperties() {
+    StandardEnvironment environment = new StandardEnvironment();
+    // Use the shipped YAML without inheriting developer machine overrides.
+    environment.getPropertySources().remove(StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME);
+    environment.getPropertySources().remove(StandardEnvironment.SYSTEM_PROPERTIES_PROPERTY_SOURCE_NAME);
+    try {
+      new YamlPropertySourceLoader().load("garage", new ClassPathResource("application.yml"))
+          .forEach(environment.getPropertySources()::addLast);
+    } catch (IOException ex) {
+      throw new UncheckedIOException(ex);
+    }
+    return Binder.get(environment)
+        .bind("spring.ai.openrouter.chat", OpenRouterChatProperties.class).get();
   }
 
   private ChatCompletionChunk textChunk(String text, String finishReason) {

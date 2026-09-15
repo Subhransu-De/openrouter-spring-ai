@@ -298,6 +298,11 @@ The PR workflow selects a smaller text suite with a free model and a zero record
 threshold. Nightly uses `--text --embedding --vision` with a USD 0.002 threshold; weekly
 uses `--image` with a USD 0.05 threshold and rotates the image interface. Scheduling and
 model selection live in the workflows, not schedule-named application profiles.
+Nightly allows 900 completion tokens per Foreman request to leave room for reasoning,
+tool arguments, and final output; its recorded-cost threshold remains unchanged.
+Garage enables usage reporting per Chat Completions request rather than as a global
+chat default, so `ChatClient` can also use Responses mode. Structured-output probes
+require providers to support all requested parameters, including the JSON schema.
 `--auto` remains accepted as a deprecated no-op; failures always return a nonzero exit code.
 
 Each scene run writes `capability-report.md`, `garage-run.json`, and a bundle `README.md`.

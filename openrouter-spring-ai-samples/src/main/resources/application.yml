@@ -28,7 +28,8 @@ spring:
           - spring-ai
       chat:
         model: ${GARAGE_FOREMAN_MODEL:openai/gpt-oss-120b}
-        include-usage: true
+        # Usage is enabled per Chat Completions request; a global default would
+        # be inherited by ChatClient when switching to Responses mode.
         temperature: 0.2
         max-completion-tokens: 900
       embedding:

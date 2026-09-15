@@ -83,6 +83,7 @@ public final class GarageOptionsFactory {
       boolean outputSchemaVariant) {
     OpenRouterChatOptions.Builder builder =
         common(operationId, "digital-inspection", requestMode, model, List.of(), topic)
+            .provider(structuredOutputProviderPreferences())
             .responseFormat(
                 OpenRouterResponseFormat.jsonSchema("service_inspection", true, schema));
     if (outputSchemaVariant) {
@@ -218,6 +219,19 @@ public final class GarageOptionsFactory {
       builder.models(fallbackModels);
     }
     return builder;
+  }
+
+  private OpenRouterProviderPreferences structuredOutputProviderPreferences() {
+    // A schema probe must only route to endpoints supporting its request parameters.
+    OpenRouterProviderPreferences provider = serviceProviderPreferences();
+    return new OpenRouterProviderPreferences(
+        provider != null ? provider.allowFallbacks() : null,
+        true,
+        null,
+        null,
+        null,
+        null,
+        provider != null ? provider.sort() : null);
   }
 
   private OpenRouterProviderPreferences serviceProviderPreferences() {
