@@ -87,7 +87,7 @@ jobs:
             --vision-model=google/gemini-2.5-flash-lite \
             --fallback-models=google/gemini-2.5-flash-lite \
             --request-mode=both \
-            --max-completion-tokens=192 \
+            --max-completion-tokens=900 \
             --specialist-max-completion-tokens=128 \
             --reasoning-effort=low \
             --provider-sort=price \
