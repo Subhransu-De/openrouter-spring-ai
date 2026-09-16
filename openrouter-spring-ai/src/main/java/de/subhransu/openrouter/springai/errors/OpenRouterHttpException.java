@@ -4,7 +4,7 @@ import org.springframework.http.HttpStatusCode;
 
 /**
  * Common inspectable contract implemented by retryable and non-retryable OpenRouter HTTP
- * failures.
+ * and in-band Responses failures.
  *
  * @author Subhransu De
  */
@@ -12,6 +12,10 @@ public interface OpenRouterHttpException {
 
 	String getMessage();
 
+	/**
+	 * Return the HTTP status, or a status derived from an in-band Responses error.
+	 * @return actual or derived failure status
+	 */
 	HttpStatusCode getStatusCode();
 
 	/**

@@ -102,6 +102,44 @@ class OpenRouterModelHttpRetryTests {
 		fixture.server().verify();
 	}
 
+	@ParameterizedTest
+	@ValueSource(strings = { "server_error", "rate_limit_exceeded", "timeout" })
+	void defaultPolicyRetriesTransientInBandResponsesFailure(String code) {
+		Fixture fixture = fixture();
+		fixture.server()
+			.expect(once(), requestTo(BASE_URL + "/responses"))
+			.andRespond(withSuccess(failedResponse(code), MediaType.APPLICATION_JSON));
+		fixture.server()
+			.expect(once(), requestTo(BASE_URL + "/responses"))
+			.andRespond(withSuccess(RESPONSES_SUCCESS, MediaType.APPLICATION_JSON));
+		OpenRouterChatModel model = OpenRouterChatModel.builder().openRouterApi(fixture.api()).build();
+
+		assertThat(model.call(chatPrompt(OpenRouterRequestMode.OPENAI_RESPONSES)).getResult().getOutput().getText())
+			.isEqualTo("recovered");
+		fixture.server().verify();
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "invalid_api_key", "invalid_request", "payment_required", "refusal",
+			"unsupported_parameter", "future_unknown_error" })
+	void defaultPolicyDoesNotRetryPermanentInBandResponsesFailure(String code) {
+		Fixture fixture = fixture();
+		fixture.server()
+			.expect(once(), requestTo(BASE_URL + "/responses"))
+			.andRespond(withSuccess(failedResponse(code), MediaType.APPLICATION_JSON));
+		OpenRouterChatModel model = OpenRouterChatModel.builder().openRouterApi(fixture.api()).build();
+
+		assertThatThrownBy(() -> model.call(chatPrompt(OpenRouterRequestMode.OPENAI_RESPONSES)))
+			.isInstanceOf(OpenRouterNonTransientApiException.class);
+		fixture.server().verify();
+	}
+
+	private String failedResponse(String code) {
+		return """
+				{"status":"failed","error":{"code":"%s","message":"synthetic failure"}}
+				""".formatted(code);
+	}
+
 	@Test
 	void retriesEmbeddingAfter503AndReturnsSuccess() {
 		Fixture fixture = fixture();

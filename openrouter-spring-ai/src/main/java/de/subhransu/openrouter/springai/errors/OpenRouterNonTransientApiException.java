@@ -4,7 +4,8 @@ import org.springframework.ai.retry.NonTransientAiException;
 import org.springframework.http.HttpStatusCode;
 
 /**
- * An OpenRouter HTTP failure that Spring AI's default retry policy must not retry.
+ * An OpenRouter HTTP or in-band Responses failure that Spring AI's default retry policy
+ * must not retry.
  *
  * @author Subhransu De
  */

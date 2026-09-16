@@ -14,7 +14,8 @@ import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
 import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
 import de.subhransu.openrouter.springai.api.dto.StreamError;
 import de.subhransu.openrouter.springai.api.dto.Usage;
-import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
+import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
+import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
 import java.util.List;
@@ -283,7 +284,7 @@ class OpenRouterResponsesMapperTests {
 				    "error_type": "provider_unavailable"
 				  }
 				}
-				"""))).isInstanceOfSatisfying(OpenRouterApiException.class, exception -> {
+				"""))).isInstanceOfSatisfying(OpenRouterTransientApiException.class, exception -> {
 			assertThat(exception.getCategory()).isEqualTo(OpenRouterErrorCategory.PROVIDER_UNAVAILABLE);
 			assertThat(exception.getErrorDetails().errorType()).isEqualTo("provider_unavailable");
 		}).hasMessage("OpenRouter responses stream failed");
@@ -300,7 +301,7 @@ class OpenRouterResponsesMapperTests {
 				    "error_type": "authentication"
 				  }
 				}
-				"""))).isInstanceOfSatisfying(OpenRouterApiException.class, exception -> {
+				"""))).isInstanceOfSatisfying(OpenRouterNonTransientApiException.class, exception -> {
 			assertThat(exception.getCategory()).isEqualTo(OpenRouterErrorCategory.AUTHENTICATION);
 			assertThat(exception.getErrorDetails().message()).isEqualTo("{\"detail\":\"invalid key\"}");
 		});
@@ -317,7 +318,7 @@ class OpenRouterResponsesMapperTests {
 				    "error_type": {"kind": "authentication"}
 				  }
 				}
-				"""))).isInstanceOfSatisfying(OpenRouterApiException.class, exception -> {
+				"""))).isInstanceOfSatisfying(OpenRouterNonTransientApiException.class, exception -> {
 			assertThat(exception.getCategory()).isEqualTo(OpenRouterErrorCategory.UNKNOWN);
 			assertThat(exception.getErrorDetails().code()).isEqualTo("invalid_api_key");
 			assertThat(exception.getErrorDetails().errorType()).isEqualTo("{\"kind\":\"authentication\"}");
@@ -332,7 +333,7 @@ class OpenRouterResponsesMapperTests {
 				""", ResponsesResult.class);
 
 		assertThatThrownBy(() -> new OpenRouterResponsesResponseMapper().map(result))
-			.isInstanceOfSatisfying(OpenRouterApiException.class, exception -> {
+			.isInstanceOfSatisfying(OpenRouterNonTransientApiException.class, exception -> {
 				assertThat(exception.getCategory()).isEqualTo(OpenRouterErrorCategory.UNKNOWN);
 				assertThat(exception.getErrorDetails().code()).isEqualTo("invalid_api_key");
 				assertThat(exception.getErrorDetails().errorType()).isEqualTo("{\"kind\":\"authentication\"}");
@@ -345,7 +346,7 @@ class OpenRouterResponsesMapperTests {
 				null, new StreamError("server_error", "add credits"), null, "payment_required");
 
 		assertThatThrownBy(() -> new OpenRouterResponsesResponseMapper().map(result))
-			.isInstanceOfSatisfying(OpenRouterApiException.class,
+			.isInstanceOfSatisfying(OpenRouterNonTransientApiException.class,
 					exception -> assertThat(exception.getCategory()).isEqualTo(OpenRouterErrorCategory.BILLING_CREDITS))
 			.hasMessage("OpenRouter responses request failed");
 	}
@@ -357,7 +358,8 @@ class OpenRouterResponsesMapperTests {
 				  "type": "response.failed.error",
 				  "error": {"message": "boom"}
 				}
-				"""))).isInstanceOf(OpenRouterApiException.class).hasMessage("OpenRouter responses stream failed");
+				"""))).isInstanceOf(OpenRouterNonTransientApiException.class)
+			.hasMessage("OpenRouter responses stream failed");
 	}
 
 	@Test
@@ -366,7 +368,7 @@ class OpenRouterResponsesMapperTests {
 				{"type":"error","error":{"code":"server_error","message":"invalid key",
 				 "metadata":{"provider_code":"nested_code","upstream_request_id":"req-1"}},
 				 "error_type":"authentication","metadata":{"provider_code":"bad_key","trace":"abc"}}
-				"""))).isInstanceOfSatisfying(OpenRouterApiException.class, exception -> {
+				"""))).isInstanceOfSatisfying(OpenRouterNonTransientApiException.class, exception -> {
 			assertThat(exception.getCategory()).isEqualTo(OpenRouterErrorCategory.AUTHENTICATION);
 			assertThat(exception.getErrorDetails().code()).isEqualTo("server_error");
 			assertThat(exception.getErrorDetails().message()).isEqualTo("invalid key");
