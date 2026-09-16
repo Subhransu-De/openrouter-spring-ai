@@ -18,6 +18,9 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.ai.chat.model.ChatResponse;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
@@ -27,6 +30,46 @@ class OpenRouterStreamingToolCallAggregatorTests {
 	private static final String MODEL = "openai/gpt-5.4-mini";
 
 	private final OpenRouterStreamingToolCallAggregator aggregator = new OpenRouterStreamingToolCallAggregator();
+
+	@ParameterizedTest
+	@NullAndEmptySource
+	@ValueSource(strings = { " ", "synthetic_lookup" })
+	void missingOrRepeatedNamesPreserveCompleteToolCalls(String initialName) {
+		StepVerifier
+			.create(this.aggregator.aggregate(Flux.just(chunk(toolFragment(0, 0, "call-0", initialName, "{\"key\":")),
+					chunk(toolFragment(0, 1, "call-1", "other_lookup", "{}")),
+					chunk(toolFragment(0, 0, null, "synthetic_lookup", "\"value\"}")),
+					chunk(toolFragment(0, 0, null, initialName, null)), chunk(finishChoice(0)))))
+			.assertNext(value -> assertThat(value.choices().get(0).delta().toolCalls()).containsExactly(
+					new ToolCall("call-0", "function", new FunctionCall("synthetic_lookup", "{\"key\":\"value\"}"), 0),
+					new ToolCall("call-1", "function", new FunctionCall("other_lookup", "{}"), 1)))
+			.verifyComplete();
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "lookup", "synthetic_lookup", "different_name" })
+	void differingNonblankNamesFailWithoutEmittingPartialCalls(String laterName) {
+		StepVerifier
+			.create(this.aggregator.aggregate(Flux.just(chunk(toolFragment(0, 0, "call-0", "synthetic_", "{")),
+					chunk(toolFragment(0, 0, null, laterName, "}")), chunk(finishChoice(0)))))
+			.expectErrorMessage("Conflicting streamed tool-call function names; fragmented names are not supported")
+			.verify();
+	}
+
+	@ParameterizedTest
+	@NullAndEmptySource
+	@ValueSource(strings = " ")
+	void completedToolCallRequiresUsableName(String name) {
+		Choice fragment = toolFragment(0, 0, "call-0", name, "{}");
+		// Check both a single terminal chunk and a separate finish chunk.
+		for (Flux<ChatCompletionChunk> source : List.of(
+				Flux.just(chunk(new Choice(0, null, fragment.delta(), "tool_calls", null))),
+				Flux.just(chunk(fragment), chunk(finishChoice(0))))) {
+			StepVerifier.create(this.aggregator.aggregate(source))
+				.expectErrorMessage("Completed streamed tool call has no function name")
+				.verify();
+		}
+	}
 
 	@Test
 	void supportedToolCallTerminatorsProduceExecutableCalls() {
