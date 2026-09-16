@@ -2,6 +2,7 @@ package de.subhransu.openrouter.springai.autoconfigure;
 
 import tools.jackson.databind.ObjectMapper;
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
+import de.subhransu.openrouter.springai.api.OpenRouterSerializationRuntimeHints;
 import java.time.Duration;
 import java.util.List;
 import java.util.StringJoiner;
@@ -13,12 +14,14 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
 import org.springframework.boot.http.client.HttpClientSettings;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.ImportRuntimeHints;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.reactive.function.client.WebClient;
 
 @AutoConfiguration(afterName = { "org.springframework.boot.http.client.autoconfigure.HttpClientAutoConfiguration",
 		"org.springframework.boot.http.client.autoconfigure.imperative.ImperativeHttpClientAutoConfiguration" })
+@ImportRuntimeHints(OpenRouterSerializationRuntimeHints.class)
 @ConditionalOnClass(OpenRouterApi.class)
 @Conditional(OpenRouterModelSelectionCondition.class)
 @EnableConfigurationProperties({ OpenRouterCommonProperties.class, OpenRouterConnectionProperties.class })
