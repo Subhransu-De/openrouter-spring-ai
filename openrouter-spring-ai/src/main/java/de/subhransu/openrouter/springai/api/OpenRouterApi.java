@@ -15,6 +15,7 @@ import de.subhransu.openrouter.springai.errors.OpenRouterHttpExceptionFactory;
 import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -25,6 +26,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
@@ -35,6 +38,8 @@ import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.ClientResponse;
+import reactor.core.publisher.Mono;
 import reactor.core.publisher.Flux;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
@@ -50,12 +55,6 @@ public class OpenRouterApi {
 
 	private static final ParameterizedTypeReference<ServerSentEvent<String>> STRING_SSE_TYPE = new ParameterizedTypeReference<>() {
 	};
-
-	// Streamed image events deliver a whole base64-encoded image in a single SSE data
-	// line, which far exceeds WebClient's 256 KB default codec limit (found live by the
-	// Garage paint bay as a DataBufferLimitException). Chat deltas are tiny, so one
-	// generous limit covers both streaming surfaces.
-	private static final int SSE_MAX_IN_MEMORY_SIZE = 32 * 1024 * 1024;
 
 	private final RestClient restClient;
 
@@ -79,13 +78,12 @@ public class OpenRouterApi {
 		this.objectMapper = builder.objectMapper;
 		this.httpExceptionFactory = new OpenRouterHttpExceptionFactory(this.objectMapper, builder.apiKey);
 		this.timeout = builder.timeout;
-		Assert.isTrue(builder.maxResponseBodyBytes > 0,
-				"Maximum blocking response body size must be greater than zero");
-		Assert.isTrue(builder.maxErrorBodyBytes > 0, "Maximum blocking error body size must be greater than zero");
+		Assert.isTrue(builder.maxResponseBodyBytes > 0, "Maximum response body size must be greater than zero");
+		Assert.isTrue(builder.maxErrorBodyBytes > 0, "Maximum error body size must be greater than zero");
 		Assert.isTrue(builder.maxResponseBodyBytes < Integer.MAX_VALUE,
-				"Maximum blocking response body size must be less than Integer.MAX_VALUE");
+				"Maximum response body size must be less than Integer.MAX_VALUE");
 		Assert.isTrue(builder.maxErrorBodyBytes < Integer.MAX_VALUE,
-				"Maximum blocking error body size must be less than Integer.MAX_VALUE");
+				"Maximum error body size must be less than Integer.MAX_VALUE");
 		this.maxResponseBodyBytes = builder.maxResponseBodyBytes;
 		this.maxErrorBodyBytes = builder.maxErrorBodyBytes;
 
@@ -110,7 +108,7 @@ public class OpenRouterApi {
 		WebClient.Builder webClientBuilder = builder.webClientBuilder != null ? builder.webClientBuilder.clone()
 				: WebClient.builder();
 		this.webClient = webClientBuilder.baseUrl(baseUrl)
-			.codecs((codecs) -> codecs.defaultCodecs().maxInMemorySize(SSE_MAX_IN_MEMORY_SIZE))
+			.codecs((codecs) -> codecs.defaultCodecs().maxInMemorySize(this.maxResponseBodyBytes))
 			.defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + builder.apiKey)
 			.defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
 			.defaultHeader(HttpHeaders.ACCEPT, MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -209,10 +207,7 @@ public class OpenRouterApi {
 			.bodyValue(request)
 			.exchangeToFlux((response) -> {
 				if (response.statusCode().isError()) {
-					return response.bodyToMono(String.class)
-						.defaultIfEmpty("")
-						.flatMapMany((body) -> Flux.error(this.httpExceptionFactory.create("/images",
-								response.statusCode(), response.headers().asHttpHeaders(), body)));
+					return streamingError("/images", response).flatMapMany(Flux::error);
 				}
 				MediaType contentType = response.headers().contentType().orElse(MediaType.APPLICATION_JSON);
 				if (MediaType.TEXT_EVENT_STREAM.isCompatibleWith(contentType)) {
@@ -257,14 +252,37 @@ public class OpenRouterApi {
 			.accept(MediaType.TEXT_EVENT_STREAM)
 			.bodyValue(request)
 			.retrieve()
-			.onStatus(HttpStatusCode::isError,
-					response -> response.bodyToMono(String.class)
-						.defaultIfEmpty("")
-						.map(body -> this.httpExceptionFactory.create(uri, response.statusCode(),
-								response.headers().asHttpHeaders(), body)))
+			.onStatus(HttpStatusCode::isError, response -> streamingError(uri, response))
 			.bodyToFlux(STRING_SSE_TYPE)
 			.transform(this::applyTimeout)
 			.transform(events -> decodeStream(events, eventType));
+	}
+
+	private Mono<RuntimeException> streamingError(String uri, ClientResponse response) {
+		return Mono.defer(() -> {
+			ByteArrayOutputStream prefix = new ByteArrayOutputStream();
+			return response.bodyToFlux(DataBuffer.class).map(buffer -> {
+				try {
+					int remaining = this.maxErrorBodyBytes - prefix.size();
+					int available = buffer.readableByteCount();
+					byte[] bytes = new byte[Math.min(remaining, available)];
+					buffer.read(bytes);
+					prefix.writeBytes(bytes);
+					return available > remaining;
+				}
+				finally {
+					DataBufferUtils.release(buffer);
+				}
+			}).takeUntil(Boolean::booleanValue).last(false).map(exceeded -> {
+				String body = prefix.toString(StandardCharsets.UTF_8);
+				return exceeded
+						? this.httpExceptionFactory.createErrorBodyLimit(uri, response.statusCode(), body,
+								this.maxErrorBodyBytes, this.maxErrorBodyBytes + 1L,
+								OpenRouterLimitExceededException.Limit.STREAMING_ERROR_BODY_BYTES)
+						: this.httpExceptionFactory.create(uri, response.statusCode(),
+								response.headers().asHttpHeaders(), body);
+			});
+		});
 	}
 
 	// Reactor's timeout operator caps the gap between elements, so a stalled stream fails
@@ -460,15 +478,15 @@ public class OpenRouterApi {
 		}
 
 		/**
-		 * Maximum decoded bytes retained for a successful blocking response before JSON
-		 * deserialization.
+		 * Maximum bytes buffered for a blocking response, a streaming JSON response, or
+		 * an individual SSE event. Does not limit the total stream size.
 		 */
 		public Builder maxResponseBodyBytes(int maxResponseBodyBytes) {
 			this.maxResponseBodyBytes = maxResponseBodyBytes;
 			return this;
 		}
 
-		/** Maximum decoded bytes retained from a blocking HTTP error response. */
+		/** Maximum bytes retained from a blocking or streaming HTTP error response. */
 		public Builder maxErrorBodyBytes(int maxErrorBodyBytes) {
 			this.maxErrorBodyBytes = maxErrorBodyBytes;
 			return this;

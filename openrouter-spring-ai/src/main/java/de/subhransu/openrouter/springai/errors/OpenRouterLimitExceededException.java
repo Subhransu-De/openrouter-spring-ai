@@ -19,6 +19,9 @@ public final class OpenRouterLimitExceededException extends NonTransientAiExcept
 		BLOCKING_ERROR_BODY_BYTES("blocking error body", "bytes",
 				"spring.ai.openrouter.connection.max-error-body-size"),
 
+		STREAMING_ERROR_BODY_BYTES("streaming error body", "bytes",
+				"spring.ai.openrouter.connection.max-error-body-size"),
+
 		STREAMING_TOOL_CALL_BYTES("streamed tool-call assembly", "bytes",
 				"spring.ai.openrouter.chat.tool-call-aggregation.max-size"),
 

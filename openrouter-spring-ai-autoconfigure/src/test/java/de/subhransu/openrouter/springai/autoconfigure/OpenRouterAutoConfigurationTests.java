@@ -9,6 +9,8 @@ import java.io.IOException;
 import java.net.URI;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
@@ -26,6 +28,21 @@ class OpenRouterAutoConfigurationTests {
 
 	private final ApplicationContextRunner contextRunner = new ApplicationContextRunner().withConfiguration(
 			AutoConfigurations.of(OpenRouterApiAutoConfiguration.class, OpenRouterChatAutoConfiguration.class));
+
+	@ParameterizedTest
+	@ValueSource(strings = { "0B", "-1B", "2147483647B", "2147483648B", "3GB" })
+	void rejectsUnsupportedBodySizesDuringBinding(String value) {
+		for (String property : new String[] { "max-response-body-size", "max-error-body-size" }) {
+			contextRunner
+				.withPropertyValues(API_KEY_PROPERTY, "spring.ai.openrouter.connection." + property + "=" + value)
+				.run(context -> {
+					assertThat(context).hasFailed();
+					assertThat(context.getStartupFailure()).hasRootCauseInstanceOf(IllegalArgumentException.class)
+						.hasStackTraceContaining("spring.ai.openrouter.connection." + property
+								+ " must be between 1 and 2147483646 bytes");
+				});
+		}
+	}
 
 	@Test
 	void createsApiAndChatModelWhenApiKeyIsConfigured() {
