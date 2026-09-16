@@ -1,4 +1,4 @@
-name: CI
+name: Build, Test, and Compatibility
 
 on:
   push:
@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   release-packaging:
-    name: Release packaging and consumer tests
+    name: Verify release packaging
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -58,7 +58,7 @@ jobs:
         run: gitleaks detect --source . --verbose --redact
 
   maven-build:
-    name: Maven build Java ${{ matrix.java-version }}
+    name: Package with Maven · Java ${{ matrix.java-version }}
     runs-on: ubuntu-latest
     needs: gitleaks
 
@@ -85,7 +85,7 @@ jobs:
         run: mvn -B -Pspotless spotless:check
 
   gradle-build:
-    name: Gradle build Java ${{ matrix.java-version }}
+    name: Assemble with Gradle · Java ${{ matrix.java-version }}
     runs-on: ubuntu-latest
     needs: gitleaks
 
@@ -117,7 +117,7 @@ jobs:
         run: gradle --no-daemon checkstyleMain checkstyleTest
 
   maven-test:
-    name: Maven test Java ${{ matrix.java-version }}
+    name: Verify with Maven · Java ${{ matrix.java-version }}
     runs-on: ubuntu-latest
     needs: maven-build
 
@@ -141,7 +141,7 @@ jobs:
         run: mvn -B verify
 
   gradle-test:
-    name: Gradle test Java ${{ matrix.java-version }}
+    name: Verify with Gradle · Java ${{ matrix.java-version }}
     runs-on: ubuntu-latest
     needs: gradle-build
 
@@ -168,8 +168,8 @@ jobs:
       - name: Gradle test
         run: gradle --no-daemon check
 
-  garage-pr-free:
-    name: Garage free live compatibility
+  garage-pr:
+    name: Run pull request compatibility tests
     if: >-
       github.event_name == 'pull_request' &&
       github.event.pull_request.draft == false &&
@@ -198,7 +198,7 @@ jobs:
       - name: Build Garage without credentials
         run: mvn -B -pl openrouter-spring-ai-samples -am -DskipTests package
 
-      - name: Require the scoped free-inference key
+      - name: Require the scoped pull request inference key
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_CI_FREE_KEY }}
         run: |
@@ -207,7 +207,7 @@ jobs:
             exit 1
           fi
 
-      - name: Run Garage free text checks
+      - name: Run Garage pull request text checks
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_CI_FREE_KEY }}
         run: |
@@ -217,8 +217,8 @@ jobs:
           java -jar "$jar_path" \
             --text \
             --scene=streaming-dispatch,dyno-tuning,attribution-check-in,recovery-road-test \
-            --foreman-model=nex-agi/nex-n2.5-mini:free \
-            --specialist-model=nex-agi/nex-n2.5-mini:free \
+            --foreman-model=google/gemini-2.5-flash-lite \
+            --specialist-model=google/gemini-2.5-flash-lite \
             --fallback-models= \
             --request-mode=both \
             --max-completion-tokens=256 \
@@ -228,7 +228,7 @@ jobs:
             --provider-order= \
             --provider-ignore= \
             --provider-quantizations= \
-            --max-cost-usd=0 \
+            --max-cost-usd=0.002 \
             --output=garage-output
 
       - name: Add capability report to job summary

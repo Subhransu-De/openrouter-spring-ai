@@ -1,4 +1,4 @@
-name: Check release packaging
+name: Verify release packaging and consumers
 description: Build release artifacts locally and consume the starter with Maven and Gradle
 inputs:
   version:

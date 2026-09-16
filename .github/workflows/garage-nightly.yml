@@ -1,4 +1,4 @@
-name: Garage nightly low-cost compatibility
+name: Nightly Compatibility Tests
 
 on:
   schedule:
@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   changes:
-    name: Check for a new default-branch commit
+    name: Check for new commits
     runs-on: ubuntu-latest
     outputs:
       should-run: ${{ steps.gate.outputs.should-run }}
@@ -44,7 +44,7 @@ jobs:
           fi
 
   garage:
-    name: Garage nightly text and embeddings
+    name: Test text, embeddings, and vision
     needs: changes
     if: needs.changes.outputs.should-run == 'true'
     runs-on: ubuntu-latest
@@ -85,7 +85,7 @@ jobs:
             --specialist-model=google/gemini-2.5-flash-lite \
             --embedding-model=openai/text-embedding-3-small \
             --vision-model=google/gemini-2.5-flash-lite \
-            --fallback-models=google/gemini-2.5-flash-lite \
+            --fallback-models=openai/gpt-5-nano \
             --request-mode=both \
             --max-completion-tokens=900 \
             --specialist-max-completion-tokens=128 \
