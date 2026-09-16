@@ -250,6 +250,17 @@ Image-capable _chat_ models work too: set
 `imageConfig`) and generated images arrive as `AssistantMessage` media — in sync calls
 and streams alike, in both chat-completions and responses request modes.
 
+Generated media can be attached directly to a new `UserMessage` for image edits or
+follow-up questions. Responses base64 results are exposed as complete data URLs;
+`output_format`, when supplied, determines the MIME type (PNG by default), while an
+existing data URL retains its own MIME type.
+
+Chat Completions preserves images when an `AssistantMessage` is replayed in conversation
+history. Responses mode rejects assistant media history explicitly: attach the media to
+a `UserMessage` instead, retaining any assistant text/tool history separately. This applies
+to both synchronous and streaming requests. Image understanding still requires a model
+that supports image input.
+
 ### Observability
 
 The starter includes Spring AI's standard observation auto-configuration for chat,

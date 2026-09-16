@@ -128,6 +128,10 @@ public final class OpenRouterResponsesRequestMapper {
 	}
 
 	private List<Object> mapMessage(Message message) {
+		if (message instanceof AssistantMessage assistant && !CollectionUtils.isEmpty(assistant.getMedia())) {
+			throw new IllegalArgumentException("OPENAI_RESPONSES does not support assistant media history; "
+					+ "attach the media to a UserMessage or use OPENAI_CHAT_COMPLETIONS");
+		}
 		if (message.getMessageType() == MessageType.ASSISTANT) {
 			List<Object> items = new ArrayList<>();
 			Object reasoning = message.getMetadata().get(ReasoningMetadata.RESPONSES_ITEMS);

@@ -17,7 +17,15 @@ import java.util.Objects;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonDeserialize(using = ResponsesOutputItem.Deserializer.class)
 public record ResponsesOutputItem(String id, String type, String status, String role, List<ResponsesContent> content,
-		String callId, String name, String arguments, String result, @JsonIgnore JsonNode rawItem) {
+		String callId, String name, String arguments, String result, String outputFormat,
+		@JsonIgnore JsonNode rawItem) {
+
+	public ResponsesOutputItem(String id, String type, String status, String role, List<ResponsesContent> content,
+			String callId, String name, String arguments, String result, JsonNode rawItem) {
+		this(id, type, status, role, content, callId, name, arguments, result,
+				rawItem != null && rawItem.hasNonNull("output_format") ? rawItem.get("output_format").asString() : null,
+				rawItem);
+	}
 
 	public ResponsesOutputItem(String id, String type, String status, String role, List<ResponsesContent> content,
 			String callId, String name, String arguments, String result) {
@@ -45,6 +53,7 @@ public record ResponsesOutputItem(String id, String type, String status, String 
 		value.put("name", this.name);
 		value.put("arguments", this.arguments);
 		value.put("result", this.result);
+		value.put("output_format", this.outputFormat);
 		value.values().removeIf(Objects::isNull);
 		return value;
 	}
@@ -59,7 +68,7 @@ public record ResponsesOutputItem(String id, String type, String status, String 
 					? Arrays.asList(context.readTreeAsValue(node.get("content"), ResponsesContent[].class)) : null;
 			return new ResponsesOutputItem(text(node, "id"), type, text(node, "status"), text(node, "role"), content,
 					text(node, "call_id"), text(node, "name"), text(node, "arguments"), text(node, "result"),
-					node.deepCopy());
+					text(node, "output_format"), node.deepCopy());
 		}
 
 		private static String text(JsonNode node, String field) {

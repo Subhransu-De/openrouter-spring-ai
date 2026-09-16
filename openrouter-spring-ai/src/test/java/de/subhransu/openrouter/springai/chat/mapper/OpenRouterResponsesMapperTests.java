@@ -125,7 +125,8 @@ class OpenRouterResponsesMapperTests {
 
 		assertThat(mapped.getResult().getOutput().getText()).isEqualTo("here you go");
 		assertThat(mapped.getResult().getOutput().getMedia()).hasSize(1);
-		assertThat(mapped.getResult().getOutput().getMedia().get(0).getData()).isEqualTo("aW1hZ2Ux");
+		assertThat(mapped.getResult().getOutput().getMedia().get(0).getData())
+			.isEqualTo("data:image/png;base64,aW1hZ2Ux");
 	}
 
 	@Test
@@ -144,7 +145,8 @@ class OpenRouterResponsesMapperTests {
 
 		assertThat(mapped.getResult().getOutput().getText()).isEmpty();
 		assertThat(mapped.getResult().getOutput().getMedia()).hasSize(1);
-		assertThat(mapped.getResult().getOutput().getMedia().get(0).getData()).isEqualTo("aW1hZ2Ux");
+		assertThat(mapped.getResult().getOutput().getMedia().get(0).getData())
+			.isEqualTo("data:image/png;base64,aW1hZ2Ux");
 	}
 
 	@Test
