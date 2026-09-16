@@ -8,9 +8,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Pins usage mapping: flat versus nested cached/reasoning token sources, their
- * precedence, null handling, cost, and the null-usage case. OpenRouter reports the same
- * counts two ways (top-level for responses mode, nested {@code *_tokens_details} for
- * chat-completions), so the precedence rule must be explicit.
+ * precedence, null handling, cost, and the null-usage case.
  */
 class UsageMapperTests {
 
@@ -64,6 +62,16 @@ class UsageMapperTests {
 	@Test
 	void nullUsageMapsToNull() {
 		assertThat(UsageMapper.map(null)).isNull();
+	}
+
+	@Test
+	void explicitTopLevelZeroTakesPrecedenceOverNestedCounts() {
+		OpenRouterUsage usage = UsageMapper.map(new Usage(10, 5, 15, 0, 0, null, new Usage.PromptTokensDetails(3),
+				new Usage.CompletionTokensDetails(2), null));
+		assertThat(usage.getCachedTokens()).isZero();
+		assertThat(usage.getCacheReadInputTokens()).isZero();
+		assertThat(usage.getReasoningTokens()).isZero();
+		assertThat(usage.getCacheWriteInputTokens()).isNull();
 	}
 
 	@Test

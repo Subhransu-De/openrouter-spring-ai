@@ -3,12 +3,12 @@ package de.subhransu.openrouter.springai.chat.mapper;
 import de.subhransu.openrouter.springai.api.dto.Usage;
 import de.subhransu.openrouter.springai.chat.OpenRouterUsage;
 
-final class UsageMapper {
+public final class UsageMapper {
 
 	private UsageMapper() {
 	}
 
-	static OpenRouterUsage map(Usage usage) {
+	public static OpenRouterUsage map(Usage usage) {
 		if (usage == null) {
 			return null;
 		}
@@ -16,9 +16,7 @@ final class UsageMapper {
 				cachedTokens(usage), reasoningTokens(usage), usage.cost(), usage);
 	}
 
-	// Chat completions report cache and reasoning counts nested under
-	// prompt_tokens_details
-	// and completion_tokens_details; the top-level fields cover the responses-mode shape.
+	// Preserve explicit top-level counts (including zero) before nested details.
 	private static Integer cachedTokens(Usage usage) {
 		if (usage.cachedTokens() != null) {
 			return usage.cachedTokens();

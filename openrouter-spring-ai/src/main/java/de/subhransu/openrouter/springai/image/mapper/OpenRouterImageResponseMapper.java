@@ -4,7 +4,7 @@ import de.subhransu.openrouter.springai.api.dto.ImagesResponse;
 import de.subhransu.openrouter.springai.api.dto.ImagesStreamEvent;
 import de.subhransu.openrouter.springai.api.dto.Usage;
 import de.subhransu.openrouter.springai.api.errors.OpenRouterApiExceptionFactory;
-import de.subhransu.openrouter.springai.chat.OpenRouterUsage;
+import de.subhransu.openrouter.springai.chat.mapper.UsageMapper;
 import de.subhransu.openrouter.springai.image.OpenRouterImageGenerationMetadata;
 import java.util.List;
 import org.springframework.ai.image.Image;
@@ -41,8 +41,7 @@ public final class OpenRouterImageResponseMapper {
 		ImageResponseMetadata metadata = created != null ? new ImageResponseMetadata(created)
 				: new ImageResponseMetadata();
 		if (usage != null) {
-			metadata.put("openrouter.usage", new OpenRouterUsage(usage.promptTokens(), usage.completionTokens(),
-					usage.totalTokens(), usage.cachedTokens(), usage.reasoningTokens(), usage.cost(), usage));
+			metadata.put("openrouter.usage", UsageMapper.map(usage));
 		}
 		return metadata;
 	}

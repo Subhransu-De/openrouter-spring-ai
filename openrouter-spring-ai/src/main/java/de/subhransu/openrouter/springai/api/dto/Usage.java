@@ -14,8 +14,8 @@ public record Usage(@JsonAlias("input_tokens") @JsonProperty("prompt_tokens") In
 		@JsonProperty("total_tokens") Integer totalTokens,
 		@JsonAlias("cached_tokens") @JsonProperty("cache_read_input_tokens") Integer cachedTokens,
 		@JsonProperty("reasoning_tokens") Integer reasoningTokens, Double cost,
-		@JsonProperty("prompt_tokens_details") PromptTokensDetails promptTokensDetails,
-		@JsonProperty("completion_tokens_details") CompletionTokensDetails completionTokensDetails,
+		@JsonAlias("input_tokens_details") @JsonProperty("prompt_tokens_details") PromptTokensDetails promptTokensDetails,
+		@JsonAlias("output_tokens_details") @JsonProperty("completion_tokens_details") CompletionTokensDetails completionTokensDetails,
 		Map<String, Object> details) {
 
 	@JsonIgnoreProperties(ignoreUnknown = true)
