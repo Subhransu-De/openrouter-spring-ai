@@ -32,18 +32,26 @@ final class GeneratedImageMapper {
 			.toList();
 	}
 
-	// The Responses API returns generated images as image_generation_call output items
-	// whose result is the raw base64 image bytes (no data-URL wrapper and no media type);
-	// the base64 string is kept verbatim and the mime type defaults to PNG like plain
-	// chat image URLs.
+	// Use URL-backed Media in both modes so generated images can be reused as input.
 	static List<Media> responsesMedia(List<ResponsesOutputItem> output) {
 		if (output == null || output.isEmpty()) {
 			return List.of();
 		}
 		return output.stream()
 			.filter(item -> item != null && "image_generation_call".equals(item.type()) && item.result() != null)
-			.map(item -> Media.builder().mimeType(MimeTypeUtils.IMAGE_PNG).data(item.result()).build())
+			.map(GeneratedImageMapper::responseMedia)
 			.toList();
+	}
+
+	private static Media responseMedia(ResponsesOutputItem item) {
+		String result = item.result();
+		String format = item.rawItem() != null && item.rawItem().hasNonNull("output_format")
+				? item.rawItem().get("output_format").asString() : "png";
+		MimeType mimeType = result.startsWith(DATA_URL_PREFIX) ? mimeType(result)
+				: MimeTypeUtils.parseMimeType("image/" + format);
+		String url = result.startsWith(DATA_URL_PREFIX) || result.startsWith("https://") || result.startsWith("http://")
+				? result : "data:" + mimeType + ";base64," + result;
+		return Media.builder().mimeType(mimeType).data(url).build();
 	}
 
 	private static MimeType mimeType(String url) {

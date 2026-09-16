@@ -62,7 +62,7 @@ public final class OpenRouterChatRequestMapper {
 				continue;
 			}
 			mapped.add(new ChatMessage(mapRole(message.getMessageType()), mapContent(message), null, null,
-					mapAssistantToolCalls(message), null,
+					mapAssistantToolCalls(message), mapAssistantImages(message),
 					message instanceof AssistantMessage
 							? (String) message.getMetadata().get(ReasoningMetadata.REASONING) : null,
 					message instanceof AssistantMessage ? ReasoningMetadata.details(message.getMetadata()) : null,
@@ -98,6 +98,13 @@ public final class OpenRouterChatRequestMapper {
 			.map(toolCall -> new ToolCall(toolCall.id(), toolCall.type(),
 					new FunctionCall(toolCall.name(), toolCall.arguments())))
 			.toList();
+	}
+
+	private List<ContentPart> mapAssistantImages(Message message) {
+		if (!(message instanceof AssistantMessage assistant) || CollectionUtils.isEmpty(assistant.getMedia())) {
+			return null;
+		}
+		return assistant.getMedia().stream().map(media -> ContentPart.image(MediaUrlMapper.imageUrl(media))).toList();
 	}
 
 	private String mapRole(MessageType messageType) {
