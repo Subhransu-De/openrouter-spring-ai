@@ -129,7 +129,7 @@ class OpenRouterStructuredOutputPropertiesTests {
 							.requestMode(mode)
 							.responseFormat(OpenRouterResponseFormat.text())
 							.build()));
-				assertThat(mapper.readTree(body.get()).at(formatPath(mode)).path("type").asText()).isEqualTo("text");
+				assertThat(mapper.readTree(body.get()).at(formatPath(mode)).path("type").asString()).isEqualTo("text");
 			});
 	}
 
@@ -141,11 +141,11 @@ class OpenRouterStructuredOutputPropertiesTests {
 			return;
 		}
 		String type = explicit == null ? "json_schema" : explicit.type().name().toLowerCase(java.util.Locale.ROOT);
-		assertThat(format.path("type").asText()).isEqualTo(type);
+		assertThat(format.path("type").asString()).isEqualTo(type);
 		if ("json_schema".equals(type)) {
 			JsonNode schema = mode == OpenRouterRequestMode.OPENAI_RESPONSES ? format : format.path("json_schema");
 			assertThat(schema.path("schema")).isEqualTo(mapper.readTree(SCHEMA));
-			assertThat(schema.path("name").asText()).isEqualTo(explicit == null ? "response" : "answer");
+			assertThat(schema.path("name").asString()).isEqualTo(explicit == null ? "response" : "answer");
 			if (explicit == null || explicit.strict() == null) {
 				assertThat(schema.has("strict")).isFalse();
 			}
@@ -196,7 +196,7 @@ class OpenRouterStructuredOutputPropertiesTests {
 			.getResourceAsStream("META-INF/spring-configuration-metadata.json")) {
 			assertThat(input).isNotNull();
 			List<String> names = new ArrayList<>();
-			mapper.readTree(input).path("properties").forEach(property -> names.add(property.path("name").asText()));
+			mapper.readTree(input).path("properties").forEach(property -> names.add(property.path("name").asString()));
 			assertThat(names).contains(PREFIX + "output-schema", PREFIX + "response-format.type",
 					PREFIX + "response-format.name", PREFIX + "response-format.strict",
 					PREFIX + "response-format.schema");
