@@ -4,11 +4,13 @@ import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
 import de.subhransu.openrouter.springai.chat.OpenRouterReasoningOptions;
+import de.subhransu.openrouter.springai.chat.OpenRouterResponseFormat;
 import de.subhransu.openrouter.springai.chat.OpenRouterServiceTier;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.NestedConfigurationProperty;
 import org.springframework.util.unit.DataSize;
 
 @ConfigurationProperties(OpenRouterChatProperties.CONFIG_PREFIX)
@@ -45,6 +47,17 @@ public class OpenRouterChatProperties {
 	private Double frequencyPenalty;
 
 	private String user;
+
+	/**
+	 * Explicit output format. Takes precedence over output-schema.
+	 */
+	@NestedConfigurationProperty
+	private OpenRouterResponseFormat responseFormat;
+
+	/**
+	 * Portable JSON schema document. Leaves strict unset and uses the name response.
+	 */
+	private String outputSchema;
 
 	private Boolean parallelToolCalls;
 
@@ -96,6 +109,8 @@ public class OpenRouterChatProperties {
 			.presencePenalty(this.presencePenalty)
 			.frequencyPenalty(this.frequencyPenalty)
 			.user(this.user)
+			.responseFormat(this.responseFormat)
+			.outputSchema(this.outputSchema)
 			.parallelToolCalls(this.parallelToolCalls)
 			.toolChoice(this.toolChoice)
 			.repetitionPenalty(this.repetitionPenalty)
@@ -222,6 +237,22 @@ public class OpenRouterChatProperties {
 
 	public void setUser(String user) {
 		this.user = user;
+	}
+
+	public OpenRouterResponseFormat getResponseFormat() {
+		return this.responseFormat;
+	}
+
+	public void setResponseFormat(OpenRouterResponseFormat responseFormat) {
+		this.responseFormat = responseFormat;
+	}
+
+	public String getOutputSchema() {
+		return this.outputSchema;
+	}
+
+	public void setOutputSchema(String outputSchema) {
+		this.outputSchema = outputSchema;
 	}
 
 	public Boolean getParallelToolCalls() {

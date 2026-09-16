@@ -28,6 +28,31 @@ takes precedence over `outputSchema`. Portable schemas leave `strict` unset;
 leave `strict` unset in both modes; this library does not currently expose a function-tool
 strictness option or rewrite tool schemas to satisfy strict-mode requirements.
 
+Configure structured-output defaults under the flattened chat namespace (no
+`options` segment):
+
+```yaml
+spring:
+  ai:
+    openrouter:
+      chat:
+        response-format:
+          type: json-schema
+          name: answer
+          strict: true
+          schema: |
+            {"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"],"additionalProperties":false}
+```
+
+`response-format.type` also accepts `text` and `json-object`. For a portable
+schema, set `spring.ai.openrouter.chat.output-schema` to the JSON document instead;
+it uses the schema name `response` and leaves strict unset. An explicit
+`response-format` wins when both are configured. Omit `strict` to leave it unset,
+or set it to `true` or `false` explicitly. With neither option configured, no
+format is sent. JSON-schema formats require a schema; malformed JSON fails before
+the request is sent. These properties use the same mapping as Java options for
+calls and streams in both request modes.
+
 Responses rejects explicitly set `stopSequences`, `seed`, `repetitionPenalty`, `minP`,
 `topA`, and `includeUsage` with `IllegalArgumentException` before sending a request.
 Unset these options or use Chat Completions. Responses usage is read from the response
