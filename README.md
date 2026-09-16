@@ -161,6 +161,35 @@ options: the advisor executes with the options it sees on the prompt. Tools decl
 by bean name are resolved through the `ToolCallbackResolver` configured on the
 `ToolCallingManager` during execution.
 
+#### Tool failure policy
+
+When OpenRouter is selected and no replacement `ChatModel` is declared, the starter
+supplies `OpenRouterToolExecutionExceptionProcessor` before Spring AI creates its
+shared manager. It returns a stable sanitized error result. This processor also applies
+to other providers using that shared manager. A declared `ToolExecutionExceptionProcessor`
+bean takes precedence; `spring.ai.tools.throw-exception-on-error=true` retains Spring AI's
+throwing policy instead.
+
+Custom and delegating `ToolCallingManager` implementations can implement
+`de.subhransu.openrouter.springai.chat.OpenRouterToolFailurePolicy`. Return the processor
+actually used by execution from `toolExecutionExceptionProcessor()`: an application-declared
+processor bean, `OpenRouterToolExecutionExceptionProcessor`, or Spring AI's default processor
+configured with `alwaysThrow(true)`. Delegates must use that same processor. The contract
+applies to both calls and streams; it declares application responsibility and cannot prove
+that a custom implementation honors its declaration.
+
+Existing `DefaultToolCallingManager` beans remain supported through a private-field
+compatibility adapter tested against Spring AI **2.0.1**, the dependency baseline. Other
+versions are not verified. The public contract with an application-declared processor avoids
+this adapter entirely. If upstream internals change, inspection fails with migration guidance;
+missing fields no longer fail class initialization or native hint registration.
+
+Managers without a verifiable policy still fail validation. The existing
+`spring.ai.openrouter.chat.allow-unsafe-tool-failure-results=true` opt-out skips manager
+validation and transfers failure-result redaction responsibility to the application; it does
+not disable the automatically supplied processor. Declaring an unrelated processor bean
+does not approve a manager that uses a different processor.
+
 ### Reasoning conversation state
 
 Assistant message metadata carries `openrouter.reasoning` (text) and
