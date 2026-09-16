@@ -116,11 +116,14 @@ public final class OpenRouterStreamingResponseMapper {
 					"Tool call choice ended without a tool-call completion reason");
 		}
 
+		Map<String, Object> properties = ReasoningMetadata.chat(
+				choice.delta() != null ? choice.delta().reasoning() : null,
+				choice.delta() != null ? choice.delta().reasoningDetails() : null);
+		RefusalMetadata.put(properties, choice.delta() != null ? choice.delta().refusal() : null);
+		Map<String, Object> snapshot = reasoning.append(properties);
 		AssistantMessage assistantMessage = AssistantMessage.builder()
 			.content(choice.delta() != null && choice.delta().content() != null ? choice.delta().content() : "")
-			.properties(
-					reasoning.append(ReasoningMetadata.chat(choice.delta() != null ? choice.delta().reasoning() : null,
-							choice.delta() != null ? choice.delta().reasoningDetails() : null)))
+			.properties(snapshot)
 			.toolCalls(mapToolCalls(choice.delta() != null ? choice.delta().toolCalls() : null))
 			.media(GeneratedImageMapper.media(choice.delta() != null ? choice.delta().images() : null))
 			.build();
@@ -129,6 +132,7 @@ public final class OpenRouterStreamingResponseMapper {
 			.metadata("openrouter.model", model)
 			.metadata("openrouter.choice_index", choice.index())
 			.metadata("openrouter.native_finish_reason", choice.nativeFinishReason())
+			.metadata(RefusalMetadata.REFUSAL, snapshot.get(RefusalMetadata.REFUSAL))
 			.metadata("openrouter.reasoning", choice.delta() != null ? choice.delta().reasoning() : null)
 			.build();
 		return new Generation(assistantMessage, metadata);

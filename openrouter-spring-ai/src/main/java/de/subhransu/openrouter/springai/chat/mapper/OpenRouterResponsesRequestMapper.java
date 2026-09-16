@@ -140,9 +140,15 @@ public final class OpenRouterResponsesRequestMapper {
 				}
 				items.addAll(reasoningItems);
 			}
-			if (StringUtils.hasText(message.getText())) {
-				items.add(new ResponsesOutputItem(null, MESSAGE_TYPE, "completed", "assistant",
-						List.of(new ResponsesContent("output_text", message.getText()))));
+			List<ResponsesContent> content = new ArrayList<>();
+			if (StringUtils.hasLength(message.getText())) {
+				content.add(new ResponsesContent("output_text", message.getText()));
+			}
+			if (message.getMetadata().get(RefusalMetadata.REFUSAL) instanceof String refusal) {
+				content.add(new ResponsesContent("refusal", null, null, refusal));
+			}
+			if (!content.isEmpty()) {
+				items.add(new ResponsesOutputItem(null, MESSAGE_TYPE, "completed", "assistant", content));
 			}
 			if (message instanceof AssistantMessage assistantMessage) {
 				for (AssistantMessage.ToolCall toolCall : assistantMessage.getToolCalls()) {

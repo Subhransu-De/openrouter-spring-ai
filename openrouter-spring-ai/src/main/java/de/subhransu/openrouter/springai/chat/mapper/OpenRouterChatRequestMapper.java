@@ -65,7 +65,9 @@ public final class OpenRouterChatRequestMapper {
 					mapAssistantToolCalls(message), null,
 					message instanceof AssistantMessage
 							? (String) message.getMetadata().get(ReasoningMetadata.REASONING) : null,
-					message instanceof AssistantMessage ? ReasoningMetadata.details(message.getMetadata()) : null));
+					message instanceof AssistantMessage ? ReasoningMetadata.details(message.getMetadata()) : null,
+					message instanceof AssistantMessage ? (String) message.getMetadata().get(RefusalMetadata.REFUSAL)
+							: null));
 		}
 		return mapped;
 	}

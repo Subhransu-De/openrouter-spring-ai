@@ -137,6 +137,24 @@ so Spring AI message aggregation retains the complete reasoning state. Text cont
 incremental. The existing generation metadata key `openrouter.reasoning` remains available
 for streamed reasoning deltas and synchronous reasoning text.
 
+### Refusals and incomplete output
+
+Both request modes expose provider refusal explanations under `openrouter.refusal` in
+assistant message and generation metadata, separately from answer text. Check this key
+to distinguish a refusal from ordinary empty output; a refusal can still have `STOP`
+as its finish reason. Streaming metadata contains cumulative refusal text, with repeated
+done events and terminal snapshots reconciled rather than concatenated.
+Keep the original assistant message and its metadata in conversation history so follow-up
+requests replay the refusal explanation, including refusal-only assistant turns.
+
+Responses normalizes `max_output_tokens` to `LENGTH` and `content_filter` to
+`CONTENT_FILTER` for both synchronous and streaming calls. Unknown incomplete reasons
+pass through unchanged; absent reasons fall back to the response status. Generation
+metadata retains the unnormalized reason as `openrouter.native_finish_reason`, the
+status as `openrouter.responses.status`, and the typed incomplete details as
+`openrouter.responses.incomplete_details`. Responses text preserves whitespace-only
+parts and messages; streaming text remains incremental without repeating terminal text.
+
 ### Embeddings
 
 `OpenRouterEmbeddingModel` is auto-configured next to the chat model and implements Spring

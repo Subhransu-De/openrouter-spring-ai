@@ -26,7 +26,8 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 		return Flux.defer(() -> {
 			ReasoningMetadata.Accumulator reasoning = new ReasoningMetadata.Accumulator();
 			List<ResponsesOutputItem> pending = new ArrayList<>();
-			return events.map(event -> map(event, reasoning, pending))
+			RefusalMetadata.Accumulator refusal = new RefusalMetadata.Accumulator();
+			return events.map(event -> map(event, reasoning, pending, refusal))
 				.concatWith(Mono
 					.defer(() -> pending.isEmpty() ? Mono.empty() : Mono.error(new OpenRouterTruncatedResponseException(
 							"Responses stream ended before tool round completion"))));
@@ -34,12 +35,13 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 	}
 
 	public ChatResponse map(ResponsesStreamEvent event) {
-		return map(event, new ReasoningMetadata.Accumulator(), new ArrayList<>());
+		return map(event, new ReasoningMetadata.Accumulator(), new ArrayList<>(), new RefusalMetadata.Accumulator());
 	}
 
 	private ChatResponse map(ResponsesStreamEvent event, ReasoningMetadata.Accumulator accumulator,
-			List<ResponsesOutputItem> pending) {
+			List<ResponsesOutputItem> pending, RefusalMetadata.Accumulator refusal) {
 		String type = event.type();
+		boolean incomplete = "response.incomplete".equals(type);
 		if ("error".equals(type) || type != null && type.endsWith(".error")) {
 			StreamError error = eventError(event);
 			throw OpenRouterApiExceptionFactory.create("OpenRouter responses stream failed", String.valueOf(event),
@@ -77,12 +79,11 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 		}
 		else if ("response.completed".equals(type)) {
 			result = event.response();
-			finishReason = result != null && result.status() != null ? result.status() : "completed";
+			finishReason = FinishReasonMapper.responses(result, "completed");
 		}
-		else if ("response.incomplete".equals(type)) {
+		else if (incomplete) {
 			result = event.response();
-			finishReason = result != null && result.incompleteDetails() != null
-					&& result.incompleteDetails().reason() != null ? result.incompleteDetails().reason() : "incomplete";
+			finishReason = FinishReasonMapper.responses(result, "incomplete");
 		}
 		else if ("response.failed".equals(type)) {
 			// A failed generation ends the stream over HTTP 200; converting it into an
@@ -92,15 +93,18 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 					failed != null ? failed.error() : null, failed != null ? failed.errorType() : null);
 		}
 
-		if ("response.completed".equals(type) || "response.incomplete".equals(type)) {
-			String status = "response.incomplete".equals(type) ? "incomplete" : finishReason;
+		String nativeFinishReason = finishReason;
+		String status = result != null && result.status() != null ? result.status()
+				: incomplete ? "incomplete" : "response.completed".equals(type) ? "completed" : null;
+		if ("response.completed".equals(type) || incomplete) {
+			String toolStatus = incomplete ? "incomplete" : status;
 			String reason = result != null && result.incompleteDetails() != null ? result.incompleteDetails().reason()
 					: null;
-			toolCalls = OpenRouterResponsesResponseMapper.toolCalls(status, reason, pending);
+			toolCalls = OpenRouterResponsesResponseMapper.toolCalls(toolStatus, reason, pending);
 			if (result != null && result.output() != null) {
 				// Validate both representations so a terminal snapshot cannot erase an
 				// explicitly non-final output_item.done status.
-				List<AssistantMessage.ToolCall> terminalCalls = OpenRouterResponsesResponseMapper.toolCalls(status,
+				List<AssistantMessage.ToolCall> terminalCalls = OpenRouterResponsesResponseMapper.toolCalls(toolStatus,
 						reason, result.output());
 				if (!terminalCalls.isEmpty()) {
 					toolCalls = terminalCalls;
@@ -121,6 +125,7 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 		if (result != null && result.output() != null) {
 			snapshot = accumulator.replace(ReasoningMetadata.responses(result.output()));
 		}
+		RefusalMetadata.put(snapshot, refusal.update(event));
 		AssistantMessage assistantMessage = AssistantMessage.builder()
 			.properties(snapshot)
 			.content(text)
@@ -129,7 +134,10 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 			.build();
 		ChatGenerationMetadata generationMetadata = ChatGenerationMetadata.builder()
 			.finishReason(FinishReasonMapper.map(finishReason))
-			.metadata("openrouter.native_finish_reason", finishReason)
+			.metadata("openrouter.native_finish_reason", nativeFinishReason)
+			.metadata("openrouter.responses.status", status)
+			.metadata("openrouter.responses.incomplete_details", result != null ? result.incompleteDetails() : null)
+			.metadata(RefusalMetadata.REFUSAL, snapshot.get(RefusalMetadata.REFUSAL))
 			.metadata("openrouter.reasoning", reasoning)
 			.build();
 		ChatResponseMetadata.Builder responseMetadata = ChatResponseMetadata.builder()

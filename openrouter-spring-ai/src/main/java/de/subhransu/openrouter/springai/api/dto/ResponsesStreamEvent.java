@@ -18,7 +18,14 @@ public record ResponsesStreamEvent(String type, String delta, ResponsesOutputIte
 		@JsonDeserialize(using = LenientResponsesResultDeserializer.class) ResponsesResult response, StreamError error,
 		@JsonDeserialize(using = TolerantJsonStringDeserializer.class) String code,
 		@JsonDeserialize(using = TolerantJsonStringDeserializer.class) String message, JsonNode metadata,
-		@JsonDeserialize(using = TolerantJsonStringDeserializer.class) @JsonProperty("error_type") String errorType) {
+		@JsonDeserialize(using = TolerantJsonStringDeserializer.class) @JsonProperty("error_type") String errorType,
+		String refusal, @JsonProperty("output_index") Integer outputIndex,
+		@JsonProperty("content_index") Integer contentIndex) {
+
+	public ResponsesStreamEvent(String type, String delta, ResponsesOutputItem item, ResponsesResult response,
+			StreamError error, String code, String message, JsonNode metadata, String errorType) {
+		this(type, delta, item, response, error, code, message, metadata, errorType, null, null, null);
+	}
 
 	public ResponsesStreamEvent(String type, String delta, ResponsesOutputItem item, ResponsesResult response,
 			StreamError error, String code, String message) {
