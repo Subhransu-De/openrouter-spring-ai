@@ -105,6 +105,15 @@ that design exactly (as do Spring AI's own OpenAI and Anthropic models):
   `advisors(AdvisorParams.toolCallingAdvisorAutoRegister(false))` to surface tool calls
   without executing them.
 
+Option builders, copies, and model defaults own detached collection snapshots. Provider
+routing lists, image input references, and nested JSON maps/lists (metadata, image
+configuration, provider options, and tool choice) are read-only through getters. Use
+`mutate()` to derive changed options. Tool-context maps/lists are also snapshotted;
+callbacks and other opaque application objects remain shared by identity. Use JSON
+maps/lists for container isolation; arbitrary mutable objects are not cloned. Null
+values and collection order are preserved. Embedding builders return independent
+results; explicit setters change only the option instance on which they are called.
+
 Register tools on the request options (or the `ChatClient`), not as model default
 options: the advisor executes with the options it sees on the prompt. Tools declared only
 by bean name are resolved through the `ToolCallbackResolver` configured on the

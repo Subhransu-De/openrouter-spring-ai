@@ -1,6 +1,7 @@
 package de.subhransu.openrouter.springai.chat;
 
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
+import de.subhransu.openrouter.springai.support.OptionSnapshots;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -324,7 +325,7 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 	}
 
 	private static Map<String, Object> copyMap(Map<String, Object> values) {
-		return values == null ? null : new LinkedHashMap<>(values);
+		return values == null ? null : new LinkedHashMap<>(OptionSnapshots.map(values));
 	}
 
 	private static Map<String, Object> readOnlyMap(Map<String, Object> values) {
@@ -371,7 +372,7 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 			this.options.user = source.user;
 			this.options.responseFormat = source.responseFormat;
 			this.options.parallelToolCalls = source.parallelToolCalls;
-			this.options.toolChoice = source.toolChoice;
+			this.options.toolChoice = OptionSnapshots.value(source.toolChoice);
 			this.options.provider = source.provider;
 			this.options.reasoning = source.reasoning;
 			this.options.serviceTier = source.serviceTier;
@@ -513,7 +514,7 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 		 * other shapes.
 		 */
 		public Builder toolChoice(Object toolChoice) {
-			this.options.toolChoice = toolChoice;
+			this.options.toolChoice = OptionSnapshots.value(toolChoice);
 			return this;
 		}
 
@@ -595,7 +596,7 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 			if (this.options.toolContext == null) {
 				this.options.toolContext = new LinkedHashMap<>();
 			}
-			this.options.toolContext.put(key, value);
+			this.options.toolContext.put(key, OptionSnapshots.value(value));
 			return this;
 		}
 
