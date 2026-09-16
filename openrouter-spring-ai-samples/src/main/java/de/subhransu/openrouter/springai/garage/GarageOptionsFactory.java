@@ -83,11 +83,11 @@ public final class GarageOptionsFactory {
       boolean outputSchemaVariant) {
     OpenRouterChatOptions.Builder builder =
         common(operationId, "digital-inspection", requestMode, model, List.of(), topic)
-            .provider(structuredOutputProviderPreferences())
-            .responseFormat(
-                OpenRouterResponseFormat.jsonSchema("service_inspection", true, schema));
+            .provider(structuredOutputProviderPreferences());
     if (outputSchemaVariant) {
       builder.outputSchema(schema);
+    } else {
+      builder.responseFormat(OpenRouterResponseFormat.jsonSchema("service_inspection", true, schema));
     }
     return builder.build();
   }

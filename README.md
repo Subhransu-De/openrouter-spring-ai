@@ -345,6 +345,14 @@ order, so match each result to the corresponding command-line entry. Authored se
 and generated media are separate application outputs and may contain customer or model content.
 These report protections do not sanitize console logs.
 
+Tool-loop evidence requires model-selected tools and correlated tool results sent in a
+follow-up request. The service story must complete inspection, specialist delegation,
+priority scoring, and service-record tools; a text-only answer cannot certify it.
+Structured-output probes test `responseFormat` and `outputSchema` independently.
+Feature reports retain each selected request mode's status. Mixed outcomes are `partial`,
+and a failed, missing, or incomplete required mode fails the run. Unsupported modes remain
+explicit; embeddings and image generation are checked once because those APIs are mode-independent.
+
 Select capabilities independently of the pipeline schedule:
 
 ```bash

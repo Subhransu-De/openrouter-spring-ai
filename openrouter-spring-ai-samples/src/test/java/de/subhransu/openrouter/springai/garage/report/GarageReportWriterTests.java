@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.garage.GarageProperties;
 import de.subhransu.openrouter.springai.garage.cli.GarageCommand;
+import de.subhransu.openrouter.springai.garage.evidence.EvidenceLevel;
 import de.subhransu.openrouter.springai.garage.evidence.GarageEvidence;
 import de.subhransu.openrouter.springai.garage.evidence.GarageFeature;
 import de.subhransu.openrouter.springai.garage.evidence.GarageTelemetry;
@@ -91,5 +92,39 @@ class GarageReportWriterTests {
     assertThat(json.get("status").stringValue()).isEqualTo(expected);
     assertThat(json.get("incompleteFeatures").size()).isEqualTo(missing.size());
     assertThat(Files.readString(reports.markdown())).contains("# Run status: " + expected);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"covered", "failed", "incomplete", "not-executed", "unsupported-in-mode"})
+  void coverageRetainsEachModesOutcome(String responseStatus) throws Exception {
+    GarageEvidence evidence = new GarageEvidence();
+    GarageFeature feature = "unsupported-in-mode".equals(responseStatus)
+        ? GarageFeature.STRUCTURED_OUTPUT : GarageFeature.SYNCHRONOUS_CHAT;
+    for (var mode : OpenRouterRequestMode.values()) {
+      String status = mode == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS ? "covered" : responseStatus;
+      if ("not-executed".equals(status) || "unsupported-in-mode".equals(status)) {
+        continue;
+      }
+      String operation = evidence.newOperation(feature.sceneId(), mode.name());
+      for (var level : EvidenceLevel.values()) {
+        if (!"incomplete".equals(status) || level != EvidenceLevel.ASSERTED) {
+          evidence.record(feature, operation, mode.name(), level, "status", "passed");
+        }
+      }
+      if ("failed".equals(status)) {
+        evidence.error(feature, operation, mode.name(), new IllegalStateException("synthetic"));
+      }
+    }
+    ObjectMapper mapper = new ObjectMapper();
+    var writer = new GarageReportWriter(mapper, evidence, mock(GarageTelemetry.class), mock(GarageTransportEvidence.class));
+    var reports = writer.write(this.output,
+        GarageCommand.from(new String[] {"--text", "--request-mode=both"}, new GarageProperties()), List.of(), List.of());
+    var registry = mapper.readTree(reports.json().toFile()).get("featureRegistry");
+    var entry = java.util.stream.StreamSupport.stream(registry.spliterator(), false)
+        .filter(item -> feature.id().equals(item.get("id").stringValue())).findFirst().orElseThrow();
+    assertThat(entry.get("status").stringValue()).isEqualTo("covered".equals(responseStatus) ? "covered" : "partial");
+    assertThat(entry.get("modeStatuses").get(0).get("status").stringValue()).isEqualTo("covered");
+    assertThat(entry.get("modeStatuses").get(1).get("status").stringValue()).isEqualTo(responseStatus);
+    assertThat(Files.readString(reports.markdown())).contains("OPENAI_CHAT_COMPLETIONS", "OPENAI_RESPONSES", responseStatus);
   }
 }

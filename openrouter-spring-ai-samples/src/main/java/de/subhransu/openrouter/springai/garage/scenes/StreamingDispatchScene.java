@@ -8,6 +8,7 @@ import de.subhransu.openrouter.springai.garage.GarageTools;
 import de.subhransu.openrouter.springai.garage.evidence.EvidenceLevel;
 import de.subhransu.openrouter.springai.garage.evidence.GarageFeature;
 import de.subhransu.openrouter.springai.garage.evidence.GarageToolCallback;
+import de.subhransu.openrouter.springai.garage.evidence.GarageToolLoop;
 import de.subhransu.openrouter.springai.garage.evidence.GarageTransportEvidence;
 import java.time.Duration;
 import java.time.Instant;
@@ -120,12 +121,14 @@ public final class StreamingDispatchScene extends GarageSceneSupport {
                           + " TRK7, model year 1972, and symptom overheating. Then summarize it."),
                   new UserMessage("Dispatch the required bulletin lookup now.")),
               toolOptions);
+      GarageToolLoop toolLoop = new GarageToolLoop();
       List<ChatResponse> toolChunks;
       try (GarageTransportEvidence.Scope ignored =
           context.transportEvidence().activate(operationId, id())) {
         toolChunks =
-            context.chatClient().prompt(toolPrompt).stream().chatResponse().collectList().block(TIMEOUT);
+            context.chatClient().prompt(toolPrompt).advisors(toolLoop).stream().chatResponse().collectList().block(TIMEOUT);
       }
+      toolLoop.assertCompleted(List.of("lookup_service_bulletin"));
       toolStreamEvents = toolChunks != null ? toolChunks.size() : 0;
       toolStreamCost = toolChunks != null ? GarageCosts.stream(toolChunks) : 0.0;
       toolInvocations = tools.invocations();

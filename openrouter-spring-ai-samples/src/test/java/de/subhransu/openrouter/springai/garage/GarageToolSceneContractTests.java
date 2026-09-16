@@ -16,9 +16,11 @@ import de.subhransu.openrouter.springai.api.dto.ChatMessage;
 import de.subhransu.openrouter.springai.api.dto.Choice;
 import de.subhransu.openrouter.springai.api.dto.Delta;
 import de.subhransu.openrouter.springai.api.dto.FunctionCall;
+import de.subhransu.openrouter.springai.api.dto.ResponsesContent;
 import de.subhransu.openrouter.springai.api.dto.ToolCall;
 import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
 import de.subhransu.openrouter.springai.api.dto.ResponsesOutputItem;
+import de.subhransu.openrouter.springai.api.dto.Usage;
 import de.subhransu.openrouter.springai.autoconfigure.OpenRouterChatProperties;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
 import de.subhransu.openrouter.springai.garage.cli.GarageCommand;
@@ -29,6 +31,7 @@ import de.subhransu.openrouter.springai.garage.evidence.GarageTransportEvidence;
 import de.subhransu.openrouter.springai.garage.scenes.ExpressInvoiceScene;
 import de.subhransu.openrouter.springai.garage.scenes.SceneContext;
 import de.subhransu.openrouter.springai.garage.scenes.SceneResult;
+import de.subhransu.openrouter.springai.garage.scenes.ServiceStoryScene;
 import de.subhransu.openrouter.springai.garage.scenes.StreamingDispatchScene;
 import io.micrometer.core.instrument.observation.DefaultMeterObservationHandler;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -39,6 +42,9 @@ import java.io.UncheckedIOException;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.env.YamlPropertySourceLoader;
@@ -50,8 +56,8 @@ class GarageToolSceneContractTests {
 
   @TempDir Path output;
 
-  @org.junit.jupiter.params.ParameterizedTest
-  @org.junit.jupiter.params.provider.EnumSource(OpenRouterRequestMode.class)
+  @ParameterizedTest
+  @EnumSource(OpenRouterRequestMode.class)
   void returnDirectInvoiceUsesExactlyOneModelCall(OpenRouterRequestMode mode) {
     OpenRouterApi api = mock(OpenRouterApi.class);
     when(api.chatCompletion(any()))
@@ -118,12 +124,97 @@ class GarageToolSceneContractTests {
     verify(api, times(3)).chatCompletionStream(any());
   }
 
-  @org.junit.jupiter.params.ParameterizedTest
-  @org.junit.jupiter.params.provider.EnumSource(OpenRouterRequestMode.class)
+  @ParameterizedTest
+  @EnumSource(OpenRouterRequestMode.class)
   void dynoTuningExecutesInBothModes(OpenRouterRequestMode mode) {
     var test = context(mock(OpenRouterApi.class), "dyno-tuning", mode);
     var result = new de.subhransu.openrouter.springai.garage.scenes.DynoTuningScene().execute(test.context());
     assertThat(result.status()).isEqualTo(SceneResult.Status.PASSED);
+  }
+
+  @ParameterizedTest
+  @EnumSource(OpenRouterRequestMode.class)
+  void serviceStoryRejectsTextWithoutModelToolCalls(OpenRouterRequestMode mode) {
+    OpenRouterApi api = mock(OpenRouterApi.class);
+    stubStory(api, List.of());
+    var test = context(api, "service-story", mode);
+    org.assertj.core.api.Assertions.assertThatThrownBy(
+        () -> new ServiceStoryScene().execute(test.context()))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("model-directed tool calls");
+    assertThat(test.context().evidence().featureSnapshot()).noneMatch(item -> Boolean.TRUE.equals(item.get("complete")));
+  }
+
+  @ParameterizedTest
+  @EnumSource(OpenRouterRequestMode.class)
+  void serviceStoryRequiresAllFourModelDirectedToolsAndFollowUp(OpenRouterRequestMode mode) throws Exception {
+    OpenRouterApi api = mock(OpenRouterApi.class);
+    stubStory(api, List.of(
+        storyCall("inspect_vehicle_profile", "{\"concern\":\"synthetic\",\"severity\":4,\"safetyCritical\":true}"),
+        storyCall("hand_to_specialist", "{\"job\":\"synthetic inspection\"}"),
+        storyCall("score_repair_plan", "{\"safetyRisk\":4,\"reliabilityRisk\":3,\"costRisk\":2}"),
+        storyCall("log_to_jobsheet", "{\"title\":\"Synthetic\",\"markdown\":\"Inspect brakes\"}")));
+    var test = context(api, "service-story", mode);
+    var result = new ServiceStoryScene().execute(test.context());
+    assertThat(result.status()).isEqualTo(SceneResult.Status.PASSED);
+    assertThat((Double) result.details().get("costUsd"))
+        .isCloseTo(0.03, org.assertj.core.api.Assertions.within(0.000001));
+    assertThat(test.context().evidence().featureSnapshot()).allMatch(item -> Boolean.TRUE.equals(item.get("complete")));
+    verify(api, times(mode == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS ? 3 : 0)).chatCompletion(any());
+    verify(api, times(mode == OpenRouterRequestMode.OPENAI_RESPONSES ? 3 : 0)).responses(any());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"missing-tools", "wrong-tool", "malformed", "wrong-type"})
+  void serviceStoryRejectsInvalidToolRounds(String variation) {
+    for (OpenRouterRequestMode mode : OpenRouterRequestMode.values()) {
+      OpenRouterApi api = mock(OpenRouterApi.class);
+      ToolCall call = switch (variation) {
+        case "wrong-tool" -> storyCall("generate_express_invoice", "{\"item\":\"synthetic\",\"amount\":1}");
+        case "malformed" -> storyCall("inspect_vehicle_profile", "{");
+        case "wrong-type" -> storyCall("inspect_vehicle_profile", "{\"concern\":\"synthetic\",\"severity\":{},\"safetyCritical\":true}");
+        default -> storyCall("log_to_jobsheet", "{\"title\":\"Synthetic\",\"markdown\":\"Inspect brakes\"}");
+      };
+      stubStory(api, List.of(call));
+      var test = context(api, "service-story", mode);
+      org.assertj.core.api.Assertions.assertThatThrownBy(
+          () -> new ServiceStoryScene().execute(test.context()))
+          .isInstanceOf(RuntimeException.class);
+      assertThat(test.context().evidence().featureSnapshot()).noneMatch(item -> Boolean.TRUE.equals(item.get("complete")));
+    }
+  }
+
+  private ToolCall storyCall(String name, String arguments) {
+    return new ToolCall("synthetic-" + name, "function", new FunctionCall(name, arguments));
+  }
+
+  private void stubStory(OpenRouterApi api, List<ToolCall> calls) {
+    var usage = new Usage(10, 5, 15, 0, 1, 0.01, null, null, null);
+    var answer = new ChatCompletionResponse("synthetic", "chat.completion", 1L, "garage/model", null,
+        List.of(new Choice(0, new ChatMessage("assistant", "Synthetic recommendation", null, null, null), null, "stop", "stop")), usage);
+    var toolRound = new ChatCompletionResponse("synthetic-tools", "chat.completion", 1L, "garage/model", null,
+        List.of(new Choice(0, new ChatMessage("assistant", "", null, null, calls), null, "tool_calls", "tool_calls")), usage);
+    when(api.chatCompletion(any())).thenReturn(calls.isEmpty() ? answer : toolRound, answer);
+    var responseAnswer = new ResponsesResult("synthetic", "response", 1L, "garage/model", "completed",
+        List.of(new ResponsesOutputItem("synthetic-message", "message", "completed", "assistant",
+            List.of(new ResponsesContent("output_text", "Synthetic recommendation")))), usage, null);
+    var responseCalls = calls.stream().map(call -> new ResponsesOutputItem("item-" + call.id(),
+        "function_call", "completed", null, null, call.id(), call.function().name(), call.function().arguments(), null)).toList();
+    when(api.responses(any())).thenReturn(calls.isEmpty() ? responseAnswer : new ResponsesResult(
+        "synthetic-tools", "response", 1L, "garage/model", "completed", responseCalls, usage, null), responseAnswer);
+  }
+
+  @Test
+  void streamingToolResultWithoutAFollowUpResponseCannotPass() {
+    OpenRouterApi api = mock(OpenRouterApi.class);
+    when(api.chatCompletionStream(any())).thenReturn(
+        Flux.just(textChunk("synthetic intake", "stop")),
+        Flux.just(toolChunk("synthetic-call", "lookup_service_bulletin",
+            "{\"vinPrefix\":\"TRK7\",\"modelYear\":1972,\"symptom\":\"synthetic\"}", "tool_calls")),
+        Flux.empty());
+    var test = context(api, "streaming-dispatch");
+    org.assertj.core.api.Assertions.assertThatThrownBy(() -> new StreamingDispatchScene().execute(test.context()))
+        .isInstanceOf(IllegalStateException.class).hasMessageContaining("no response");
   }
 
   private TestContext context(OpenRouterApi api, String sceneId) {
