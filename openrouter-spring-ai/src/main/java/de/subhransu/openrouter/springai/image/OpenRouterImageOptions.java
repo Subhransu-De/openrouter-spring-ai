@@ -1,7 +1,6 @@
 package de.subhransu.openrouter.springai.image;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import de.subhransu.openrouter.springai.support.OptionSnapshots;
 import java.util.List;
 import java.util.Map;
 import org.springframework.ai.image.ImageOptions;
@@ -194,10 +193,8 @@ public class OpenRouterImageOptions implements ImageOptions {
 			this.options.background = source.background;
 			this.options.outputCompression = source.outputCompression;
 			this.options.seed = source.seed;
-			this.options.inputReferences = source.inputReferences == null ? null
-					: new ArrayList<>(source.inputReferences);
-			this.options.providerOptions = source.providerOptions == null ? null
-					: new LinkedHashMap<>(source.providerOptions);
+			this.options.inputReferences = OptionSnapshots.list(source.inputReferences);
+			this.options.providerOptions = OptionSnapshots.map(source.providerOptions);
 		}
 
 		public Builder model(String model) {
@@ -256,12 +253,12 @@ public class OpenRouterImageOptions implements ImageOptions {
 		}
 
 		public Builder inputReferences(List<String> inputReferences) {
-			this.options.inputReferences = inputReferences == null ? null : new ArrayList<>(inputReferences);
+			this.options.inputReferences = OptionSnapshots.list(inputReferences);
 			return this;
 		}
 
 		public Builder providerOptions(Map<String, Object> providerOptions) {
-			this.options.providerOptions = providerOptions == null ? null : new LinkedHashMap<>(providerOptions);
+			this.options.providerOptions = OptionSnapshots.map(providerOptions);
 			return this;
 		}
 

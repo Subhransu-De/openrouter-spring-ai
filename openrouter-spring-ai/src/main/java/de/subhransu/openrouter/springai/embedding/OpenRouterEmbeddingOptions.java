@@ -149,7 +149,7 @@ public class OpenRouterEmbeddingOptions implements EmbeddingOptions {
 		}
 
 		public OpenRouterEmbeddingOptions build() {
-			return this.options;
+			return new Builder(this.options).options;
 		}
 
 	}
