@@ -143,7 +143,7 @@ public class OpenRouterChatModel implements ChatModel {
 					: Observation.Scope.NOOP) {
 				observation.start();
 			}
-			Flux<ChatResponse> responses = switch (resolveRequestMode(options)) {
+			Flux<ChatResponse> responses = Flux.defer(() -> switch (resolveRequestMode(options)) {
 				case OPENAI_CHAT_COMPLETIONS -> {
 					ChatCompletionRequest request = buildChatCompletionsRequest(prompt, options, true);
 					yield this.streamingResponseMapper.map(this.streamingToolCallAggregator
@@ -154,7 +154,7 @@ public class OpenRouterChatModel implements ChatModel {
 							resolveToolDefinitions(options));
 					yield this.responsesStreamingResponseMapper.map(this.openRouterApi.responsesStream(request));
 				}
-			};
+			});
 			AtomicReference<OpenRouterUsage> usage = new AtomicReference<>();
 			Flux<ChatResponse> observed = responses.doOnNext(response -> {
 				if (response.getMetadata().getUsage() instanceof OpenRouterUsage current) {
