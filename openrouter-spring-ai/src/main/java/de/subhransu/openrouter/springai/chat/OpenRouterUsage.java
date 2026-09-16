@@ -12,7 +12,8 @@ public class OpenRouterUsage extends DefaultUsage {
 
 	public OpenRouterUsage(Integer promptTokens, Integer generationTokens, Integer totalTokens, Integer cachedTokens,
 			Integer reasoningTokens, Double cost, Object nativeUsage) {
-		super(promptTokens, generationTokens, totalTokens, nativeUsage);
+		super(promptTokens, generationTokens, totalTokens, nativeUsage,
+				cachedTokens != null ? cachedTokens.longValue() : null, null);
 		this.cachedTokens = cachedTokens;
 		this.reasoningTokens = reasoningTokens;
 		this.cost = cost;

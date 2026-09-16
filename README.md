@@ -241,6 +241,14 @@ observations with the `openrouter` provider, operation, request model, response 
 where available, and token-usage context. When a `MeterRegistry` is present, chat and
 embedding usage is also recorded as `gen_ai.client.token.usage`.
 
+Chat and embedding response usage is available as `OpenRouterUsage`; image responses
+expose it in metadata under `openrouter.usage`. It retains provider cost, cached and
+reasoning token counts, and the native usage DTO. Cached tokens are also available
+through Spring AI's portable `Usage.getCacheReadInputTokens()`. Missing detail counts
+remain `null`, distinct from an explicit zero; unavailable cache-write counts remain
+`null`. Streaming chat model observations retain the latest provider usage snapshot
+in both request modes, including cost and detailed counts.
+
 The starter provides the Spring AI handlers, but it does not choose monitoring backends
 for the application:
 

@@ -18,6 +18,8 @@ import io.micrometer.observation.ObservationRegistry;
 import io.micrometer.observation.contextpropagation.ObservationThreadLocalAccessor;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
+import org.springframework.ai.chat.metadata.ChatResponseMetadata;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.MessageAggregator;
@@ -153,10 +155,31 @@ public class OpenRouterChatModel implements ChatModel {
 					yield this.responsesStreamingResponseMapper.map(this.openRouterApi.responsesStream(request));
 				}
 			};
-			Flux<ChatResponse> observed = responses.doOnError(observation::error)
+			AtomicReference<OpenRouterUsage> usage = new AtomicReference<>();
+			Flux<ChatResponse> observed = responses.doOnNext(response -> {
+				if (response.getMetadata().getUsage() instanceof OpenRouterUsage current) {
+					usage.set(current);
+				}
+			})
+				.doOnError(observation::error)
 				.doFinally(signal -> observation.stop())
 				.contextWrite(ctx -> ctx.put(ObservationThreadLocalAccessor.KEY, observation));
-			return new MessageAggregator().aggregate(observed, observationContext::setResponse);
+			return new MessageAggregator().aggregate(observed, response -> {
+				// Spring AI's aggregator replaces provider usage with token totals only.
+				// OpenRouter usage is a cumulative snapshot, not a per-chunk delta.
+				if (usage.get() != null) {
+					ChatResponseMetadata original = response.getMetadata();
+					ChatResponseMetadata.Builder metadata = ChatResponseMetadata.builder()
+						.id(original.getId())
+						.model(original.getModel())
+						.rateLimit(original.getRateLimit())
+						.promptMetadata(original.getPromptMetadata())
+						.usage(usage.get());
+					original.entrySet().forEach(entry -> metadata.keyValue(entry.getKey(), entry.getValue()));
+					response = new ChatResponse(response.getResults(), metadata.build());
+				}
+				observationContext.setResponse(response);
+			});
 		});
 	}
 
