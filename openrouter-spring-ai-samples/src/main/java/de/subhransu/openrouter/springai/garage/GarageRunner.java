@@ -257,6 +257,11 @@ final class GarageRunner implements CommandLineRunner {
     } catch (Exception failure) {
       log.error("FAIL {}: {}", scene.id(), failure.getMessage());
       String operationId = lastOperationId(scene.id(), requestMode);
+      this.evidence.featureSnapshot().stream()
+          .filter(item -> operationId.equals(item.get("operationId")))
+          .filter(item -> requestMode.name().equals(item.get("requestMode")))
+          .forEach(item -> this.evidence.error(GarageFeature.fromId(item.get("featureId").toString()),
+              operationId, requestMode.name(), failure));
       return SceneResult.failed(
           scene.id(),
           operationId,
@@ -419,17 +424,6 @@ final class GarageRunner implements CommandLineRunner {
         selected.stream()
             .flatMap(scene -> scene.features().stream())
             .collect(Collectors.toCollection(LinkedHashSet::new));
-    if (!command.requestModes().contains(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS)) {
-      required.remove(GarageFeature.CHAT_COMPLETIONS_MODE);
-      // Digital inspection explicitly reports structured output as unsupported in Responses mode.
-      // Keep that outcome in the report without claiming that inference was executed.
-      required.remove(GarageFeature.STRUCTURED_OUTPUT);
-      // runScenes skips the Chat Completions-only recovery contract in Responses mode.
-      required.removeAll(GarageFeature.forScene("recovery-road-test"));
-    }
-    if (!command.requestModes().contains(OpenRouterRequestMode.OPENAI_RESPONSES)) {
-      required.remove(GarageFeature.RESPONSES_MODE);
-    }
     if (!command.runsEmbeddings()) {
       required.remove(GarageFeature.EMBEDDINGS);
     }
@@ -439,13 +433,10 @@ final class GarageRunner implements CommandLineRunner {
     if (!command.runsImageGeneration()) {
       required.remove(GarageFeature.IMAGE_GENERATION);
     }
-    List<Map<String, Object>> snapshot = this.evidence.featureSnapshot();
     return required.stream()
-        .filter(
-            feature ->
-                snapshot.stream()
-                    .filter(item -> feature.id().equals(item.get("featureId")))
-                    .noneMatch(item -> Boolean.TRUE.equals(item.get("complete"))))
+        .filter(feature -> feature.coverageModes(command.requestModes()).stream()
+            .filter(feature::supports)
+            .anyMatch(mode -> !"covered".equals(this.evidence.coverageStatus(feature, mode))))
         .map(GarageFeature::id)
         .toList();
   }

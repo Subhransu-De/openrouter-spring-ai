@@ -3,6 +3,7 @@ package de.subhransu.openrouter.springai.garage;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 
+import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.garage.evidence.EvidenceLevel;
 import de.subhransu.openrouter.springai.garage.evidence.GarageEvidence;
 import de.subhransu.openrouter.springai.garage.evidence.GarageFeature;
@@ -160,6 +161,35 @@ class GarageEvidenceTests {
     String echo(String concern) {
       return concern;
     }
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void aSuccessfulOperationCannotHideAnotherIncompleteOrFailedOperation(boolean failed) {
+    GarageEvidence evidence = new GarageEvidence();
+    var mode = OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS;
+    String complete = evidence.newOperation("service-story", mode.name());
+    for (EvidenceLevel level : EvidenceLevel.values()) {
+      evidence.record(GarageFeature.TOOL_LOOP, complete, mode.name(), level, "status", "passed");
+    }
+    String other = evidence.newOperation("service-story", mode.name());
+    evidence.record(GarageFeature.TOOL_LOOP, other, mode.name(), EvidenceLevel.CONFIGURED, "status", "passed");
+    if (failed) {
+      evidence.error(GarageFeature.TOOL_LOOP, other, mode.name(), new IllegalStateException("synthetic"));
+    }
+    assertThat(evidence.coverageStatus(GarageFeature.TOOL_LOOP, mode)).isEqualTo(failed ? "failed" : "incomplete");
+  }
+
+  @Test
+  void modeIndependentBaysRequireOnlyThePassThatExecutesThem() {
+    var chat = OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS;
+    var responses = OpenRouterRequestMode.OPENAI_RESPONSES;
+    for (var feature : List.of(GarageFeature.EMBEDDINGS, GarageFeature.IMAGE_GENERATION)) {
+      assertThat(feature.coverageModes(List.of(chat, responses))).containsExactly(chat);
+      assertThat(feature.coverageModes(List.of(responses))).containsExactly(responses);
+    }
+    assertThat(GarageFeature.IMAGE_INPUT.coverageModes(List.of(chat, responses))).containsExactly(chat, responses);
+    assertThat(GarageFeature.STREAMING_TOOL_AGGREGATION.supports(responses)).isFalse();
   }
 
   record PrivatePayload(String prompt) {}

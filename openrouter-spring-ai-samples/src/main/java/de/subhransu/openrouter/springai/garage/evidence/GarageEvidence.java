@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.garage.evidence;
 
+import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -33,7 +34,7 @@ public final class GarageEvidence {
       "dimensions", "similarCosine", "unrelatedCosine", "imageBytes", "usage",
       "promptTokens", "completionTokens", "totalTokens", "count", "value", "measurements",
       "cachedTokens", "reasoningTokens", "cost", "full", "offlineContracts", "capabilities",
-      "imageSurface", "imageQuality");
+      "imageSurface", "imageQuality", "modeStatuses");
 
   private static final Set<String> LABELS = labels();
   private final Set<String> operationIds = ConcurrentHashMap.newKeySet();
@@ -41,7 +42,7 @@ public final class GarageEvidence {
   private static Set<String> labels() {
     Set<String> labels = new HashSet<>(Set.of(
         REDACTED, "garage", "passed", "failed", "PASSED", "FAILED", "success", "error",
-        "covered", "not-executed", "incomplete", "unsupported-in-mode",
+        "covered", "not-executed", "incomplete", "unsupported-in-mode", "partial",
         "OPENAI_CHAT_COMPLETIONS", "OPENAI_RESPONSES", "embedding-models", "image-models",
         "operation.started", "feature.error", "transport.request", "observation.stopped",
         "tool.schema", "tool.attempted", "tool.succeeded", "tool.failed",
@@ -125,6 +126,24 @@ public final class GarageEvidence {
     return List.copyOf(this.events);
   }
 
+  public String coverageStatus(GarageFeature feature, OpenRouterRequestMode mode) {
+    List<Map<String, Object>> matching = featureSnapshot().stream()
+        .filter(item -> feature.id().equals(item.get("featureId")))
+        .filter(item -> mode.name().equals(item.get("requestMode")))
+        .toList();
+    if (matching.stream().anyMatch(item -> !((List<?>) item.get("errors")).isEmpty())) {
+      return "failed";
+    }
+    if (!feature.supports(mode)) {
+      return "unsupported-in-mode";
+    }
+    if (matching.isEmpty()) {
+      return "not-executed";
+    }
+    return matching.stream().allMatch(item -> Boolean.TRUE.equals(item.get("complete")))
+        ? "covered" : "incomplete";
+  }
+
   public boolean operationPassed(String operationId) {
     List<FeatureEvidence> matching =
         this.featureEvidence.entrySet().stream()
@@ -170,7 +189,7 @@ public final class GarageEvidence {
 
   private FeatureEvidence evidence(
       GarageFeature feature, String operationId, String requestMode) {
-    String key = operationId + "|" + feature.id();
+    String key = operationId + "|" + feature.id() + "|" + requestMode;
     return this.featureEvidence.computeIfAbsent(
         key,
         ignored -> new FeatureEvidence(feature, operationId, feature.sceneId(), requestMode));

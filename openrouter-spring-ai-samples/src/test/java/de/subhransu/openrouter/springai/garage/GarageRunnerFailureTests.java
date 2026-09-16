@@ -9,12 +9,14 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
+import de.subhransu.openrouter.springai.garage.evidence.EvidenceLevel;
 import de.subhransu.openrouter.springai.garage.evidence.GarageEvidence;
 import de.subhransu.openrouter.springai.garage.evidence.GarageFeature;
 import de.subhransu.openrouter.springai.garage.evidence.GarageTelemetry;
 import de.subhransu.openrouter.springai.garage.evidence.GarageTransportEvidence;
 import de.subhransu.openrouter.springai.garage.report.GarageReportWriter;
 import de.subhransu.openrouter.springai.garage.scenes.GarageScene;
+import de.subhransu.openrouter.springai.garage.scenes.SceneContext;
 import de.subhransu.openrouter.springai.garage.scenes.SceneResult;
 import io.micrometer.observation.ObservationRegistry;
 import java.nio.file.Files;
@@ -41,13 +43,23 @@ class GarageRunnerFailureTests {
   @Test
   void failedSceneReportsAndFailsWithoutAuto() throws Exception {
     GarageScene scene = scene();
-    when(scene.execute(any())).thenThrow(new IllegalStateException("synthetic failure"));
+    GarageEvidence evidence = new GarageEvidence();
+    when(scene.execute(any())).thenAnswer(invocation -> {
+      String mode = OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS.name();
+      evidence.record(GarageFeature.STANDARD_SAMPLING, evidence.newOperation(scene.id(), mode),
+          mode, EvidenceLevel.CONFIGURED, "status", "passed");
+      throw new IllegalStateException("synthetic failure");
+    });
     GarageReportWriter writer = writer();
-    GarageRunner runner = runner(scene, new GarageEvidence(), writer);
+    GarageRunner runner = runner(scene, evidence, writer);
 
     assertThatThrownBy(() -> runner.run("--scene=dyno-tuning", "--output=" + this.output))
         .isInstanceOf(IllegalStateException.class).hasMessageContaining("1 failed");
     verify(writer).write(any(), any(), any(), any());
+    assertThat(evidence.coverageStatus(GarageFeature.STANDARD_SAMPLING,
+        OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS)).isEqualTo("failed");
+    assertThat(evidence.coverageStatus(GarageFeature.FULL_PROPERTY_BINDING,
+        OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS)).isEqualTo("not-executed");
   }
 
   @Test
@@ -148,6 +160,41 @@ class GarageRunnerFailureTests {
     assertThat(report).doesNotContain(secret).contains("failed", "[REDACTED]");
     var json = new ObjectMapper().readTree(report);
     assertThat(json.get("failed").intValue()).isEqualTo(1);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"covered", "failed", "incomplete", "not-executed"})
+  void everySelectedModeNeedsCompleteEvidenceEvenWhenScenesReturnPassed(String responseStatus) throws Exception {
+    GarageEvidence evidence = new GarageEvidence();
+    GarageScene scene = scene();
+    when(scene.features()).thenReturn(List.of(GarageFeature.STANDARD_SAMPLING));
+    when(scene.execute(any())).thenAnswer(invocation -> {
+      var context = invocation.getArgument(0, SceneContext.class);
+      String mode = context.requestMode().name();
+      String operation = evidence.newOperation(scene.id(), mode);
+      String status = context.requestMode() == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS ? "covered" : responseStatus;
+      if (!"not-executed".equals(status)) {
+        for (var level : EvidenceLevel.values()) {
+          if (!"incomplete".equals(status) || level != EvidenceLevel.ASSERTED) {
+            evidence.record(GarageFeature.STANDARD_SAMPLING, operation, mode, level, "status", "passed");
+          }
+        }
+        if ("failed".equals(status)) {
+          evidence.error(GarageFeature.STANDARD_SAMPLING, operation, mode, new IllegalStateException("synthetic"));
+        }
+      }
+      return SceneResult.passed(scene.id(), operation, context.requestMode(), Duration.ZERO, this.output, Map.of());
+    });
+    GarageReportWriter writer = writer();
+    GarageRunner runner = runner(scene, evidence, writer);
+    String[] args = {"--text", "--scene=dyno-tuning", "--request-mode=both", "--output=" + this.output};
+    if ("covered".equals(responseStatus)) {
+      runner.run(args);
+    } else {
+      assertThatThrownBy(() -> runner.run(args)).isInstanceOf(IllegalStateException.class)
+          .hasMessageContaining("0 failed and 1 features");
+    }
+    verify(writer).write(any(), any(), any(), eq("covered".equals(responseStatus) ? List.of() : List.of("standard-sampling")));
   }
 
   private GarageScene scene() {

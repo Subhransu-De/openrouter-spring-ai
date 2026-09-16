@@ -9,6 +9,7 @@ import de.subhransu.openrouter.springai.garage.GarageTools;
 import de.subhransu.openrouter.springai.garage.evidence.EvidenceLevel;
 import de.subhransu.openrouter.springai.garage.evidence.GarageFeature;
 import de.subhransu.openrouter.springai.garage.evidence.GarageToolCallback;
+import de.subhransu.openrouter.springai.garage.evidence.GarageToolLoop;
 import de.subhransu.openrouter.springai.garage.evidence.GarageTransportEvidence;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -24,14 +25,13 @@ import java.util.Map;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.support.ToolCallbacks;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
-/** Stabilized service story with deterministic tool inputs and a single advisor-driven writer. */
+/** Model-directed inspection, delegation, scoring, and service-record tool loop. */
 @Component
 public final class ServiceStoryScene extends GarageSceneSupport {
 
@@ -39,7 +39,7 @@ public final class ServiceStoryScene extends GarageSceneSupport {
     super(
         "service-story",
         "Service story",
-        "Deterministic inspection, specialist delegation, priority score, and service record.",
+        "Model-directed inspection, specialist delegation, priority score, and service record.",
         false);
   }
 
@@ -62,8 +62,11 @@ public final class ServiceStoryScene extends GarageSceneSupport {
             operationId,
             id(),
             context.command().specialistModel());
+    List<String> requiredTools = List.of(
+        "inspect_vehicle_profile", "score_repair_plan", "hand_to_specialist", "log_to_jobsheet");
     List<ToolCallback> callbacks =
         Arrays.stream(ToolCallbacks.from(tools))
+            .filter(callback -> requiredTools.contains(callback.getToolDefinition().name()))
             .map(
                 callback ->
                     GarageToolCallback.wrap(
@@ -76,27 +79,7 @@ public final class ServiceStoryScene extends GarageSceneSupport {
                         GarageFeature.MIXED_TOOL_SCHEMAS))
             .toList();
 
-    ToolContext toolContext =
-        new ToolContext(
-            Map.of("garage.jobId", operationId, "garage.tenant", "sample-shop"));
-    callback(callbacks, "inspect_vehicle_profile")
-        .call(
-            "{\"concern\":\""
-                + jsonText(context.command().topic())
-                + "\",\"severity\":4,\"safetyCritical\":true}",
-            toolContext);
-    callback(callbacks, "score_repair_plan")
-        .call("{\"safetyRisk\":4,\"reliabilityRisk\":3,\"costRisk\":2}", toolContext);
-    callback(callbacks, "hand_to_specialist")
-        .call(
-            "{\"job\":\"Inspect the cooling and brake symptoms; return measured next steps.\"}",
-            toolContext);
-    callback(callbacks, "log_to_jobsheet")
-        .call(
-            "{\"title\":\"Deterministic inspection\",\"markdown\":\"Inspection, specialist, and risk-score steps completed with typed inputs.\"}",
-            toolContext);
-
-    ToolCallback writer = callback(callbacks, "log_to_jobsheet");
+    GarageToolLoop toolLoop = new GarageToolLoop();
     OpenRouterChatOptions options =
         context.optionsFactory()
             .serviceStory(
@@ -105,7 +88,7 @@ public final class ServiceStoryScene extends GarageSceneSupport {
                 context.command().foremanModel(),
                 context.command().fallbackModels(),
                 context.command().topic(),
-                List.of(writer));
+                callbacks);
     context.evidence().recordAll(
         applicable,
         operationId,
@@ -118,17 +101,21 @@ public final class ServiceStoryScene extends GarageSceneSupport {
         new Prompt(
             List.of(
                 new SystemMessage(
-                    "You are the Garage Foreman. You have exactly one tool. Call"
-                        + " log_to_jobsheet once with a short final recommendation, then return a"
-                        + " one-sentence customer note. Do not invent completed repairs."),
+                    "You are the Garage Foreman. Call inspect_vehicle_profile, hand_to_specialist,"
+                        + " score_repair_plan, and log_to_jobsheet in that order. Use each result"
+                        + " to inform the next step, then return a one-sentence customer note."
+                        + " Do not invent completed repairs."),
                 new UserMessage("Write the final service recommendation for: " + context.command().topic())),
             options);
 
     ChatResponse response;
     try (GarageTransportEvidence.Scope ignored =
         context.transportEvidence().activate(operationId, id())) {
-      response = context.chatClient().prompt(prompt).call().chatResponse();
+      response = context.chatClient().prompt(prompt).advisors(toolLoop).call().chatResponse();
     }
+    toolLoop.assertCompleted(requiredTools);
+    // The advisor aggregates standard usage; probe provider-specific fields on the final model round.
+    response = toolLoop.lastResponse();
     String finalText = GarageResponses.text(response);
     appendFinalRecord(context.outputDirectory(), finalText);
 
@@ -227,13 +214,6 @@ public final class ServiceStoryScene extends GarageSceneSupport {
         || usage.getReasoningTokens() <= 0;
   }
 
-  private ToolCallback callback(List<ToolCallback> callbacks, String name) {
-    return callbacks.stream()
-        .filter(callback -> name.equals(callback.getToolDefinition().name()))
-        .findFirst()
-        .orElseThrow(() -> new IllegalStateException("Missing Garage tool: " + name));
-  }
-
   private void appendFinalRecord(Path outputDirectory, String finalText) throws Exception {
     Path serviceRecord = outputDirectory.resolve("service-record.md");
     Files.writeString(
@@ -246,7 +226,4 @@ public final class ServiceStoryScene extends GarageSceneSupport {
         StandardOpenOption.APPEND);
   }
 
-  private String jsonText(String value) {
-    return value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ");
-  }
 }

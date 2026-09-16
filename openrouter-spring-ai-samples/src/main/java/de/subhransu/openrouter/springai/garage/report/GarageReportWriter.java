@@ -44,7 +44,7 @@ public final class GarageReportWriter {
       List<String> incompleteFeatures) throws IOException {
     Files.createDirectories(runDirectory);
     List<Map<String, Object>> featureEvidence = this.evidence.featureSnapshot();
-    List<Map<String, Object>> registry = registry(featureEvidence);
+    List<Map<String, Object>> registry = registry(featureEvidence, command);
     double recordedCostUsd = this.evidence.recordedCostUsd();
     boolean budgetExceeded =
         command.maxCostUsd() != null && recordedCostUsd > command.maxCostUsd() + 0.000000001;
@@ -100,26 +100,29 @@ public final class GarageReportWriter {
     return new ReportPaths(json, report, readme);
   }
 
-  private List<Map<String, Object>> registry(List<Map<String, Object>> featureEvidence) {
+  private List<Map<String, Object>> registry(List<Map<String, Object>> featureEvidence, GarageCommand command) {
     List<Map<String, Object>> registry = new ArrayList<>();
     for (GarageFeature feature : GarageFeature.values()) {
       List<Map<String, Object>> matching =
           featureEvidence.stream()
               .filter(item -> feature.id().equals(item.get("featureId")))
               .toList();
-      boolean complete = matching.stream().anyMatch(item -> Boolean.TRUE.equals(item.get("complete")));
-      boolean failed =
-          matching.stream()
-              .map(item -> item.get("errors"))
-              .filter(List.class::isInstance)
-              .map(List.class::cast)
-              .anyMatch(errors -> !errors.isEmpty());
+      List<Map<String, Object>> modeStatuses = feature.coverageModes(command.requestModes()).stream()
+          .map(mode -> Map.<String, Object>of("requestMode", mode.name(),
+              "status", this.evidence.coverageStatus(feature, mode)))
+          .toList();
+      List<Object> statuses = modeStatuses.stream().map(mode -> mode.get("status")).distinct().toList();
+      String status = statuses.isEmpty() ? "not-executed"
+          : statuses.size() == 1 ? statuses.get(0).toString()
+          : statuses.contains("covered") ? "partial"
+          : statuses.contains("failed") ? "failed" : "incomplete";
       Map<String, Object> item = new LinkedHashMap<>();
       item.put("id", feature.id());
       item.put("title", feature.title());
       item.put("sceneId", feature.sceneId());
       item.put("kind", feature.kind().name());
-      item.put("status", complete ? "covered" : failed ? "failed" : matching.isEmpty() ? "not-executed" : "incomplete");
+      item.put("status", status);
+      item.put("modeStatuses", modeStatuses);
       item.put("evidenceOperations", matching.size());
       registry.add(item);
     }
@@ -169,14 +172,17 @@ public final class GarageReportWriter {
           .append(" |\n");
     }
     report.append("\n## Feature contract\n\n");
-    report.append("A feature is **covered** only when one operation produced configured, executed, observed, and asserted evidence with no error.\n\n");
-    report.append("| Feature | Scene | Kind | Status | Evidence operations |\n");
-    report.append("| --- | --- | --- | --- | ---: |\n");
+    report.append("A feature is **covered** only when every selected applicable mode has complete evidence and no failed or incomplete operation. Mixed outcomes remain visible as partial coverage.\n\n");
+    report.append("| Feature | Scene | Kind | Status | Modes | Evidence operations |\n");
+    report.append("| --- | --- | --- | --- | --- | ---: |\n");
     for (Map<String, Object> feature : registry) {
+      List<Map<String, Object>> modes = (List<Map<String, Object>>) feature.get("modeStatuses");
       report.append("| ").append(feature.get("title")).append(" | `")
           .append(feature.get("sceneId")).append("` | ")
           .append(feature.get("kind")).append(" | **")
           .append(feature.get("status")).append("** | ")
+          .append(String.join("; ", modes.stream()
+              .map(mode -> mode.get("requestMode") + ": " + mode.get("status")).toList())).append(" | ")
           .append(feature.get("evidenceOperations")).append(" |\n");
     }
     report.append("\n## Deliberately deferred library surface\n\n");

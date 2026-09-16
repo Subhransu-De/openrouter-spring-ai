@@ -105,6 +105,12 @@ class GarageOptionsFactoryTests {
       OpenRouterChatOptions options = optionsFactory.digitalInspection(
           "synthetic-schema", OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS,
           "garage/model", "synthetic report", "{\"type\":\"object\"}", outputSchema);
+      assertThat(options.getOutputSchema()).isEqualTo(outputSchema ? "{\"type\":\"object\"}" : null);
+      if (outputSchema) {
+        assertThat(options.getResponseFormat()).isNull();
+      } else {
+        assertThat(options.getResponseFormat()).isNotNull();
+      }
       var request = new de.subhransu.openrouter.springai.chat.mapper.OpenRouterChatRequestMapper(
           new tools.jackson.databind.ObjectMapper()).map(List.of(), options, false, List.of());
       assertThat(request.provider().requireParameters()).isTrue();

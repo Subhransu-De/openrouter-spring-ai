@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.garage.evidence;
 
+import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import java.util.Arrays;
 import java.util.List;
 
@@ -70,6 +71,26 @@ public enum GarageFeature {
 
   public Kind kind() {
     return this.kind;
+  }
+
+  public boolean supports(OpenRouterRequestMode mode) {
+    if (this == RESPONSES_MODE) {
+      return mode == OpenRouterRequestMode.OPENAI_RESPONSES;
+    }
+    return mode == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS
+        || (this != CHAT_COMPLETIONS_MODE && this != STRUCTURED_OUTPUT
+            && this != STREAMING_TOOL_AGGREGATION && !this.sceneId.equals("recovery-road-test"));
+  }
+
+  public List<OpenRouterRequestMode> coverageModes(List<OpenRouterRequestMode> selected) {
+    if (this == EMBEDDINGS || this == IMAGE_GENERATION) {
+      return selected.contains(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS)
+          ? List.of(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS) : selected;
+    }
+    if (this == CHAT_COMPLETIONS_MODE || this == RESPONSES_MODE) {
+      return selected.stream().filter(this::supports).toList();
+    }
+    return selected;
   }
 
   public static GarageFeature fromId(String id) {
