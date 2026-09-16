@@ -404,7 +404,8 @@ final class GarageRunner implements CommandLineRunner {
             && recordedCostUsd > command.maxCostUsd() + 0.000000001);
     document.put("results", results);
     Path sweepJson = command.outputRoot().resolve(output.fileName());
-    this.objectMapper.writerWithDefaultPrettyPrinter().writeValue(sweepJson.toFile(), document);
+    this.objectMapper.writerWithDefaultPrettyPrinter()
+        .writeValue(sweepJson.toFile(), this.evidence.sanitizeForEvidence(document));
     log.info(
         "\nSweep result: {}/{} models passed. Evidence: {}",
         passed,

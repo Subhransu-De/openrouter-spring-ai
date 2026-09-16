@@ -10,10 +10,14 @@ import de.subhransu.openrouter.springai.garage.evidence.GarageToolCallback;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.support.ToolCallbacks;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
+import tools.jackson.databind.ObjectMapper;
 
 class GarageEvidenceTests {
 
@@ -71,16 +75,14 @@ class GarageEvidenceTests {
         Map.of(
             "Authorization", "Bearer secret-token",
             "topic", "private customer concern",
-            "safe", "retained"));
+            "count", 2));
 
     assertThat(evidence.operationPassed(operation)).isTrue();
     assertThat(evidence.featureSnapshot().get(0).get("complete")).isEqualTo(true);
     Map<String, Object> details =
         (Map<String, Object>) evidence.eventSnapshot().get(1).get("details");
     assertThat(details)
-        .containsEntry("Authorization", "[REDACTED]")
-        .containsEntry("topic", "[REDACTED]")
-        .containsEntry("safe", "retained");
+        .containsOnly(Map.entry("count", 2));
   }
 
   @Test
@@ -106,6 +108,61 @@ class GarageEvidenceTests {
         .contains("tool.attempted", "tool.failed", "feature.error");
     assertThat(evidence.operationPassed(operation)).isFalse();
   }
+
+  @Test
+  void nestedPayloadsAndUnknownObjectsFailClosed() {
+    GarageEvidence evidence = new GarageEvidence();
+    String secret = "SYNTHETIC_PRIVATE_SENTINEL";
+    String operation = evidence.newOperation(secret, "OPENAI_CHAT_COMPLETIONS");
+    Object payload = Map.of("operationId", operation, "results", new Object[] {
+        "{\"concern\":\"" + secret + "\"}",
+        new PrivatePayload(secret), java.nio.file.Path.of(secret), Map.of("input", secret),
+        Map.of(secret, true), new char[] {'s', 'e', 'c', 'r', 'e', 't'},
+        new Object() {
+          @Override
+          public String toString() {
+            throw new AssertionError("must not stringify");
+          }
+        }});
+
+    String serialized = new ObjectMapper()
+        .writeValueAsString(evidence.sanitizeForEvidence(payload));
+
+    assertThat(serialized).doesNotContain(secret, "secret").contains(operation, "[REDACTED]");
+    assertThat(evidence.sanitizeForEvidence(new byte[] {83, 89, 78})).isEqualTo("[REDACTED]");
+    assertThat(evidence.sanitizeForEvidence(evidence.sanitizeForEvidence(payload)))
+        .isEqualTo(evidence.sanitizeForEvidence(payload));
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void toolsStillReceiveAndReturnPayloadsWithoutRetainingThem(boolean withContext) {
+    GarageEvidence evidence = new GarageEvidence();
+    String secret = "SYNTHETIC_PRIVATE_SENTINEL";
+    ToolCallback callback = GarageToolCallback.wrap(ToolCallbacks.from(new EchoTool())[0],
+        evidence, evidence.newOperation("service-story", "OPENAI_CHAT_COMPLETIONS"),
+        "service-story", "OPENAI_CHAT_COMPLETIONS", GarageFeature.TOOL_LOOP);
+    String input = "{\"concern\":\"" + secret + "\"}";
+
+    String output = withContext
+        ? callback.call(input, new ToolContext(Map.of("job", secret)))
+        : callback.call(input);
+
+    assertThat(output).contains(secret);
+    assertThat(new ObjectMapper().writeValueAsString(evidence.eventSnapshot()))
+        .doesNotContain(secret);
+    assertThat(evidence.eventSnapshot()).extracting(event -> event.get("type"))
+        .contains("tool.attempted", "tool.succeeded");
+  }
+
+  static final class EchoTool {
+    @Tool(description = "Synthetic echo.")
+    String echo(String concern) {
+      return concern;
+    }
+  }
+
+  record PrivatePayload(String prompt) {}
 
   static final class TypedTool {
 

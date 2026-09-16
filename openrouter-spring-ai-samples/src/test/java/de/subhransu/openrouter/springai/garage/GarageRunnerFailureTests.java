@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.garage;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -16,6 +17,7 @@ import de.subhransu.openrouter.springai.garage.report.GarageReportWriter;
 import de.subhransu.openrouter.springai.garage.scenes.GarageScene;
 import de.subhransu.openrouter.springai.garage.scenes.SceneResult;
 import io.micrometer.observation.ObservationRegistry;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
@@ -26,7 +28,9 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.ai.embedding.EmbeddingRequest;
 import org.springframework.ai.image.ImageModel;
+import org.springframework.ai.image.ImagePrompt;
 import org.springframework.mock.env.MockEnvironment;
 import tools.jackson.databind.ObjectMapper;
 
@@ -119,6 +123,31 @@ class GarageRunnerFailureTests {
       assertThatThrownBy(() -> runner.run(args)).isInstanceOf(IllegalStateException.class)
           .hasMessageContaining("connection-timeout");
     }
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"embedding", "image"})
+  void sweepFileOmitsProviderErrorTextAndModelInput(String surface) throws Exception {
+    String secret = "SYNTHETIC_PRIVATE_SENTINEL";
+    EmbeddingModel model = mock(EmbeddingModel.class);
+    when(model.call(any(EmbeddingRequest.class)))
+        .thenThrow(new IllegalStateException(secret, new IllegalArgumentException(secret)));
+    ImageModel imageModel = mock(ImageModel.class);
+    when(imageModel.call(any(ImagePrompt.class)))
+        .thenThrow(new IllegalStateException(secret, new IllegalArgumentException(secret)));
+    GarageRunner runner = new GarageRunner(mock(ChatModel.class), model, imageModel,
+        new GarageProperties(), mock(GarageOptionsFactory.class), new ObjectMapper(),
+        new MockEnvironment().withProperty("spring.ai.openrouter.api-key", "synthetic-test-key"),
+        List.of(), new GarageEvidence(), mock(GarageTelemetry.class),
+        mock(GarageTransportEvidence.class), ObservationRegistry.create(), writer());
+
+    assertThatThrownBy(() -> runner.run("--" + surface + "-sweep=" + secret, "--output=" + this.output))
+        .isInstanceOf(IllegalStateException.class).hasMessageContaining("1 failures");
+
+    String report = Files.readString(this.output.resolve(surface + "-sweep.json"));
+    assertThat(report).doesNotContain(secret).contains("failed", "[REDACTED]");
+    var json = new ObjectMapper().readTree(report);
+    assertThat(json.get("failed").intValue()).isEqualTo(1);
   }
 
   private GarageScene scene() {
