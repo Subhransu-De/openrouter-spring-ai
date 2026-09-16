@@ -24,6 +24,23 @@ class GeneratedImageReuseTests {
 
 	private final OpenRouterChatOptions options = OpenRouterChatOptions.builder().model("synthetic/model").build();
 
+	@ParameterizedTest
+	@ValueSource(strings = { "png", "jpeg", "webp" })
+	void typedImageItemsRetainTheirOutputFormat(String format) {
+		ResponsesOutputItem item = new ResponsesOutputItem("image-1", "image_generation_call", "completed", null, null,
+				null, null, null, "AQID", format, null);
+		assertThat(GeneratedImageMapper.responsesMedia(List.of(item)).get(0).getData())
+			.isEqualTo("data:image/" + format + ";base64,AQID");
+		ResponsesOutputItem decoded = this.json.readValue(this.json.writeValueAsString(item),
+				ResponsesOutputItem.class);
+		assertThat(decoded.outputFormat()).isEqualTo(format);
+		ResponsesOutputItem rebuilt = new ResponsesOutputItem(decoded.id(), decoded.type(), decoded.status(),
+				decoded.role(), decoded.content(), decoded.callId(), decoded.name(), decoded.arguments(),
+				decoded.result(), decoded.outputFormat(), null);
+		assertThat(GeneratedImageMapper.responsesMedia(List.of(rebuilt)).get(0).getMimeType())
+			.isEqualTo(MimeTypeUtils.parseMimeType("image/" + format));
+	}
+
 	@Test
 	void dataUrlFormatTakesPrecedenceAndMissingFormatDefaultsToPng() {
 		ResponsesOutputItem item = this.json.readValue("""
