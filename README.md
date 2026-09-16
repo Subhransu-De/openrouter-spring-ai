@@ -249,6 +249,9 @@ remain `null`, distinct from an explicit zero; unavailable cache-write counts re
 `null`. Streaming chat model observations retain the latest provider usage snapshot
 in both request modes, including cost and detailed counts.
 
+Chat and image streams record request-mapping and transport errors on their observation.
+Each subscription stops its observation on completion, error, or cancellation.
+
 The starter provides the Spring AI handlers, but it does not choose monitoring backends
 for the application:
 

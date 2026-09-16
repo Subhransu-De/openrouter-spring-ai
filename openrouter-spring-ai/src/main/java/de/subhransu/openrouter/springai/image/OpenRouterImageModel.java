@@ -109,8 +109,10 @@ public class OpenRouterImageModel implements ImageModel {
 					: Observation.Scope.NOOP) {
 				observation.start();
 			}
-			ImagesRequest request = this.requestMapper.map(prompt, options, true);
-			return this.openRouterApi.imagesStream(request)
+			return Flux.defer(() -> {
+				ImagesRequest request = this.requestMapper.map(prompt, options, true);
+				return this.openRouterApi.imagesStream(request);
+			})
 				.map(this.responseMapper::map)
 				.doOnNext(observationContext::setResponse)
 				.doOnError(observation::error)
