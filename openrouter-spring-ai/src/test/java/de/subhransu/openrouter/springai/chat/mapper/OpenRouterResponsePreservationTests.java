@@ -3,10 +3,12 @@ package de.subhransu.openrouter.springai.chat.mapper;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionChunk;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionResponse;
 import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
 import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
+import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
@@ -15,6 +17,8 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.MessageAggregator;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.UserMessage;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 
@@ -189,6 +193,19 @@ class OpenRouterResponsePreservationTests {
 	private void assertRefusal(ChatResponse response, String expected) {
 		assertThat(response.getResult().getOutput().getMetadata()).containsEntry(REFUSAL, expected);
 		assertThat(response.getResult().getMetadata().<String>get(REFUSAL)).isEqualTo(expected);
+		AssistantMessage assistant = response.getResult().getOutput();
+		OpenRouterChatOptions options = OpenRouterChatOptions.builder().model("synthetic-model").build();
+		JsonNode chat = this.json.valueToTree(new OpenRouterChatRequestMapper(this.json)
+			.map(List.of(assistant, new UserMessage("Continue")), options, false, List.of()));
+		assertThat(chat.at("/messages/0/refusal").asString()).isEqualTo(expected);
+		assertThat(chat.at("/messages/0/content").asString()).isEqualTo(assistant.getText());
+		JsonNode responses = this.json.valueToTree(new OpenRouterResponsesRequestMapper(this.json)
+			.map(List.of(assistant, new UserMessage("Continue")), options, false, List.of()));
+		JsonNode content = responses.at("/input/0/content");
+		assertThat(content.get(content.size() - 1).get("refusal").asString()).isEqualTo(expected);
+		if (!assistant.getText().isEmpty()) {
+			assertThat(content.get(0).get("text").asString()).isEqualTo(assistant.getText());
+		}
 	}
 
 }

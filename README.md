@@ -135,6 +135,8 @@ assistant message and generation metadata, separately from answer text. Check th
 to distinguish a refusal from ordinary empty output; a refusal can still have `STOP`
 as its finish reason. Streaming metadata contains cumulative refusal text, with repeated
 done events and terminal snapshots reconciled rather than concatenated.
+Keep the original assistant message and its metadata in conversation history so follow-up
+requests replay the refusal explanation, including refusal-only assistant turns.
 
 Responses normalizes `max_output_tokens` to `LENGTH` and `content_filter` to
 `CONTENT_FILTER` for both synchronous and streaming calls. Unknown incomplete reasons
