@@ -8,6 +8,7 @@ import de.subhransu.openrouter.springai.api.errors.OpenRouterApiExceptionFactory
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.metadata.ChatGenerationMetadata;
@@ -62,10 +63,13 @@ public final class OpenRouterChatResponseMapper {
 			.map(choice.message() != null ? choice.message().content() : null);
 		List<Media> media = new ArrayList<>(content.media());
 		media.addAll(GeneratedImageMapper.media(choice.message() != null ? choice.message().images() : null));
+		Map<String, Object> properties = ReasoningMetadata.chat(
+				choice.message() != null ? choice.message().reasoning() : null,
+				choice.message() != null ? choice.message().reasoningDetails() : null);
+		RefusalMetadata.put(properties, choice.message() != null ? choice.message().refusal() : null);
 		AssistantMessage assistantMessage = AssistantMessage.builder()
 			.content(content.text())
-			.properties(ReasoningMetadata.chat(choice.message() != null ? choice.message().reasoning() : null,
-					choice.message() != null ? choice.message().reasoningDetails() : null))
+			.properties(properties)
 			.toolCalls(mapToolCalls(choice.message() != null ? choice.message().toolCalls() : null))
 			.media(media)
 			.build();
@@ -75,6 +79,7 @@ public final class OpenRouterChatResponseMapper {
 			.metadata("openrouter.model", model)
 			.metadata("openrouter.reasoning", choice.message() != null ? choice.message().reasoning() : null)
 			.metadata("openrouter.native_finish_reason", choice.nativeFinishReason())
+			.metadata(RefusalMetadata.REFUSAL, properties.get(RefusalMetadata.REFUSAL))
 			.build();
 		return new Generation(assistantMessage, metadata);
 	}

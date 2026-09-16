@@ -7,13 +7,14 @@ import de.subhransu.openrouter.springai.api.errors.OpenRouterApiExceptionFactory
 import de.subhransu.openrouter.springai.errors.OpenRouterExceptionMessage;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.metadata.ChatGenerationMetadata;
 import org.springframework.ai.chat.metadata.ChatResponseMetadata;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.util.CollectionUtils;
-import org.springframework.util.StringUtils;
 
 public final class OpenRouterResponsesResponseMapper {
 
@@ -27,16 +28,22 @@ public final class OpenRouterResponsesResponseMapper {
 		}
 		List<AssistantMessage.ToolCall> toolCalls = toolCalls(response.status(),
 				response.incompleteDetails() != null ? response.incompleteDetails().reason() : null, response.output());
+		Map<String, Object> properties = ReasoningMetadata.responses(response.output());
+		RefusalMetadata.put(properties, RefusalMetadata.responses(response.output()));
 		AssistantMessage assistantMessage = AssistantMessage.builder()
 			.content(text(response))
-			.properties(ReasoningMetadata.responses(response.output()))
+			.properties(properties)
 			.toolCalls(toolCalls)
 			.media(GeneratedImageMapper.responsesMedia(response.output()))
 			.build();
-		String finishReason = toolCalls.isEmpty() ? FinishReasonMapper.map(response.status()) : "TOOL_CALLS";
+		String nativeReason = FinishReasonMapper.responses(response, response.status());
+		String finishReason = toolCalls.isEmpty() ? FinishReasonMapper.map(nativeReason) : "TOOL_CALLS";
 		ChatGenerationMetadata generationMetadata = ChatGenerationMetadata.builder()
 			.finishReason(finishReason)
-			.metadata("openrouter.native_finish_reason", response.status())
+			.metadata("openrouter.native_finish_reason", nativeReason)
+			.metadata("openrouter.responses.status", response.status())
+			.metadata("openrouter.responses.incomplete_details", response.incompleteDetails())
+			.metadata(RefusalMetadata.REFUSAL, properties.get(RefusalMetadata.REFUSAL))
 			.metadata(ReasoningMetadata.REASONING, assistantMessage.getMetadata().get(ReasoningMetadata.REASONING))
 			.build();
 		ChatResponseMetadata responseMetadata = ChatResponseMetadata.builder()
@@ -77,7 +84,7 @@ public final class OpenRouterResponsesResponseMapper {
 			.stream()
 			.filter(item -> "message".equals(item.type()))
 			.map(this::text)
-			.filter(StringUtils::hasText)
+			.filter(Objects::nonNull)
 			.reduce("", String::concat);
 	}
 
@@ -89,7 +96,7 @@ public final class OpenRouterResponsesResponseMapper {
 			.stream()
 			.filter(content -> "output_text".equals(content.type()) || "text".equals(content.type()))
 			.map(ResponsesContent::text)
-			.filter(StringUtils::hasText)
+			.filter(Objects::nonNull)
 			.reduce("", String::concat);
 	}
 

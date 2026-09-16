@@ -11,7 +11,12 @@ import java.util.List;
 @JsonInclude(Include.NON_NULL)
 public record ChatMessage(String role, Object content, String name, @JsonProperty("tool_call_id") String toolCallId,
 		@JsonProperty("tool_calls") List<ToolCall> toolCalls, List<ContentPart> images, String reasoning,
-		@JsonProperty("reasoning_details") List<JsonNode> reasoningDetails) {
+		@JsonProperty("reasoning_details") List<JsonNode> reasoningDetails, String refusal) {
+
+	public ChatMessage(String role, Object content, String name, String toolCallId, List<ToolCall> toolCalls,
+			List<ContentPart> images, String reasoning, List<JsonNode> reasoningDetails) {
+		this(role, content, name, toolCallId, toolCalls, images, reasoning, reasoningDetails, null);
+	}
 
 	public ChatMessage(String role, Object content, String name, String toolCallId, List<ToolCall> toolCalls,
 			List<ContentPart> images) {
