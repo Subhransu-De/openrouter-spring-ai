@@ -84,6 +84,21 @@ retried, including after partial output. Tool execution belongs to
 and response mapping. Garage uses two retries with a 200 ms delay only for
 `TransientAiException` and transport `ResourceAccessException` failures.
 
+### Response buffering limits
+
+`spring.ai.openrouter.connection.max-response-body-size` (default `64MB`) limits each
+blocking response, each SSE event, and the complete JSON fallback for streamed image
+requests. It does not cap the total size of an SSE stream. Streaming success decoding
+uses Spring's codec limits and reports `DataBufferLimitException` when exceeded
+(wrapped in `WebClientResponseException` for chat and Responses).
+
+`spring.ai.openrouter.connection.max-error-body-size` (default `64KB`) bounds HTTP error
+body retention for both blocking and streaming requests. Oversized errors report
+`OpenRouterLimitExceededException` with the endpoint, HTTP status, bounded sanitized
+excerpt, and any recoverable error details. The observed size is a lower bound.
+Both settings accept 1 through 2147483646 bytes; invalid values fail property binding.
+Java callers can configure the same limits with `OpenRouterApi.Builder`.
+
 ## Status
 
 Done and live-verified:

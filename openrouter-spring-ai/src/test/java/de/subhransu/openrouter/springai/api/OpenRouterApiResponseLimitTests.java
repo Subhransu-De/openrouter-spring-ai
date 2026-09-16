@@ -20,6 +20,17 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.api.Test;
+import org.springframework.core.io.buffer.DataBufferLimitException;
+import org.springframework.core.io.buffer.DefaultDataBufferFactory;
+import org.springframework.mock.http.client.reactive.MockClientHttpResponse;
+import org.springframework.mock.http.client.reactive.MockClientHttpRequest;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.ClientResponse;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 import org.junit.jupiter.api.Named;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -125,6 +136,88 @@ class OpenRouterApiResponseLimitTests {
 				assertThat(exception.getErrorDetails().message()).isEqualTo("denied");
 			});
 		fixture.server().verify();
+	}
+
+	@ParameterizedTest
+	@ValueSource(ints = { 0, 63, 64, 65, 4096 })
+	void streamingErrorsRespectBoundariesAcrossEndpoints(int size) {
+		for (Endpoint endpoint : List.of(Endpoint.CHAT, Endpoint.RESPONSES, Endpoint.IMAGES)) {
+			OpenRouterApi api = OpenRouterApi.builder()
+				.apiKey("test-key")
+				.maxErrorBodyBytes(LIMIT)
+				.webClientBuilder(WebClient.builder()
+					.exchangeFunction(request -> Mono.just(ClientResponse.create(HttpStatus.BAD_REQUEST)
+						.body(Flux.range(0, size).map(index -> new DefaultDataBufferFactory().wrap(new byte[] { 'x' })))
+						.build())))
+				.build();
+			Flux<?> result = switch (endpoint) {
+				case CHAT -> api.chatCompletionStream(chatRequest());
+				case RESPONSES -> api.responsesStream(responsesRequest());
+				case IMAGES -> api.imagesStream(new ImagesRequest("test-image", "hello", null, null, null, null, null,
+						null, null, null, null, null, null, null));
+				default -> throw new IllegalArgumentException();
+			};
+			StepVerifier.create(result).expectErrorSatisfies(error -> {
+				if (size <= LIMIT) {
+					assertThat(error).isInstanceOf(OpenRouterNonTransientApiException.class);
+				}
+				else {
+					assertThat(error).isInstanceOf(OpenRouterLimitExceededException.class);
+					OpenRouterLimitExceededException limit = (OpenRouterLimitExceededException) error;
+					assertThat(limit.getLimit())
+						.isEqualTo(OpenRouterLimitExceededException.Limit.STREAMING_ERROR_BODY_BYTES);
+					assertThat(limit.getConfiguredLimit()).isEqualTo(LIMIT);
+					assertThat(limit.getObservedValue()).isEqualTo(LIMIT + 1L);
+					assertThat(limit.getEndpoint()).isEqualTo(endpoint.path);
+					assertThat(limit.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+					assertThat(limit.getResponseBody()).isEqualTo("x".repeat(LIMIT));
+				}
+			}).verify();
+		}
+	}
+
+	private OpenRouterApi streamingSuccess(String body, MediaType contentType, int limit) {
+		return OpenRouterApi.builder()
+			.apiKey("test-key")
+			.maxResponseBodyBytes(limit)
+			.webClientBuilder(WebClient.builder().clientConnector((method, uri, callback) -> {
+				MockClientHttpResponse response = new MockClientHttpResponse(HttpStatus.OK);
+				response.getHeaders().setContentType(contentType);
+				response.setBody(body);
+				return callback.apply(new MockClientHttpRequest(method, uri)).thenReturn(response);
+			}))
+			.build();
+	}
+
+	@Test
+	void successLimitAppliesPerEventRatherThanToTheWholeStream() {
+		String event = "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"hello\"}}]}\n\n";
+		StepVerifier
+			.create(streamingSuccess(event.repeat(10) + "data: [DONE]\n\n", MediaType.TEXT_EVENT_STREAM, 128)
+				.chatCompletionStream(chatRequest()))
+			.expectNextCount(10)
+			.verifyComplete();
+		StepVerifier
+			.create(streamingSuccess(event, MediaType.TEXT_EVENT_STREAM, 32).chatCompletionStream(chatRequest()))
+			.expectErrorSatisfies(error -> assertThat(error).hasRootCauseInstanceOf(DataBufferLimitException.class))
+			.verify();
+	}
+
+	@ParameterizedTest
+	@ValueSource(booleans = { false, true })
+	void imageDecodingHonorsConfiguredLimitForSseAndJson(boolean sse) {
+		String image = "a".repeat(300_000);
+		String body = sse ? "data: {\"type\":\"image_generation.completed\",\"b64_json\":\"" + image + "\"}\n\n"
+				: "{\"data\":[{\"b64_json\":\"" + image + "\"}]}";
+		MediaType contentType = sse ? MediaType.TEXT_EVENT_STREAM : MediaType.APPLICATION_JSON;
+		ImagesRequest request = new ImagesRequest("test-image", "hello", null, null, null, null, null, null, null, null,
+				null, null, null, null);
+		StepVerifier.create(streamingSuccess(body, contentType, 400_000).imagesStream(request))
+			.assertNext(event -> assertThat(event.b64Json()).isEqualTo(image))
+			.verifyComplete();
+		StepVerifier.create(streamingSuccess(body, contentType, 1024).imagesStream(request))
+			.expectError(DataBufferLimitException.class)
+			.verify();
 	}
 
 	private static String paddedJson(String json, int size) {

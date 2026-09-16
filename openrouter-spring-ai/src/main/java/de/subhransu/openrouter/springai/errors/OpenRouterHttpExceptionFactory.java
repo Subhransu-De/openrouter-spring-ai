@@ -63,6 +63,13 @@ public final class OpenRouterHttpExceptionFactory {
 
 	public OpenRouterLimitExceededException createErrorBodyLimit(String endpoint, HttpStatusCode statusCode,
 			String responseBodyExcerpt, long configuredLimit, long observedValue) {
+		return createErrorBodyLimit(endpoint, statusCode, responseBodyExcerpt, configuredLimit, observedValue,
+				OpenRouterLimitExceededException.Limit.BLOCKING_ERROR_BODY_BYTES);
+	}
+
+	public OpenRouterLimitExceededException createErrorBodyLimit(String endpoint, HttpStatusCode statusCode,
+			String responseBodyExcerpt, long configuredLimit, long observedValue,
+			OpenRouterLimitExceededException.Limit limit) {
 		String safeBody = OpenRouterExceptionMessage.sanitize(responseBodyExcerpt, this.apiKey);
 		OpenRouterErrorDetails details = parseDetails(responseBodyExcerpt, statusCode.value());
 		if (details == null) {
@@ -71,8 +78,8 @@ public final class OpenRouterHttpExceptionFactory {
 		if (details == null) {
 			details = statusDetails(statusCode.value());
 		}
-		return new OpenRouterLimitExceededException(OpenRouterLimitExceededException.Limit.BLOCKING_ERROR_BODY_BYTES,
-				configuredLimit, observedValue, endpoint, statusCode, safeBody, details);
+		return new OpenRouterLimitExceededException(limit, configuredLimit, observedValue, endpoint, statusCode,
+				safeBody, details);
 	}
 
 	private OpenRouterErrorDetails statusDetails(int statusCode) {

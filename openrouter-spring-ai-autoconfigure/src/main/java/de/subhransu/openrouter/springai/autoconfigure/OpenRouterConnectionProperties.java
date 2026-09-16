@@ -3,6 +3,7 @@ package de.subhransu.openrouter.springai.autoconfigure;
 import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.util.unit.DataSize;
+import org.springframework.util.Assert;
 
 @ConfigurationProperties(OpenRouterConnectionProperties.CONFIG_PREFIX)
 public class OpenRouterConnectionProperties {
@@ -28,6 +29,7 @@ public class OpenRouterConnectionProperties {
 	}
 
 	public void setMaxResponseBodySize(DataSize maxResponseBodySize) {
+		validateBodySize(maxResponseBodySize, "max-response-body-size");
 		this.maxResponseBodySize = maxResponseBodySize;
 	}
 
@@ -36,7 +38,13 @@ public class OpenRouterConnectionProperties {
 	}
 
 	public void setMaxErrorBodySize(DataSize maxErrorBodySize) {
+		validateBodySize(maxErrorBodySize, "max-error-body-size");
 		this.maxErrorBodySize = maxErrorBodySize;
+	}
+
+	private static void validateBodySize(DataSize size, String property) {
+		Assert.isTrue(size != null && size.toBytes() > 0 && size.toBytes() < Integer.MAX_VALUE,
+				CONFIG_PREFIX + "." + property + " must be between 1 and 2147483646 bytes");
 	}
 
 }
