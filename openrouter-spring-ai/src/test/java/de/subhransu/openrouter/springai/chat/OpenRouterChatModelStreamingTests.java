@@ -14,11 +14,17 @@ import de.subhransu.openrouter.springai.api.dto.ChatCompletionRequest;
 import de.subhransu.openrouter.springai.api.dto.Choice;
 import de.subhransu.openrouter.springai.api.dto.Delta;
 import de.subhransu.openrouter.springai.api.dto.ResponsesRequest;
+import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
 import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
+import de.subhransu.openrouter.springai.api.dto.StreamError;
 import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
+import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -165,6 +171,33 @@ class OpenRouterChatModelStreamingTests {
 						.build())))
 			.expectErrorSatisfies(error -> assertThat(error).isSameAs(failure))
 			.verify(Duration.ofSeconds(5));
+	}
+
+	@ParameterizedTest
+	@ValueSource(booleans = { false, true })
+	void transientResponsesFailureDoesNotResubscribe(boolean partialOutput) {
+		OpenRouterApi api = mock(OpenRouterApi.class);
+		AtomicInteger subscriptions = new AtomicInteger();
+		ResponsesResult failed = new ResponsesResult("resp-1", "response", null, CHAT_MODEL, "failed", List.of(), null,
+				new StreamError("server_error", "synthetic failure"));
+		ResponsesStreamEvent failure = new ResponsesStreamEvent("response.failed", null, null, failed, null);
+		when(api.responsesStream(any())).thenReturn(Flux.defer(() -> {
+			subscriptions.incrementAndGet();
+			return partialOutput ? Flux.just(textDelta("partial"), failure) : Flux.just(failure);
+		}));
+		OpenRouterChatModel model = OpenRouterChatModel.builder().openRouterApi(api).build();
+		var verifier = StepVerifier.create(model.stream(new Prompt(List.of(new UserMessage("hi")),
+				OpenRouterChatOptions.builder()
+					.model(CHAT_MODEL)
+					.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
+					.build())));
+		if (partialOutput) {
+			verifier
+				.assertNext(response -> assertThat(response.getResult().getOutput().getText()).isEqualTo("partial"));
+		}
+		verifier.expectError(OpenRouterTransientApiException.class).verify(Duration.ofSeconds(5));
+		assertThat(subscriptions).hasValue(1);
+		verify(api, never()).responses(any());
 	}
 
 	@Test

@@ -6,7 +6,6 @@ import de.subhransu.openrouter.springai.api.dto.ResponsesOutputItem;
 import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
 import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
 import de.subhransu.openrouter.springai.api.dto.StreamError;
-import de.subhransu.openrouter.springai.api.errors.OpenRouterApiExceptionFactory;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import java.util.ArrayList;
 import java.util.List;
@@ -44,7 +43,7 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 		boolean incomplete = "response.incomplete".equals(type);
 		if ("error".equals(type) || type != null && type.endsWith(".error")) {
 			StreamError error = eventError(event);
-			throw OpenRouterApiExceptionFactory.create("OpenRouter responses stream failed", String.valueOf(event),
+			throw OpenRouterResponsesResponseMapper.failure("OpenRouter responses stream failed", String.valueOf(event),
 					error, event.errorType());
 		}
 
@@ -89,7 +88,7 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 			// A failed generation ends the stream over HTTP 200; converting it into an
 			// empty finish chunk would hide the provider error from consumers.
 			ResponsesResult failed = event.response();
-			throw OpenRouterApiExceptionFactory.create("OpenRouter responses stream failed", String.valueOf(event),
+			throw OpenRouterResponsesResponseMapper.failure("OpenRouter responses stream failed", String.valueOf(event),
 					failed != null ? failed.error() : null, failed != null ? failed.errorType() : null);
 		}
 

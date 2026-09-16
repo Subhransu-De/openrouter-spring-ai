@@ -3,7 +3,12 @@ package de.subhransu.openrouter.springai.chat.mapper;
 import de.subhransu.openrouter.springai.api.dto.ResponsesContent;
 import de.subhransu.openrouter.springai.api.dto.ResponsesOutputItem;
 import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
+import de.subhransu.openrouter.springai.api.dto.StreamError;
+import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
 import de.subhransu.openrouter.springai.api.errors.OpenRouterApiExceptionFactory;
+import de.subhransu.openrouter.springai.errors.OpenRouterErrorClassifier;
+import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
+import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
 import de.subhransu.openrouter.springai.errors.OpenRouterExceptionMessage;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import java.util.List;
@@ -22,7 +27,7 @@ public final class OpenRouterResponsesResponseMapper {
 		if ("failed".equals(response.status())) {
 			// Failed generations arrive with HTTP 200; mapping them to an empty message
 			// would make a provider failure look like a valid empty answer.
-			throw OpenRouterApiExceptionFactory.create("OpenRouter responses request failed",
+			throw failure("OpenRouter responses request failed",
 					response.error() != null ? response.error().toString() : response.status(), response.error(),
 					response.errorType());
 		}
@@ -54,6 +59,16 @@ public final class OpenRouterResponsesResponseMapper {
 			.keyValue("openrouter.created", response.createdAt())
 			.build();
 		return new ChatResponse(List.of(new Generation(assistantMessage, generationMetadata)), responseMetadata);
+	}
+
+	static RuntimeException failure(String message, String responseBody, StreamError error, String errorType) {
+		OpenRouterApiException failure = OpenRouterApiExceptionFactory.create(message, responseBody, error, errorType);
+		if (OpenRouterErrorClassifier.isTransient(failure.getCategory())) {
+			return new OpenRouterTransientApiException(message, failure.getStatusCode(), failure.getResponseBody(),
+					failure.getErrorDetails(), null, "/responses");
+		}
+		return new OpenRouterNonTransientApiException(message, failure.getStatusCode(), failure.getResponseBody(),
+				failure.getErrorDetails(), null, "/responses");
 	}
 
 	// Accept absent status for compatibility; reject every explicit non-final status.

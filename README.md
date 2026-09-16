@@ -42,6 +42,23 @@ map to their corresponding wire fields. `requestMode` selects the endpoint;
 endpoint's form. Legacy `{type: "auto"}`, `{type: "none"}`, and
 `{type: "required"}` objects are normalized to strings. Other shapes are rejected. These rules apply to calls and streams.
 
+### Retries and Responses failures
+
+Synchronous Responses failures carried over HTTP 200 use
+`OpenRouterTransientApiException` or `OpenRouterNonTransientApiException`, replacing
+the legacy `OpenRouterApiException` for this request mode. Inspect their shared
+`OpenRouterHttpException` contract for sanitized error details and category;
+the status is derived from the in-band error, and the endpoint is `/responses`.
+Transient provider, rate-limit, and timeout failures qualify for Spring AI's
+default retry policy. Authentication, billing, invalid requests, refusals, and
+unknown failures do not.
+
+Responses streams expose the same exception types but are never automatically
+retried, including after partial output. Tool execution belongs to
+`ToolCallingAdvisor`; the model's retry scope covers only the provider request
+and response mapping. Garage uses two retries with a 200 ms delay only for
+`TransientAiException` and transport `ResourceAccessException` failures.
+
 ## Status
 
 Done and live-verified:

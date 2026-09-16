@@ -11,7 +11,7 @@ import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
 import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
 import de.subhransu.openrouter.springai.api.dto.StreamError;
 import de.subhransu.openrouter.springai.api.dto.Usage;
-import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
+import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -89,9 +89,12 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 	void failedStatusRaisesApiExceptionWithStructuredError() {
 		assertThatThrownBy(() -> this.responseMapper.map(result("failed", List.of(), null,
 				new StreamError("server_error", "model crashed\r\nforged\u001B[31m Bearer response-secret"))))
-			.isInstanceOfSatisfying(OpenRouterApiException.class, exception -> {
+			.isInstanceOfSatisfying(OpenRouterTransientApiException.class, exception -> {
 				assertThat(exception.getMessage()).isEqualTo("OpenRouter responses request failed");
 				assertThat(exception.getErrorDetails().code()).isEqualTo("server_error");
+				assertThat(exception.getStatusCode().value()).isEqualTo(500);
+				assertThat(exception.getEndpoint()).isEqualTo("/responses");
+				assertThat(exception.getRetryAfter()).isNull();
 				assertThat(exception.getErrorDetails().message())
 					.isEqualTo("model crashed forged [31m Bearer [REDACTED]");
 				assertThat(exception.getResponseBody()).doesNotContain("\r", "\n", "\u001B", "response-secret");
@@ -105,12 +108,12 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 				  "error": {"code":"server_error","message":"line one\\r\\nline two Bearer response-stream-secret"} }
 				""");
 
-		assertThatThrownBy(() -> this.streamingMapper.map(event)).isInstanceOfSatisfying(OpenRouterApiException.class,
-				exception -> {
-					assertThat(exception.getMessage()).isEqualTo("OpenRouter responses stream failed");
-					assertThat(exception.getErrorDetails().message()).isEqualTo("line one line two Bearer [REDACTED]");
-					assertThat(exception.getResponseBody()).doesNotContain("\r", "\n", "response-stream-secret");
-				});
+		assertThatThrownBy(() -> this.streamingMapper.map(event))
+			.isInstanceOfSatisfying(OpenRouterTransientApiException.class, exception -> {
+				assertThat(exception.getMessage()).isEqualTo("OpenRouter responses stream failed");
+				assertThat(exception.getErrorDetails().message()).isEqualTo("line one line two Bearer [REDACTED]");
+				assertThat(exception.getResponseBody()).doesNotContain("\r", "\n", "response-stream-secret");
+			});
 	}
 
 	@Test
