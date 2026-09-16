@@ -46,6 +46,7 @@ val libraryProjects =
 
 extra["archunitVersion"] = archunitVersion
 extra["lombokVersion"] = pomProperty("lombok.version")
+extra["twelveMonkeysVersion"] = pomProperty("twelvemonkeys.version")
 
 allprojects {
 	group = "de.subhransu"
