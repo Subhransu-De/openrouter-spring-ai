@@ -1,10 +1,10 @@
 package de.subhransu.openrouter.springai.autoconfigure;
 
 import de.subhransu.openrouter.springai.chat.OpenRouterToolExecutionExceptionProcessor;
+import de.subhransu.openrouter.springai.chat.OpenRouterToolFailurePolicy;
 import java.lang.ref.Reference;
 import java.lang.ref.ReferenceQueue;
 import java.lang.ref.WeakReference;
-import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -19,17 +19,10 @@ import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.beans.factory.config.BeanPostProcessor;
-import org.springframework.util.ReflectionUtils;
 
 final class OpenRouterToolCallingManagerGuard implements BeanPostProcessor, SmartInitializingSingleton {
 
 	private static final String SPRING_TOOL_CALLING_AUTO_CONFIGURATION = "org.springframework.ai.model.tool.autoconfigure.ToolCallingAutoConfiguration";
-
-	private static final Field PROCESSOR_FIELD = requiredField(DefaultToolCallingManager.class,
-			"toolExecutionExceptionProcessor");
-
-	private static final Field ALWAYS_THROW_FIELD = requiredField(DefaultToolExecutionExceptionProcessor.class,
-			"alwaysThrow");
 
 	private final ConfigurableListableBeanFactory beanFactory;
 
@@ -95,15 +88,19 @@ final class OpenRouterToolCallingManagerGuard implements BeanPostProcessor, Smar
 	}
 
 	private void validate(ToolCallingManager manager) {
-		if (!(manager instanceof DefaultToolCallingManager)) {
+		ToolExecutionExceptionProcessor actualProcessor;
+		if (manager instanceof OpenRouterToolFailurePolicy policy) {
+			actualProcessor = policy.toolExecutionExceptionProcessor();
+		}
+		else if (manager instanceof DefaultToolCallingManager defaultManager) {
+			actualProcessor = SpringAiToolFailurePolicyAdapter.processor(defaultManager);
+		}
+		else {
 			throw unsafeManager(manager);
 		}
-		ToolExecutionExceptionProcessor actualProcessor = (ToolExecutionExceptionProcessor) ReflectionUtils
-			.getField(PROCESSOR_FIELD, manager);
-		boolean declaredPolicy = isDeclaredProcessor(actualProcessor);
-		boolean safePolicy = actualProcessor instanceof OpenRouterToolExecutionExceptionProcessor
-				|| throwsInsteadOfReturning(actualProcessor);
-		if (!declaredPolicy && !safePolicy) {
+		if (actualProcessor == null || !(isDeclaredProcessor(actualProcessor)
+				|| actualProcessor instanceof OpenRouterToolExecutionExceptionProcessor
+				|| throwsInsteadOfReturning(actualProcessor))) {
 			throw unsafeManager(manager);
 		}
 	}
@@ -126,24 +123,15 @@ final class OpenRouterToolCallingManagerGuard implements BeanPostProcessor, Smar
 	}
 
 	private static boolean throwsInsteadOfReturning(ToolExecutionExceptionProcessor processor) {
-		return processor instanceof DefaultToolExecutionExceptionProcessor
-				&& Boolean.TRUE.equals(ReflectionUtils.getField(ALWAYS_THROW_FIELD, processor));
+		return processor instanceof DefaultToolExecutionExceptionProcessor defaultProcessor
+				&& SpringAiToolFailurePolicyAdapter.alwaysThrows(defaultProcessor);
 	}
 
 	private static IllegalStateException unsafeManager(ToolCallingManager manager) {
 		return new IllegalStateException("Custom ToolCallingManager " + manager.getClass().getName()
-				+ " does not expose a verifiable provider-visible failure policy. Install the declared "
+				+ " does not expose a verifiable provider-visible failure policy. Implement OpenRouterToolFailurePolicy and install the declared "
 				+ "ToolExecutionExceptionProcessor in the manager, or explicitly set "
 				+ "spring.ai.openrouter.chat.allow-unsafe-tool-failure-results=true after auditing its behavior.");
-	}
-
-	private static Field requiredField(Class<?> type, String name) {
-		Field field = ReflectionUtils.findField(type, name);
-		if (field == null) {
-			throw new IllegalStateException("Spring AI changed the " + type.getSimpleName() + " failure policy field");
-		}
-		ReflectionUtils.makeAccessible(field);
-		return field;
 	}
 
 	private static final class IdentityWeakReference<T> extends WeakReference<T> {
