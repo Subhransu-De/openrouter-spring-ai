@@ -157,6 +157,8 @@ class GarageToolSceneContractTests {
     var test = context(api, "service-story", mode);
     var result = new ServiceStoryScene().execute(test.context());
     assertThat(result.status()).isEqualTo(SceneResult.Status.PASSED);
+    assertThat((Double) result.details().get("costUsd"))
+        .isCloseTo(0.03, org.assertj.core.api.Assertions.within(0.000001));
     assertThat(test.context().evidence().featureSnapshot()).allMatch(item -> Boolean.TRUE.equals(item.get("complete")));
     verify(api, times(mode == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS ? 3 : 0)).chatCompletion(any());
     verify(api, times(mode == OpenRouterRequestMode.OPENAI_RESPONSES ? 3 : 0)).responses(any());
@@ -187,7 +189,7 @@ class GarageToolSceneContractTests {
   }
 
   private void stubStory(OpenRouterApi api, List<ToolCall> calls) {
-    var usage = new Usage(10, 5, 15, 0, 1, 0.0, null, null, null);
+    var usage = new Usage(10, 5, 15, 0, 1, 0.01, null, null, null);
     var answer = new ChatCompletionResponse("synthetic", "chat.completion", 1L, "garage/model", null,
         List.of(new Choice(0, new ChatMessage("assistant", "Synthetic recommendation", null, null, null), null, "stop", "stop")), usage);
     var toolRound = new ChatCompletionResponse("synthetic-tools", "chat.completion", 1L, "garage/model", null,
