@@ -38,6 +38,7 @@ public final class GarageReportWriter {
     this.transportEvidence = transportEvidence;
   }
 
+  @SuppressWarnings("unchecked")
   public ReportPaths write(
       Path runDirectory, GarageCommand command, List<SceneResult> results,
       List<String> incompleteFeatures) throws IOException {
@@ -71,22 +72,27 @@ public final class GarageReportWriter {
     run.put("meters", this.telemetry.meterSnapshot());
     run.put("transport", this.transportEvidence.snapshot());
 
+    Map<String, Object> diagnostic =
+        (Map<String, Object>) this.evidence.sanitizeForEvidence(run);
     Path json = runDirectory.resolve("garage-run.json");
     this.objectMapper
         .writerWithDefaultPrettyPrinter()
-        .writeValue(json.toFile(), this.evidence.sanitizeForEvidence(run));
+        .writeValue(json.toFile(), diagnostic);
     Path report = runDirectory.resolve("capability-report.md");
     Files.writeString(report,
-        "# Run status: " + run.get("status") + "\n\n"
-            + "Required features lacking complete evidence: " + incompleteFeatures + "\n\n"
-            + markdown(command, results, registry),
+        "# Run status: " + diagnostic.get("status") + "\n\n"
+            + "Required features lacking complete evidence: " + diagnostic.get("incompleteFeatures") + "\n\n"
+            + markdown(diagnostic),
         StandardCharsets.UTF_8);
     Path readme = runDirectory.resolve("README.md");
     Files.writeString(
         readme,
         "# Garage evidence bundle\n\n"
-            + "This directory was generated from the runtime feature registry. Prompt/topic text"
-            + " and credentials are redacted.\n\n"
+            + "Diagnostic reports retain only allowlisted fields and fixed labels, numeric values"
+            + " and booleans, plus generated operation identifiers. Free-form text, payloads, paths"
+            + " and unknown objects are omitted or"
+            + " redacted. Authored service records are separate outputs and may contain customer"
+            + " content. Raw diagnostic payload retention is not supported.\n\n"
             + "- `garage-run.json`: correlated scenes, features, observations, meters, tool and"
             + " transport evidence.\n"
             + "- `capability-report.md`: human-readable feature contract.\n",
@@ -137,33 +143,29 @@ public final class GarageReportWriter {
     return values;
   }
 
-  private String markdown(
-      GarageCommand command, List<SceneResult> results, List<Map<String, Object>> registry) {
+  @SuppressWarnings("unchecked")
+  private String markdown(Map<String, Object> diagnostic) {
     StringBuilder report = new StringBuilder();
     report.append("# Garage capability report\n\n");
-    report.append("- Created: ").append(Instant.now()).append('\n');
-    report.append("- Capabilities: `").append(command.capabilities()).append("`\n");
-    report.append("- Request modes: `").append(command.requestModes()).append("`\n");
-    report.append("- Selected scenes: `").append(command.sceneIds()).append("`\n");
-    report.append("- Image surface: `").append(command.imageSurface()).append("`\n");
-    report.append("- Recorded inference cost: `$ ")
-        .append(
-            String.format(
-                java.util.Locale.ROOT, "%.8f", this.evidence.recordedCostUsd()))
-        .append("`\n");
-    report.append("- Cost ceiling: `")
-        .append(command.maxCostUsd() != null ? "$ " + command.maxCostUsd() : "not configured")
-        .append("`\n");
-    report.append("- Sensitive prompt/topic text retained: `no`\n\n");
+    Map<String, Object> command = (Map<String, Object>) diagnostic.get("command");
+    report.append("- Capabilities: `").append(command.get("capabilities")).append("`\n");
+    report.append("- Request modes: `").append(command.get("requestModes")).append("`\n");
+    report.append("- Selected scenes: `").append(command.get("sceneIds")).append("`\n");
+    report.append("- Image surface: `").append(command.get("imageSurface")).append("`\n");
+    report.append("- Recorded inference cost: `$ ").append(diagnostic.get("recordedCostUsd")).append("`\n");
+    report.append("- Cost ceiling: `").append(diagnostic.get("maxCostUsd")).append("`\n");
+    report.append("- Free-form diagnostic text and raw payloads retained: `no`\n\n");
+    List<Map<String, Object>> results = (List<Map<String, Object>>) diagnostic.get("scenes");
+    List<Map<String, Object>> registry = (List<Map<String, Object>>) diagnostic.get("featureRegistry");
     report.append("## Scene results\n\n");
     report.append("| Scene | Mode | Status | Duration (ms) | Error |\n");
     report.append("| --- | --- | --- | ---: | --- |\n");
-    for (SceneResult result : results) {
-      report.append("| `").append(result.sceneId()).append("` | `")
-          .append(result.requestMode()).append("` | ")
-          .append(result.status()).append(" | ")
-          .append(result.duration().toMillis()).append(" | ")
-          .append(result.error() != null ? escape(result.error()) : "")
+    for (Map<String, Object> result : results) {
+      report.append("| `").append(result.get("sceneId")).append("` | `")
+          .append(result.get("requestMode")).append("` | ")
+          .append(result.get("status")).append(" | ")
+          .append(result.get("durationMillis")).append(" | ")
+          .append(result.get("error") != null ? result.get("error") : "")
           .append(" |\n");
     }
     report.append("\n## Feature contract\n\n");
@@ -181,10 +183,6 @@ public final class GarageReportWriter {
     report.append("- OpenRouter server web search and citation annotations.\n");
     report.append("- Audio/video modalities and model catalogue clients.\n");
     return report.toString();
-  }
-
-  private String escape(String value) {
-    return value.replace("|", "\\|").replace("\n", " ").replace("\r", " ");
   }
 
   public record ReportPaths(Path json, Path markdown, Path readme) {}

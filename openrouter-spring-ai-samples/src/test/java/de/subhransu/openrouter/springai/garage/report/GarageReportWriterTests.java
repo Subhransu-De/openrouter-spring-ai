@@ -1,12 +1,15 @@
 package de.subhransu.openrouter.springai.garage.report;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.SoftAssertions.assertSoftly;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.garage.GarageProperties;
 import de.subhransu.openrouter.springai.garage.cli.GarageCommand;
 import de.subhransu.openrouter.springai.garage.evidence.GarageEvidence;
+import de.subhransu.openrouter.springai.garage.evidence.GarageFeature;
 import de.subhransu.openrouter.springai.garage.evidence.GarageTelemetry;
 import de.subhransu.openrouter.springai.garage.evidence.GarageTransportEvidence;
 import de.subhransu.openrouter.springai.garage.scenes.SceneResult;
@@ -23,6 +26,52 @@ import tools.jackson.databind.ObjectMapper;
 class GarageReportWriterTests {
 
   @TempDir Path output;
+
+  record PrivatePayload(String prompt) {}
+
+  @ParameterizedTest
+  @ValueSource(strings = {"OPENAI_CHAT_COMPLETIONS", "OPENAI_RESPONSES"})
+  void allReportFilesExcludeUntrustedPayloads(String mode) throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    GarageEvidence evidence = new GarageEvidence();
+    GarageTelemetry telemetry = mock(GarageTelemetry.class);
+    GarageTransportEvidence transport = mock(GarageTransportEvidence.class);
+    String secret = "SYNTHETIC_PRIVATE_SENTINEL";
+    Map<String, Object> payload = Map.of(
+        "input", "{\"concern\":\"" + secret + "\"}",
+        "results", new Object[] {new PrivatePayload(secret), Map.of("job", secret)},
+        "details", Map.of(secret, secret), "count", 3, "streaming", true);
+    when(telemetry.observationSnapshot()).thenReturn(List.of(payload));
+    when(transport.snapshot()).thenReturn(List.of(payload));
+    String operation = evidence.newOperation("service-story", mode);
+    evidence.event(operation, "service-story", "tool.attempted", payload);
+    RuntimeException failure = new IllegalStateException(secret, new IllegalArgumentException(secret));
+    evidence.error(GarageFeature.SYNCHRONOUS_CHAT, operation, mode, failure);
+    SceneResult result = SceneResult.failed("service-story", operation,
+        OpenRouterRequestMode.valueOf(mode), Duration.ofMillis(12), this.output.resolve(secret),
+        payload, failure);
+    GarageCommand command = GarageCommand.from(new String[] {"--text", "--topic=" + secret},
+        new GarageProperties());
+
+    var reports = new GarageReportWriter(mapper, evidence, telemetry, transport)
+        .write(this.output, command, List.of(result), List.of());
+
+    String jsonText = Files.readString(reports.json());
+    String markdownText = Files.readString(reports.markdown());
+    String readmeText = Files.readString(reports.readme());
+    assertSoftly(softly -> {
+      softly.assertThat(jsonText).as("JSON").doesNotContain(secret);
+      softly.assertThat(markdownText).as("Markdown").doesNotContain(secret);
+      softly.assertThat(readmeText).as("README").doesNotContain(secret);
+    });
+    var json = mapper.readTree(reports.json().toFile());
+    assertThat(json.get("scenes").get(0).get("details").get("count").intValue()).isEqualTo(3);
+    assertThat(json.get("scenes").get(0).get("status").stringValue()).isEqualTo("FAILED");
+    assertThat(json.get("scenes").get(0).get("operationId").stringValue()).isEqualTo(operation);
+    assertThat(json.get("featureEvidence").get(0).get("errors").get(0).get("type").stringValue())
+        .isEqualTo(IllegalStateException.class.getName());
+    assertThat(Files.readString(reports.markdown())).contains("FAILED", "service-story", "12");
+  }
 
   @ParameterizedTest
   @ValueSource(booleans = {true, false})

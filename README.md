@@ -271,6 +271,14 @@ OPENROUTER_API_KEY=$(cat openrouter.key) java -jar openrouter-spring-ai-samples/
     --topic="1987 diesel pickup, hard cold starts" --full
 ```
 
+Garage diagnostic JSON, Markdown, and sweep files retain only allowlisted fields and fixed
+labels, numeric measurements, booleans, and generated operation identifiers. Free-form text,
+model/provider names, paths, tool payloads, exception messages, and unknown objects are omitted
+or redacted; raw diagnostic payload retention is not supported. Sweep results preserve input
+order, so match each result to the corresponding command-line entry. Authored service records
+and generated media are separate application outputs and may contain customer or model content.
+These report protections do not sanitize console logs.
+
 Select capabilities independently of the pipeline schedule:
 
 ```bash
