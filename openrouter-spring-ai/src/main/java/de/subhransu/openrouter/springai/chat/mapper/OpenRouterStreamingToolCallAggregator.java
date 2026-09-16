@@ -21,6 +21,7 @@ import java.util.function.Consumer;
 import org.reactivestreams.Subscription;
 import org.springframework.util.Assert;
 import org.springframework.util.CollectionUtils;
+import org.springframework.util.StringUtils;
 import reactor.core.CoreSubscriber;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
@@ -292,11 +293,21 @@ public final class OpenRouterStreamingToolCallAggregator {
 			function = earlierFunction;
 		}
 		else {
-			function = new FunctionCall(value(earlierFunction.name(), laterFunction.name()),
+			function = new FunctionCall(mergeFunctionNames(earlierFunction.name(), laterFunction.name()),
 					concat(earlierFunction.arguments(), laterFunction.arguments()));
 		}
 		return new ToolCall(value(earlier.id(), later.id()), value(earlier.type(), later.type()), function,
 				value(earlier.index(), later.index()));
+	}
+
+	private String mergeFunctionNames(String earlier, String later) {
+		if (!StringUtils.hasText(earlier)) {
+			return later;
+		}
+		// Names are complete identifiers, unlike incremental JSON arguments.
+		Assert.state(!StringUtils.hasText(later) || earlier.equals(later),
+				"Conflicting streamed tool-call function names; fragmented names are not supported");
+		return earlier;
 	}
 
 	private static <T> T value(T preferred, T fallback) {
@@ -370,7 +381,15 @@ public final class OpenRouterStreamingToolCallAggregator {
 						}
 						this.bufferedByChoice.remove(index);
 						buffered.close();
-						ready.add(merge(buffered.chunks));
+						ChatCompletionChunk merged = merge(buffered.chunks);
+						if (!OpenRouterChoiceErrorExceptionFactory.isFailure(choice)) {
+							for (ToolCall toolCall : merged.choices().get(0).delta().toolCalls()) {
+								Assert.state(
+										toolCall.function() != null && StringUtils.hasText(toolCall.function().name()),
+										"Completed streamed tool call has no function name");
+							}
+						}
+						ready.add(merged);
 						release(buffered.chunks.size(), buffered.retainedBytes);
 					}
 				}

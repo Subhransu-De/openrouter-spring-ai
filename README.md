@@ -147,6 +147,13 @@ that design exactly (as do Spring AI's own OpenAI and Anthropic models):
   `advisors(AdvisorParams.toolCallingAdvisorAutoRegister(false))` to surface tool calls
   without executing them.
 
+In Chat Completions streams, a tool's function name must arrive as a complete name.
+Missing or blank names are ignored until a nonblank name arrives; identical repeated
+names are accepted. Differing nonblank names (including split-name fragments) and
+completed calls without a usable name fail with `IllegalStateException` before the
+call is emitted. JSON argument fragments are still concatenated by tool index, and
+calls require a tool-call finish reason before they can be emitted.
+
 Option builders, copies, and model defaults own detached collection snapshots. Provider
 routing lists, image input references, and nested JSON maps/lists (metadata, image
 configuration, provider options, and tool choice) are read-only through getters. Use
