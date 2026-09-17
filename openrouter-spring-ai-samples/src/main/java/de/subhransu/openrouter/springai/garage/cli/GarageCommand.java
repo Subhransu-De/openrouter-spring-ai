@@ -24,7 +24,6 @@ public record GarageCommand(
     boolean vision,
     ImageSurface imageSurface,
     String imageQuality,
-    Double maxCostUsd,
     String foremanModel,
     String specialistModel,
     String embeddingModel,
@@ -89,7 +88,6 @@ public record GarageCommand(
     List<String> imageSweepModels = List.of();
     ImageSurface imageSurface = ImageSurface.NONE;
     String imageQuality = null;
-    Double maxCostUsd = null;
 
     for (String arg : args) {
       if ("--text".equals(arg)) {
@@ -137,6 +135,8 @@ public record GarageCommand(
         properties.setReasoningEffort(value(arg));
       } else if (arg.startsWith("--provider-sort=")) {
         properties.setProviderSort(value(arg));
+      } else if (arg.startsWith("--provider-require-parameters=")) {
+        properties.setProviderRequireParameters(booleanValue(arg));
       } else if (arg.startsWith("--provider-order=")) {
         properties.setProviderOrder(parseList(value(arg)));
       } else if (arg.startsWith("--provider-ignore=")) {
@@ -144,7 +144,7 @@ public record GarageCommand(
       } else if (arg.startsWith("--provider-quantizations=")) {
         properties.setProviderQuantizations(parseList(value(arg)));
       } else if (arg.startsWith("--max-cost-usd=")) {
-        maxCostUsd = Double.valueOf(value(arg));
+        // Backward-compatible no-op: Garage reports what a run cost but enforces no ceiling.
       } else if (arg.startsWith("--embedding-sweep=")) {
         embeddingSweepModels = parseList(value(arg));
       } else if (arg.startsWith("--image-sweep=")) {
@@ -165,9 +165,6 @@ public record GarageCommand(
       }
     }
 
-    if (maxCostUsd != null && (!Double.isFinite(maxCostUsd) || maxCostUsd < 0)) {
-      throw new IllegalArgumentException("--max-cost-usd must be finite and non-negative");
-    }
     boolean capabilitiesExplicit = text || embedding || vision || image;
     if ((capabilitiesExplicit || full || scenesExplicit)
         && (!embeddingSweepModels.isEmpty() || !imageSweepModels.isEmpty())) {
@@ -256,7 +253,6 @@ public record GarageCommand(
         vision,
         imageSurface,
         imageQuality,
-        maxCostUsd,
         foremanModel,
         specialistModel,
         embeddingModel,
@@ -310,6 +306,17 @@ public record GarageCommand(
 
   private static String value(String arg) {
     return arg.substring(arg.indexOf('=') + 1);
+  }
+
+  private static boolean booleanValue(String arg) {
+    String raw = value(arg).strip();
+    if ("true".equalsIgnoreCase(raw)) {
+      return true;
+    }
+    if ("false".equalsIgnoreCase(raw)) {
+      return false;
+    }
+    throw new IllegalArgumentException(arg + " must be true or false");
   }
 
   private static int positiveInteger(String arg) {

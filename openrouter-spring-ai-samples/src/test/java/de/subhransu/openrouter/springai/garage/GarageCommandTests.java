@@ -43,7 +43,6 @@ class GarageCommandTests {
     assertThat(selected.runsImageInput()).isFalse();
     assertThat(selected.runsImageGeneration()).isFalse();
     assertThat(selected.foremanModel()).isEqualTo(this.properties.getForemanModel());
-    assertThat(selected.maxCostUsd()).isNull();
     assertThat(this.properties.getMaxCompletionTokens()).isEqualTo(900);
     assertThat(command("--embedding", "--text")).isEqualTo(selected);
   }
@@ -93,11 +92,11 @@ class GarageCommandTests {
   }
 
   @Test
-  void workflowExplicitlySelectsItsTextSubsetAndCostControls() {
+  void workflowExplicitlySelectsItsTextSubsetAndLimits() {
     GarageCommand selected = command("--text",
         "--scene=streaming-dispatch,dyno-tuning,attribution-check-in,recovery-road-test",
         "--foreman-model=synthetic/text:free", "--specialist-model=synthetic/text:free",
-        "--fallback-models=", "--max-cost-usd=0", "--max-completion-tokens=256",
+        "--fallback-models=", "--max-completion-tokens=256",
         "--specialist-max-completion-tokens=128", "--reasoning-effort=low",
         "--provider-sort=price", "--provider-order=", "--provider-ignore=",
         "--provider-quantizations=");
@@ -105,7 +104,6 @@ class GarageCommandTests {
     assertThat(selected.foremanModel()).isEqualTo("synthetic/text:free");
     assertThat(selected.specialistModel()).isEqualTo("synthetic/text:free");
     assertThat(selected.fallbackModels()).isEmpty();
-    assertThat(selected.maxCostUsd()).isZero();
     assertThat(this.properties.getMaxCompletionTokens()).isEqualTo(256);
     assertThat(this.properties.getSpecialistMaxCompletionTokens()).isEqualTo(128);
     assertThat(this.properties.getReasoningEffort()).isEqualTo("low");
@@ -119,13 +117,36 @@ class GarageCommandTests {
   void nightlyCapabilitiesUseExplicitModelsWithoutGeneratingImages() {
     GarageCommand selected = command("--text", "--embedding", "--vision",
         "--foreman-model=synthetic/text", "--embedding-model=synthetic/embedding",
-        "--vision-model=synthetic/vision", "--max-cost-usd=0.002");
+        "--vision-model=synthetic/vision");
     assertThat(selected.sceneIds()).hasSize(8);
     assertThat(selected.capabilities()).containsExactly("text", "embedding", "vision");
     assertThat(selected.runsImageGeneration()).isFalse();
-    assertThat(selected.maxCostUsd()).isEqualTo(0.002);
     assertThat(selected.embeddingModel()).isEqualTo("synthetic/embedding");
     assertThat(selected.visionModel()).isEqualTo("synthetic/vision");
+  }
+
+  @Test
+  void nightlyRequiresProvidersToHonourEveryRequestedParameter() {
+    command("--text", "--embedding", "--vision", "--provider-sort=price",
+        "--provider-require-parameters=true");
+    assertThat(this.properties.getProviderRequireParameters()).isTrue();
+    assertThat(this.properties.getProviderSort()).isEqualTo("price");
+
+    command("--text", "--provider-require-parameters=false");
+    assertThat(this.properties.getProviderRequireParameters()).isFalse();
+  }
+
+  @Test
+  void requireParametersFlagToleratesSurroundingWhitespace() {
+    command("--text", "--provider-require-parameters= true ");
+    assertThat(this.properties.getProviderRequireParameters()).isTrue();
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"", "yes", "1", "truthy", "no"})
+  void unparsableRequireParametersFlagsFailBeforeInference(String raw) {
+    assertThatThrownBy(() -> command("--text", "--provider-require-parameters=" + raw))
+        .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("must be true or false");
   }
 
   @Test
@@ -142,13 +163,6 @@ class GarageCommandTests {
         "--request-modes=chat,responses,chat");
     assertThat(selected.sceneIds()).containsExactly("dyno-tuning");
     assertThat(selected.requestModes()).hasSize(2);
-  }
-
-  @ParameterizedTest
-  @ValueSource(strings = {"NaN", "Infinity", "-Infinity", "-0.01"})
-  void invalidCostCeilingsFailBeforeInference(String amount) {
-    assertThatThrownBy(() -> command("--text", "--max-cost-usd=" + amount))
-        .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("finite and non-negative");
   }
 
   @Test

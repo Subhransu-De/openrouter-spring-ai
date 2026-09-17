@@ -1,12 +1,21 @@
 package de.subhransu.openrouter.springai.garage;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.definition.ToolDefinition;
 
@@ -116,6 +125,79 @@ class GarageOptionsFactoryTests {
       assertThat(request.provider().requireParameters()).isTrue();
       assertThat(request.provider().sort()).isEqualTo(routingEnabled ? properties.getProviderSort() : null);
     }
+  }
+
+  @Test
+  void specialistDelegationRoutesWithTheSharedProviderPreferences() {
+    GarageProperties properties = new GarageProperties();
+    properties.setProviderRequireParameters(true);
+    properties.setProviderSort("price");
+    ChatModel chatModel = mock(ChatModel.class);
+    when(chatModel.call(any(Prompt.class))).thenReturn(new ChatResponse(List.of()));
+    GarageTools tools =
+        new GarageTools(
+            chatModel,
+            properties,
+            Path.of("target"),
+            OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS,
+            "op-specialist",
+            "service-story",
+            "garage/specialist");
+
+    tools.handToSpecialist("inspect the brake wear");
+
+    ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
+    verify(chatModel).call(prompt.capture());
+    OpenRouterChatOptions options = (OpenRouterChatOptions) prompt.getValue().getOptions();
+    assertThat(options.getProvider()).isNotNull();
+    assertThat(options.getProvider().requireParameters()).isTrue();
+    assertThat(options.getProvider().sort()).isEqualTo("price");
+    // Without this a reasoning specialist falls back to its own default effort and can
+    // spend the whole completion budget thinking.
+    assertThat(options.getReasoning()).isNotNull();
+    assertThat(options.getReasoning().effort()).isEqualTo(properties.getReasoningEffort());
+  }
+
+  @Test
+  void aPinnedSweepProviderKeepsRunStrictnessAndForbidsFallbacks() {
+    GarageProperties properties = new GarageProperties();
+    properties.setProviderRequireParameters(true);
+    properties.setProviderSort("price");
+    var shared = GarageOptionsFactory.serviceProviderPreferences(properties);
+
+    var pinned = GarageOptionsFactory.pinnedProviderPreferences(shared, "OpenAI");
+
+    assertThat(pinned.order()).containsExactly("OpenAI");
+    assertThat(pinned.allowFallbacks()).isFalse();
+    assertThat(pinned.requireParameters()).isTrue();
+    assertThat(pinned.sort()).isEqualTo("price");
+    assertThat(GarageOptionsFactory.pinnedProviderPreferences(shared, null)).isSameAs(shared);
+  }
+
+  @Test
+  void imageProviderOptionsUseTheWireNamesAndDropEmptyPreferences() {
+    GarageProperties properties = new GarageProperties();
+    properties.setProviderRequireParameters(true);
+    properties.setProviderSort("price");
+    var shared = GarageOptionsFactory.serviceProviderPreferences(properties);
+
+    assertThat(GarageOptionsFactory.imageProviderOptions(shared, null))
+        .containsEntry("require_parameters", true)
+        .containsEntry("sort", "price")
+        .doesNotContainKey("order");
+    assertThat(GarageOptionsFactory.imageProviderOptions(shared, "OpenAI"))
+        .containsEntry("order", List.of("OpenAI"))
+        .containsEntry("allow_fallbacks", false)
+        .containsEntry("require_parameters", true);
+    assertThat(GarageOptionsFactory.imageProviderOptions(null, null)).isNull();
+  }
+
+  @Test
+  void disabledProviderPreferencesLeaveRequestsUnrouted() {
+    GarageProperties properties = new GarageProperties();
+    properties.setProviderPreferencesEnabled(false);
+
+    assertThat(GarageOptionsFactory.serviceProviderPreferences(properties)).isNull();
   }
 
   private ToolCallback tool() {

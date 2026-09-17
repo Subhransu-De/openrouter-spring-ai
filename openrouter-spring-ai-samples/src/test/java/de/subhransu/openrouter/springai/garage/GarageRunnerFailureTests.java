@@ -63,7 +63,7 @@ class GarageRunnerFailureTests {
   }
 
   @Test
-  void exceededBudgetReportsAndFailsWithoutAuto() throws Exception {
+  void recordedCostAloneNeverFailsARun() throws Exception {
     GarageScene scene = scene();
     GarageEvidence evidence = new GarageEvidence();
     when(scene.execute(any())).thenAnswer(invocation -> {
@@ -74,9 +74,25 @@ class GarageRunnerFailureTests {
     GarageReportWriter writer = writer();
     GarageRunner runner = runner(scene, evidence, writer);
 
-    assertThatThrownBy(() -> runner.run("--scene=dyno-tuning", "--max-cost-usd=0.002",
-        "--output=" + this.output))
-        .isInstanceOf(IllegalStateException.class).hasMessageContaining("recorded cost was $0.01000000");
+    runner.run("--scene=dyno-tuning", "--output=" + this.output);
+
+    verify(writer).write(any(), any(), any(), any());
+  }
+
+  @Test
+  void theRetiredCostCeilingOptionIsAcceptedAndIgnored() throws Exception {
+    GarageScene scene = scene();
+    GarageEvidence evidence = new GarageEvidence();
+    when(scene.execute(any())).thenAnswer(invocation -> {
+      evidence.recordCost("synthetic-operation", 0.01);
+      return SceneResult.passed("dyno-tuning", "synthetic-operation",
+          OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS, Duration.ZERO, this.output, Map.of());
+    });
+    GarageReportWriter writer = writer();
+
+    runner(scene, evidence, writer).run("--scene=dyno-tuning", "--max-cost-usd=0.002",
+        "--output=" + this.output);
+
     verify(writer).write(any(), any(), any(), any());
   }
 

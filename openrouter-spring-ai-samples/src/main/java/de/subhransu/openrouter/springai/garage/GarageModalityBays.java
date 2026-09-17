@@ -8,6 +8,7 @@ import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.USAGE;
 
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
+import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
 import de.subhransu.openrouter.springai.chat.OpenRouterUsage;
 import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingOptions;
 import de.subhransu.openrouter.springai.image.OpenRouterImageGenerationMetadata;
@@ -70,6 +71,7 @@ public final class GarageModalityBays {
   private final String visionModelId;
   private final String imageModelId;
   private final String imageQuality;
+  private final OpenRouterProviderPreferences provider;
 
   public GarageModalityBays(
       ChatModel chatModel,
@@ -79,7 +81,8 @@ public final class GarageModalityBays {
       String embeddingModelId,
       String visionModelId,
       String imageModelId,
-      String imageQuality) {
+      String imageQuality,
+      OpenRouterProviderPreferences provider) {
     this.chatModel = chatModel;
     this.embeddingModel = embeddingModel;
     this.imageModel = imageModel;
@@ -88,6 +91,7 @@ public final class GarageModalityBays {
     this.visionModelId = visionModelId;
     this.imageModelId = imageModelId;
     this.imageQuality = imageQuality;
+    this.provider = provider;
   }
 
   /** Embeds the customer topic against the symptom catalogue and picks the closest match. */
@@ -101,7 +105,10 @@ public final class GarageModalityBays {
           this.embeddingModel.call(
               new EmbeddingRequest(
                   texts,
-                  OpenRouterEmbeddingOptions.builder().model(this.embeddingModelId).build()));
+                  OpenRouterEmbeddingOptions.builder()
+                      .model(this.embeddingModelId)
+                      .provider(this.provider)
+                      .build()));
       probe.put(USAGE, GarageResponses.usage(response.getMetadata().getUsage()));
 
       List<Embedding> results = response.getResults();
@@ -160,6 +167,7 @@ public final class GarageModalityBays {
               .temperature(0.1)
               .maxCompletionTokens(600)
               .includeUsage(requestMode == OpenRouterRequestMode.OPENAI_RESPONSES ? null : true)
+              .provider(this.provider)
               .build();
 
       ChatResponse response = this.chatModel.call(new Prompt(List.of(message), options));
@@ -263,6 +271,7 @@ public final class GarageModalityBays {
               // sample's default 900-token cap would truncate them.
               .maxCompletionTokens(8000)
               .includeUsage(true)
+              .provider(this.provider)
               .build();
       ChatResponse response =
           this.chatModel.call(new Prompt(List.of(new UserMessage(paintPrompt(topic))), options));
@@ -318,8 +327,10 @@ public final class GarageModalityBays {
               throw new IllegalArgumentException("unknown image sweep option: " + option.getKey());
         }
       }
-      if (providerTag != null) {
-        options.providerOptions(Map.of("order", List.of(providerTag), "allow_fallbacks", false));
+      Map<String, Object> providerOptions =
+          GarageOptionsFactory.imageProviderOptions(this.provider, providerTag);
+      if (providerOptions != null) {
+        options.providerOptions(providerOptions);
       }
       ImageResponse response =
           this.imageModel.call(
@@ -378,6 +389,11 @@ public final class GarageModalityBays {
         OpenRouterImageOptions.builder().model(this.imageModelId).n(1);
     if (StringUtils.hasText(this.imageQuality)) {
       options.quality(this.imageQuality);
+    }
+    Map<String, Object> providerOptions =
+        GarageOptionsFactory.imageProviderOptions(this.provider, null);
+    if (providerOptions != null) {
+      options.providerOptions(providerOptions);
     }
     return options.build();
   }

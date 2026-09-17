@@ -235,17 +235,75 @@ public final class GarageOptionsFactory {
   }
 
   private OpenRouterProviderPreferences serviceProviderPreferences() {
-    if (!this.properties.isProviderPreferencesEnabled()) {
+    return serviceProviderPreferences(this.properties);
+  }
+
+  /**
+   * The routing preferences every live Garage request shares. Scenes that build options
+   * outside this factory (the specialist delegation and the modality bays) must apply
+   * these too, otherwise {@code --provider-sort} and {@code --provider-require-parameters}
+   * would silently cover only part of a run.
+   */
+  public static OpenRouterProviderPreferences serviceProviderPreferences(
+      GarageProperties properties) {
+    if (!properties.isProviderPreferencesEnabled()) {
       return null;
     }
     return new OpenRouterProviderPreferences(
-        this.properties.getProviderAllowFallbacks(),
-        this.properties.getProviderRequireParameters(),
+        properties.getProviderAllowFallbacks(),
+        properties.getProviderRequireParameters(),
         null,
         null,
         null,
         null,
-        this.properties.getProviderSort());
+        properties.getProviderSort());
+  }
+
+  /**
+   * The shared preferences narrowed to one pinned provider, for the sweeps. The pin owns
+   * the provider list and forbids fallbacks; strictness and sorting still come from the
+   * run so a sweep entry cannot quietly opt out of {@code --provider-require-parameters}.
+   */
+  public static OpenRouterProviderPreferences pinnedProviderPreferences(
+      OpenRouterProviderPreferences shared, String providerPin) {
+    if (providerPin == null) {
+      return shared;
+    }
+    return new OpenRouterProviderPreferences(
+        false,
+        shared != null ? shared.requireParameters() : null,
+        null,
+        List.of(providerPin),
+        null,
+        null,
+        shared != null ? shared.sort() : null);
+  }
+
+  /**
+   * The same preferences as the raw provider map the Image API takes, since
+   * {@code OpenRouterImageOptions} exposes passthrough options rather than typed routing
+   * preferences. Returns {@code null} when there is nothing to send.
+   */
+  public static Map<String, Object> imageProviderOptions(
+      OpenRouterProviderPreferences shared, String providerPin) {
+    OpenRouterProviderPreferences provider = pinnedProviderPreferences(shared, providerPin);
+    if (provider == null) {
+      return null;
+    }
+    Map<String, Object> values = new LinkedHashMap<>();
+    if (provider.allowFallbacks() != null) {
+      values.put("allow_fallbacks", provider.allowFallbacks());
+    }
+    if (provider.requireParameters() != null) {
+      values.put("require_parameters", provider.requireParameters());
+    }
+    if (provider.sort() != null) {
+      values.put("sort", provider.sort());
+    }
+    if (provider.order() != null && !provider.order().isEmpty()) {
+      values.put("order", provider.order());
+    }
+    return values.isEmpty() ? null : values;
   }
 
   private OpenRouterProviderPreferences fullProviderPreferences() {
@@ -260,14 +318,24 @@ public final class GarageOptionsFactory {
   }
 
   private OpenRouterReasoningOptions reasoningOptions() {
-    if (!this.properties.isReasoningEnabled()) {
+    return serviceReasoningOptions(this.properties);
+  }
+
+  /**
+   * The reasoning configuration every live Garage request shares. The specialist
+   * delegation builds its options outside this factory and must apply these too; without
+   * them a reasoning model falls back to its own default effort and can spend the whole
+   * specialist completion budget thinking, returning truncated or empty text.
+   */
+  public static OpenRouterReasoningOptions serviceReasoningOptions(GarageProperties properties) {
+    if (!properties.isReasoningEnabled()) {
       return null;
     }
-    Integer maxTokens = this.properties.getReasoningMaxTokens();
+    Integer maxTokens = properties.getReasoningMaxTokens();
     return new OpenRouterReasoningOptions(
-        maxTokens == null ? this.properties.getReasoningEffort() : null,
+        maxTokens == null ? properties.getReasoningEffort() : null,
         maxTokens,
-        this.properties.isReasoningExclude(),
+        properties.isReasoningExclude(),
         true);
   }
 

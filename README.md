@@ -446,22 +446,24 @@ and all modalities. With no selection flags, the original service-story demo run
 `--scene=<ids>` can narrow a capability suite; selected modality flags require
 `modality-bays` in that list. `--offline-contracts` runs only local contracts.
 
-Models and spending settings are independent: use `--foreman-model`, `--specialist-model`,
-`--embedding-model`, `--vision-model`, `--image-model`, and `--max-cost-usd` as appropriate.
-The capability flags do not imply free models or a spending cap. Completion limits and
-provider preferences are explicit options shown by `--help`. Cost limits are checked
-after execution and do not prevent already-issued requests from charging.
+Models are selected independently: use `--foreman-model`, `--specialist-model`,
+`--embedding-model`, `--vision-model`, and `--image-model` as appropriate.
+The capability flags do not imply free models. Completion limits and provider
+preferences are explicit options shown by `--help`. Garage records what a run cost and
+reports it, but enforces no ceiling of its own; cap spending with a credit limit on the
+OpenRouter API key instead, which is the only control that can stop a request before it
+is billed.
 
-The PR workflow selects a smaller text suite with a free model and a zero recorded-cost
-threshold. Nightly uses `--text --embedding --vision` with a USD 0.002 threshold; weekly
-uses `--image` with a USD 0.05 threshold and rotates the image interface. Scheduling and
-model selection live in the workflows, not schedule-named application profiles.
-Nightly allows 900 completion tokens per Foreman request to leave room for reasoning,
-tool arguments, and final output; its recorded-cost threshold remains unchanged.
+The PR workflow selects a smaller text suite with a free model. Nightly uses
+`--text --embedding --vision`; weekly uses `--image` and rotates the image interface.
+Scheduling and model selection live in the workflows, not schedule-named application
+profiles. Nightly allows 900 completion tokens per Foreman request to leave room for
+reasoning, tool arguments, and final output.
 Garage enables usage reporting per Chat Completions request rather than as a global
 chat default, so `ChatClient` can also use Responses mode. Structured-output probes
 require providers to support all requested parameters, including the JSON schema.
-`--auto` remains accepted as a deprecated no-op; failures always return a nonzero exit code.
+`--auto` and `--max-cost-usd` remain accepted as deprecated no-ops; failures always return
+a nonzero exit code.
 
 Each scene run writes `capability-report.md`, `garage-run.json`, and a bundle `README.md`.
 

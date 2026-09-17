@@ -46,8 +46,6 @@ public final class GarageReportWriter {
     List<Map<String, Object>> featureEvidence = this.evidence.featureSnapshot();
     List<Map<String, Object>> registry = registry(featureEvidence, command);
     double recordedCostUsd = this.evidence.recordedCostUsd();
-    boolean budgetExceeded =
-        command.maxCostUsd() != null && recordedCostUsd > command.maxCostUsd() + 0.000000001;
     Map<String, Object> run = new LinkedHashMap<>();
     run.put("application", "garage");
     run.put("createdAt", Instant.now().toString());
@@ -55,12 +53,9 @@ public final class GarageReportWriter {
         "status",
         results.stream().allMatch(result -> result.status() == SceneResult.Status.PASSED)
                 && incompleteFeatures.isEmpty()
-                && !budgetExceeded
             ? "passed"
             : "failed");
     run.put("recordedCostUsd", recordedCostUsd);
-    run.put("maxCostUsd", command.maxCostUsd());
-    run.put("costBudgetExceeded", budgetExceeded);
     run.put("incompleteFeatures", incompleteFeatures);
     run.put("costsByOperation", this.evidence.costSnapshot());
     run.put("command", commandEvidence(command));
@@ -137,7 +132,6 @@ public final class GarageReportWriter {
     values.put("capabilities", command.capabilities());
     values.put("imageSurface", command.imageSurface());
     values.put("imageQuality", command.imageQuality());
-    values.put("maxCostUsd", command.maxCostUsd());
     values.put("foremanModel", command.foremanModel());
     values.put("specialistModel", command.specialistModel());
     values.put("fallbackModels", command.fallbackModels());
@@ -156,7 +150,6 @@ public final class GarageReportWriter {
     report.append("- Selected scenes: `").append(command.get("sceneIds")).append("`\n");
     report.append("- Image surface: `").append(command.get("imageSurface")).append("`\n");
     report.append("- Recorded inference cost: `$ ").append(diagnostic.get("recordedCostUsd")).append("`\n");
-    report.append("- Cost ceiling: `").append(diagnostic.get("maxCostUsd")).append("`\n");
     report.append("- Free-form diagnostic text and raw payloads retained: `no`\n\n");
     List<Map<String, Object>> results = (List<Map<String, Object>>) diagnostic.get("scenes");
     List<Map<String, Object>> registry = (List<Map<String, Object>>) diagnostic.get("featureRegistry");
