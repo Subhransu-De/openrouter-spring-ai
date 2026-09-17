@@ -80,7 +80,7 @@ class GarageRunnerFailureTests {
   }
 
   @Test
-  void theRetiredCostCeilingOptionIsRejected() {
+  void theRetiredCostCeilingOptionIsRejected() throws Exception {
     GarageRunner runner = runner(scene(), new GarageEvidence(), writer());
 
     assertThatThrownBy(() -> runner.run("--scene=dyno-tuning", "--max-cost-usd=0.002",
