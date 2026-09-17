@@ -196,24 +196,6 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 	}
 
 	@Test
-	void malformedTerminalPayloadStillEmitsFinishWithoutThrowing() throws Exception {
-		// The event's lenient response deserialization swallows a malformed response
-		// object so the stream still terminates cleanly; the finish reason from the
-		// event type survives, identity/usage do not.
-		ChatResponse mapped = this.streamingMapper.map(streamEvent("""
-				{
-				  "type": "response.completed",
-				  "response": "this should be an object not a string"
-				}
-				"""));
-
-		assertThat(mapped.getResult().getMetadata().getFinishReason()).isEqualTo("STOP");
-		// The response deserialized to null, so no id/model/usage were attached; the
-		// metadata id defaults to empty rather than carrying stale identity.
-		assertThat(mapped.getMetadata().getId()).isEmpty();
-	}
-
-	@Test
 	void completedEventExtractsUsageAndIdentity() throws Exception {
 		ChatResponse mapped = this.streamingMapper.map(streamEvent("""
 				{

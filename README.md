@@ -274,6 +274,11 @@ status as `openrouter.responses.status`, and the typed incomplete details as
 `openrouter.responses.incomplete_details`. Responses text preserves whitespace-only
 parts and messages; streaming text remains incremental without repeating terminal text.
 
+Responses streaming requires a response snapshot before releasing buffered tool calls
+and rejects malformed response payloads. Optional fields may be absent and unknown fields
+are ignored, but invalid typed fields fail decoding rather than discarding response
+status or output.
+
 ### Embeddings
 
 `OpenRouterEmbeddingModel` is auto-configured next to the chat model and implements Spring
