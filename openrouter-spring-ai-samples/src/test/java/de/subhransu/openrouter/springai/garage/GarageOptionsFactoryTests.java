@@ -155,6 +155,40 @@ class GarageOptionsFactoryTests {
   }
 
   @Test
+  void aPinnedSweepProviderKeepsRunStrictnessAndForbidsFallbacks() {
+    GarageProperties properties = new GarageProperties();
+    properties.setProviderRequireParameters(true);
+    properties.setProviderSort("price");
+    var shared = GarageOptionsFactory.serviceProviderPreferences(properties);
+
+    var pinned = GarageOptionsFactory.pinnedProviderPreferences(shared, "OpenAI");
+
+    assertThat(pinned.order()).containsExactly("OpenAI");
+    assertThat(pinned.allowFallbacks()).isFalse();
+    assertThat(pinned.requireParameters()).isTrue();
+    assertThat(pinned.sort()).isEqualTo("price");
+    assertThat(GarageOptionsFactory.pinnedProviderPreferences(shared, null)).isSameAs(shared);
+  }
+
+  @Test
+  void imageProviderOptionsUseTheWireNamesAndDropEmptyPreferences() {
+    GarageProperties properties = new GarageProperties();
+    properties.setProviderRequireParameters(true);
+    properties.setProviderSort("price");
+    var shared = GarageOptionsFactory.serviceProviderPreferences(properties);
+
+    assertThat(GarageOptionsFactory.imageProviderOptions(shared, null))
+        .containsEntry("require_parameters", true)
+        .containsEntry("sort", "price")
+        .doesNotContainKey("order");
+    assertThat(GarageOptionsFactory.imageProviderOptions(shared, "OpenAI"))
+        .containsEntry("order", List.of("OpenAI"))
+        .containsEntry("allow_fallbacks", false)
+        .containsEntry("require_parameters", true);
+    assertThat(GarageOptionsFactory.imageProviderOptions(null, null)).isNull();
+  }
+
+  @Test
   void disabledProviderPreferencesLeaveRequestsUnrouted() {
     GarageProperties properties = new GarageProperties();
     properties.setProviderPreferencesEnabled(false);

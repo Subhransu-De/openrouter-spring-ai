@@ -299,10 +299,12 @@ final class GarageRunner implements CommandLineRunner {
     try {
       OpenRouterEmbeddingOptions.Builder options =
           OpenRouterEmbeddingOptions.builder().model(pin.modelId());
-      if (pin.providerTag() != null) {
-        options.provider(
-            new OpenRouterProviderPreferences(
-                false, null, null, List.of(pin.providerTag()), null, null, null));
+      OpenRouterProviderPreferences provider =
+          GarageOptionsFactory.pinnedProviderPreferences(
+              GarageOptionsFactory.serviceProviderPreferences(this.properties),
+              pin.providerTag());
+      if (provider != null) {
+        options.provider(provider);
       }
       EmbeddingResponse response =
           this.embeddingModel.call(

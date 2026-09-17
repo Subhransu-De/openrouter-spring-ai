@@ -327,8 +327,10 @@ public final class GarageModalityBays {
               throw new IllegalArgumentException("unknown image sweep option: " + option.getKey());
         }
       }
-      if (providerTag != null) {
-        options.providerOptions(Map.of("order", List.of(providerTag), "allow_fallbacks", false));
+      Map<String, Object> providerOptions =
+          GarageOptionsFactory.imageProviderOptions(this.provider, providerTag);
+      if (providerOptions != null) {
+        options.providerOptions(providerOptions);
       }
       ImageResponse response =
           this.imageModel.call(
@@ -387,6 +389,11 @@ public final class GarageModalityBays {
         OpenRouterImageOptions.builder().model(this.imageModelId).n(1);
     if (StringUtils.hasText(this.imageQuality)) {
       options.quality(this.imageQuality);
+    }
+    Map<String, Object> providerOptions =
+        GarageOptionsFactory.imageProviderOptions(this.provider, null);
+    if (providerOptions != null) {
+      options.providerOptions(providerOptions);
     }
     return options.build();
   }
