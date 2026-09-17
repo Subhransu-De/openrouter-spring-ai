@@ -10,6 +10,7 @@ import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingModel;
 import de.subhransu.openrouter.springai.image.OpenRouterImageModel;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.embedding.EmbeddingModel;
@@ -17,6 +18,7 @@ import org.springframework.ai.image.ImageModel;
 import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.model.tool.autoconfigure.ToolCallingAutoConfiguration;
 import org.springframework.ai.tool.execution.ToolExecutionExceptionProcessor;
+import org.springframework.ai.tool.execution.DefaultToolExecutionExceptionProcessor;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -72,9 +74,11 @@ class OpenRouterModelSelectionTests {
 	}
 
 	@ParameterizedTest
-	@ValueSource(strings = { "openrouter", "other", "none" })
-	void explicitSelectionChoosesOneProviderAcrossModalities(String provider) {
-		this.contextRunner.withConfiguration(AutoConfigurations.of(OtherProviderAutoConfiguration.class))
+	@CsvSource({ "openrouter, true", "openrouter, false", "other, true", "other, false", "none, true", "none, false" })
+	void explicitSelectionChoosesOneProviderAcrossModalities(String provider, boolean otherProviderFirst) {
+		this.contextRunner
+			.withConfiguration(AutoConfigurations.of(otherProviderFirst ? OtherProviderFirstAutoConfiguration.class
+					: OtherProviderLastAutoConfiguration.class))
 			.withPropertyValues("spring.ai.openrouter.api-key=test-key", "spring.ai.model.chat=" + provider,
 					"spring.ai.model.embedding=" + provider, "spring.ai.model.image=" + provider)
 			.run(context -> {
@@ -105,9 +109,38 @@ class OpenRouterModelSelectionTests {
 				}
 				else {
 					assertThat(context).doesNotHaveBean(OpenRouterApi.class)
+						.hasSingleBean(DefaultToolExecutionExceptionProcessor.class)
 						.doesNotHaveBean(OpenRouterToolExecutionExceptionProcessor.class)
 						.doesNotHaveBean(OpenRouterToolCallingManagerGuard.class);
 				}
+			});
+	}
+
+	@Test
+	void missingSelectorsEnableModelsAndDefaultToolPolicyTogether() {
+		this.contextRunner.withPropertyValues("spring.ai.openrouter.api-key=test-key").run(context -> {
+			assertThat(context).hasNotFailed()
+				.hasSingleBean(OpenRouterApi.class)
+				.hasSingleBean(ChatModel.class)
+				.hasSingleBean(EmbeddingModel.class)
+				.hasSingleBean(ImageModel.class)
+				.hasSingleBean(OpenRouterToolCallingManagerGuard.class)
+				.hasSingleBean(ToolCallingManager.class)
+				.hasSingleBean(ToolExecutionExceptionProcessor.class)
+				.hasSingleBean(OpenRouterToolExecutionExceptionProcessor.class);
+		});
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "chat", "embedding", "image" })
+	void eachSelectedModalityRequiresCredentials(String modality) {
+		this.contextRunner
+			.withPropertyValues("spring.ai.model.chat=none", "spring.ai.model.embedding=none",
+					"spring.ai.model.image=none")
+			.withPropertyValues("spring.ai.model." + modality + "=openrouter")
+			.run(context -> {
+				assertThat(context).hasFailed();
+				assertThat(context.getStartupFailure()).rootCause().hasMessageContaining("OpenRouter API key");
 			});
 	}
 
@@ -141,8 +174,19 @@ class OpenRouterModelSelectionTests {
 			});
 	}
 
-	@AutoConfiguration
-	static class OtherProviderAutoConfiguration {
+	@AutoConfiguration(before = { OpenRouterToolCallingAutoConfiguration.class, OpenRouterChatAutoConfiguration.class,
+			OpenRouterEmbeddingAutoConfiguration.class, OpenRouterImageAutoConfiguration.class })
+	static class OtherProviderFirstAutoConfiguration extends OtherProviderConfiguration {
+
+	}
+
+	@AutoConfiguration(after = { OpenRouterToolCallingAutoConfiguration.class, OpenRouterChatAutoConfiguration.class,
+			OpenRouterEmbeddingAutoConfiguration.class, OpenRouterImageAutoConfiguration.class })
+	static class OtherProviderLastAutoConfiguration extends OtherProviderConfiguration {
+
+	}
+
+	static class OtherProviderConfiguration {
 
 		@Bean
 		@ConditionalOnProperty(name = "spring.ai.model.chat", havingValue = "other")

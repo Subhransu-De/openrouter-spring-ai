@@ -190,6 +190,7 @@ The starter intentionally backs off for any application-declared `ChatModel`,
 provider's model and a custom OpenRouter model. Setting `spring.ai.model.chat=openrouter`
 enables chat auto-configuration but does not override a replacement `ChatModel` bean.
 The same rule applies to `spring.ai.model.embedding` and `spring.ai.model.image`.
+This preserves existing replacement-bean behavior and requires no migration.
 
 Each selector defaults independently to `openrouter`. Use `none` to disable a modality,
 or another provider's identifier to select its auto-configuration. Disabling chat alone

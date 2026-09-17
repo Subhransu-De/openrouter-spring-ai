@@ -16,5 +16,7 @@ dependencies {
 	annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
 
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
+	testImplementation("org.springframework.ai:spring-ai-client-chat")
+	testImplementation("io.projectreactor:reactor-test")
 	testImplementation("com.tngtech.archunit:archunit-junit5:$archunitVersion")
 }
