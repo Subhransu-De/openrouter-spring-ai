@@ -35,6 +35,9 @@ public record GarageCommand(
     List<String> embeddingSweepModels,
     List<String> imageSweepModels) {
 
+  private static final String STREAMING_DISPATCH = "streaming-dispatch";
+  private static final String RECOVERY_ROAD_TEST = "recovery-road-test";
+
   private static final List<OpenRouterRequestMode> ALL_REQUEST_MODES =
       List.of(
           OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS,
@@ -43,24 +46,24 @@ public record GarageCommand(
   private static final List<String> FULL_SCENES =
       List.of(
           "service-story",
-          "streaming-dispatch",
+          STREAMING_DISPATCH,
           "digital-inspection",
           "modality-bays",
           "express-invoice",
           "routing-lane",
           "dyno-tuning",
           "attribution-check-in",
-          "recovery-road-test");
+          RECOVERY_ROAD_TEST);
 
   private static final List<String> TEXT_SCENES =
       List.of(
           "service-story",
-          "streaming-dispatch",
+          STREAMING_DISPATCH,
           "digital-inspection",
           "express-invoice",
           "dyno-tuning",
           "attribution-check-in",
-          "recovery-road-test");
+          RECOVERY_ROAD_TEST);
 
   public static GarageCommand from(String[] args, GarageProperties properties) {
     String topic = properties.getTopic();
@@ -158,7 +161,7 @@ public record GarageCommand(
         sceneIds = parseList(value(arg));
         scenesExplicit = true;
       } else if ("--stream".equals(arg)) {
-        sceneIds = add(sceneIds, "streaming-dispatch");
+        sceneIds = add(sceneIds, STREAMING_DISPATCH);
         scenesExplicit = true;
       } else if (!isBootOption(arg)) {
         throw new IllegalArgumentException("Unknown Garage option: " + arg);
@@ -168,7 +171,7 @@ public record GarageCommand(
     boolean capabilitiesExplicit = text || embedding || vision || image;
     if (properties.isStream() && !scenesExplicit && !capabilitiesExplicit && !full
         && !offlineContracts && embeddingSweepModels.isEmpty() && imageSweepModels.isEmpty()) {
-      sceneIds = add(sceneIds, "streaming-dispatch");
+      sceneIds = add(sceneIds, STREAMING_DISPATCH);
     }
     if ((capabilitiesExplicit || full || scenesExplicit)
         && (!embeddingSweepModels.isEmpty() || !imageSweepModels.isEmpty())) {
@@ -239,7 +242,7 @@ public record GarageCommand(
       sceneIds = FULL_SCENES;
     }
     if (offlineContracts && !scenesExplicit) {
-      sceneIds = List.of("recovery-road-test", "dyno-tuning");
+      sceneIds = List.of(RECOVERY_ROAD_TEST, "dyno-tuning");
     }
     if (offlineContracts && requiresLiveScene(sceneIds)) {
       throw new IllegalArgumentException("--offline-contracts accepts only offline scenes");
@@ -305,7 +308,7 @@ public record GarageCommand(
 
   private static boolean requiresLiveScene(List<String> scenes) {
     return scenes.stream()
-        .anyMatch(scene -> !"recovery-road-test".equals(scene) && !"dyno-tuning".equals(scene));
+        .anyMatch(scene -> !RECOVERY_ROAD_TEST.equals(scene) && !"dyno-tuning".equals(scene));
   }
 
   private static String value(String arg) {
