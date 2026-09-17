@@ -462,7 +462,8 @@ reasoning, tool arguments, and final output.
 Garage enables usage reporting per Chat Completions request rather than as a global
 chat default, so `ChatClient` can also use Responses mode. Structured-output probes
 require providers to support all requested parameters, including the JSON schema.
-`--auto` remains accepted as a deprecated no-op; failures always return a nonzero exit code.
+`--auto` and `--max-cost-usd` remain accepted as deprecated no-ops; failures always return
+a nonzero exit code.
 
 Each scene run writes `capability-report.md`, `garage-run.json`, and a bundle `README.md`.
 

@@ -80,12 +80,20 @@ class GarageRunnerFailureTests {
   }
 
   @Test
-  void theRetiredCostCeilingOptionIsRejected() throws Exception {
-    GarageRunner runner = runner(scene(), new GarageEvidence(), writer());
+  void theRetiredCostCeilingOptionIsAcceptedAndIgnored() throws Exception {
+    GarageScene scene = scene();
+    GarageEvidence evidence = new GarageEvidence();
+    when(scene.execute(any())).thenAnswer(invocation -> {
+      evidence.recordCost("synthetic-operation", 0.01);
+      return SceneResult.passed("dyno-tuning", "synthetic-operation",
+          OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS, Duration.ZERO, this.output, Map.of());
+    });
+    GarageReportWriter writer = writer();
 
-    assertThatThrownBy(() -> runner.run("--scene=dyno-tuning", "--max-cost-usd=0.002",
-        "--output=" + this.output))
-        .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Unknown Garage option");
+    runner(scene, evidence, writer).run("--scene=dyno-tuning", "--max-cost-usd=0.002",
+        "--output=" + this.output);
+
+    verify(writer).write(any(), any(), any(), any());
   }
 
   @Test

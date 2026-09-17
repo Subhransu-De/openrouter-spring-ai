@@ -143,6 +143,8 @@ public record GarageCommand(
         properties.setProviderIgnore(parseList(value(arg)));
       } else if (arg.startsWith("--provider-quantizations=")) {
         properties.setProviderQuantizations(parseList(value(arg)));
+      } else if (arg.startsWith("--max-cost-usd=")) {
+        // Backward-compatible no-op: Garage reports what a run cost but enforces no ceiling.
       } else if (arg.startsWith("--embedding-sweep=")) {
         embeddingSweepModels = parseList(value(arg));
       } else if (arg.startsWith("--image-sweep=")) {
