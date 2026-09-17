@@ -129,6 +129,30 @@ class GarageCommandTests {
   }
 
   @Test
+  void nightlyRequiresProvidersToHonourEveryRequestedParameter() {
+    command("--text", "--embedding", "--vision", "--provider-sort=price",
+        "--provider-require-parameters=true");
+    assertThat(this.properties.getProviderRequireParameters()).isTrue();
+    assertThat(this.properties.getProviderSort()).isEqualTo("price");
+
+    command("--text", "--provider-require-parameters=false");
+    assertThat(this.properties.getProviderRequireParameters()).isFalse();
+  }
+
+  @Test
+  void requireParametersFlagToleratesSurroundingWhitespace() {
+    command("--text", "--provider-require-parameters= true ");
+    assertThat(this.properties.getProviderRequireParameters()).isTrue();
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"", "yes", "1", "truthy", "no"})
+  void unparsableRequireParametersFlagsFailBeforeInference(String raw) {
+    assertThatThrownBy(() -> command("--text", "--provider-require-parameters=" + raw))
+        .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("must be true or false");
+  }
+
+  @Test
   void offlineContractsNeedNoApiKeyAndAutoIsALegacyNoOp() {
     GarageCommand selected = command("--offline-contracts");
     assertThat(selected.sceneIds()).containsExactly("recovery-road-test", "dyno-tuning");

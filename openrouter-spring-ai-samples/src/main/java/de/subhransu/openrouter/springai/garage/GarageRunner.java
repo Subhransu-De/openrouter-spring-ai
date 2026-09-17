@@ -538,6 +538,8 @@ final class GarageRunner implements CommandLineRunner {
           --specialist-max-completion-tokens=<n>  Specialist completion limit
           --reasoning-effort=<value>     Text reasoning effort
           --provider-sort=<value>        Provider sorting preference
+          --provider-require-parameters=<true|false>  Drop providers that cannot honour
+                                         every requested parameter
           --provider-order=<ids>         Provider preference list; empty clears it
           --provider-ignore=<ids>        Excluded providers; empty clears it
           --provider-quantizations=<ids> Provider quantizations; empty clears them

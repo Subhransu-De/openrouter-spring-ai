@@ -137,6 +137,8 @@ public record GarageCommand(
         properties.setReasoningEffort(value(arg));
       } else if (arg.startsWith("--provider-sort=")) {
         properties.setProviderSort(value(arg));
+      } else if (arg.startsWith("--provider-require-parameters=")) {
+        properties.setProviderRequireParameters(booleanValue(arg));
       } else if (arg.startsWith("--provider-order=")) {
         properties.setProviderOrder(parseList(value(arg)));
       } else if (arg.startsWith("--provider-ignore=")) {
@@ -310,6 +312,17 @@ public record GarageCommand(
 
   private static String value(String arg) {
     return arg.substring(arg.indexOf('=') + 1);
+  }
+
+  private static boolean booleanValue(String arg) {
+    String raw = value(arg).strip();
+    if ("true".equalsIgnoreCase(raw)) {
+      return true;
+    }
+    if ("false".equalsIgnoreCase(raw)) {
+      return false;
+    }
+    throw new IllegalArgumentException(arg + " must be true or false");
   }
 
   private static int positiveInteger(String arg) {
