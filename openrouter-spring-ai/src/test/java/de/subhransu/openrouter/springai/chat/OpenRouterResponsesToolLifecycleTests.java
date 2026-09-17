@@ -8,6 +8,8 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.json.JsonMapper;
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.api.dto.ResponsesContent;
@@ -32,6 +34,8 @@ import org.springframework.ai.tool.function.FunctionToolCallback;
 import reactor.core.publisher.Flux;
 
 class OpenRouterResponsesToolLifecycleTests {
+
+	private static final String OUTPUT_ITEM_DONE = "response.output_item.done";
 
 	private static final String FIRST_CALL_ID = "synthetic_call_1";
 
@@ -100,8 +104,8 @@ class OpenRouterResponsesToolLifecycleTests {
 		ResponsesOutputItem done = call(FIRST_CALL_ID, invalidDoneItem ? "incomplete" : "completed", "{}");
 		ResponsesResult terminal = result("completed",
 				List.of(call(FIRST_CALL_ID, invalidDoneItem ? "completed" : "incomplete", "{}")));
-		when(this.api.responsesStream(any())).thenReturn(
-				Flux.just(event("response.output_item.done", done, null), event("response.completed", null, terminal)));
+		when(this.api.responsesStream(any()))
+			.thenReturn(Flux.just(event(OUTPUT_ITEM_DONE, done, null), event("response.completed", null, terminal)));
 
 		assertThatThrownBy(() -> invoke(true)).isInstanceOf(OpenRouterTruncatedResponseException.class)
 			.hasMessageContaining("item status=incomplete");
@@ -109,10 +113,26 @@ class OpenRouterResponsesToolLifecycleTests {
 		verifyRequests(true, 1);
 	}
 
+	@ParameterizedTest
+	@ValueSource(strings = { "\"malformed\"", "{\"status\":\"incomplete\",\"usage\":\"malformed\"}",
+			"{\"status\":\"completed\",\"output\":\"malformed\"}",
+			"{\"status\":\"completed\",\"output\":[{\"type\":\"function_call\",\"status\":\"incomplete\"}],\"usage\":\"malformed\"}" })
+	void malformedTerminalResponseCannotReleaseBufferedCalls(String response) {
+		Flux<ResponsesStreamEvent> terminal = Flux.defer(() -> Flux.just(JsonMapper.builder()
+			.build()
+			.readValue("{\"type\":\"response.completed\",\"response\":" + response + "}", ResponsesStreamEvent.class)));
+		when(this.api.responsesStream(any())).thenReturn(
+				Flux.just(event(OUTPUT_ITEM_DONE, call(FIRST_CALL_ID, "completed", "{}"), null)).concatWith(terminal));
+
+		assertThatThrownBy(() -> invoke(true)).isInstanceOf(JacksonException.class);
+		assertThat(this.executions).hasValue(0);
+		verifyRequests(true, 1);
+	}
+
 	@Test
 	void streamEndingBeforeTerminalResponseDoesNotExecuteBufferedCalls() {
 		when(this.api.responsesStream(any()))
-			.thenReturn(Flux.just(event("response.output_item.done", call("synthetic_call", "completed", "{}"), null)));
+			.thenReturn(Flux.just(event(OUTPUT_ITEM_DONE, call("synthetic_call", "completed", "{}"), null)));
 
 		assertThatThrownBy(() -> invoke(true)).isInstanceOf(OpenRouterTruncatedResponseException.class)
 			.hasMessageContaining("before tool round completion");
@@ -144,7 +164,7 @@ class OpenRouterResponsesToolLifecycleTests {
 		when(this.api.responses(any())).thenReturn(first, answer);
 		String terminalType = "incomplete".equals(first.status()) ? "response.incomplete" : "response.completed";
 		Flux<ResponsesStreamEvent> firstStream = Flux.fromIterable(first.output())
-			.map(item -> event("response.output_item.done", item, null))
+			.map(item -> event(OUTPUT_ITEM_DONE, item, null))
 			.concatWithValues(event(terminalType, null, first));
 		when(this.api.responsesStream(any())).thenReturn(firstStream,
 				Flux.just(new ResponsesStreamEvent("response.output_text.delta", "done", null, null, null),

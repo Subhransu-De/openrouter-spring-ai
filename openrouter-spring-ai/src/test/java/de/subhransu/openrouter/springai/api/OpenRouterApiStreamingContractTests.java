@@ -371,6 +371,19 @@ class OpenRouterApiStreamingContractTests {
 			.verify();
 	}
 
+	@ParameterizedTest
+	@ValueSource(strings = { "response.completed", "response.incomplete", "response.failed" })
+	void malformedResponsesTerminalPayloadFailsDecoding(String type) {
+		String sse = "data: {\"type\":\"" + type
+				+ "\",\"response\":{\"status\":\"incomplete\",\"usage\":\"malformed\"}}\n\n";
+		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE, sse);
+
+		StepVerifier.create(capture.api().responsesStream(responsesRequest()))
+			.expectErrorSatisfies(error -> assertThat(error).isInstanceOf(IllegalStateException.class)
+				.hasMessage("Failed to decode OpenRouter stream chunk"))
+			.verify();
+	}
+
 	@Test
 	void responsesStreamParsesEventsAsTypedStreamEvents() {
 		String sse = """
