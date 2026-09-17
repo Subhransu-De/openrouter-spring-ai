@@ -14,6 +14,43 @@ class GarageCommandTests {
 
   private final GarageProperties properties = new GarageProperties();
 
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void streamPropertyOnlyAddsToDefaultSceneSelection(boolean stream) {
+    this.properties.setStream(stream);
+    assertThat(command().sceneIds()).containsExactlyElementsOf(stream
+        ? java.util.List.of("service-story", "streaming-dispatch")
+        : java.util.List.of("service-story"));
+    assertThat(command("--stream").sceneIds()).containsExactly("service-story", "streaming-dispatch");
+    assertThat(command("--scene=dyno-tuning").sceneIds()).containsExactly("dyno-tuning");
+    assertThat(command("--offline-contracts").sceneIds()).containsExactly("recovery-road-test", "dyno-tuning");
+    for (String capability : new String[] {"embedding", "vision", "image"}) {
+      assertThat(command("--" + capability).sceneIds()).containsExactly("modality-bays");
+      assertThat(command("--" + capability, "--scene=modality-bays").sceneIds())
+          .containsExactly("modality-bays");
+    }
+    assertThat(command("--text", "--scene=service-story").sceneIds()).containsExactly("service-story");
+    assertThat(command("--full").sceneIds()).hasSize(9);
+    assertThat(command("--embedding-sweep=synthetic/embedding").sceneIds()).doesNotContain("streaming-dispatch");
+    assertThat(command("--image-sweep=synthetic/image").sceneIds()).doesNotContain("streaming-dispatch");
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"--spring.profiles.active=coverage", "--spring.main.banner-mode=off",
+      "--garage.stream=true", "--logging.level.root=warn", "--debug", "--trace=false"})
+  void acceptsBootOptions(String option) {
+    assertThat(command(option)).isEqualTo(command());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"--streem", "--stream=true", "--specialist-model", "--scenes",
+      "--foreman-model", "--spring.main.banner-mode", "--=value", "--.broken=value",
+      "--scene..name=value", "--specialst-model=synthetic/model.with.dots"})
+  void rejectsUnknownOrMalformedGarageOptions(String option) {
+    assertThatThrownBy(() -> command(option)).isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("Unknown Garage option");
+  }
+
   @Test
   void fullCannotBeNarrowedToASubsetOfScenes() {
     assertThatThrownBy(() -> command("--full", "--scene=service-story"))

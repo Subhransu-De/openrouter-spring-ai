@@ -9,6 +9,7 @@ import de.subhransu.openrouter.springai.autoconfigure.OpenRouterEmbeddingAutoCon
 import de.subhransu.openrouter.springai.autoconfigure.OpenRouterImageAutoConfiguration;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
 import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingModel;
+import de.subhransu.openrouter.springai.garage.cli.GarageCommand;
 import de.subhransu.openrouter.springai.garage.evidence.GarageEvidence;
 import de.subhransu.openrouter.springai.garage.evidence.GarageTelemetry;
 import de.subhransu.openrouter.springai.garage.evidence.GarageTransportEvidence;
@@ -18,11 +19,15 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
 import org.springframework.core.retry.RetryTemplate;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.image.ImageModel;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.boot.context.properties.bind.UnboundConfigurationPropertiesException;
+import org.springframework.core.env.SimpleCommandLinePropertySource;
 
 /**
  * Sample-wiring smoke test for the Garage demo. It builds the full sample context with a
@@ -81,6 +86,28 @@ class GarageApplicationContextTests {
 	}
 
 	@Test
+	void bootArgumentsBindPropertiesAndGarageOverridesRemainAuthoritative() {
+		String[] args = { "--spring.profiles.active=coverage", "--spring.main.banner-mode=off",
+				"--garage.stream=true", "--garage.specialistModel=synthetic/configured",
+				"--garage.max-completion-tokens=123", "--specialist-model=synthetic/override",
+				"--max-completion-tokens=456" };
+		this.contextRunner.withInitializer(context -> context.getEnvironment().getPropertySources()
+			.addFirst(new SimpleCommandLinePropertySource(args))).run(context -> {
+				assertThat(context).hasNotFailed();
+				assertThat(context.getEnvironment().getActiveProfiles()).contains("coverage");
+				assertThat(context.getEnvironment().getProperty("spring.main.banner-mode")).isEqualTo("off");
+				GarageProperties properties = context.getBean(GarageProperties.class);
+				assertThat(properties.isStream()).isTrue();
+				assertThat(properties.getSpecialistModel()).isEqualTo("synthetic/configured");
+				assertThat(properties.getMaxCompletionTokens()).isEqualTo(123);
+				GarageCommand command = GarageCommand.from(args, properties);
+				assertThat(command.sceneIds()).containsExactly("service-story", "streaming-dispatch");
+				assertThat(command.specialistModel()).isEqualTo("synthetic/override");
+				assertThat(properties.getMaxCompletionTokens()).isEqualTo(456);
+			});
+	}
+
+	@Test
 	void chatModelAutoConfigurationBacksOffForAUserModel() {
 		ChatModel customModel = org.mockito.Mockito.mock(ChatModel.class);
 		this.contextRunner.withBean(ChatModel.class, () -> customModel).run(context -> {
@@ -88,6 +115,28 @@ class GarageApplicationContextTests {
 			assertThat(context).hasSingleBean(ChatModel.class);
 			assertThat(context).doesNotHaveBean(OpenRouterChatModel.class);
 		});
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "garage.streem", "garage.specialst-model" })
+	void unknownGaragePropertiesFailBindingBeforeInference(String key) {
+		this.contextRunner.withInitializer(context -> context.getEnvironment().getPropertySources()
+			.addFirst(new SimpleCommandLinePropertySource("--" + key + "=true"))).run(context -> {
+				assertThat(context).hasFailed();
+				assertThat(context.getStartupFailure())
+					.hasRootCauseInstanceOf(UnboundConfigurationPropertiesException.class)
+					.hasStackTraceContaining(key);
+			});
+	}
+
+	@Test
+	void disablingGarageRemainsAValidBoundProperty() {
+		this.contextRunner.withInitializer(context -> context.getEnvironment().getPropertySources()
+			.addFirst(new SimpleCommandLinePropertySource("--garage.enabled=false"))).run(context -> {
+				assertThat(context).hasNotFailed();
+				assertThat(context.getBean(GarageProperties.class).isEnabled()).isFalse();
+				assertThat(context).doesNotHaveBean(GarageRunner.class);
+			});
 	}
 
 }

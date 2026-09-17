@@ -7,9 +7,10 @@ import java.util.ArrayList;
 import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
-@ConfigurationProperties("garage")
+@ConfigurationProperties(prefix = "garage", ignoreUnknownFields = false)
 public class GarageProperties {
 
+  private boolean enabled = true;
   private String foremanModel = "openai/gpt-oss-120b";
   private String specialistModel = "openai/gpt-oss-20b";
   private String embeddingModel = "openai/text-embedding-3-small";
@@ -51,6 +52,14 @@ public class GarageProperties {
   private List<String> providerQuantizations =
       new ArrayList<>(List.of("bf16", "fp16", "fp8"));
   private OpenRouterServiceTier serviceTier = OpenRouterServiceTier.AUTO;
+
+  public boolean isEnabled() {
+    return this.enabled;
+  }
+
+  public void setEnabled(boolean enabled) {
+    this.enabled = enabled;
+  }
 
   public String getForemanModel() {
     return this.foremanModel;

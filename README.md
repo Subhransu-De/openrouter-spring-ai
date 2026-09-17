@@ -350,7 +350,12 @@ The OpenRouter-native knobs (`resolution`, `aspect-ratio`, `quality`, `output-fo
 along with `inputReferences` for image-to-image work and `providerOptions` passthrough.
 `OpenRouterImageModel.stream(ImagePrompt)` exposes OpenRouter's SSE image streaming:
 partial previews arrive first (see `OpenRouterImageGenerationMetadata.partialImageIndex()`),
-then the completed image with usage and cost.
+then completed images with usage and cost. The stream ends at `[DONE]`, not at the
+first completed image. An SSE connection that closes without `[DONE]` fails as a
+truncated response, even if it delivered a completed image. `n` is an upper bound;
+providers may return fewer images, and support for multiple images and native streaming
+depends on the endpoint. Check the [OpenRouter image API capabilities](https://openrouter.ai/docs/guides/overview/multimodal/image-generation)
+before combining them.
 
 Image-capable _chat_ models work too: set
 `OpenRouterChatOptions.builder().modalities(List.of("image", "text"))` (optionally with
@@ -476,6 +481,16 @@ request modes; `--request-mode=chat` narrows it. `--full` additionally includes 
 and all modalities. With no selection flags, the original service-story demo runs.
 `--scene=<ids>` can narrow a capability suite; selected modality flags require
 `modality-bays` in that list. `--offline-contracts` runs only local contracts.
+
+Boot arguments such as `--spring.profiles.active=coverage` and
+`--spring.main.banner-mode=off` work alongside Garage flags. Namespaced properties
+use `--key=value`; Boot's `--debug` and `--trace` flags are also accepted.
+Unknown `garage.*` properties fail during binding before any scene runs.
+Garage CLI overrides take precedence over bound properties, including
+`--specialist-model`. With no explicit selection, `garage.stream=true` adds
+`streaming-dispatch` to the service-story demo. Explicit scene, capability, full,
+offline, or sweep selections take precedence over that property default.
+The `--stream` flag explicitly adds streaming to the current scene selection.
 
 Models are selected independently: use `--foreman-model`, `--specialist-model`,
 `--embedding-model`, `--vision-model`, and `--image-model` as appropriate.

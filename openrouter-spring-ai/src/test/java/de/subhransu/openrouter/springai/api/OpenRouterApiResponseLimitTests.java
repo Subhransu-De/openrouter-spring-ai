@@ -207,7 +207,8 @@ class OpenRouterApiResponseLimitTests {
 	@ValueSource(booleans = { false, true })
 	void imageDecodingHonorsConfiguredLimitForSseAndJson(boolean sse) {
 		String image = "a".repeat(300_000);
-		String body = sse ? "data: {\"type\":\"image_generation.completed\",\"b64_json\":\"" + image + "\"}\n\n"
+		String body = sse
+				? "data: {\"type\":\"image_generation.completed\",\"b64_json\":\"" + image + "\"}\n\ndata: [DONE]\n\n"
 				: "{\"data\":[{\"b64_json\":\"" + image + "\"}]}";
 		MediaType contentType = sse ? MediaType.TEXT_EVENT_STREAM : MediaType.APPLICATION_JSON;
 		ImagesRequest request = new ImagesRequest("test-image", "hello", null, null, null, null, null, null, null, null,

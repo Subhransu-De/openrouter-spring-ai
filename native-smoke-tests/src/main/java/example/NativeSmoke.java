@@ -157,10 +157,12 @@ public class NativeSmoke {
 		check(events.get(3).response().usage().totalTokens() == 3, "terminal response decoding");
 		fixture.expect("/images", true, sse(
 				"{\"type\":\"image_generation.partial_image\",\"partial_image_index\":0,\"b64_json\":\"c3lu\"}",
-				"{\"type\":\"image_generation.completed\",\"b64_json\":\"c3ludGhldGlj\",\"media_type\":\"image/png\"}"));
+				"{\"type\":\"image_generation.completed\",\"b64_json\":\"c3ludGhldGlj\",\"media_type\":\"image/png\"}",
+				"{\"type\":\"image_generation.completed\",\"b64_json\":\"c2Vjb25k\",\"media_type\":\"image/png\"}", "[DONE]"));
 		var images = collect(api.imagesStream(image(true)));
-		check(images.size() == 2 && images.get(0).partialImageIndex() == 0, "partial image");
+		check(images.size() == 3 && images.get(0).partialImageIndex() == 0, "partial image");
 		check("c3ludGhldGlj".equals(images.get(1).b64Json()), "completed image");
+		check("c2Vjb25k".equals(images.get(2).b64Json()), "second completed image");
 		fixture.add(new Exchange("/images", true, 200, "application/json", IMAGE, false));
 		check(collect(api.imagesStream(image(true))).get(0).type().equals(ImagesStreamEvent.COMPLETED),
 				"image JSON fallback");

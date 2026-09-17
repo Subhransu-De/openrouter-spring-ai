@@ -3,8 +3,11 @@ package de.subhransu.openrouter.springai.chat.mapper;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionChunk;
+import de.subhransu.openrouter.springai.api.dto.ChatCompletionResponse;
+import de.subhransu.openrouter.springai.api.dto.ChatMessage;
 import de.subhransu.openrouter.springai.api.dto.Choice;
 import de.subhransu.openrouter.springai.api.dto.ChoiceError;
+import de.subhransu.openrouter.springai.api.dto.ContentPart;
 import de.subhransu.openrouter.springai.api.dto.Delta;
 import de.subhransu.openrouter.springai.api.dto.FunctionCall;
 import de.subhransu.openrouter.springai.api.dto.StreamError;
@@ -22,10 +25,14 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.content.Media;
+import org.springframework.util.MimeTypeUtils;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 
 class OpenRouterStreamingToolCallAggregatorTests {
+
+	private static final String CHUNK_OBJECT = "chat.completion.chunk";
 
 	private static final String MODEL = "openai/gpt-5.4-mini";
 
@@ -85,11 +92,64 @@ class OpenRouterStreamingToolCallAggregatorTests {
 		}
 	}
 
+	@ParameterizedTest
+	@ValueSource(booleans = { false, true })
+	void imageBearingToolFragmentsRetainMediaAndMatchSynchronousResponse(boolean imagesOnContinuation) {
+		ContentPart firstImage = ContentPart.image("data:image/png;base64,AQID");
+		ContentPart secondImage = ContentPart.image("data:image/png;base64,BAUG");
+		List<ContentPart> firstImages = imagesOnContinuation ? null : List.of(firstImage);
+		List<ContentPart> laterImages = imagesOnContinuation ? List.of(firstImage, secondImage) : List.of(secondImage);
+		Choice first = new Choice(0, null, new Delta("assistant", "Checking ", "First ",
+				List.of(new ToolCall("call-0", "function", new FunctionCall("weather", "{\"city\":"), 0)), firstImages),
+				null, null);
+		Choice continuation = new Choice(0, null,
+				new Delta(null, "both.", "second.",
+						List.of(new ToolCall(null, null, new FunctionCall(null, "\"Berlin\"}"), 0)), laterImages),
+				null, null);
+		Usage usage = new Usage(10, 5, 15, null, null, null, null, null, null);
+		ChatCompletionChunk terminal = new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, MODEL, "openai",
+				List.of(finishChoice(0)), usage, null);
+		List<ToolCall> expectedTools = List.of(
+				new ToolCall("call-0", "function", new FunctionCall("weather", "{\"city\":\"Berlin\"}"), 0),
+				new ToolCall("call-1", "function", new FunctionCall("time", "{\"zone\":\"UTC\"}"), 1));
+		ChatMessage message = new ChatMessage("assistant", "Checking both.", null, null, expectedTools,
+				List.of(firstImage, secondImage), "First second.", null);
+		ChatResponse synchronous = new OpenRouterChatResponseMapper()
+			.map(new ChatCompletionResponse("gen-1", "chat.completion", 123L, MODEL, "openai",
+					List.of(new Choice(0, message, null, "tool_calls", "tool_calls")), usage));
+
+		StepVerifier
+			.create(this.aggregator
+				.aggregate(Flux.just(chunk(first), chunk(toolFragment(0, 1, "call-1", "time", "{\"zone\":")),
+						chunk(continuation), chunk(toolFragment(0, 1, null, null, "\"UTC\"}")), terminal)))
+			.assertNext(merged -> {
+				Choice choice = merged.choices().get(0);
+				assertThat(choice.delta().images()).containsExactly(firstImage, secondImage);
+				assertThat(choice.delta().content()).isEqualTo("Checking both.");
+				assertThat(choice.delta().reasoning()).isEqualTo("First second.");
+				assertThat(choice.delta().toolCalls()).containsExactlyElementsOf(expectedTools);
+				assertThat(choice.finishReason()).isEqualTo("tool_calls");
+				assertThat(merged.usage()).isEqualTo(usage);
+
+				ChatResponse streamed = new OpenRouterStreamingResponseMapper().map(merged);
+				assertThat(streamed.getResult().getOutput().getMedia()).hasSize(2)
+					.allSatisfy(media -> assertThat(media.getMimeType()).isEqualTo(MimeTypeUtils.IMAGE_PNG));
+				assertThat(streamed.getResult().getOutput().getMedia()).extracting(Media::getData)
+					.containsExactly("data:image/png;base64,AQID", "data:image/png;base64,BAUG");
+				assertThat(streamed.getResult().getOutput()).usingRecursiveComparison()
+					.ignoringFields("media.name")
+					.isEqualTo(synchronous.getResult().getOutput());
+				assertThat(streamed.getResult().getMetadata().getFinishReason()).isEqualTo("TOOL_CALLS")
+					.isEqualTo(synchronous.getResult().getMetadata().getFinishReason());
+				assertThat(streamed.getMetadata().getUsage()).isEqualTo(synchronous.getMetadata().getUsage());
+			})
+			.verifyComplete();
+	}
+
 	@Test
 	void usageWhileBufferedIsRetainedAfterToolCallTerminator() {
 		var usage = new Usage(10, 5, 15, null, null, null, null, null, null);
-		var usageChunk = new ChatCompletionChunk("gen-1", "chat.completion.chunk", 123L, MODEL, "openai", List.of(),
-				usage, null);
+		var usageChunk = new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, MODEL, "openai", List.of(), usage, null);
 		StepVerifier
 			.create(this.aggregator.aggregate(Flux.just(chunk(toolFragment(0, 0, "call-0", "weather", "{}")),
 					usageChunk, chunk(finishChoice(0)))))
@@ -140,8 +200,8 @@ class OpenRouterStreamingToolCallAggregatorTests {
 
 	@Test
 	void inStreamErrorClearsEveryBufferedChoice() {
-		ChatCompletionChunk error = new ChatCompletionChunk("gen-1", "chat.completion.chunk", 123L, MODEL, "openai",
-				List.of(), null, new StreamError("upstream_error", "failed"));
+		ChatCompletionChunk error = new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, MODEL, "openai", List.of(),
+				null, new StreamError("upstream_error", "failed"));
 
 		List<ChatCompletionChunk> aggregated = this.aggregator
 			.aggregate(Flux.just(chunk(toolFragment(0, 0, "stale-0", "weather", "stale-0")),
@@ -222,8 +282,7 @@ class OpenRouterStreamingToolCallAggregatorTests {
 	}
 
 	private ChatCompletionChunk chunk(Choice... choices) {
-		return new ChatCompletionChunk("gen-1", "chat.completion.chunk", 123L, MODEL, "openai", List.of(choices), null,
-				null);
+		return new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, MODEL, "openai", List.of(choices), null, null);
 	}
 
 	private Choice textChoice(int choiceIndex, String text) {

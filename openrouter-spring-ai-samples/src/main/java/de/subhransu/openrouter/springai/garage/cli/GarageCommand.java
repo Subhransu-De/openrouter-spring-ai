@@ -160,12 +160,16 @@ public record GarageCommand(
       } else if ("--stream".equals(arg)) {
         sceneIds = add(sceneIds, "streaming-dispatch");
         scenesExplicit = true;
-      } else {
+      } else if (!isBootOption(arg)) {
         throw new IllegalArgumentException("Unknown Garage option: " + arg);
       }
     }
 
     boolean capabilitiesExplicit = text || embedding || vision || image;
+    if (properties.isStream() && !scenesExplicit && !capabilitiesExplicit && !full
+        && !offlineContracts && embeddingSweepModels.isEmpty() && imageSweepModels.isEmpty()) {
+      sceneIds = add(sceneIds, "streaming-dispatch");
+    }
     if ((capabilitiesExplicit || full || scenesExplicit)
         && (!embeddingSweepModels.isEmpty() || !imageSweepModels.isEmpty())) {
       throw new IllegalArgumentException("Sweeps cannot be combined with capability or scene selections");
@@ -306,6 +310,19 @@ public record GarageCommand(
 
   private static String value(String arg) {
     return arg.substring(arg.indexOf('=') + 1);
+  }
+
+  private static boolean isBootOption(String arg) {
+    if ("--debug".equals(arg) || "--trace".equals(arg)) {
+      return true;
+    }
+    int separator = arg.indexOf('=');
+    if (!arg.startsWith("--") || separator < 3) {
+      return false;
+    }
+    String key = arg.substring(2, separator);
+    return "debug".equals(key) || "trace".equals(key)
+        || key.matches("[\\w-]+(?:\\.[\\w\\[\\]-]+)+");
   }
 
   private static boolean booleanValue(String arg) {
