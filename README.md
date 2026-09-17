@@ -485,6 +485,7 @@ and all modalities. With no selection flags, the original service-story demo run
 Boot arguments such as `--spring.profiles.active=coverage` and
 `--spring.main.banner-mode=off` work alongside Garage flags. Namespaced properties
 use `--key=value`; Boot's `--debug` and `--trace` flags are also accepted.
+Unknown `garage.*` properties fail during binding before any scene runs.
 Garage CLI overrides take precedence over bound properties, including
 `--specialist-model`. With no explicit selection, `garage.stream=true` adds
 `streaming-dispatch` to the service-story demo. Explicit scene, capability, full,
