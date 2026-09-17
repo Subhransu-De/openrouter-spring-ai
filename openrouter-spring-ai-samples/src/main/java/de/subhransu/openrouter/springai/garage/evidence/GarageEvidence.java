@@ -24,7 +24,7 @@ public final class GarageEvidence {
   // Only explicitly named diagnostic fields cross the persistence boundary. In particular,
   // arbitrary map keys, payload strings, records and other objects are not evidence schemas.
   private static final Set<String> FIELDS = Set.of(
-      "application", "status", "recordedCostUsd", "maxCostUsd", "costBudgetExceeded",
+      "application", "status", "recordedCostUsd",
       "incompleteFeatures", "costsByOperation", "command", "scenes", "featureRegistry",
       "featureEvidence", "events", "observations", "meters", "transport", "results", "sweep",
       "passed", "failed", "id", "title", "featureId", "feature", "kind", "sceneId",

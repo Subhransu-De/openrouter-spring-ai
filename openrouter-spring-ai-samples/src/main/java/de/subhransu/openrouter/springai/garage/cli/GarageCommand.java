@@ -24,7 +24,6 @@ public record GarageCommand(
     boolean vision,
     ImageSurface imageSurface,
     String imageQuality,
-    Double maxCostUsd,
     String foremanModel,
     String specialistModel,
     String embeddingModel,
@@ -89,7 +88,6 @@ public record GarageCommand(
     List<String> imageSweepModels = List.of();
     ImageSurface imageSurface = ImageSurface.NONE;
     String imageQuality = null;
-    Double maxCostUsd = null;
 
     for (String arg : args) {
       if ("--text".equals(arg)) {
@@ -145,8 +143,6 @@ public record GarageCommand(
         properties.setProviderIgnore(parseList(value(arg)));
       } else if (arg.startsWith("--provider-quantizations=")) {
         properties.setProviderQuantizations(parseList(value(arg)));
-      } else if (arg.startsWith("--max-cost-usd=")) {
-        maxCostUsd = Double.valueOf(value(arg));
       } else if (arg.startsWith("--embedding-sweep=")) {
         embeddingSweepModels = parseList(value(arg));
       } else if (arg.startsWith("--image-sweep=")) {
@@ -167,9 +163,6 @@ public record GarageCommand(
       }
     }
 
-    if (maxCostUsd != null && (!Double.isFinite(maxCostUsd) || maxCostUsd < 0)) {
-      throw new IllegalArgumentException("--max-cost-usd must be finite and non-negative");
-    }
     boolean capabilitiesExplicit = text || embedding || vision || image;
     if ((capabilitiesExplicit || full || scenesExplicit)
         && (!embeddingSweepModels.isEmpty() || !imageSweepModels.isEmpty())) {
@@ -258,7 +251,6 @@ public record GarageCommand(
         vision,
         imageSurface,
         imageQuality,
-        maxCostUsd,
         foremanModel,
         specialistModel,
         embeddingModel,

@@ -153,9 +153,7 @@ final class GarageRunner implements CommandLineRunner {
     List<SceneResult> failures =
         results.stream().filter(result -> result.status() == SceneResult.Status.FAILED).toList();
     double recordedCostUsd = this.evidence.recordedCostUsd();
-    boolean budgetExceeded =
-        command.maxCostUsd() != null && recordedCostUsd > command.maxCostUsd() + 0.000000001;
-    if (!failures.isEmpty() || !incompleteFeatures.isEmpty() || budgetExceeded) {
+    if (!failures.isEmpty() || !incompleteFeatures.isEmpty()) {
       throw new IllegalStateException(
           "Garage completed every selected scene but "
               + failures.size()
@@ -165,9 +163,6 @@ final class GarageRunner implements CommandLineRunner {
               + incompleteFeatures
               + ", recorded cost was $"
               + String.format(Locale.ROOT, "%.8f", recordedCostUsd)
-              + (command.maxCostUsd() != null
-                  ? " against a $" + command.maxCostUsd() + " ceiling"
-                  : "")
               + "; inspect "
               + reports.markdown().toAbsolutePath());
     }
@@ -198,18 +193,12 @@ final class GarageRunner implements CommandLineRunner {
     }
     long failures =
         allResults.stream().filter(result -> !PASSED.equals(result.get(STATUS))).count();
-    boolean budgetExceeded =
-        command.maxCostUsd() != null
-            && recordedCostUsd > command.maxCostUsd() + 0.000000001;
-    if (failures > 0 || budgetExceeded) {
+    if (failures > 0) {
       throw new IllegalStateException(
           "Garage sweeps completed with "
               + failures
               + " failures and recorded cost $"
-              + String.format(Locale.ROOT, "%.8f", recordedCostUsd)
-              + (command.maxCostUsd() != null
-                  ? " against a $" + command.maxCostUsd() + " ceiling"
-                  : ""));
+              + String.format(Locale.ROOT, "%.8f", recordedCostUsd));
     }
     return true;
   }
@@ -405,11 +394,6 @@ final class GarageRunner implements CommandLineRunner {
     document.put(PASSED, passed);
     document.put(FAILED, results.size() - passed);
     document.put("recordedCostUsd", recordedCostUsd);
-    document.put("maxCostUsd", command.maxCostUsd());
-    document.put(
-        "costBudgetExceeded",
-        command.maxCostUsd() != null
-            && recordedCostUsd > command.maxCostUsd() + 0.000000001);
     document.put("results", results);
     Path sweepJson = command.outputRoot().resolve(output.fileName());
     this.objectMapper.writerWithDefaultPrettyPrinter()
@@ -476,7 +460,6 @@ final class GarageRunner implements CommandLineRunner {
         Image model      : {}
         Capabilities     : {}
         Image surface    : {}
-        Cost ceiling USD : {}
         Request modes    : {}
         Scenes           : {}
         Offline contracts: {}
@@ -488,7 +471,6 @@ final class GarageRunner implements CommandLineRunner {
         command.imageModel(),
         command.capabilities(),
         command.imageSurface(),
-        command.maxCostUsd(),
         command.requestModes(),
         selected.stream().map(GarageScene::id).toList(),
         command.offlineContracts(),
@@ -536,7 +518,6 @@ final class GarageRunner implements CommandLineRunner {
           --image-model=<model>          Image-generation model id for the modality bays
           --image-surface=<surface>      none, sync, streaming, chat, or all
           --image-quality=<quality>      Optional Image API/chat image quality
-          --max-cost-usd=<amount>        Fail when recorded inference exceeds this (post-run)
           --max-completion-tokens=<n>    Main text completion limit
           --specialist-max-completion-tokens=<n>  Specialist completion limit
           --reasoning-effort=<value>     Text reasoning effort

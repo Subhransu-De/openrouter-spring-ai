@@ -95,7 +95,6 @@ jobs:
             --provider-order= \
             --provider-ignore= \
             --provider-quantizations= \
-            --max-cost-usd=0.002 \
             --output=garage-output
 
       - name: Add capability report to job summary

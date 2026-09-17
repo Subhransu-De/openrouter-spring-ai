@@ -63,7 +63,7 @@ class GarageRunnerFailureTests {
   }
 
   @Test
-  void exceededBudgetReportsAndFailsWithoutAuto() throws Exception {
+  void recordedCostAloneNeverFailsARun() throws Exception {
     GarageScene scene = scene();
     GarageEvidence evidence = new GarageEvidence();
     when(scene.execute(any())).thenAnswer(invocation -> {
@@ -74,10 +74,18 @@ class GarageRunnerFailureTests {
     GarageReportWriter writer = writer();
     GarageRunner runner = runner(scene, evidence, writer);
 
+    runner.run("--scene=dyno-tuning", "--output=" + this.output);
+
+    verify(writer).write(any(), any(), any(), any());
+  }
+
+  @Test
+  void theRetiredCostCeilingOptionIsRejected() {
+    GarageRunner runner = runner(scene(), new GarageEvidence(), writer());
+
     assertThatThrownBy(() -> runner.run("--scene=dyno-tuning", "--max-cost-usd=0.002",
         "--output=" + this.output))
-        .isInstanceOf(IllegalStateException.class).hasMessageContaining("recorded cost was $0.01000000");
-    verify(writer).write(any(), any(), any(), any());
+        .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Unknown Garage option");
   }
 
   @Test
