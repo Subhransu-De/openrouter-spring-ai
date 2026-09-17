@@ -27,6 +27,8 @@ import org.springframework.context.annotation.Bean;
 
 class OpenRouterModelSelectionTests {
 
+	private static final String API_KEY = "spring.ai.openrouter.api-key=test-key";
+
 	private final ApplicationContextRunner contextRunner = new ApplicationContextRunner().withConfiguration(
 			AutoConfigurations.of(OpenRouterApiAutoConfiguration.class, OpenRouterChatAutoConfiguration.class,
 					OpenRouterEmbeddingAutoConfiguration.class, OpenRouterImageAutoConfiguration.class,
@@ -50,8 +52,8 @@ class OpenRouterModelSelectionTests {
 					.withBean("applicationEmbedding", EmbeddingModel.class, () -> embedding)
 					.withBean("applicationImage", ImageModel.class, () -> image);
 		runner
-			.withPropertyValues("spring.ai.openrouter.api-key=test-key", "spring.ai.model.chat=openrouter",
-					"spring.ai.model.embedding=openrouter", "spring.ai.model.image=openrouter")
+			.withPropertyValues(API_KEY, "spring.ai.model.chat=openrouter", "spring.ai.model.embedding=openrouter",
+					"spring.ai.model.image=openrouter")
 			.withBean(ToolCallingManager.class, () -> manager)
 			.withBean(ToolExecutionExceptionProcessor.class, () -> processor)
 			.run(context -> {
@@ -79,8 +81,8 @@ class OpenRouterModelSelectionTests {
 		this.contextRunner
 			.withConfiguration(AutoConfigurations.of(otherProviderFirst ? OtherProviderFirstAutoConfiguration.class
 					: OtherProviderLastAutoConfiguration.class))
-			.withPropertyValues("spring.ai.openrouter.api-key=test-key", "spring.ai.model.chat=" + provider,
-					"spring.ai.model.embedding=" + provider, "spring.ai.model.image=" + provider)
+			.withPropertyValues(API_KEY, "spring.ai.model.chat=" + provider, "spring.ai.model.embedding=" + provider,
+					"spring.ai.model.image=" + provider)
 			.run(context -> {
 				assertThat(context).hasNotFailed();
 				if ("none".equals(provider)) {
@@ -118,7 +120,7 @@ class OpenRouterModelSelectionTests {
 
 	@Test
 	void missingSelectorsEnableModelsAndDefaultToolPolicyTogether() {
-		this.contextRunner.withPropertyValues("spring.ai.openrouter.api-key=test-key").run(context -> {
+		this.contextRunner.withPropertyValues(API_KEY).run(context -> {
 			assertThat(context).hasNotFailed()
 				.hasSingleBean(OpenRouterApi.class)
 				.hasSingleBean(ChatModel.class)
@@ -162,16 +164,15 @@ class OpenRouterModelSelectionTests {
 
 	@Test
 	void disablingChatRetainsDefaultEmbeddingAndImageSelection() {
-		this.contextRunner.withPropertyValues("spring.ai.openrouter.api-key=test-key", "spring.ai.model.chat=none")
-			.run(context -> {
-				assertThat(context).hasNotFailed()
-					.hasSingleBean(OpenRouterApi.class)
-					.doesNotHaveBean(ChatModel.class)
-					.hasSingleBean(OpenRouterEmbeddingModel.class)
-					.hasSingleBean(OpenRouterImageModel.class)
-					.doesNotHaveBean(OpenRouterToolCallingManagerGuard.class)
-					.doesNotHaveBean(OpenRouterToolExecutionExceptionProcessor.class);
-			});
+		this.contextRunner.withPropertyValues(API_KEY, "spring.ai.model.chat=none").run(context -> {
+			assertThat(context).hasNotFailed()
+				.hasSingleBean(OpenRouterApi.class)
+				.doesNotHaveBean(ChatModel.class)
+				.hasSingleBean(OpenRouterEmbeddingModel.class)
+				.hasSingleBean(OpenRouterImageModel.class)
+				.doesNotHaveBean(OpenRouterToolCallingManagerGuard.class)
+				.doesNotHaveBean(OpenRouterToolExecutionExceptionProcessor.class);
+		});
 	}
 
 	@AutoConfiguration(before = { OpenRouterToolCallingAutoConfiguration.class, OpenRouterChatAutoConfiguration.class,
