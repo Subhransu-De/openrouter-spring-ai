@@ -2,6 +2,7 @@ package de.subhransu.openrouter.springai.garage.evidence;
 
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.garage.GarageCosts;
+import de.subhransu.openrouter.springai.garage.GarageResponses;
 import io.micrometer.common.KeyValue;
 import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -16,7 +17,11 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.locks.LockSupport;
+import java.util.function.Supplier;
 import org.springframework.ai.chat.observation.ChatModelObservationContext;
+import org.springframework.ai.chat.metadata.Usage;
+import org.springframework.ai.embedding.observation.EmbeddingModelObservationContext;
+import org.springframework.ai.image.observation.ImageModelObservationContext;
 
 /** Records completed Spring AI observations and their Micrometer timer measurements. */
 public final class GarageTelemetry implements ObservationHandler<Observation.Context> {
@@ -25,6 +30,9 @@ public final class GarageTelemetry implements ObservationHandler<Observation.Con
   private static final String START_INSTANT = GarageTelemetry.class.getName() + ".startInstant";
   private static final long OBSERVATION_POLL_INTERVAL_NANOS =
       Duration.ofMillis(5).toNanos();
+
+  private static final String CORRELATION = GarageTelemetry.class.getName() + ".correlation";
+  private final ThreadLocal<Map<String, Object>> currentOperation = new ThreadLocal<>();
 
   private final SimpleMeterRegistry meterRegistry;
   private final GarageEvidence evidence;
@@ -40,11 +48,35 @@ public final class GarageTelemetry implements ObservationHandler<Observation.Con
   public void onStart(Observation.Context context) {
     context.put(START_NANOS, System.nanoTime());
     context.put(START_INSTANT, Instant.now().toString());
+    Map<String, Object> correlation = this.currentOperation.get();
     if (context instanceof ChatModelObservationContext chatContext
-        && chatContext.getRequest().getOptions() instanceof OpenRouterChatOptions options) {
-      String operationId = value(options.getMetadata(), "operationId");
+        && chatContext.getRequest().getOptions() instanceof OpenRouterChatOptions options
+        && value(options.getMetadata(), "operationId") != null) {
+      correlation = options.getMetadata();
+    }
+    if (correlation != null) {
+      Map<String, Object> identity = new LinkedHashMap<>();
+      identity.put("operationId", value(correlation, "operationId"));
+      identity.put("sceneId", value(correlation, "sceneId"));
+      context.put(CORRELATION, identity);
+      String operationId = value(identity, "operationId");
       if (operationId != null) {
         this.startedObservations.merge(operationId, 1, Integer::sum);
+      }
+    }
+  }
+
+  /** Runs and subscribes model calls on the calling thread; completion may happen elsewhere. */
+  public <T> T observeOperation(String operationId, String sceneId, Supplier<T> action) {
+    Map<String, Object> previous = this.currentOperation.get();
+    this.currentOperation.set(Map.of("operationId", operationId, "sceneId", sceneId));
+    try {
+      return action.get();
+    } finally {
+      if (previous == null) {
+        this.currentOperation.remove();
+      } else {
+        this.currentOperation.set(previous);
       }
     }
   }
@@ -62,23 +94,49 @@ public final class GarageTelemetry implements ObservationHandler<Observation.Con
     observation.put("lowCardinality", keys(context.getLowCardinalityKeyValues()));
     observation.put("highCardinality", keys(context.getHighCardinalityKeyValues()));
 
-    String operationId = null;
-    String sceneId = null;
+    Map<String, Object> correlation = context.getOrDefault(CORRELATION, Map.of());
+    String operationId = value(correlation, "operationId");
+    String sceneId = value(correlation, "sceneId");
+    observation.putAll(correlation);
+    Usage usage = null;
     if (context instanceof ChatModelObservationContext chatContext) {
+      observation.put("modality", "chat");
       observation.put("streaming", chatContext.isStreaming());
       if (chatContext.getRequest().getOptions() instanceof OpenRouterChatOptions options) {
-        Map<String, Object> metadata = options.getMetadata();
-        operationId = value(metadata, "operationId");
-        sceneId = value(metadata, "sceneId");
-        observation.put("operationId", operationId);
-        observation.put("sceneId", sceneId);
         observation.put("openRouterOptions", optionEvidence(options));
       }
       if (chatContext.getResponse() != null) {
-        double costUsd = GarageCosts.usage(chatContext.getResponse().getMetadata().getUsage());
-        observation.put("costUsd", costUsd);
-        this.evidence.recordCost(operationId, costUsd);
+        usage = chatContext.getResponse().getMetadata().getUsage();
       }
+    } else if (context instanceof EmbeddingModelObservationContext embeddingContext) {
+      observation.put("modality", "embedding");
+      observation.put("inputCount", embeddingContext.getRequest().getInstructions().size());
+      if (embeddingContext.getRequest().getOptions() != null) {
+        observation.put("dimensions", embeddingContext.getRequest().getOptions().getDimensions());
+      }
+      if (embeddingContext.getResponse() != null) {
+        observation.put("count", embeddingContext.getResponse().getResults().size());
+        usage = embeddingContext.getResponse().getMetadata().getUsage();
+      }
+    } else if (context instanceof ImageModelObservationContext imageContext) {
+      observation.put("modality", "image");
+      if (imageContext.getRequest().getOptions() != null) {
+        observation.put("width", imageContext.getRequest().getOptions().getWidth());
+        observation.put("height", imageContext.getRequest().getOptions().getHeight());
+      }
+      if (imageContext.getResponse() != null) {
+        observation.put("count", imageContext.getResponse().getResults().size());
+        Object imageUsage = imageContext.getResponse().getMetadata().get("openrouter.usage");
+        if (imageUsage instanceof Usage recordedUsage) {
+          usage = recordedUsage;
+        }
+      }
+    }
+    if (usage != null) {
+      observation.put("usage", GarageResponses.usage(usage));
+      double costUsd = GarageCosts.usage(usage);
+      observation.put("costUsd", costUsd);
+      this.evidence.recordCost(operationId, costUsd);
     }
     if (operationId != null) {
       this.evidence.event(
@@ -93,16 +151,19 @@ public final class GarageTelemetry implements ObservationHandler<Observation.Con
 
   @Override
   public boolean supportsContext(Observation.Context context) {
-    return context instanceof ChatModelObservationContext;
+    return context instanceof ChatModelObservationContext
+        || context instanceof EmbeddingModelObservationContext
+        || context instanceof ImageModelObservationContext;
   }
 
   public List<Map<String, Object>> observationSnapshot() {
-    return List.copyOf(this.observations);
+    return this.observations.stream().map(this::sanitize).toList();
   }
 
   public List<Map<String, Object>> observationsFor(String operationId) {
     return this.observations.stream()
         .filter(item -> operationId.equals(item.get("operationId")))
+        .map(this::sanitize)
         .toList();
   }
 
@@ -158,13 +219,18 @@ public final class GarageTelemetry implements ObservationHandler<Observation.Con
       item.put("measurements", measurements);
       meters.add(item);
     }
-    return meters;
+    return meters.stream().map(this::sanitize).toList();
   }
 
   public void reset() {
     this.observations.clear();
     this.startedObservations.clear();
     this.meterRegistry.clear();
+  }
+
+  @SuppressWarnings("unchecked")
+  private Map<String, Object> sanitize(Map<String, Object> value) {
+    return (Map<String, Object>) this.evidence.sanitizeForEvidence(value);
   }
 
   private Map<String, String> keys(Iterable<KeyValue> keyValues) {

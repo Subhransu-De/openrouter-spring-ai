@@ -34,7 +34,10 @@ public final class GarageEvidence {
       "dimensions", "similarCosine", "unrelatedCosine", "imageBytes", "usage",
       "promptTokens", "completionTokens", "totalTokens", "count", "value", "measurements",
       "cachedTokens", "reasoningTokens", "cost", "full", "offlineContracts", "capabilities",
-      "imageSurface", "imageQuality", "modeStatuses");
+      "imageSurface", "imageQuality", "modeStatuses", "modality", "inputCount", "width", "height",
+      "name", "lowCardinality", "highCardinality", "tags", "statistic",
+      "gen_ai.system", "gen_ai.operation.name", "gen_ai.request.model", "gen_ai.response.model",
+      "error.type");
 
   private static final Set<String> LABELS = labels();
   private final Set<String> operationIds = ConcurrentHashMap.newKeySet();
@@ -48,7 +51,9 @@ public final class GarageEvidence {
         "tool.schema", "tool.attempted", "tool.succeeded", "tool.failed",
         "java.lang.IllegalStateException", "java.lang.IllegalArgumentException",
         "java.lang.RuntimeException", "java.io.IOException",
-        "NONE", "SYNC", "STREAMING", "CHAT", "ALL", "text", "embedding", "vision", "image"));
+        "gen_ai.client.operation", "openrouter", "embeddings", "image_generation",
+        "TIMER", "COUNT", "TOTAL_TIME", "MAX", "chat", "NONE", "SYNC", "STREAMING", "CHAT",
+        "ALL", "text", "embedding", "vision", "image"));
     for (GarageFeature feature : GarageFeature.values()) {
       labels.addAll(List.of(feature.id(), feature.title(), feature.sceneId(), feature.kind().name()));
     }

@@ -6,7 +6,6 @@ import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.PASSED;
 import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.STATUS;
 
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
-import de.subhransu.openrouter.springai.garage.GarageCosts;
 import de.subhransu.openrouter.springai.garage.GarageModalityBays;
 import de.subhransu.openrouter.springai.garage.GarageOptionsFactory;
 import de.subhransu.openrouter.springai.garage.cli.GarageCommand;
@@ -68,6 +67,74 @@ public final class ModalityBaysScene extends GarageSceneSupport {
             command.imageQuality(),
             GarageOptionsFactory.serviceProviderPreferences(context.properties()));
 
+    Map<GarageFeature, List<Map<String, Object>>> probesByFeature =
+        context.telemetry().observeOperation(operationId, id(), () -> runProbes(context, bays));
+
+    List<Map<String, Object>> probes = new ArrayList<>();
+    List<String> failures = new ArrayList<>();
+    for (Map.Entry<GarageFeature, List<Map<String, Object>>> entry : probesByFeature.entrySet()) {
+      GarageFeature feature = entry.getKey();
+      context.evidence().record(
+          feature,
+          operationId,
+          mode,
+          EvidenceLevel.CONFIGURED,
+          "models",
+          Map.of(
+              "embedding", command.embeddingModel(),
+              "vision", command.visionModel(),
+              "image", command.imageModel()));
+      context.evidence().record(
+          feature,
+          operationId,
+          mode,
+          EvidenceLevel.EXECUTED,
+          "bays",
+          entry.getValue().stream().map(probe -> probe.get(BAY)).toList());
+      context.evidence().record(
+          feature, operationId, mode, EvidenceLevel.OBSERVED, "probes", entry.getValue());
+      boolean featurePassed = true;
+      for (Map<String, Object> probe : entry.getValue()) {
+        probes.add(probe);
+        log.info("{} [{}]: {}", probe.get(BAY), probe.get("model"), probe.get(STATUS));
+        if (!PASSED.equals(probe.get(STATUS))) {
+          featurePassed = false;
+          failures.add(probe.get(BAY) + ": " + probe.getOrDefault(ERROR, "unknown failure"));
+        }
+      }
+      if (featurePassed) {
+        context.evidence().record(
+            feature, operationId, mode, EvidenceLevel.ASSERTED, "assertion", "every probe passed");
+      }
+    }
+
+    if (!failures.isEmpty()) {
+      IllegalStateException failure =
+          new IllegalStateException(
+              "Garage modality bay checks failed: " + String.join("; ", failures));
+      probesByFeature.keySet().forEach(
+          feature -> context.evidence().error(feature, operationId, mode, failure));
+      throw failure;
+    }
+
+    List<Map<String, Object>> observations = probesByFeature.isEmpty() ? List.of()
+        : context.telemetry().awaitObservationsFor(operationId, Duration.ofSeconds(1));
+    Map<String, Object> details = new LinkedHashMap<>();
+    details.put("probes", probes);
+    details.put("observations", observations);
+    details.put("costUsd", context.evidence().costFor(operationId));
+    return SceneResult.passed(
+        id(),
+        operationId,
+        context.requestMode(),
+        Duration.between(started, Instant.now()),
+        context.outputDirectory(),
+        details);
+  }
+
+  private Map<GarageFeature, List<Map<String, Object>>> runProbes(
+      SceneContext context, GarageModalityBays bays) {
+    GarageCommand command = context.command();
     boolean modeIndependentBays =
         context.requestMode() == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS
             || !command.requestModes().contains(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS);
@@ -100,63 +167,6 @@ public final class ModalityBaysScene extends GarageSceneSupport {
           });
     }
 
-    List<Map<String, Object>> probes = new ArrayList<>();
-    List<String> failures = new ArrayList<>();
-    for (Map.Entry<GarageFeature, List<Map<String, Object>>> entry : probesByFeature.entrySet()) {
-      GarageFeature feature = entry.getKey();
-      context.evidence().record(
-          feature,
-          operationId,
-          mode,
-          EvidenceLevel.CONFIGURED,
-          "models",
-          Map.of(
-              "embedding", command.embeddingModel(),
-              "vision", command.visionModel(),
-              "image", command.imageModel()));
-      context.evidence().record(
-          feature,
-          operationId,
-          mode,
-          EvidenceLevel.EXECUTED,
-          "bays",
-          entry.getValue().stream().map(probe -> probe.get(BAY)).toList());
-      context.evidence().record(
-          feature, operationId, mode, EvidenceLevel.OBSERVED, "probes", entry.getValue());
-      boolean featurePassed = true;
-      for (Map<String, Object> probe : entry.getValue()) {
-        probes.add(probe);
-        context.evidence().recordCost(operationId, GarageCosts.usageMaps(probe));
-        log.info("{} [{}]: {}", probe.get(BAY), probe.get("model"), probe.get(STATUS));
-        if (!PASSED.equals(probe.get(STATUS))) {
-          featurePassed = false;
-          failures.add(probe.get(BAY) + ": " + probe.getOrDefault(ERROR, "unknown failure"));
-        }
-      }
-      if (featurePassed) {
-        context.evidence().record(
-            feature, operationId, mode, EvidenceLevel.ASSERTED, "assertion", "every probe passed");
-      }
-    }
-
-    if (!failures.isEmpty()) {
-      IllegalStateException failure =
-          new IllegalStateException(
-              "Garage modality bay checks failed: " + String.join("; ", failures));
-      probesByFeature.keySet().forEach(
-          feature -> context.evidence().error(feature, operationId, mode, failure));
-      throw failure;
-    }
-
-    Map<String, Object> details = new LinkedHashMap<>();
-    details.put("probes", probes);
-    details.put("costUsd", GarageCosts.usageMaps(probes));
-    return SceneResult.passed(
-        id(),
-        operationId,
-        context.requestMode(),
-        Duration.between(started, Instant.now()),
-        context.outputDirectory(),
-        details);
+    return probesByFeature;
   }
 }
