@@ -542,3 +542,40 @@ SSE text/tool fragments, terminal metadata, image JSON fallback, and cancellatio
 model auto-configuration is disabled in this consumer to verify that API serialization hints
 remain available independently of tool-manager hints. This verifies the provider's wire
 contracts; it does not certify arbitrary application DTOs or live upstream providers.
+
+## Build quality checks
+
+The library and samples compile with `--release 17`. Run `mvn -B verify` and
+`gradle --no-daemon check` for tests and static analysis. Checkstyle runs on JDK 21+
+only. Library sources use Spring formatting; samples retain their existing layout
+and enforce `EqualsHashCode`, `FallThrough`, `EmptyStatement`, and
+`StringLiteralEquality` through `config/checkstyle/checkstyle-samples.xml`.
+Both builds apply the shared PMD rules to production and test sources, including
+samples. Gradle excludes generated Spring AOT source sets from these checks,
+matching Maven's maintained-source scope. Three sample classes suppress only
+duplicate literals to keep registry rows and test inputs explicit. Sample CPD remains deferred because scenario and
+fixture duplication is intentional; Gradle has no CPD task. Sample formatter and
+Enforcer exclusions are unchanged.
+
+On JDK 25, `mvn -B -Pmodernizer-java25 verify` also runs Modernizer 3.4.0 with an
+explicit Java 25 analysis target on every module's production and test bytecode.
+The profile activates automatically on JDK 25+. The JDK 25 Maven CI leg is the
+shared Modernizer enforcement point for both build systems; Gradle `check` does
+not invoke it. Modernizer checks its known API catalog, not every newer Java
+feature. Compiler release checking still protects Java 17 compatibility.
+
+The Java 17-compatible recursive list snapshot and content joining simplifications
+are applied. `Math.clamp`, `List.getFirst`/`getLast`, and pattern switches in
+assistant content and terminal-event handling remain deferred until the minimum
+Java version changes. Existing null handling, collection guards, and terminal
+error semantics remain in place.
+
+Protocol coverage is measured by JaCoCo reports in each module's
+`target/site/jacoco` or `build/reports/jacoco/test` directory. A numeric branch gate
+is deliberately deferred. The 2026-09-17 core baseline covers 99/110 branches in
+`OpenRouterApi`, 112/140 across the tool aggregator and its nested classes,
+84/108 in the Responses stream mapper, and 42/55 in reasoning merging.
+A percentage cannot establish correct fragment ordering, cancellation, or terminal
+error handling. Those requirements remain enforced by the synthetic streaming,
+reasoning replay, and tool aggregation contract tests. Reports are evidence of
+coverage, not a coverage gate.

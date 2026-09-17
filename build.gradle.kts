@@ -135,10 +135,12 @@ subprojects {
 
 	if (name == "openrouter-spring-ai-samples") {
 		tasks.withType<Checkstyle>().configureEach {
-			enabled = false
+			configFile = rootProject.file("config/checkstyle/checkstyle-samples.xml")
+			// Spring AOT sources are generated, not maintained sample code.
+			enabled = JavaVersion.current() >= JavaVersion.VERSION_21 && name in setOf("checkstyleMain", "checkstyleTest")
 		}
 		tasks.withType<Pmd>().configureEach {
-			enabled = false
+			enabled = name in setOf("pmdMain", "pmdTest")
 		}
 	}
 

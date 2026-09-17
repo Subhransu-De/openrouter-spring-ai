@@ -6,7 +6,9 @@ import tools.jackson.databind.ObjectMapper;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionChunk;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionRequest;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionResponse;
+import de.subhransu.openrouter.springai.api.dto.ContentPart;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -26,6 +28,19 @@ class OpenRouterChatImageOutputMapperTests {
 	private static final String DATA_URL = "data:image/png;base64,aW1hZ2Ux";
 
 	private final ObjectMapper objectMapper = new ObjectMapper();
+
+	@Test
+	void joinsMixedContentWithoutChangingWhitespaceOrNullHandling() {
+		var content = Arrays.asList(null, 42, " first ", ContentPart.text(""),
+				Map.of("type", "text", "text", "\nsecond"),
+				new ContentPart("image_url", null, new ContentPart.ImageUrl(DATA_URL)), Map.of("text", 123),
+				ContentPart.text(" last "));
+		var mapped = AssistantContentMapper.map(content);
+		assertThat(mapped.text()).isEqualTo(" first \nsecond last ");
+		assertThat(mapped.media()).singleElement().extracting(Media::getData).isEqualTo(DATA_URL);
+		assertThat(AssistantContentMapper.map(Arrays.asList(null, 42, Map.of())).text()).isEmpty();
+		assertThat(AssistantContentMapper.map(List.of()).text()).isEmpty();
+	}
 
 	@Test
 	void putsModalitiesAndImageConfigOnTheWire() {

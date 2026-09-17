@@ -35,9 +35,7 @@ public final class OptionSnapshots {
 			return map(map);
 		}
 		if (value instanceof List<?> list) {
-			List<Object> copy = new ArrayList<>(list.size());
-			list.forEach(element -> copy.add(value(element)));
-			return Collections.unmodifiableList(copy);
+			return list.stream().map(OptionSnapshots::value).toList();
 		}
 		return value;
 	}

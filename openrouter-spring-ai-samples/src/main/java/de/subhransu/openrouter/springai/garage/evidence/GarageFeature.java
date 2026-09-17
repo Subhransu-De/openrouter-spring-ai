@@ -8,6 +8,8 @@ import java.util.List;
  * The single Garage capability registry. CLI discovery, scene assertions, JSON evidence,
  * Markdown reports, and documentation tests all consume this enum.
  */
+// Keep the capability registry readable as literal rows.
+@SuppressWarnings("PMD.AvoidDuplicateLiterals")
 public enum GarageFeature {
   STARTER_AUTOCONFIGURATION("starter-autoconfiguration", "Starter + Boot auto-configuration", "service-story", Kind.LIVE),
   SYNCHRONOUS_CHAT("synchronous-chat", "Synchronous chat", "service-story", Kind.LIVE),

@@ -10,6 +10,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+// Keep CLI inputs and expected scene names explicit in each test.
+@SuppressWarnings("PMD.AvoidDuplicateLiterals")
 class GarageCommandTests {
 
   private final GarageProperties properties = new GarageProperties();
