@@ -183,6 +183,32 @@ options: the advisor executes with the options it sees on the prompt. Tools decl
 by bean name are resolved through the `ToolCallbackResolver` configured on the
 `ToolCallingManager` during execution.
 
+#### Model selection and replacement beans
+
+The starter intentionally backs off for any application-declared `ChatModel`,
+`EmbeddingModel`, or `ImageModel` of the corresponding modality. This includes another
+provider's model and a custom OpenRouter model. Setting `spring.ai.model.chat=openrouter`
+enables chat auto-configuration but does not override a replacement `ChatModel` bean.
+The same rule applies to `spring.ai.model.embedding` and `spring.ai.model.image`.
+This preserves existing replacement-bean behavior and requires no migration.
+
+Each selector defaults independently to `openrouter`. Use `none` to disable a modality,
+or another provider's identifier to select its auto-configuration. Disabling chat alone
+leaves OpenRouter embeddings and images enabled and still requires an API key. Set all
+three selectors to `none` to disable the shared OpenRouter API as well. Replacement model
+beans alone do not disable that API.
+
+When several provider starters are installed, set each selector explicitly. This policy
+does not arbitrate between competing auto-configurations that match missing selectors;
+their ordering must not be used to choose a provider. For multiple models of one modality,
+declare the model beans yourself and inject them with `@Qualifier` using their bean names.
+The starter's default bean names are `openRouterChatModel`, `openRouterEmbeddingModel`,
+and `openRouterImageModel`. Selection properties do not remove application-declared beans.
+
+A replacement `ChatModel` also disables OpenRouter's automatic tool-failure processor
+and manager guard. Applications that declare their own chat models own the shared tool
+failure policy described below.
+
 #### Tool failure policy
 
 When OpenRouter is selected and no replacement `ChatModel` is declared, the starter
