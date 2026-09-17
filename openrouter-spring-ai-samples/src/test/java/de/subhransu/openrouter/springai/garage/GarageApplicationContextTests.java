@@ -9,6 +9,7 @@ import de.subhransu.openrouter.springai.autoconfigure.OpenRouterEmbeddingAutoCon
 import de.subhransu.openrouter.springai.autoconfigure.OpenRouterImageAutoConfiguration;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
 import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingModel;
+import de.subhransu.openrouter.springai.garage.cli.GarageCommand;
 import de.subhransu.openrouter.springai.garage.evidence.GarageEvidence;
 import de.subhransu.openrouter.springai.garage.evidence.GarageTelemetry;
 import de.subhransu.openrouter.springai.garage.evidence.GarageTransportEvidence;
@@ -23,6 +24,7 @@ import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.image.ImageModel;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.core.env.SimpleCommandLinePropertySource;
 
 /**
  * Sample-wiring smoke test for the Garage demo. It builds the full sample context with a
@@ -77,6 +79,28 @@ class GarageApplicationContextTests {
 				GarageProperties properties = context.getBean(GarageProperties.class);
 				assertThat(properties.getForemanModel()).isEqualTo("openai/gpt-5.4");
 				assertThat(properties.getSpecialistModel()).isEqualTo("openai/gpt-5.4-mini");
+			});
+	}
+
+	@Test
+	void bootArgumentsBindPropertiesAndGarageOverridesRemainAuthoritative() {
+		String[] args = { "--spring.profiles.active=coverage", "--spring.main.banner-mode=off",
+				"--garage.stream=true", "--garage.specialist-model=synthetic/configured",
+				"--garage.max-completion-tokens=123", "--specialist-model=synthetic/override",
+				"--max-completion-tokens=456" };
+		this.contextRunner.withInitializer(context -> context.getEnvironment().getPropertySources()
+			.addFirst(new SimpleCommandLinePropertySource(args))).run(context -> {
+				assertThat(context).hasNotFailed();
+				assertThat(context.getEnvironment().getActiveProfiles()).contains("coverage");
+				assertThat(context.getEnvironment().getProperty("spring.main.banner-mode")).isEqualTo("off");
+				GarageProperties properties = context.getBean(GarageProperties.class);
+				assertThat(properties.isStream()).isTrue();
+				assertThat(properties.getSpecialistModel()).isEqualTo("synthetic/configured");
+				assertThat(properties.getMaxCompletionTokens()).isEqualTo(123);
+				GarageCommand command = GarageCommand.from(args, properties);
+				assertThat(command.sceneIds()).containsExactly("service-story", "streaming-dispatch");
+				assertThat(command.specialistModel()).isEqualTo("synthetic/override");
+				assertThat(properties.getMaxCompletionTokens()).isEqualTo(456);
 			});
 	}
 

@@ -129,6 +129,8 @@ class OpenRouterImageModelTests {
 		String sse = """
 				data: {"type":"image_generation.partial_image","partial_image_index":0,"b64_json":"cGFydGlhbA=="}
 
+				data: {"type":"image_generation.completed","b64_json":"aW1hZ2Ux","media_type":"image/png"}
+
 				data: {"type":"image_generation.completed","b64_json":"ZmluYWw=","media_type":"image/png","created":1750000000,"usage":{"completion_tokens":4160,"total_tokens":4160,"cost":0.03}}
 
 				data: [DONE]
@@ -152,11 +154,16 @@ class OpenRouterImageModelTests {
 				.getMetadata();
 			assertThat(metadata.partialImageIndex()).isZero();
 			assertThat(partial.getResult().getOutput().getB64Json()).isEqualTo("cGFydGlhbA==");
+		}).assertNext(first -> {
+			assertThat(first.getResult().getOutput().getB64Json()).isEqualTo("aW1hZ2Ux");
 		}).assertNext(completed -> {
 			assertThat(completed.getResult().getOutput().getB64Json()).isEqualTo("ZmluYWw=");
 			assertThat(completed.getMetadata().getCreated()).isEqualTo(1750000000L);
 			assertThat(completed.getMetadata().<String>get("openrouter.event_type"))
 				.isEqualTo("image_generation.completed");
+			OpenRouterUsage usage = completed.getMetadata().get("openrouter.usage");
+			assertThat(usage.getTotalTokens()).isEqualTo(4160);
+			assertThat(usage.getCost()).isEqualTo(0.03);
 		}).verifyComplete();
 	}
 

@@ -27,8 +27,8 @@ import reactor.core.publisher.Flux;
  *
  * <p>
  * {@link #call(ImagePrompt)} performs a blocking generation. {@link #stream(ImagePrompt)}
- * exposes OpenRouter's SSE image streaming: each partial-image preview and the final
- * completed image arrive as separate {@link ImageResponse} elements, distinguishable via
+ * exposes OpenRouter's SSE image streaming: partial-image previews and completed images
+ * arrive as separate {@link ImageResponse} elements, distinguishable via
  * {@link OpenRouterImageGenerationMetadata#partialImageIndex()} and the
  * {@code openrouter.event_type} metadata entry. Spring AI has no streaming image
  * abstraction yet, so {@code stream} is an OpenRouter-specific extension.
@@ -87,9 +87,9 @@ public class OpenRouterImageModel implements ImageModel {
 
 	/**
 	 * Stream a generation over SSE. With providers that stream natively, partial previews
-	 * precede the completed image; with providers that do not, OpenRouter answers with
-	 * the complete generation in one JSON document and this surfaces it as a single
-	 * completed element.
+	 * precede completed images. With providers that do not, OpenRouter answers with the
+	 * complete generation in one JSON document, emitted as one completed element per
+	 * image.
 	 */
 	public Flux<ImageResponse> stream(ImagePrompt prompt) {
 		OpenRouterImageOptions options = buildRequestOptions(prompt.getOptions());

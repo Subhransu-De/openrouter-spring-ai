@@ -199,7 +199,7 @@ public class OpenRouterApi {
 	// Providers without native image streaming make OpenRouter ignore stream=true and
 	// answer with one complete application/json generation instead of an SSE stream
 	// (found live by the Garage paint bay). Branching on the response content type turns
-	// that answer into a single completed event, so callers see one uniform contract.
+	// that answer into completed events, so callers see one uniform contract.
 	public Flux<ImagesStreamEvent> imagesStream(ImagesRequest request) {
 		return this.webClient.post()
 			.uri("/images")
@@ -370,8 +370,8 @@ public class OpenRouterApi {
 					|| response.type() != null && response.type().endsWith(".error");
 		}
 		if (event instanceof ImagesStreamEvent image) {
-			return ImagesStreamEvent.COMPLETED.equals(image.type())
-					|| ImagesStreamEvent.ERROR_EVENT.equals(image.type());
+			// A completed image is not the end of the request; image SSE ends at [DONE].
+			return ImagesStreamEvent.ERROR_EVENT.equals(image.type());
 		}
 		return false;
 	}

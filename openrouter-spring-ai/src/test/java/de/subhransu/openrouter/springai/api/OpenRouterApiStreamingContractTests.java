@@ -417,9 +417,59 @@ class OpenRouterApiStreamingContractTests {
 	@ParameterizedTest
 	@CsvSource({ "responses,response.completed", "responses,response.failed", "responses,response.incomplete",
 			"responses,error", "responses,response.failed.error", "responses,response.output_text.error",
-			"images,image_generation.completed", "images,error" })
+			"images,error" })
 	void typedTerminalEventIsEmittedBeforeCancellation(String endpoint, String type) {
 		assertTerminalBody(endpoint, false, "data: {\"type\":\"" + type + "\"}\n\ndata: {invalid}\n\n", 1);
+	}
+
+	@ParameterizedTest
+	@ValueSource(booleans = { false, true })
+	void imageStreamPreservesMultipleImagesAndFinalUsage(boolean sse) {
+		String body = sse
+				? """
+						data: {"type":"image_generation.completed","b64_json":"aW1hZ2Ux"}
+
+						data: {"type":"image_generation.completed","b64_json":"aW1hZ2Uy","usage":{"total_tokens":42,"cost":0.03}}
+
+						data: [DONE]
+
+						"""
+				: """
+						{"data":[{"b64_json":"aW1hZ2Ux"},{"b64_json":"aW1hZ2Uy"}],"usage":{"total_tokens":42,"cost":0.03}}
+						""";
+		Capture capture = capturingApi(HttpStatus.OK,
+				sse ? MediaType.TEXT_EVENT_STREAM_VALUE : MediaType.APPLICATION_JSON_VALUE, body);
+		// n is an upper bound; returning fewer images must still complete at [DONE].
+		ImagesRequest request = new ImagesRequest("test-image", "synthetic images", 3, null, null, null, null, null,
+				null, null, null, true, null, null);
+		StepVerifier.create(capture.api().imagesStream(request))
+			.assertNext(event -> assertThat(event.b64Json()).isEqualTo("aW1hZ2Ux"))
+			.assertNext(event -> {
+				assertThat(event.b64Json()).isEqualTo("aW1hZ2Uy");
+				assertThat(event.usage().totalTokens()).isEqualTo(42);
+				assertThat(event.usage().cost()).isEqualTo(0.03);
+			})
+			.verifyComplete();
+	}
+
+	@Test
+	void completedImageWithoutDoneIsTruncated() {
+		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE,
+				"data: {\"type\":\"image_generation.completed\",\"b64_json\":\"aW1hZ2U=\"}\n\n");
+		StepVerifier.create(capture.api().imagesStream(imagesRequest()))
+			.expectNextCount(1)
+			.expectError(OpenRouterTruncatedResponseException.class)
+			.verify();
+	}
+
+	@Test
+	void imageCompletionDoesNotHideLaterErrorsAndDoneCancelsOpenBody() {
+		String completed = "data: {\"type\":\"image_generation.completed\",\"b64_json\":\"aW1hZ2U=\"}\n\n";
+		assertTerminalBody("images", false, completed + DONE_ONLY_SSE + "data: {invalid}\n\n", 1);
+		assertTerminalBody("images", false,
+				completed
+						+ "data: {\"type\":\"error\",\"error\":{\"message\":\"failed\",\"code\":\"server_error\"}}\n\n",
+				2);
 	}
 
 	private void assertTerminalBody(String endpoint, boolean timeout, String sse, long count) {
