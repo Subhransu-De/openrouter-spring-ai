@@ -358,7 +358,8 @@ final class GarageRunner implements CommandLineRunner {
             command.embeddingModel(),
             command.visionModel(),
             command.imageModel(),
-            command.imageQuality());
+            command.imageQuality(),
+            GarageOptionsFactory.serviceProviderPreferences(this.properties));
 
     List<Map<String, Object>> results = new ArrayList<>();
     int index = 0;

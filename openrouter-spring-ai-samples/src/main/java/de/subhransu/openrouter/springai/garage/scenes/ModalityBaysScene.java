@@ -8,6 +8,7 @@ import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.STATUS;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.garage.GarageCosts;
 import de.subhransu.openrouter.springai.garage.GarageModalityBays;
+import de.subhransu.openrouter.springai.garage.GarageOptionsFactory;
 import de.subhransu.openrouter.springai.garage.cli.GarageCommand;
 import de.subhransu.openrouter.springai.garage.cli.GarageCommand.ImageSurface;
 import de.subhransu.openrouter.springai.garage.evidence.EvidenceLevel;
@@ -64,7 +65,8 @@ public final class ModalityBaysScene extends GarageSceneSupport {
             command.embeddingModel(),
             command.visionModel(),
             command.imageModel(),
-            command.imageQuality());
+            command.imageQuality(),
+            GarageOptionsFactory.serviceProviderPreferences(context.properties()));
 
     boolean modeIndependentBays =
         context.requestMode() == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS

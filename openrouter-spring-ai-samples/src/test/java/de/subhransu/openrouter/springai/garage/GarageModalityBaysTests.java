@@ -3,8 +3,10 @@ package de.subhransu.openrouter.springai.garage;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterUsage;
 import java.nio.file.Path;
 import java.util.Base64;
@@ -12,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.ai.chat.metadata.ChatResponseMetadata;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -26,7 +29,7 @@ class GarageModalityBaysTests {
   @Test
   void validatesSvgDocumentsWithoutResolvingExternalEntities() throws Exception {
     GarageModalityBays bays = new GarageModalityBays(
-        null, null, null, Path.of("target"), "embedding", "vision", "image", null);
+        null, null, null, Path.of("target"), "embedding", "vision", "image", null, null);
     String valid = "<svg xmlns='http://www.w3.org/2000/svg' width='1' height='1'><rect width='1' height='1'/></svg>";
     assertThat(bays.recordDimensions(new LinkedHashMap<>(),
         valid.getBytes(java.nio.charset.StandardCharsets.UTF_8), "image/svg+xml")).isTrue();
@@ -54,7 +57,7 @@ class GarageModalityBaysTests {
     byte[] webp = Base64.getDecoder().decode(
         "UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA");
     GarageModalityBays bays = new GarageModalityBays(
-        null, null, null, Path.of("target"), "embedding", "vision", "image", null);
+        null, null, null, Path.of("target"), "embedding", "vision", "image", null, null);
     Map<String, Object> probe = new LinkedHashMap<>();
     assertThat(bays.recordDimensions(probe, webp, "image/webp")).isTrue();
     assertThat(probe).containsEntry("width", 1).containsEntry("height", 1);
@@ -74,7 +77,7 @@ class GarageModalityBaysTests {
         .thenReturn(new ImageResponse(List.of(), metadata));
     GarageModalityBays bays =
         new GarageModalityBays(
-            null, null, imageModel, Path.of("target"), "embedding", "vision", "image", null);
+            null, null, imageModel, Path.of("target"), "embedding", "vision", "image", null, null);
 
     Map<String, Object> probe = bays.runPaintBay("cost accounting");
 
@@ -92,11 +95,34 @@ class GarageModalityBaysTests {
                 List.of(), ChatResponseMetadata.builder().usage(usage).build()));
     GarageModalityBays bays =
         new GarageModalityBays(
-            chatModel, null, null, Path.of("target"), "embedding", "vision", "image", null);
+            chatModel, null, null, Path.of("target"), "embedding", "vision", "image", null, null);
 
     Map<String, Object> probe = bays.runChatPaintBay("cost accounting");
 
     assertThat(probe.get("status")).isEqualTo("failed");
     assertThat(GarageCosts.usageMaps(probe)).isEqualTo(0.04);
+  }
+
+  @Test
+  void chatBaysRouteWithTheSharedProviderPreferences() {
+    ChatModel chatModel = mock(ChatModel.class);
+    when(chatModel.call(any(Prompt.class)))
+        .thenReturn(new ChatResponse(List.of(), ChatResponseMetadata.builder().build()));
+    GarageProperties properties = new GarageProperties();
+    properties.setProviderRequireParameters(true);
+    properties.setProviderSort("price");
+    GarageModalityBays bays =
+        new GarageModalityBays(
+            chatModel, null, null, Path.of("target"), "embedding", "vision", "image", null,
+            GarageOptionsFactory.serviceProviderPreferences(properties));
+
+    bays.runChatPaintBay("cost accounting");
+
+    ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
+    verify(chatModel).call(prompt.capture());
+    OpenRouterChatOptions options = (OpenRouterChatOptions) prompt.getValue().getOptions();
+    assertThat(options.getProvider()).isNotNull();
+    assertThat(options.getProvider().requireParameters()).isTrue();
+    assertThat(options.getProvider().sort()).isEqualTo("price");
   }
 }

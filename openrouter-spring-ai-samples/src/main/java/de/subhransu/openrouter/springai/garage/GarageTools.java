@@ -99,6 +99,7 @@ public final class GarageTools {
             .temperature(0.1)
             .maxCompletionTokens(this.properties.getSpecialistMaxCompletionTokens())
             .includeUsage(this.requestMode == OpenRouterRequestMode.OPENAI_RESPONSES ? null : true)
+            .provider(GarageOptionsFactory.serviceProviderPreferences(this.properties))
             .metadata(
                 Map.of(
                     "application", "garage",

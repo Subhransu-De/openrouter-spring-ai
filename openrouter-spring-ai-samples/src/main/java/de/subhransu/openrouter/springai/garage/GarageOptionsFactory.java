@@ -235,17 +235,28 @@ public final class GarageOptionsFactory {
   }
 
   private OpenRouterProviderPreferences serviceProviderPreferences() {
-    if (!this.properties.isProviderPreferencesEnabled()) {
+    return serviceProviderPreferences(this.properties);
+  }
+
+  /**
+   * The routing preferences every live Garage request shares. Scenes that build options
+   * outside this factory (the specialist delegation and the modality bays) must apply
+   * these too, otherwise {@code --provider-sort} and {@code --provider-require-parameters}
+   * would silently cover only part of a run.
+   */
+  public static OpenRouterProviderPreferences serviceProviderPreferences(
+      GarageProperties properties) {
+    if (!properties.isProviderPreferencesEnabled()) {
       return null;
     }
     return new OpenRouterProviderPreferences(
-        this.properties.getProviderAllowFallbacks(),
-        this.properties.getProviderRequireParameters(),
+        properties.getProviderAllowFallbacks(),
+        properties.getProviderRequireParameters(),
         null,
         null,
         null,
         null,
-        this.properties.getProviderSort());
+        properties.getProviderSort());
   }
 
   private OpenRouterProviderPreferences fullProviderPreferences() {
