@@ -129,6 +129,20 @@ class OpenRouterResponsesToolLifecycleTests {
 		verifyRequests(true, 1);
 	}
 
+	@ParameterizedTest
+	@ValueSource(
+			strings = { "{\"type\":\"response.completed\"}", "{\"type\":\"response.completed\",\"response\":null}" })
+	void missingTerminalResponseCannotReleaseBufferedCalls(String json) {
+		ResponsesStreamEvent terminal = JsonMapper.builder().build().readValue(json, ResponsesStreamEvent.class);
+		when(this.api.responsesStream(any()))
+			.thenReturn(Flux.just(event(OUTPUT_ITEM_DONE, call(FIRST_CALL_ID, "completed", "{}"), null), terminal));
+
+		assertThatThrownBy(() -> invoke(true)).isInstanceOf(OpenRouterTruncatedResponseException.class)
+			.hasMessageContaining("without a response snapshot");
+		assertThat(this.executions).hasValue(0);
+		verifyRequests(true, 1);
+	}
+
 	@Test
 	void streamEndingBeforeTerminalResponseDoesNotExecuteBufferedCalls() {
 		when(this.api.responsesStream(any()))

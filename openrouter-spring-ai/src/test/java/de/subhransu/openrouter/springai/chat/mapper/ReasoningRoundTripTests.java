@@ -168,7 +168,8 @@ class ReasoningRoundTripTests {
 		for (boolean terminal : List.of(false, true)) {
 			Flux<ResponsesStreamEvent> stream = terminal
 					? events.concatWithValues(new ResponsesStreamEvent("response.completed", null, null, wire, null))
-					: events.concatWithValues(new ResponsesStreamEvent("response.completed", null, null, null, null));
+					: events.concatWithValues(new ResponsesStreamEvent("response.completed", null, null,
+							new ResponsesResult(null, null, null, null, "completed", null, null, null), null));
 			AtomicReference<ChatResponse> result = new AtomicReference<>();
 			new MessageAggregator().aggregate(new OpenRouterResponsesStreamingResponseMapper().map(stream), result::set)
 				.blockLast();

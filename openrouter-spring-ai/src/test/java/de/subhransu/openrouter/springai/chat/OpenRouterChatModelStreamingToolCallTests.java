@@ -14,6 +14,7 @@ import de.subhransu.openrouter.springai.api.dto.Choice;
 import de.subhransu.openrouter.springai.api.dto.Delta;
 import de.subhransu.openrouter.springai.api.dto.FunctionCall;
 import de.subhransu.openrouter.springai.api.dto.ResponsesRequest;
+import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
 import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
 import de.subhransu.openrouter.springai.api.dto.ResponsesTool;
 import de.subhransu.openrouter.springai.api.dto.ToolCall;
@@ -145,8 +146,9 @@ class OpenRouterChatModelStreamingToolCallTests {
 	@Test
 	void responsesStreamingSurfacesToolCallWithoutExecutingIt() {
 		OpenRouterApi api = mock(OpenRouterApi.class);
-		when(api.responsesStream(any())).thenReturn(Flux.just(responsesToolCallEvent(),
-				new ResponsesStreamEvent("response.completed", null, null, null, null)));
+		when(api.responsesStream(any()))
+			.thenReturn(Flux.just(responsesToolCallEvent(), new ResponsesStreamEvent("response.completed", null, null,
+					new ResponsesResult(null, null, null, null, "completed", null, null, null), null)));
 		OpenRouterChatModel model = OpenRouterChatModel.builder().openRouterApi(api).build();
 
 		List<ChatResponse> responses = model

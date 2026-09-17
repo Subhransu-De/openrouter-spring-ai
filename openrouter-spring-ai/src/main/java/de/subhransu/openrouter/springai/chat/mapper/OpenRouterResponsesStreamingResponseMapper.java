@@ -78,6 +78,10 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 		}
 		else if ("response.completed".equals(type)) {
 			result = event.response();
+			if (result == null && !pending.isEmpty()) {
+				throw new OpenRouterTruncatedResponseException(
+						"Responses tool round completed without a response snapshot");
+			}
 			finishReason = FinishReasonMapper.responses(result, "completed");
 		}
 		else if (incomplete) {
