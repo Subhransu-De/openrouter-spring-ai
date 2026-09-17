@@ -38,12 +38,18 @@ class OpenRouterModelSelectionTests {
 		ImageModel image = concreteModels ? mock(OpenRouterImageModel.class) : mock(ImageModel.class);
 		ToolCallingManager manager = mock(ToolCallingManager.class);
 		ToolExecutionExceptionProcessor processor = exception -> "application failure";
-		this.contextRunner
+		ApplicationContextRunner runner = concreteModels
+				? this.contextRunner
+					.withBean("applicationChat", OpenRouterChatModel.class, () -> (OpenRouterChatModel) chat)
+					.withBean("applicationEmbedding", OpenRouterEmbeddingModel.class,
+							() -> (OpenRouterEmbeddingModel) embedding)
+					.withBean("applicationImage", OpenRouterImageModel.class, () -> (OpenRouterImageModel) image)
+				: this.contextRunner.withBean("applicationChat", ChatModel.class, () -> chat)
+					.withBean("applicationEmbedding", EmbeddingModel.class, () -> embedding)
+					.withBean("applicationImage", ImageModel.class, () -> image);
+		runner
 			.withPropertyValues("spring.ai.openrouter.api-key=test-key", "spring.ai.model.chat=openrouter",
 					"spring.ai.model.embedding=openrouter", "spring.ai.model.image=openrouter")
-			.withBean("applicationChat", ChatModel.class, () -> chat)
-			.withBean("applicationEmbedding", EmbeddingModel.class, () -> embedding)
-			.withBean("applicationImage", ImageModel.class, () -> image)
 			.withBean(ToolCallingManager.class, () -> manager)
 			.withBean(ToolExecutionExceptionProcessor.class, () -> processor)
 			.run(context -> {
