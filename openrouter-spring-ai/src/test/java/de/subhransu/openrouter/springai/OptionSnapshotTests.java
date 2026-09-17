@@ -10,6 +10,7 @@ import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
 import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingOptions;
 import de.subhransu.openrouter.springai.image.OpenRouterImageOptions;
+import de.subhransu.openrouter.springai.support.OptionSnapshots;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -18,6 +19,27 @@ import org.junit.jupiter.api.Test;
 import org.springframework.ai.tool.ToolCallback;
 
 class OptionSnapshotTests {
+
+	@Test
+	void recursiveListsRetainNullsOrderAndOpaqueIdentity() {
+		Object opaque = new Object();
+		var nested = new ArrayList<>(List.of(opaque));
+		var input = new ArrayList<Object>();
+		input.add(null);
+		input.add(nested);
+		input.add(List.of());
+		var snapshot = (List<?>) OptionSnapshots.value(input);
+		input.clear();
+		nested.clear();
+		assertThat(snapshot).hasSize(3);
+		assertThat(snapshot.get(0)).isNull();
+		var child = (List<?>) snapshot.get(1);
+		assertThat(child).hasSize(1);
+		assertThat(child.get(0)).isSameAs(opaque);
+		assertThat((List<?>) snapshot.get(2)).isEmpty();
+		assertThatThrownBy(snapshot::clear).isInstanceOf(UnsupportedOperationException.class);
+		assertThatThrownBy(child::clear).isInstanceOf(UnsupportedOperationException.class);
+	}
 
 	@Test
 	void providerListsStayDetachedAcrossModelAndRequestSnapshots() {

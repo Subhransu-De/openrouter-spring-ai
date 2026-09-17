@@ -160,7 +160,7 @@ jobs:
           cache: maven
 
       - name: Maven test
-        run: mvn -B verify
+        run: mvn -B ${{ matrix.java-version == '25' && '-Pmodernizer-java25' || '' }} verify
 
   gradle-test:
     name: Verify with Gradle · Java ${{ matrix.java-version }}

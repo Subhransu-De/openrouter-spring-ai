@@ -14,11 +14,10 @@
   <description>Repository-local sample applications for the OpenRouter starter. Not published.</description>
 
   <properties>
-    <checkstyle.skip>true</checkstyle.skip>
+    <checkstyle.config>${maven.multiModuleProjectDirectory}/config/checkstyle/checkstyle-samples.xml</checkstyle.config>
     <cpd.skip>true</cpd.skip>
     <enforcer.skip>true</enforcer.skip>
     <maven.deploy.skip>true</maven.deploy.skip>
-    <pmd.skip>true</pmd.skip>
     <spring-javaformat.skip>true</spring-javaformat.skip>
   </properties>
 

@@ -43,6 +43,7 @@
     <revision>0.1.0-SNAPSHOT</revision>
 
     <java.version>17</java.version>
+    <checkstyle.config>${maven.multiModuleProjectDirectory}/config/checkstyle/checkstyle.xml</checkstyle.config>
     <maven.compiler.source>${java.version}</maven.compiler.source>
     <maven.compiler.target>${java.version}</maven.compiler.target>
     <maven.compiler.release>${java.version}</maven.compiler.release>
@@ -65,6 +66,7 @@
     <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
     <checkstyle.version>14.1.0</checkstyle.version>
     <maven-pmd-plugin.version>3.28.0</maven-pmd-plugin.version>
+    <modernizer-maven-plugin.version>3.4.0</modernizer-maven-plugin.version>
     <pmd.version>7.27.0</pmd.version>
     <graalvm-buildtools.version>1.1.12</graalvm-buildtools.version>
     <maven-enforcer-plugin.version>3.6.3</maven-enforcer-plugin.version>
@@ -322,10 +324,6 @@
             <ruleset>${maven.multiModuleProjectDirectory}/config/pmd/pmd-main.xml</ruleset>
             <ruleset>${maven.multiModuleProjectDirectory}/config/pmd/pmd-test.xml</ruleset>
           </rulesets>
-          <excludeRoots>
-            <excludeRoot>${maven.multiModuleProjectDirectory}/openrouter-spring-ai-samples/src/main/java</excludeRoot>
-            <excludeRoot>${maven.multiModuleProjectDirectory}/openrouter-spring-ai-samples/src/test/java</excludeRoot>
-          </excludeRoots>
         </configuration>
         <!-- Pin the PMD distribution the plugin loads: without this Maven analyses with the
              plugin's bundled PMD while Gradle uses ${pmd.version}, so the two builds could
@@ -367,6 +365,35 @@
   </build>
 
   <profiles>
+    <profile>
+      <id>modernizer-java25</id>
+      <activation>
+        <jdk>[25,)</jdk>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.gaul</groupId>
+            <artifactId>modernizer-maven-plugin</artifactId>
+            <version>${modernizer-maven-plugin.version}</version>
+            <configuration>
+              <javaVersion>25</javaVersion>
+              <failOnViolations>true</failOnViolations>
+              <includeTestClasses>true</includeTestClasses>
+            </configuration>
+            <executions>
+              <execution>
+                <id>modernizer-java25</id>
+                <goals>
+                  <goal>modernizer</goal>
+                </goals>
+                <phase>verify</phase>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
     <profile>
       <id>release</id>
       <build>
@@ -488,7 +515,7 @@
                 </goals>
                 <phase>validate</phase>
                 <configuration>
-                  <configLocation>${maven.multiModuleProjectDirectory}/config/checkstyle/checkstyle.xml</configLocation>
+                  <configLocation>${checkstyle.config}</configLocation>
                   <includeTestSourceDirectory>true</includeTestSourceDirectory>
                   <consoleOutput>true</consoleOutput>
                   <failsOnError>true</failsOnError>

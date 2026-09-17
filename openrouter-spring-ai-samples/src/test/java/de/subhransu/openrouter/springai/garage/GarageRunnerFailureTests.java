@@ -36,6 +36,8 @@ import org.springframework.ai.image.ImagePrompt;
 import org.springframework.mock.env.MockEnvironment;
 import tools.jackson.databind.ObjectMapper;
 
+// Keep synthetic failure inputs explicit in each test.
+@SuppressWarnings("PMD.AvoidDuplicateLiterals")
 class GarageRunnerFailureTests {
 
   @TempDir Path output;

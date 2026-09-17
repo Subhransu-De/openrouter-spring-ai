@@ -3,6 +3,8 @@ package de.subhransu.openrouter.springai.chat.mapper;
 import de.subhransu.openrouter.springai.api.dto.ContentPart;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 import org.springframework.ai.content.Media;
 
 /**
@@ -29,15 +31,10 @@ final class AssistantContentMapper {
 
 		List<ContentPart> parts = values.stream()
 			.map(AssistantContentMapper::contentPart)
-			.filter(java.util.Objects::nonNull)
+			.filter(Objects::nonNull)
 			.toList();
-		StringBuilder text = new StringBuilder();
-		for (ContentPart part : parts) {
-			if (part.text() != null) {
-				text.append(part.text());
-			}
-		}
-		return new MappedContent(text.toString(), GeneratedImageMapper.media(parts));
+		String text = parts.stream().map(ContentPart::text).filter(Objects::nonNull).collect(Collectors.joining());
+		return new MappedContent(text, GeneratedImageMapper.media(parts));
 	}
 
 	private static ContentPart contentPart(Object value) {
