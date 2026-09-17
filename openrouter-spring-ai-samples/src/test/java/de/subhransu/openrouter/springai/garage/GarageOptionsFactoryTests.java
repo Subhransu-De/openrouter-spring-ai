@@ -152,6 +152,10 @@ class GarageOptionsFactoryTests {
     assertThat(options.getProvider()).isNotNull();
     assertThat(options.getProvider().requireParameters()).isTrue();
     assertThat(options.getProvider().sort()).isEqualTo("price");
+    // Without this a reasoning specialist falls back to its own default effort and can
+    // spend the whole completion budget thinking.
+    assertThat(options.getReasoning()).isNotNull();
+    assertThat(options.getReasoning().effort()).isEqualTo(properties.getReasoningEffort());
   }
 
   @Test

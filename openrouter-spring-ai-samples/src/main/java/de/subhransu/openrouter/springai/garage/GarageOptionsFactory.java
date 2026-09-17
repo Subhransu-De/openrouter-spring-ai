@@ -318,14 +318,24 @@ public final class GarageOptionsFactory {
   }
 
   private OpenRouterReasoningOptions reasoningOptions() {
-    if (!this.properties.isReasoningEnabled()) {
+    return serviceReasoningOptions(this.properties);
+  }
+
+  /**
+   * The reasoning configuration every live Garage request shares. The specialist
+   * delegation builds its options outside this factory and must apply these too; without
+   * them a reasoning model falls back to its own default effort and can spend the whole
+   * specialist completion budget thinking, returning truncated or empty text.
+   */
+  public static OpenRouterReasoningOptions serviceReasoningOptions(GarageProperties properties) {
+    if (!properties.isReasoningEnabled()) {
       return null;
     }
-    Integer maxTokens = this.properties.getReasoningMaxTokens();
+    Integer maxTokens = properties.getReasoningMaxTokens();
     return new OpenRouterReasoningOptions(
-        maxTokens == null ? this.properties.getReasoningEffort() : null,
+        maxTokens == null ? properties.getReasoningEffort() : null,
         maxTokens,
-        this.properties.isReasoningExclude(),
+        properties.isReasoningExclude(),
         true);
   }
 
