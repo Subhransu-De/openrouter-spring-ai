@@ -33,6 +33,8 @@ public final class GarageTools {
   private final String sceneId;
   private final List<Map<String, Object>> invocations =
       Collections.synchronizedList(new ArrayList<>());
+  private final List<Map<String, Object>> modelResponseEvidence =
+      Collections.synchronizedList(new ArrayList<>());
 
   public GarageTools(
       ChatModel chatModel,
@@ -119,6 +121,11 @@ public final class GarageTools {
             options);
 
     ChatResponse response = this.chatModel.call(prompt);
+    synchronized (this.modelResponseEvidence) {
+      this.modelResponseEvidence.add(
+          GarageResponses.reasoningEvidence(
+              response, "specialist", this.modelResponseEvidence.size() + 1));
+    }
     String text = GarageResponses.text(response);
     Map<String, Object> arguments = new LinkedHashMap<>();
     arguments.put("requestedModel", selectedModel);
@@ -304,6 +311,12 @@ public final class GarageTools {
   public List<Map<String, Object>> invocations() {
     synchronized (this.invocations) {
       return List.copyOf(this.invocations);
+    }
+  }
+
+  public List<Map<String, Object>> modelResponseEvidence() {
+    synchronized (this.modelResponseEvidence) {
+      return List.copyOf(this.modelResponseEvidence);
     }
   }
 

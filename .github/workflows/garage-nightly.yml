@@ -91,7 +91,6 @@ jobs:
             --specialist-max-completion-tokens=400 \
             --reasoning-effort=low \
             --provider-sort=price \
-            --provider-require-parameters=true \
             --provider-order= \
             --provider-ignore= \
             --provider-quantizations= \

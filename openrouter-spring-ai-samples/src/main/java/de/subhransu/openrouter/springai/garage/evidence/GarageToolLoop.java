@@ -1,5 +1,7 @@
 package de.subhransu.openrouter.springai.garage.evidence;
 
+import de.subhransu.openrouter.springai.garage.GarageResponses;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -25,6 +27,7 @@ public final class GarageToolLoop implements CallAdvisor, StreamAdvisor {
   private final Map<String, ToolCall> pending = new LinkedHashMap<>();
   private final Set<String> callIds = new HashSet<>();
   private final Set<String> completedTools = new HashSet<>();
+  private final List<Map<String, Object>> responseEvidence = new ArrayList<>();
   private ChatResponse lastResponse;
 
   @Override
@@ -76,6 +79,9 @@ public final class GarageToolLoop implements CallAdvisor, StreamAdvisor {
       throw new IllegalStateException("Tool loop model response was missing");
     }
     this.lastResponse = response.chatResponse();
+    this.responseEvidence.add(
+        GarageResponses.reasoningEvidence(
+            this.lastResponse, "foreman", this.responseEvidence.size() + 1));
     for (ToolCall call : response.chatResponse().getResult().getOutput().getToolCalls()) {
       if (!StringUtils.hasText(call.id()) || !this.callIds.add(call.id())) {
         throw new IllegalStateException("Tool call ID was missing or reused");
@@ -86,6 +92,10 @@ public final class GarageToolLoop implements CallAdvisor, StreamAdvisor {
 
   public ChatResponse lastResponse() {
     return this.lastResponse;
+  }
+
+  public List<Map<String, Object>> responseEvidence() {
+    return List.copyOf(this.responseEvidence);
   }
 
   public void assertCompleted(List<String> requiredTools) {

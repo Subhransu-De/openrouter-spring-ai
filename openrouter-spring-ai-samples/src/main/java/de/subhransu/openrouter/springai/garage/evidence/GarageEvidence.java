@@ -33,7 +33,9 @@ public final class GarageEvidence {
       "durationNanos", "streaming", "returnDirect", "resultCharacters", "costUsd",
       "dimensions", "similarCosine", "unrelatedCosine", "imageBytes", "usage",
       "promptTokens", "completionTokens", "totalTokens", "count", "value", "measurements",
-      "cachedTokens", "reasoningTokens", "cost", "full", "offlineContracts", "capabilities",
+      "cachedTokens", "reasoningTokens", "reasoning", "reasoningCharacters", "reasoningObserved",
+      "reasoningRequested", "usageReported", "round", "rounds", "phase", "toolCallCount",
+      "cost", "full", "offlineContracts", "capabilities",
       "imageSurface", "imageQuality", "modeStatuses", "modality", "inputCount", "width", "height",
       "name", "lowCardinality", "highCardinality", "tags", "statistic",
       "gen_ai.system", "gen_ai.operation.name", "gen_ai.request.model", "gen_ai.response.model",
@@ -53,7 +55,7 @@ public final class GarageEvidence {
         "java.lang.RuntimeException", "java.io.IOException",
         "gen_ai.client.operation", "openrouter", "embeddings", "image_generation",
         "TIMER", "COUNT", "TOTAL_TIME", "MAX", "chat", "NONE", "SYNC", "STREAMING", "CHAT",
-        "ALL", "text", "embedding", "vision", "image"));
+        "ALL", "text", "embedding", "vision", "image", "foreman", "specialist"));
     for (GarageFeature feature : GarageFeature.values()) {
       labels.addAll(List.of(feature.id(), feature.title(), feature.sceneId(), feature.kind().name()));
     }

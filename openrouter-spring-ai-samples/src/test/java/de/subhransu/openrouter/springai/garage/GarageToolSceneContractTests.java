@@ -40,6 +40,7 @@ import java.nio.file.Path;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -149,19 +150,48 @@ class GarageToolSceneContractTests {
   @EnumSource(OpenRouterRequestMode.class)
   void serviceStoryRequiresAllFourModelDirectedToolsAndFollowUp(OpenRouterRequestMode mode) throws Exception {
     OpenRouterApi api = mock(OpenRouterApi.class);
-    stubStory(api, List.of(
-        storyCall("inspect_vehicle_profile", "{\"concern\":\"synthetic\",\"severity\":4,\"safetyCritical\":true}"),
-        storyCall("hand_to_specialist", "{\"job\":\"synthetic inspection\"}"),
-        storyCall("score_repair_plan", "{\"safetyRisk\":4,\"reliabilityRisk\":3,\"costRisk\":2}"),
-        storyCall("log_to_jobsheet", "{\"title\":\"Synthetic\",\"markdown\":\"Inspect brakes\"}")));
+    stubStory(api, requiredStoryCalls());
     var test = context(api, "service-story", mode);
     var result = new ServiceStoryScene().execute(test.context());
     assertThat(result.status()).isEqualTo(SceneResult.Status.PASSED);
     assertThat((Double) result.details().get("costUsd"))
         .isCloseTo(0.03, org.assertj.core.api.Assertions.within(0.000001));
+    @SuppressWarnings("unchecked")
+    Map<String, Object> reasoning = (Map<String, Object>) result.details().get("reasoning");
+    assertThat(reasoning)
+        .containsEntry("reasoningRequested", true)
+        .containsEntry("reasoningObserved", true);
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> rounds = (List<Map<String, Object>>) reasoning.get("rounds");
+    assertThat(rounds)
+        .anySatisfy(round -> assertThat(round)
+            .containsEntry("phase", "foreman")
+            .containsEntry("round", 1)
+            .containsEntry("reasoningTokens", 1))
+        .anySatisfy(round -> assertThat(round)
+            .containsEntry("phase", "foreman")
+            .containsEntry("round", 2)
+            .containsEntry("reasoningTokens", 0));
     assertThat(test.context().evidence().featureSnapshot()).allMatch(item -> Boolean.TRUE.equals(item.get("complete")));
     verify(api, times(mode == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS ? 3 : 0)).chatCompletion(any());
     verify(api, times(mode == OpenRouterRequestMode.OPENAI_RESPONSES ? 3 : 0)).responses(any());
+  }
+
+  @ParameterizedTest
+  @EnumSource(OpenRouterRequestMode.class)
+  void serviceStoryReportsAbsentReasoningWithoutFailing(OpenRouterRequestMode mode) throws Exception {
+    OpenRouterApi api = mock(OpenRouterApi.class);
+    stubStory(api, requiredStoryCalls(), 0);
+    var test = context(api, "service-story", mode);
+
+    var result = new ServiceStoryScene().execute(test.context());
+
+    assertThat(result.status()).isEqualTo(SceneResult.Status.PASSED);
+    @SuppressWarnings("unchecked")
+    Map<String, Object> reasoning = (Map<String, Object>) result.details().get("reasoning");
+    assertThat(reasoning)
+        .containsEntry("reasoningRequested", true)
+        .containsEntry("reasoningObserved", false);
   }
 
   @ParameterizedTest
@@ -188,20 +218,33 @@ class GarageToolSceneContractTests {
     return new ToolCall("synthetic-" + name, "function", new FunctionCall(name, arguments));
   }
 
+  private List<ToolCall> requiredStoryCalls() {
+    return List.of(
+        storyCall("inspect_vehicle_profile", "{\"concern\":\"synthetic\",\"severity\":4,\"safetyCritical\":true}"),
+        storyCall("hand_to_specialist", "{\"job\":\"synthetic inspection\"}"),
+        storyCall("score_repair_plan", "{\"safetyRisk\":4,\"reliabilityRisk\":3,\"costRisk\":2}"),
+        storyCall("log_to_jobsheet", "{\"title\":\"Synthetic\",\"markdown\":\"Inspect brakes\"}"));
+  }
+
   private void stubStory(OpenRouterApi api, List<ToolCall> calls) {
-    var usage = new Usage(10, 5, 15, 0, 1, 0.01, null, null, null);
+    stubStory(api, calls, 1);
+  }
+
+  private void stubStory(OpenRouterApi api, List<ToolCall> calls, int reasoningTokens) {
+    var toolUsage = new Usage(10, 5, 15, 0, reasoningTokens, 0.01, null, null, null);
+    var answerUsage = new Usage(10, 5, 15, 0, 0, 0.01, null, null, null);
     var answer = new ChatCompletionResponse("synthetic", "chat.completion", 1L, "garage/model", null,
-        List.of(new Choice(0, new ChatMessage("assistant", "Synthetic recommendation", null, null, null), null, "stop", "stop")), usage);
+        List.of(new Choice(0, new ChatMessage("assistant", "Synthetic recommendation", null, null, null), null, "stop", "stop")), answerUsage);
     var toolRound = new ChatCompletionResponse("synthetic-tools", "chat.completion", 1L, "garage/model", null,
-        List.of(new Choice(0, new ChatMessage("assistant", "", null, null, calls), null, "tool_calls", "tool_calls")), usage);
+        List.of(new Choice(0, new ChatMessage("assistant", "", null, null, calls), null, "tool_calls", "tool_calls")), toolUsage);
     when(api.chatCompletion(any())).thenReturn(calls.isEmpty() ? answer : toolRound, answer);
     var responseAnswer = new ResponsesResult("synthetic", "response", 1L, "garage/model", "completed",
         List.of(new ResponsesOutputItem("synthetic-message", "message", "completed", "assistant",
-            List.of(new ResponsesContent("output_text", "Synthetic recommendation")))), usage, null);
+            List.of(new ResponsesContent("output_text", "Synthetic recommendation")))), answerUsage, null);
     var responseCalls = calls.stream().map(call -> new ResponsesOutputItem("item-" + call.id(),
         "function_call", "completed", null, null, call.id(), call.function().name(), call.function().arguments(), null)).toList();
     when(api.responses(any())).thenReturn(calls.isEmpty() ? responseAnswer : new ResponsesResult(
-        "synthetic-tools", "response", 1L, "garage/model", "completed", responseCalls, usage, null), responseAnswer);
+        "synthetic-tools", "response", 1L, "garage/model", "completed", responseCalls, toolUsage, null), responseAnswer);
   }
 
   @Test
@@ -223,7 +266,6 @@ class GarageToolSceneContractTests {
 
   private TestContext context(OpenRouterApi api, String sceneId, OpenRouterRequestMode mode) {
     GarageProperties properties = new GarageProperties();
-    properties.setReasoningEnabled(false);
     GarageEvidence evidence = new GarageEvidence();
     SimpleMeterRegistry meters = new SimpleMeterRegistry();
     GarageTelemetry telemetry = new GarageTelemetry(meters, evidence);

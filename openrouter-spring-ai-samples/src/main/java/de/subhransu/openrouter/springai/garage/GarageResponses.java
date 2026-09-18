@@ -1,6 +1,8 @@
 package de.subhransu.openrouter.springai.garage;
 
+import de.subhransu.openrouter.springai.chat.OpenRouterUsage;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.springframework.ai.chat.metadata.ChatResponseMetadata;
 import org.springframework.ai.chat.metadata.Usage;
@@ -35,6 +37,36 @@ public final class GarageResponses {
     }
     Object reasoning = result.getMetadata().get("openrouter.reasoning");
     return reasoning != null ? reasoning.toString() : "";
+  }
+
+  public static Map<String, Object> reasoningEvidence(
+      ChatResponse response, String phase, int round) {
+    String reasoning = reasoning(response);
+    Integer reasoningTokens =
+        response != null && response.getMetadata().getUsage() instanceof OpenRouterUsage usage
+            ? usage.getReasoningTokens()
+            : null;
+    int toolCallCount =
+        response != null && response.getResult() != null
+            ? response.getResult().getOutput().getToolCalls().size()
+            : 0;
+    Map<String, Object> evidence = new LinkedHashMap<>();
+    evidence.put("phase", phase);
+    evidence.put("round", round);
+    evidence.put("reasoningCharacters", reasoning.length());
+    evidence.put("reasoningTokens", reasoningTokens);
+    evidence.put("usageReported", reasoningTokens != null);
+    evidence.put("toolCallCount", toolCallCount);
+    return evidence;
+  }
+
+  public static boolean reasoningObserved(List<Map<String, Object>> rounds) {
+    return rounds.stream()
+        .anyMatch(
+            round ->
+                ((Number) round.getOrDefault("reasoningCharacters", 0)).intValue() > 0
+                    || (round.get("reasoningTokens") instanceof Number tokens
+                        && tokens.intValue() > 0));
   }
 
   public static Map<String, Object> metadata(ChatResponse response) {

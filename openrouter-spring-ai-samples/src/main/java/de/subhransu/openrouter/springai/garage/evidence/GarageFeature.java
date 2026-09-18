@@ -21,7 +21,7 @@ public enum GarageFeature {
   STREAMING_TOOL_AGGREGATION("streaming-tool-aggregation", "Streamed tool-call fragment aggregation", "streaming-dispatch", Kind.LIVE),
   RETURN_DIRECT("return-direct", "returnDirect tools", "express-invoice", Kind.LIVE),
   MODEL_DELEGATION("model-delegation", "Model-to-model delegation", "service-story", Kind.LIVE),
-  REASONING("reasoning", "Reasoning options + deltas", "service-story", Kind.LIVE),
+  REASONING("reasoning", "Reasoning request + returned evidence", "service-story", Kind.LIVE),
   BASIC_USAGE("basic-usage", "Basic usage accounting", "service-story", Kind.LIVE),
   EXTENDED_USAGE("extended-usage", "Cost, cached & reasoning tokens", "service-story", Kind.LIVE),
   RESPONSE_METADATA("response-metadata", "Response metadata + finish reasons", "service-story", Kind.LIVE),

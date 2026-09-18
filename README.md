@@ -561,6 +561,11 @@ The PR workflow selects a smaller text suite with a free model. Nightly uses
 Scheduling and model selection live in the workflows, not schedule-named application
 profiles. Nightly allows 900 completion tokens per Foreman request to leave room for
 reasoning, tool arguments, and final output.
+It requests reasoning on every service-story model call and records sanitized token and text
+counts for each Foreman and specialist round. A provider returning zero reasoning tokens is
+reported as `reasoningObserved=false`, not treated as a failed request, because reasoning output
+is controlled by the model. Nightly routes by price without globally requiring support for every
+request parameter. Structured-output probes still require parameter support for their schema.
 Garage enables usage reporting per Chat Completions request rather than as a global
 chat default, so `ChatClient` can also use Responses mode. Structured-output probes
 require providers to support all requested parameters, including the JSON schema.
