@@ -43,6 +43,7 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 			List<ResponsesOutputItem> pending, RefusalMetadata.Accumulator refusal, TextState textState) {
 		String type = event.type();
 		boolean incomplete = "response.incomplete".equals(type);
+		boolean completed = "response.completed".equals(type);
 		if ("error".equals(type) || type != null && type.endsWith(".error")) {
 			StreamError error = eventError(event);
 			throw OpenRouterResponsesResponseMapper.failure("OpenRouter responses stream failed", String.valueOf(event),
@@ -77,7 +78,7 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 			// output.
 			media = GeneratedImageMapper.responsesMedia(List.of(event.item()));
 		}
-		else if ("response.completed".equals(type)) {
+		else if (completed) {
 			result = event.response();
 			if (result == null && !pending.isEmpty()) {
 				throw new OpenRouterTruncatedResponseException(
@@ -99,8 +100,8 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 
 		String nativeFinishReason = finishReason;
 		String status = result != null && result.status() != null ? result.status()
-				: incomplete ? "incomplete" : "response.completed".equals(type) ? "completed" : null;
-		if ("response.completed".equals(type) || incomplete) {
+				: incomplete ? "incomplete" : completed ? "completed" : null;
+		if (completed || incomplete) {
 			String toolStatus = incomplete ? "incomplete" : status;
 			String reason = result != null && result.incompleteDetails() != null ? result.incompleteDetails().reason()
 					: null;
@@ -130,7 +131,7 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 			snapshot = accumulator.replace(ReasoningMetadata.responses(result.output()));
 		}
 		RefusalMetadata.put(snapshot, refusal.update(event));
-		if (("response.completed".equals(type) || incomplete) && !textState.hasText
+		if ((completed || incomplete) && !textState.hasText
 				&& snapshot.get(ReasoningMetadata.RESPONSES_OUTPUT_ITEMS) instanceof List<?> output) {
 			text = OpenRouterResponsesResponseMapper
 				.text(output.stream().map(ResponsesOutputItem.class::cast).toList());
