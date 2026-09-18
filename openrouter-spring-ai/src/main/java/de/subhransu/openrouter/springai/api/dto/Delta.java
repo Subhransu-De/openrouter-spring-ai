@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.api.dto;
 
+import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -9,19 +10,25 @@ import java.util.List;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonInclude(Include.NON_NULL)
-public record Delta(String role, String content, String reasoning, @JsonProperty("tool_calls") List<ToolCall> toolCalls,
-		List<ContentPart> images, @JsonProperty("reasoning_details") List<JsonNode> reasoningDetails, String refusal) {
+public record Delta(@Nullable String role, @Nullable String content, @Nullable String reasoning,
+		@JsonProperty("tool_calls") @Nullable List<@Nullable ToolCall> toolCalls,
+		@Nullable List<@Nullable ContentPart> images,
+		@JsonProperty("reasoning_details") @Nullable List<@Nullable JsonNode> reasoningDetails,
+		@Nullable String refusal) {
 
-	public Delta(String role, String content, String reasoning, List<ToolCall> toolCalls, List<ContentPart> images,
-			List<JsonNode> reasoningDetails) {
+	public Delta(@Nullable String role, @Nullable String content, @Nullable String reasoning,
+			@Nullable List<@Nullable ToolCall> toolCalls, @Nullable List<@Nullable ContentPart> images,
+			@Nullable List<@Nullable JsonNode> reasoningDetails) {
 		this(role, content, reasoning, toolCalls, images, reasoningDetails, null);
 	}
 
-	public Delta(String role, String content, String reasoning, List<ToolCall> toolCalls, List<ContentPart> images) {
+	public Delta(@Nullable String role, @Nullable String content, @Nullable String reasoning,
+			@Nullable List<@Nullable ToolCall> toolCalls, @Nullable List<@Nullable ContentPart> images) {
 		this(role, content, reasoning, toolCalls, images, null);
 	}
 
-	public Delta(String role, String content, String reasoning, List<ToolCall> toolCalls) {
+	public Delta(@Nullable String role, @Nullable String content, @Nullable String reasoning,
+			@Nullable List<@Nullable ToolCall> toolCalls) {
 		this(role, content, reasoning, toolCalls, null);
 	}
 }

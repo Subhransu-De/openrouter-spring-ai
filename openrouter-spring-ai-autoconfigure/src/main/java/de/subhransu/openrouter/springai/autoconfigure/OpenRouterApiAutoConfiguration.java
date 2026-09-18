@@ -4,6 +4,7 @@ import tools.jackson.databind.ObjectMapper;
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.OpenRouterSerializationRuntimeHints;
 import java.time.Duration;
+import org.jspecify.annotations.Nullable;
 import java.util.List;
 import java.util.StringJoiner;
 import org.springframework.beans.factory.ObjectProvider;
@@ -59,7 +60,7 @@ public class OpenRouterApiAutoConfiguration {
 
 	private void applyTimeout(RestClient.Builder restClientBuilder,
 			ClientHttpRequestFactoryBuilder<?> requestFactoryBuilder, HttpClientSettings httpClientSettings,
-			Duration timeout) {
+			@Nullable Duration timeout) {
 		if (timeout == null) {
 			return;
 		}
@@ -71,7 +72,7 @@ public class OpenRouterApiAutoConfiguration {
 		restClientBuilder.requestFactory(requestFactoryBuilder.build(settings));
 	}
 
-	private String categories(List<String> categories) {
+	private @Nullable String categories(@Nullable List<String> categories) {
 		if (categories == null || categories.isEmpty()) {
 			return null;
 		}

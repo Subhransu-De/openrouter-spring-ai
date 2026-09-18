@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.image;
 
+import org.jspecify.annotations.Nullable;
 import de.subhransu.openrouter.springai.support.OptionSnapshots;
 import java.util.List;
 import java.util.Map;
@@ -21,31 +22,31 @@ import org.springframework.ai.image.ImageOptions;
  */
 public class OpenRouterImageOptions implements ImageOptions {
 
-	private String model;
+	private @Nullable String model;
 
-	private Integer n;
+	private @Nullable Integer n;
 
-	private Integer width;
+	private @Nullable Integer width;
 
-	private Integer height;
+	private @Nullable Integer height;
 
-	private String resolution;
+	private @Nullable String resolution;
 
-	private String aspectRatio;
+	private @Nullable String aspectRatio;
 
-	private String quality;
+	private @Nullable String quality;
 
-	private String outputFormat;
+	private @Nullable String outputFormat;
 
-	private String background;
+	private @Nullable String background;
 
-	private Integer outputCompression;
+	private @Nullable Integer outputCompression;
 
-	private Integer seed;
+	private @Nullable Integer seed;
 
-	private List<String> inputReferences;
+	private @Nullable List<String> inputReferences;
 
-	private Map<String, Object> providerOptions;
+	private @Nullable Map<String, @Nullable Object> providerOptions;
 
 	public static Builder builder() {
 		return new Builder();
@@ -59,7 +60,7 @@ public class OpenRouterImageOptions implements ImageOptions {
 		return this.mutate().build();
 	}
 
-	public static OpenRouterImageOptions fromOptions(ImageOptions options) {
+	public static @Nullable OpenRouterImageOptions fromOptions(@Nullable ImageOptions options) {
 		if (options == null) {
 			return null;
 		}
@@ -74,7 +75,7 @@ public class OpenRouterImageOptions implements ImageOptions {
 			.build();
 	}
 
-	public OpenRouterImageOptions merge(OpenRouterImageOptions runtimeOptions) {
+	public OpenRouterImageOptions merge(@Nullable OpenRouterImageOptions runtimeOptions) {
 		if (runtimeOptions == null) {
 			return this.copy();
 		}
@@ -95,27 +96,27 @@ public class OpenRouterImageOptions implements ImageOptions {
 			.build();
 	}
 
-	private static <T> T value(T runtimeValue, T defaultValue) {
+	private static <T> @Nullable T value(@Nullable T runtimeValue, @Nullable T defaultValue) {
 		return runtimeValue != null ? runtimeValue : defaultValue;
 	}
 
 	@Override
-	public String getModel() {
+	public @Nullable String getModel() {
 		return this.model;
 	}
 
 	@Override
-	public Integer getN() {
+	public @Nullable Integer getN() {
 		return this.n;
 	}
 
 	@Override
-	public Integer getWidth() {
+	public @Nullable Integer getWidth() {
 		return this.width;
 	}
 
 	@Override
-	public Integer getHeight() {
+	public @Nullable Integer getHeight() {
 		return this.height;
 	}
 
@@ -132,43 +133,43 @@ public class OpenRouterImageOptions implements ImageOptions {
 	 * {@link #getQuality() quality} or provider passthrough options instead.
 	 */
 	@Override
-	public String getStyle() {
+	public @Nullable String getStyle() {
 		return null;
 	}
 
-	public String getResolution() {
+	public @Nullable String getResolution() {
 		return this.resolution;
 	}
 
-	public String getAspectRatio() {
+	public @Nullable String getAspectRatio() {
 		return this.aspectRatio;
 	}
 
-	public String getQuality() {
+	public @Nullable String getQuality() {
 		return this.quality;
 	}
 
-	public String getOutputFormat() {
+	public @Nullable String getOutputFormat() {
 		return this.outputFormat;
 	}
 
-	public String getBackground() {
+	public @Nullable String getBackground() {
 		return this.background;
 	}
 
-	public Integer getOutputCompression() {
+	public @Nullable Integer getOutputCompression() {
 		return this.outputCompression;
 	}
 
-	public Integer getSeed() {
+	public @Nullable Integer getSeed() {
 		return this.seed;
 	}
 
-	public List<String> getInputReferences() {
+	public @Nullable List<String> getInputReferences() {
 		return this.inputReferences;
 	}
 
-	public Map<String, Object> getProviderOptions() {
+	public @Nullable Map<String, @Nullable Object> getProviderOptions() {
 		return this.providerOptions;
 	}
 
@@ -197,67 +198,67 @@ public class OpenRouterImageOptions implements ImageOptions {
 			this.options.providerOptions = OptionSnapshots.map(source.providerOptions);
 		}
 
-		public Builder model(String model) {
+		public Builder model(@Nullable String model) {
 			this.options.model = model;
 			return this;
 		}
 
-		public Builder n(Integer n) {
+		public Builder n(@Nullable Integer n) {
 			this.options.n = n;
 			return this;
 		}
 
-		public Builder width(Integer width) {
+		public Builder width(@Nullable Integer width) {
 			this.options.width = width;
 			return this;
 		}
 
-		public Builder height(Integer height) {
+		public Builder height(@Nullable Integer height) {
 			this.options.height = height;
 			return this;
 		}
 
-		public Builder resolution(String resolution) {
+		public Builder resolution(@Nullable String resolution) {
 			this.options.resolution = resolution;
 			return this;
 		}
 
-		public Builder aspectRatio(String aspectRatio) {
+		public Builder aspectRatio(@Nullable String aspectRatio) {
 			this.options.aspectRatio = aspectRatio;
 			return this;
 		}
 
-		public Builder quality(String quality) {
+		public Builder quality(@Nullable String quality) {
 			this.options.quality = quality;
 			return this;
 		}
 
-		public Builder outputFormat(String outputFormat) {
+		public Builder outputFormat(@Nullable String outputFormat) {
 			this.options.outputFormat = outputFormat;
 			return this;
 		}
 
-		public Builder background(String background) {
+		public Builder background(@Nullable String background) {
 			this.options.background = background;
 			return this;
 		}
 
-		public Builder outputCompression(Integer outputCompression) {
+		public Builder outputCompression(@Nullable Integer outputCompression) {
 			this.options.outputCompression = outputCompression;
 			return this;
 		}
 
-		public Builder seed(Integer seed) {
+		public Builder seed(@Nullable Integer seed) {
 			this.options.seed = seed;
 			return this;
 		}
 
-		public Builder inputReferences(List<String> inputReferences) {
+		public Builder inputReferences(@Nullable List<String> inputReferences) {
 			this.options.inputReferences = OptionSnapshots.list(inputReferences);
 			return this;
 		}
 
-		public Builder providerOptions(Map<String, Object> providerOptions) {
+		public Builder providerOptions(@Nullable Map<String, @Nullable Object> providerOptions) {
 			this.options.providerOptions = OptionSnapshots.map(providerOptions);
 			return this;
 		}

@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.chat.errors;
 
+import org.jspecify.annotations.Nullable;
 import de.subhransu.openrouter.springai.errors.OpenRouterExceptionMessage;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -32,14 +33,17 @@ import de.subhransu.openrouter.springai.errors.OpenRouterErrorClassifier;
  * @param category stable application-facing failure category
  * @author Subhransu De
  */
-public record OpenRouterChoiceErrorDetails(String responseId, String model, String provider, Integer choiceIndex,
-		String finishReason, Object nativeFinishReason, String code, String message, String errorType,
-		String providerCode, Map<String, Object> metadata, String partialOutput, boolean partialOutputTruncated,
-		OpenRouterErrorCategory category) {
+public record OpenRouterChoiceErrorDetails(@Nullable String responseId, @Nullable String model,
+		@Nullable String provider, @Nullable Integer choiceIndex, @Nullable String finishReason,
+		@Nullable Object nativeFinishReason, @Nullable String code, @Nullable String message,
+		@Nullable String errorType, @Nullable String providerCode, @Nullable Map<String, @Nullable Object> metadata,
+		@Nullable String partialOutput, boolean partialOutputTruncated, @Nullable OpenRouterErrorCategory category) {
 
-	public OpenRouterChoiceErrorDetails(String responseId, String model, String provider, Integer choiceIndex,
-			String finishReason, String code, String message, String errorType, String providerCode,
-			Map<String, Object> metadata, String partialOutput, boolean partialOutputTruncated) {
+	public OpenRouterChoiceErrorDetails(@Nullable String responseId, @Nullable String model, @Nullable String provider,
+			@Nullable Integer choiceIndex, @Nullable String finishReason, @Nullable String code,
+			@Nullable String message, @Nullable String errorType, @Nullable String providerCode,
+			@Nullable Map<String, @Nullable Object> metadata, @Nullable String partialOutput,
+			boolean partialOutputTruncated) {
 		this(responseId, model, provider, choiceIndex, finishReason, null, code, message, errorType, providerCode,
 				metadata, partialOutput, partialOutputTruncated,
 				OpenRouterErrorClassifier.category(errorType, code, message));
@@ -59,6 +63,14 @@ public record OpenRouterChoiceErrorDetails(String responseId, String model, Stri
 			.unmodifiableMap(new LinkedHashMap<>(OpenRouterExceptionMessage.sanitizeMetadata(metadata)));
 		partialOutput = OpenRouterExceptionMessage.sanitize(partialOutput);
 		category = category != null ? category : OpenRouterErrorCategory.UNKNOWN;
+	}
+
+	public OpenRouterErrorCategory category() {
+		return this.category;
+	}
+
+	public Map<String, @Nullable Object> metadata() {
+		return this.metadata;
 	}
 
 }

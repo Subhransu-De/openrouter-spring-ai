@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.api.dto;
 
+import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -10,25 +11,30 @@ import de.subhransu.openrouter.springai.errors.TolerantJsonStringDeserializer;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonInclude(Include.NON_NULL)
-public record ResponsesStreamEvent(String type, String delta, ResponsesOutputItem item, ResponsesResult response,
-		StreamError error, @JsonDeserialize(using = TolerantJsonStringDeserializer.class) String code,
-		@JsonDeserialize(using = TolerantJsonStringDeserializer.class) String message, JsonNode metadata,
-		@JsonDeserialize(using = TolerantJsonStringDeserializer.class) @JsonProperty("error_type") String errorType,
-		String refusal, @JsonProperty("output_index") Integer outputIndex,
-		@JsonProperty("content_index") Integer contentIndex) {
+public record ResponsesStreamEvent(@Nullable String type, @Nullable String delta, @Nullable ResponsesOutputItem item,
+		@Nullable ResponsesResult response, @Nullable StreamError error,
+		@JsonDeserialize(using = TolerantJsonStringDeserializer.class) @Nullable String code,
+		@JsonDeserialize(using = TolerantJsonStringDeserializer.class) @Nullable String message,
+		@Nullable JsonNode metadata,
+		@JsonDeserialize(
+				using = TolerantJsonStringDeserializer.class) @JsonProperty("error_type") @Nullable String errorType,
+		@Nullable String refusal, @JsonProperty("output_index") @Nullable Integer outputIndex,
+		@JsonProperty("content_index") @Nullable Integer contentIndex) {
 
-	public ResponsesStreamEvent(String type, String delta, ResponsesOutputItem item, ResponsesResult response,
-			StreamError error, String code, String message, JsonNode metadata, String errorType) {
+	public ResponsesStreamEvent(@Nullable String type, @Nullable String delta, @Nullable ResponsesOutputItem item,
+			@Nullable ResponsesResult response, @Nullable StreamError error, @Nullable String code,
+			@Nullable String message, @Nullable JsonNode metadata, @Nullable String errorType) {
 		this(type, delta, item, response, error, code, message, metadata, errorType, null, null, null);
 	}
 
-	public ResponsesStreamEvent(String type, String delta, ResponsesOutputItem item, ResponsesResult response,
-			StreamError error, String code, String message) {
+	public ResponsesStreamEvent(@Nullable String type, @Nullable String delta, @Nullable ResponsesOutputItem item,
+			@Nullable ResponsesResult response, @Nullable StreamError error, @Nullable String code,
+			@Nullable String message) {
 		this(type, delta, item, response, error, code, message, null, null);
 	}
 
-	public ResponsesStreamEvent(String type, String delta, ResponsesOutputItem item, ResponsesResult response,
-			StreamError error) {
+	public ResponsesStreamEvent(@Nullable String type, @Nullable String delta, @Nullable ResponsesOutputItem item,
+			@Nullable ResponsesResult response, @Nullable StreamError error) {
 		this(type, delta, item, response, error, null, null, null, null);
 	}
 

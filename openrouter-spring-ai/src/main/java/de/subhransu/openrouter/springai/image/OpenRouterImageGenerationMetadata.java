@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.image;
 
+import org.jspecify.annotations.Nullable;
 import org.springframework.ai.image.ImageGenerationMetadata;
 
 /**
@@ -11,6 +12,6 @@ import org.springframework.ai.image.ImageGenerationMetadata;
  * for completed images
  * @author Subhransu De
  */
-public record OpenRouterImageGenerationMetadata(String mediaType,
-		Integer partialImageIndex) implements ImageGenerationMetadata {
+public record OpenRouterImageGenerationMetadata(@Nullable String mediaType,
+		@Nullable Integer partialImageIndex) implements ImageGenerationMetadata {
 }

@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.api.dto;
 
+import org.jspecify.annotations.Nullable;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
@@ -9,16 +10,17 @@ import java.util.Objects;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonInclude(Include.NON_NULL)
-public record EmbeddingsResponse(String object, List<EmbeddingData> data, String model, Usage usage) {
+public record EmbeddingsResponse(@Nullable String object, @Nullable List<@Nullable EmbeddingData> data,
+		@Nullable String model, @Nullable Usage usage) {
 
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(Include.NON_NULL)
-	public record EmbeddingData(String object, Integer index, float[] embedding) {
+	public record EmbeddingData(@Nullable String object, @Nullable Integer index, float @Nullable [] embedding) {
 
 		// The generated record methods compare the float[] by identity; compare and
 		// render its content instead.
 		@Override
-		public boolean equals(Object other) {
+		public boolean equals(@Nullable Object other) {
 			return other instanceof EmbeddingData that && Objects.equals(this.object, that.object)
 					&& Objects.equals(this.index, that.index) && Arrays.equals(this.embedding, that.embedding);
 		}

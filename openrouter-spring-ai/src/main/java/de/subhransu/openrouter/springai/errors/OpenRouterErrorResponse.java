@@ -21,6 +21,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonInclude(Include.NON_NULL)
+@org.jspecify.annotations.NullUnmarked
 public record OpenRouterErrorResponse(Error error,
 		@JsonDeserialize(using = TolerantJsonStringDeserializer.class) @JsonProperty("error_type") String errorType) {
 

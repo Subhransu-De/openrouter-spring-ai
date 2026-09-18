@@ -1,6 +1,9 @@
 package de.subhransu.openrouter.springai.chat;
 
-public record OpenRouterReasoningOptions(String effort, Integer maxTokens, Boolean exclude, Boolean enabled) {
+import org.jspecify.annotations.Nullable;
+
+public record OpenRouterReasoningOptions(@Nullable String effort, @Nullable Integer maxTokens,
+		@Nullable Boolean exclude, @Nullable Boolean enabled) {
 
 	public OpenRouterReasoningOptions {
 		if (effort != null && maxTokens != null) {

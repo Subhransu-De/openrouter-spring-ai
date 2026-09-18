@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.api.dto;
 
+import org.jspecify.annotations.Nullable;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
@@ -8,11 +9,11 @@ import java.util.List;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonInclude(Include.NON_NULL)
-public record ImagesResponse(Long created, List<ImageData> data, Usage usage) {
+public record ImagesResponse(@Nullable Long created, @Nullable List<@Nullable ImageData> data, @Nullable Usage usage) {
 
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(Include.NON_NULL)
-	public record ImageData(@JsonProperty("b64_json") String b64Json, @JsonProperty("media_type") String mediaType,
-			String url) {
+	public record ImageData(@JsonProperty("b64_json") @Nullable String b64Json,
+			@JsonProperty("media_type") @Nullable String mediaType, @Nullable String url) {
 	}
 }

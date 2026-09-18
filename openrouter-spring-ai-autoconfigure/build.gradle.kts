@@ -3,6 +3,7 @@ description = "@AutoConfiguration and @ConfigurationProperties for the OpenRoute
 val archunitVersion = rootProject.extra["archunitVersion"] as String
 
 dependencies {
+	api("org.jspecify:jspecify")
 	api(project(":openrouter-spring-ai"))
 	api("org.springframework.boot:spring-boot-autoconfigure")
 	api("org.springframework.boot:spring-boot-http-client")

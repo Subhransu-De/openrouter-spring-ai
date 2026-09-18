@@ -13,6 +13,7 @@ import org.springframework.util.StringUtils;
  *
  * @author Subhransu De
  */
+@org.jspecify.annotations.NullUnmarked
 public final class OpenRouterApiExceptionFactory {
 
 	private OpenRouterApiExceptionFactory() {

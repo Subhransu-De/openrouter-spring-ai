@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.chat.errors;
 
+import org.jspecify.annotations.Nullable;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
 
 /**
@@ -9,7 +10,7 @@ import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
  */
 public interface OpenRouterChoiceFailure {
 
-	OpenRouterChoiceErrorDetails getErrorDetails();
+	@Nullable OpenRouterChoiceErrorDetails getErrorDetails();
 
 	default OpenRouterErrorCategory getCategory() {
 		OpenRouterChoiceErrorDetails details = getErrorDetails();

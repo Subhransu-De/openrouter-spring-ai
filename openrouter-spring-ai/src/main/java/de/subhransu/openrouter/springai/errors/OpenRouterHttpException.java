@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.errors;
 
+import org.jspecify.annotations.Nullable;
 import org.springframework.http.HttpStatusCode;
 
 /**
@@ -10,30 +11,30 @@ import org.springframework.http.HttpStatusCode;
  */
 public interface OpenRouterHttpException {
 
-	String getMessage();
+	@Nullable String getMessage();
 
 	/**
 	 * Return the HTTP status, or a status derived from an in-band Responses error.
 	 * @return actual or derived failure status
 	 */
-	HttpStatusCode getStatusCode();
+	@Nullable HttpStatusCode getStatusCode();
 
 	/**
 	 * Return a bounded, single-line, credential-safe excerpt of the untrusted provider
 	 * response body.
 	 * @return provider diagnostic excerpt, or {@code null}
 	 */
-	String getResponseBody();
+	@Nullable String getResponseBody();
 
-	OpenRouterErrorDetails getErrorDetails();
+	@Nullable OpenRouterErrorDetails getErrorDetails();
 
 	default OpenRouterErrorCategory getCategory() {
 		OpenRouterErrorDetails details = getErrorDetails();
 		return details != null ? details.category() : OpenRouterErrorCategory.UNKNOWN;
 	}
 
-	OpenRouterRetryAfter getRetryAfter();
+	@Nullable OpenRouterRetryAfter getRetryAfter();
 
-	String getEndpoint();
+	@Nullable String getEndpoint();
 
 }

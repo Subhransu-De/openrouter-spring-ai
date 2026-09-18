@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.errors;
 
+import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
 
 /**
@@ -13,8 +14,8 @@ import tools.jackson.databind.JsonNode;
  * @param category stable application-facing failure category
  * @author Subhransu De
  */
-public record OpenRouterErrorDetails(String code, String message, String errorType, String providerCode,
-		JsonNode metadata, OpenRouterErrorCategory category) {
+public record OpenRouterErrorDetails(@Nullable String code, @Nullable String message, @Nullable String errorType,
+		@Nullable String providerCode, @Nullable JsonNode metadata, @Nullable OpenRouterErrorCategory category) {
 
 	public OpenRouterErrorDetails {
 		code = OpenRouterExceptionMessage.sanitize(code);
@@ -25,9 +26,14 @@ public record OpenRouterErrorDetails(String code, String message, String errorTy
 		category = category != null ? category : OpenRouterErrorCategory.UNKNOWN;
 	}
 
-	public OpenRouterErrorDetails(String code, String message, String errorType, String providerCode,
-			JsonNode metadata) {
+	public OpenRouterErrorDetails(@Nullable String code, @Nullable String message, @Nullable String errorType,
+			@Nullable String providerCode, @Nullable JsonNode metadata) {
 		this(code, message, errorType, providerCode, metadata,
 				OpenRouterErrorClassifier.category(errorType, code, message));
 	}
+
+	public OpenRouterErrorCategory category() {
+		return this.category;
+	}
+
 }

@@ -15,6 +15,10 @@
 
   <dependencies>
     <dependency>
+      <groupId>org.jspecify</groupId>
+      <artifactId>jspecify</artifactId>
+    </dependency>
+    <dependency>
       <groupId>de.subhransu</groupId>
       <artifactId>openrouter-spring-ai</artifactId>
     </dependency>

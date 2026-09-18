@@ -10,6 +10,7 @@ import org.springframework.util.StringUtils;
  *
  * @author Subhransu De
  */
+@org.jspecify.annotations.NullUnmarked
 public final class OpenRouterErrorClassifier {
 
 	private static final Set<String> TRANSIENT_ERROR_TYPES = Set.of("api_error", "insufficient_system_resources",

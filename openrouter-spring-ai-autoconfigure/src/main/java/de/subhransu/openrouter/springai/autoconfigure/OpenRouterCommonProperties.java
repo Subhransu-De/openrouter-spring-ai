@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.autoconfigure;
 
+import org.jspecify.annotations.Nullable;
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -9,65 +10,65 @@ public class OpenRouterCommonProperties {
 
 	public static final String CONFIG_PREFIX = "spring.ai.openrouter";
 
-	private String apiKey;
+	private @Nullable String apiKey;
 
-	private String baseUrl = OpenRouterApi.DEFAULT_BASE_URL;
+	private @Nullable String baseUrl = OpenRouterApi.DEFAULT_BASE_URL;
 
-	private App app = new App();
+	private @Nullable App app = new App();
 
-	public String getApiKey() {
+	public @Nullable String getApiKey() {
 		return this.apiKey;
 	}
 
-	public void setApiKey(String apiKey) {
+	public void setApiKey(@Nullable String apiKey) {
 		this.apiKey = apiKey;
 	}
 
-	public String getBaseUrl() {
+	public @Nullable String getBaseUrl() {
 		return this.baseUrl;
 	}
 
-	public void setBaseUrl(String baseUrl) {
+	public void setBaseUrl(@Nullable String baseUrl) {
 		this.baseUrl = baseUrl;
 	}
 
-	public App getApp() {
+	public @Nullable App getApp() {
 		return this.app;
 	}
 
-	public void setApp(App app) {
+	public void setApp(@Nullable App app) {
 		this.app = app;
 	}
 
 	public static class App {
 
-		private String httpReferer;
+		private @Nullable String httpReferer;
 
-		private String title;
+		private @Nullable String title;
 
-		private List<String> categories;
+		private @Nullable List<String> categories;
 
-		public String getHttpReferer() {
+		public @Nullable String getHttpReferer() {
 			return this.httpReferer;
 		}
 
-		public void setHttpReferer(String httpReferer) {
+		public void setHttpReferer(@Nullable String httpReferer) {
 			this.httpReferer = httpReferer;
 		}
 
-		public String getTitle() {
+		public @Nullable String getTitle() {
 			return this.title;
 		}
 
-		public void setTitle(String title) {
+		public void setTitle(@Nullable String title) {
 			this.title = title;
 		}
 
-		public List<String> getCategories() {
+		public @Nullable List<String> getCategories() {
 			return this.categories;
 		}
 
-		public void setCategories(List<String> categories) {
+		public void setCategories(@Nullable List<String> categories) {
 			this.categories = categories;
 		}
 

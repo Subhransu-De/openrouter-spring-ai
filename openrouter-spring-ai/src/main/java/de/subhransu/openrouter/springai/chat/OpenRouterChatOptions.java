@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.chat;
 
+import org.jspecify.annotations.Nullable;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.support.OptionSnapshots;
 import java.util.ArrayList;
@@ -15,65 +16,65 @@ import org.springframework.util.Assert;
 
 public class OpenRouterChatOptions implements ToolCallingChatOptions, StructuredOutputChatOptions {
 
-	private String model;
+	private @Nullable String model;
 
-	private List<String> models;
+	private @Nullable List<String> models;
 
-	private OpenRouterRequestMode requestMode;
+	private @Nullable OpenRouterRequestMode requestMode;
 
-	private Double frequencyPenalty;
+	private @Nullable Double frequencyPenalty;
 
-	private Integer maxTokens;
+	private @Nullable Integer maxTokens;
 
-	private Integer maxCompletionTokens;
+	private @Nullable Integer maxCompletionTokens;
 
-	private Double presencePenalty;
+	private @Nullable Double presencePenalty;
 
-	private List<String> stopSequences;
+	private @Nullable List<String> stopSequences;
 
-	private Double temperature;
+	private @Nullable Double temperature;
 
-	private Integer topK;
+	private @Nullable Integer topK;
 
-	private Double topP;
+	private @Nullable Double topP;
 
-	private Double repetitionPenalty;
+	private @Nullable Double repetitionPenalty;
 
-	private Double minP;
+	private @Nullable Double minP;
 
-	private Double topA;
+	private @Nullable Double topA;
 
-	private Integer seed;
+	private @Nullable Integer seed;
 
-	private String user;
+	private @Nullable String user;
 
-	private OpenRouterResponseFormat responseFormat;
+	private @Nullable OpenRouterResponseFormat responseFormat;
 
-	private Boolean parallelToolCalls;
+	private @Nullable Boolean parallelToolCalls;
 
-	private Object toolChoice;
+	private @Nullable Object toolChoice;
 
-	private OpenRouterProviderPreferences provider;
+	private @Nullable OpenRouterProviderPreferences provider;
 
-	private OpenRouterReasoningOptions reasoning;
+	private @Nullable OpenRouterReasoningOptions reasoning;
 
-	private OpenRouterServiceTier serviceTier;
+	private @Nullable OpenRouterServiceTier serviceTier;
 
-	private Map<String, Object> metadata;
+	private @Nullable Map<String, @Nullable Object> metadata;
 
-	private String route;
+	private @Nullable String route;
 
-	private Boolean includeUsage;
+	private @Nullable Boolean includeUsage;
 
-	private List<String> modalities;
+	private @Nullable List<String> modalities;
 
-	private Map<String, Object> imageConfig;
+	private @Nullable Map<String, @Nullable Object> imageConfig;
 
-	private String outputSchema;
+	private @Nullable String outputSchema;
 
-	private List<ToolCallback> toolCallbacks = new ArrayList<>();
+	private @Nullable List<ToolCallback> toolCallbacks = new ArrayList<>();
 
-	private Map<String, Object> toolContext;
+	private @Nullable Map<String, Object> toolContext;
 
 	public static Builder builder() {
 		return new Builder();
@@ -84,7 +85,7 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 		return new Builder(this);
 	}
 
-	public static OpenRouterChatOptions fromOptions(ChatOptions options) {
+	public static @Nullable OpenRouterChatOptions fromOptions(@Nullable ChatOptions options) {
 		if (options == null) {
 			return null;
 		}
@@ -111,7 +112,7 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 		return builder.build();
 	}
 
-	public OpenRouterChatOptions merge(OpenRouterChatOptions runtimeOptions) {
+	public OpenRouterChatOptions merge(@Nullable OpenRouterChatOptions runtimeOptions) {
 		if (runtimeOptions == null) {
 			return this.copy();
 		}
@@ -153,7 +154,7 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 		return builder.build();
 	}
 
-	private static <T> T value(T runtime, T defaults) {
+	private static <T> @Nullable T value(@Nullable T runtime, @Nullable T defaults) {
 		return runtime != null ? runtime : defaults;
 	}
 
@@ -163,153 +164,153 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 	}
 
 	@Override
-	public String getModel() {
+	public @Nullable String getModel() {
 		return this.model;
 	}
 
-	public List<String> getModels() {
+	public @Nullable List<String> getModels() {
 		return readOnlyList(this.models);
 	}
 
-	public OpenRouterRequestMode getRequestMode() {
+	public @Nullable OpenRouterRequestMode getRequestMode() {
 		return this.requestMode;
 	}
 
 	@Override
-	public Double getFrequencyPenalty() {
+	public @Nullable Double getFrequencyPenalty() {
 		return this.frequencyPenalty;
 	}
 
 	@Override
-	public Integer getMaxTokens() {
+	public @Nullable Integer getMaxTokens() {
 		return this.maxTokens;
 	}
 
-	public Integer getMaxCompletionTokens() {
+	public @Nullable Integer getMaxCompletionTokens() {
 		return this.maxCompletionTokens;
 	}
 
 	@Override
-	public Double getPresencePenalty() {
+	public @Nullable Double getPresencePenalty() {
 		return this.presencePenalty;
 	}
 
 	@Override
-	public List<String> getStopSequences() {
+	public @Nullable List<String> getStopSequences() {
 		return readOnlyList(this.stopSequences);
 	}
 
 	@Override
-	public Double getTemperature() {
+	public @Nullable Double getTemperature() {
 		return this.temperature;
 	}
 
 	@Override
-	public Integer getTopK() {
+	public @Nullable Integer getTopK() {
 		return this.topK;
 	}
 
 	@Override
-	public Double getTopP() {
+	public @Nullable Double getTopP() {
 		return this.topP;
 	}
 
-	public Double getRepetitionPenalty() {
+	public @Nullable Double getRepetitionPenalty() {
 		return this.repetitionPenalty;
 	}
 
-	public Double getMinP() {
+	public @Nullable Double getMinP() {
 		return this.minP;
 	}
 
-	public Double getTopA() {
+	public @Nullable Double getTopA() {
 		return this.topA;
 	}
 
-	public Integer getSeed() {
+	public @Nullable Integer getSeed() {
 		return this.seed;
 	}
 
-	public String getUser() {
+	public @Nullable String getUser() {
 		return this.user;
 	}
 
-	public OpenRouterResponseFormat getResponseFormat() {
+	public @Nullable OpenRouterResponseFormat getResponseFormat() {
 		return this.responseFormat;
 	}
 
-	public Boolean getParallelToolCalls() {
+	public @Nullable Boolean getParallelToolCalls() {
 		return this.parallelToolCalls;
 	}
 
-	public Object getToolChoice() {
+	public @Nullable Object getToolChoice() {
 		return this.toolChoice;
 	}
 
-	public OpenRouterProviderPreferences getProvider() {
+	public @Nullable OpenRouterProviderPreferences getProvider() {
 		return this.provider;
 	}
 
-	public OpenRouterReasoningOptions getReasoning() {
+	public @Nullable OpenRouterReasoningOptions getReasoning() {
 		return this.reasoning;
 	}
 
-	public OpenRouterServiceTier getServiceTier() {
+	public @Nullable OpenRouterServiceTier getServiceTier() {
 		return this.serviceTier;
 	}
 
-	public Map<String, Object> getMetadata() {
+	public @Nullable Map<String, @Nullable Object> getMetadata() {
 		return readOnlyMap(this.metadata);
 	}
 
-	public String getRoute() {
+	public @Nullable String getRoute() {
 		return this.route;
 	}
 
-	public Boolean getIncludeUsage() {
+	public @Nullable Boolean getIncludeUsage() {
 		return this.includeUsage;
 	}
 
-	public List<String> getModalities() {
+	public @Nullable List<String> getModalities() {
 		return readOnlyList(this.modalities);
 	}
 
-	public Map<String, Object> getImageConfig() {
+	public @Nullable Map<String, @Nullable Object> getImageConfig() {
 		return readOnlyMap(this.imageConfig);
 	}
 
 	@Override
-	public String getOutputSchema() {
+	public @Nullable String getOutputSchema() {
 		return this.outputSchema;
 	}
 
-	public void setOutputSchema(String outputSchema) {
+	public void setOutputSchema(@Nullable String outputSchema) {
 		this.outputSchema = outputSchema;
 	}
 
 	@Override
-	public List<ToolCallback> getToolCallbacks() {
+	public @Nullable List<ToolCallback> getToolCallbacks() {
 		return readOnlyList(this.toolCallbacks);
 	}
 
-	public void setToolCallbacks(List<ToolCallback> toolCallbacks) {
+	public void setToolCallbacks(@Nullable List<ToolCallback> toolCallbacks) {
 		this.toolCallbacks = copyList(toolCallbacks);
 	}
 
 	@Override
-	public Map<String, Object> getToolContext() {
+	public @Nullable Map<String, Object> getToolContext() {
 		return readOnlyMap(this.toolContext);
 	}
 
-	public void setToolContext(Map<String, Object> toolContext) {
+	public void setToolContext(@Nullable Map<String, Object> toolContext) {
 		this.toolContext = copyMap(toolContext);
 	}
 
-	private static <T> List<T> copyList(List<T> values) {
+	private static <T> @Nullable List<T> copyList(@Nullable List<T> values) {
 		return values == null ? null : new ArrayList<>(values);
 	}
 
-	private static <T> List<T> combineLists(List<T> defaults, List<T> additions) {
+	private static <T> @Nullable List<T> combineLists(@Nullable List<T> defaults, @Nullable List<T> additions) {
 		if (defaults == null) {
 			return copyList(additions);
 		}
@@ -320,19 +321,23 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 		return combined;
 	}
 
-	private static <T> List<T> readOnlyList(List<T> values) {
+	private static <T> @Nullable List<T> readOnlyList(@Nullable List<T> values) {
 		return values == null ? null : Collections.unmodifiableList(new ArrayList<>(values));
 	}
 
-	private static Map<String, Object> copyMap(Map<String, Object> values) {
+	@org.jspecify.annotations.NullUnmarked
+	private static @Nullable Map<String, Object> copyMap(@Nullable Map<String, Object> values) {
 		return values == null ? null : new LinkedHashMap<>(OptionSnapshots.map(values));
 	}
 
-	private static Map<String, Object> readOnlyMap(Map<String, Object> values) {
+	@org.jspecify.annotations.NullUnmarked
+	private static @Nullable Map<String, Object> readOnlyMap(@Nullable Map<String, Object> values) {
 		return values == null ? null : Collections.unmodifiableMap(new LinkedHashMap<>(values));
 	}
 
-	private static Map<String, Object> mergeMaps(Map<String, Object> defaults, Map<String, Object> runtime) {
+	@org.jspecify.annotations.NullUnmarked
+	private static @Nullable Map<String, Object> mergeMaps(@Nullable Map<String, Object> defaults,
+			@Nullable Map<String, Object> runtime) {
 		if (defaults == null) {
 			return copyMap(runtime);
 		}
@@ -394,7 +399,7 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 		}
 
 		@Override
-		public Builder combineWith(ChatOptions.Builder<?> builder) {
+		public Builder combineWith(ChatOptions.@Nullable Builder<?> builder) {
 			if (builder == null) {
 				return this;
 			}
@@ -410,99 +415,99 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 		}
 
 		@Override
-		public Builder model(String model) {
+		public Builder model(@Nullable String model) {
 			this.options.model = model;
 			return this;
 		}
 
-		public Builder models(List<String> models) {
+		public Builder models(@Nullable List<String> models) {
 			this.options.models = copyList(models);
 			return this;
 		}
 
-		public Builder requestMode(OpenRouterRequestMode requestMode) {
+		public Builder requestMode(@Nullable OpenRouterRequestMode requestMode) {
 			this.options.requestMode = requestMode;
 			return this;
 		}
 
 		@Override
-		public Builder frequencyPenalty(Double frequencyPenalty) {
+		public Builder frequencyPenalty(@Nullable Double frequencyPenalty) {
 			this.options.frequencyPenalty = frequencyPenalty;
 			return this;
 		}
 
 		@Override
-		public Builder maxTokens(Integer maxTokens) {
+		public Builder maxTokens(@Nullable Integer maxTokens) {
 			this.options.maxTokens = maxTokens;
 			return this;
 		}
 
-		public Builder maxCompletionTokens(Integer maxCompletionTokens) {
+		public Builder maxCompletionTokens(@Nullable Integer maxCompletionTokens) {
 			this.options.maxCompletionTokens = maxCompletionTokens;
 			return this;
 		}
 
 		@Override
-		public Builder presencePenalty(Double presencePenalty) {
+		public Builder presencePenalty(@Nullable Double presencePenalty) {
 			this.options.presencePenalty = presencePenalty;
 			return this;
 		}
 
 		@Override
-		public Builder stopSequences(List<String> stopSequences) {
+		public Builder stopSequences(@Nullable List<String> stopSequences) {
 			this.options.stopSequences = copyList(stopSequences);
 			return this;
 		}
 
 		@Override
-		public Builder temperature(Double temperature) {
+		public Builder temperature(@Nullable Double temperature) {
 			this.options.temperature = temperature;
 			return this;
 		}
 
 		@Override
-		public Builder topK(Integer topK) {
+		public Builder topK(@Nullable Integer topK) {
 			this.options.topK = topK;
 			return this;
 		}
 
 		@Override
-		public Builder topP(Double topP) {
+		public Builder topP(@Nullable Double topP) {
 			this.options.topP = topP;
 			return this;
 		}
 
-		public Builder repetitionPenalty(Double repetitionPenalty) {
+		public Builder repetitionPenalty(@Nullable Double repetitionPenalty) {
 			this.options.repetitionPenalty = repetitionPenalty;
 			return this;
 		}
 
-		public Builder minP(Double minP) {
+		public Builder minP(@Nullable Double minP) {
 			this.options.minP = minP;
 			return this;
 		}
 
-		public Builder topA(Double topA) {
+		public Builder topA(@Nullable Double topA) {
 			this.options.topA = topA;
 			return this;
 		}
 
-		public Builder seed(Integer seed) {
+		public Builder seed(@Nullable Integer seed) {
 			this.options.seed = seed;
 			return this;
 		}
 
-		public Builder user(String user) {
+		public Builder user(@Nullable String user) {
 			this.options.user = user;
 			return this;
 		}
 
-		public Builder responseFormat(OpenRouterResponseFormat responseFormat) {
+		public Builder responseFormat(@Nullable OpenRouterResponseFormat responseFormat) {
 			this.options.responseFormat = responseFormat;
 			return this;
 		}
 
-		public Builder parallelToolCalls(Boolean parallelToolCalls) {
+		public Builder parallelToolCalls(@Nullable Boolean parallelToolCalls) {
 			this.options.parallelToolCalls = parallelToolCalls;
 			return this;
 		}
@@ -513,37 +518,37 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 		 * accepted. The mapper converts named choices to the selected mode and rejects
 		 * other shapes.
 		 */
-		public Builder toolChoice(Object toolChoice) {
+		public Builder toolChoice(@Nullable Object toolChoice) {
 			this.options.toolChoice = OptionSnapshots.value(toolChoice);
 			return this;
 		}
 
-		public Builder provider(OpenRouterProviderPreferences provider) {
+		public Builder provider(@Nullable OpenRouterProviderPreferences provider) {
 			this.options.provider = provider;
 			return this;
 		}
 
-		public Builder reasoning(OpenRouterReasoningOptions reasoning) {
+		public Builder reasoning(@Nullable OpenRouterReasoningOptions reasoning) {
 			this.options.reasoning = reasoning;
 			return this;
 		}
 
-		public Builder serviceTier(OpenRouterServiceTier serviceTier) {
+		public Builder serviceTier(@Nullable OpenRouterServiceTier serviceTier) {
 			this.options.serviceTier = serviceTier;
 			return this;
 		}
 
-		public Builder metadata(Map<String, Object> metadata) {
+		public Builder metadata(@Nullable Map<String, @Nullable Object> metadata) {
 			this.options.metadata = copyMap(metadata);
 			return this;
 		}
 
-		public Builder route(String route) {
+		public Builder route(@Nullable String route) {
 			this.options.route = route;
 			return this;
 		}
 
-		public Builder includeUsage(Boolean includeUsage) {
+		public Builder includeUsage(@Nullable Boolean includeUsage) {
 			this.options.includeUsage = includeUsage;
 			return this;
 		}
@@ -552,7 +557,7 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 		 * Output modalities to request, e.g. {@code ["image", "text"]} for
 		 * image-generating chat models.
 		 */
-		public Builder modalities(List<String> modalities) {
+		public Builder modalities(@Nullable List<String> modalities) {
 			this.options.modalities = copyList(modalities);
 			return this;
 		}
@@ -561,19 +566,19 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 		 * Model-specific image generation configuration forwarded as
 		 * {@code image_config}, e.g. {@code {"aspect_ratio": "16:9"}}.
 		 */
-		public Builder imageConfig(Map<String, Object> imageConfig) {
+		public Builder imageConfig(@Nullable Map<String, @Nullable Object> imageConfig) {
 			this.options.imageConfig = copyMap(imageConfig);
 			return this;
 		}
 
 		@Override
-		public Builder outputSchema(String outputSchema) {
+		public Builder outputSchema(@Nullable String outputSchema) {
 			this.options.outputSchema = outputSchema;
 			return this;
 		}
 
 		@Override
-		public Builder toolCallbacks(List<ToolCallback> toolCallbacks) {
+		public Builder toolCallbacks(@Nullable List<ToolCallback> toolCallbacks) {
 			this.options.toolCallbacks = copyList(toolCallbacks);
 			return this;
 		}
@@ -586,7 +591,7 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 		}
 
 		@Override
-		public Builder toolContext(Map<String, Object> toolContext) {
+		public Builder toolContext(@Nullable Map<String, Object> toolContext) {
 			this.options.toolContext = toolContext == null ? null : mergeMaps(this.options.toolContext, toolContext);
 			return this;
 		}

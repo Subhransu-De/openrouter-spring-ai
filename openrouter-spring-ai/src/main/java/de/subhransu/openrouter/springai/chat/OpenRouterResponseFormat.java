@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.chat;
 
+import org.jspecify.annotations.Nullable;
 import org.springframework.util.Assert;
 
 /**
@@ -15,7 +16,8 @@ import org.springframework.util.Assert;
  * @param schema the JSON schema document for {@link Type#JSON_SCHEMA}
  * @author Subhransu De
  */
-public record OpenRouterResponseFormat(Type type, String name, Boolean strict, String schema) {
+public record OpenRouterResponseFormat(Type type, @Nullable String name, @Nullable Boolean strict,
+		@Nullable String schema) {
 
 	public OpenRouterResponseFormat {
 		Assert.notNull(type, "type must not be null");
@@ -34,7 +36,7 @@ public record OpenRouterResponseFormat(Type type, String name, Boolean strict, S
 		return new OpenRouterResponseFormat(Type.JSON_SCHEMA, null, null, schema);
 	}
 
-	public static OpenRouterResponseFormat jsonSchema(String name, Boolean strict, String schema) {
+	public static OpenRouterResponseFormat jsonSchema(@Nullable String name, @Nullable Boolean strict, String schema) {
 		return new OpenRouterResponseFormat(Type.JSON_SCHEMA, name, strict, schema);
 	}
 

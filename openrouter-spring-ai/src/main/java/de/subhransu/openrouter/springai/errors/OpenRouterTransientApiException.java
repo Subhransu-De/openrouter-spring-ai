@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.errors;
 
+import org.jspecify.annotations.Nullable;
 import org.springframework.ai.retry.TransientAiException;
 import org.springframework.http.HttpStatusCode;
 
@@ -11,18 +12,19 @@ import org.springframework.http.HttpStatusCode;
  */
 public final class OpenRouterTransientApiException extends TransientAiException implements OpenRouterHttpException {
 
-	private final HttpStatusCode statusCode;
+	private final @Nullable HttpStatusCode statusCode;
 
-	private final String responseBody;
+	private final @Nullable String responseBody;
 
-	private final OpenRouterErrorDetails errorDetails;
+	private final @Nullable OpenRouterErrorDetails errorDetails;
 
-	private final OpenRouterRetryAfter retryAfter;
+	private final @Nullable OpenRouterRetryAfter retryAfter;
 
-	private final String endpoint;
+	private final @Nullable String endpoint;
 
-	public OpenRouterTransientApiException(String message, HttpStatusCode statusCode, String responseBody,
-			OpenRouterErrorDetails errorDetails, OpenRouterRetryAfter retryAfter, String endpoint) {
+	public OpenRouterTransientApiException(String message, @Nullable HttpStatusCode statusCode,
+			@Nullable String responseBody, @Nullable OpenRouterErrorDetails errorDetails,
+			@Nullable OpenRouterRetryAfter retryAfter, @Nullable String endpoint) {
 		super(message);
 		this.statusCode = statusCode;
 		this.responseBody = responseBody;
@@ -32,27 +34,27 @@ public final class OpenRouterTransientApiException extends TransientAiException 
 	}
 
 	@Override
-	public HttpStatusCode getStatusCode() {
+	public @Nullable HttpStatusCode getStatusCode() {
 		return this.statusCode;
 	}
 
 	@Override
-	public String getResponseBody() {
+	public @Nullable String getResponseBody() {
 		return this.responseBody;
 	}
 
 	@Override
-	public OpenRouterErrorDetails getErrorDetails() {
+	public @Nullable OpenRouterErrorDetails getErrorDetails() {
 		return this.errorDetails;
 	}
 
 	@Override
-	public OpenRouterRetryAfter getRetryAfter() {
+	public @Nullable OpenRouterRetryAfter getRetryAfter() {
 		return this.retryAfter;
 	}
 
 	@Override
-	public String getEndpoint() {
+	public @Nullable String getEndpoint() {
 		return this.endpoint;
 	}
 
