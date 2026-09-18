@@ -12,6 +12,8 @@ import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -151,8 +153,9 @@ class ReasoningRoundTripTests {
 		}
 	}
 
-	@Test
-	void responsesReplayPreservesInterleavedOutputOrder() {
+	@ParameterizedTest
+	@ValueSource(booleans = { false, true })
+	void responsesReplayPreservesInterleavedOutputOrder(boolean textDelta) {
 		String output = """
 				[{"type":"reasoning","id":"r1","encrypted_content":"synthetic-first"},
 				 {"type":"message","id":"m1","role":"assistant","content":[{"type":"output_text","text":"checking","annotations":[]}]},
@@ -165,6 +168,10 @@ class ReasoningRoundTripTests {
 		assertOrderedReplay(sync, output);
 		Flux<ResponsesStreamEvent> events = Flux.fromIterable(wire.output())
 			.map(item -> new ResponsesStreamEvent("response.output_item.done", null, item, null, null));
+		if (textDelta) {
+			events = events
+				.startWith(new ResponsesStreamEvent("response.output_text.delta", "checking", null, null, null));
+		}
 		for (boolean terminal : List.of(false, true)) {
 			Flux<ResponsesStreamEvent> stream = terminal
 					? events.concatWithValues(new ResponsesStreamEvent("response.completed", null, null, wire, null))
@@ -173,6 +180,7 @@ class ReasoningRoundTripTests {
 			AtomicReference<ChatResponse> result = new AtomicReference<>();
 			new MessageAggregator().aggregate(new OpenRouterResponsesStreamingResponseMapper().map(stream), result::set)
 				.blockLast();
+			assertThat(result.get().getResult().getOutput().getText()).isEqualTo("checking");
 			assertOrderedReplay(result.get().getResult().getOutput(), output);
 		}
 	}

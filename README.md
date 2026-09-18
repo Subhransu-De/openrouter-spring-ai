@@ -297,6 +297,14 @@ The accompanying `openrouter.responses.output_items` snapshot preserves their po
 relative to text and function calls during replay.
 Request mappers replay this state when the assistant message is included in conversation
 history. Keep the original assistant message and its metadata when adding tool results.
+Responses rejects history before sending a request if the assistant text, tool calls,
+or `openrouter.refusal` differ from the saved output snapshot, or reasoning metadata has no
+output snapshot. Custom history storage must retain both metadata fields. Editing or removing
+content while keeping the reasoning metadata is rejected. To redact history, start a new
+conversation with the edited messages and without the old reasoning state. Do not carry
+encrypted reasoning or output snapshots into that new conversation, since they may retain
+the original content. The assistant media history restriction also applies to generated images
+retained in output snapshots, even if the message's media list was cleared.
 
 Streaming assembles consecutive text and summary detail fragments, while retaining
 encrypted and unknown detail types as opaque items. Assistant metadata contains
@@ -322,6 +330,7 @@ metadata retains the unnormalized reason as `openrouter.native_finish_reason`, t
 status as `openrouter.responses.status`, and the typed incomplete details as
 `openrouter.responses.incomplete_details`. Responses text preserves whitespace-only
 parts and messages; streaming text remains incremental without repeating terminal text.
+If a completed stream delivers no text deltas, its saved output snapshot supplies the text.
 
 Responses streaming requires a response snapshot before releasing buffered tool calls
 and rejects malformed response payloads. Optional fields may be absent and unknown fields
