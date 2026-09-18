@@ -45,6 +45,7 @@ If a mode does not support an option, preserve or add explicit validation rather
 - Keep Maven and Gradle module dependencies, scopes, and packaging aligned when changing either.
 - Preserve the configured Java release baseline (currently 17); a newer local JDK is not permission to use newer language or runtime APIs.
 - Use installed `mvn` and `gradle`; this checkout has no Maven or Gradle wrapper. Check the CI workflow for the expected Gradle version and JDK matrix.
+- `.mvn/maven.config` applies resolver retry flags to every `mvn` invocation, including release rehearsals that resolve into a fresh local repository. Maven Central returns `403` from its CDN when the shared GitHub runner egress pool is throttled, and the resolver retries only `429,503` by default, so a throttled response fails the build on first contact. Both the `aether.connector.*` (Maven 3.9) and `aether.transport.*` (Maven 4) spellings are listed; the legacy `maven.wagon.http.retryHandler.*` properties are ignored on 3.9.x. Maven 3 passes every line of that file through as a CLI argument and has no comment syntax, so this is where the rationale lives.
 - Keep the three published library artifacts thin. The samples application is the executable artifact.
 - Use the existing Jackson 3 databind stack. Existing `com.fasterxml.jackson.annotation` imports are valid; do not mechanically rewrite those annotations.
 
