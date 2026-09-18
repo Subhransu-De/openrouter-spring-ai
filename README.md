@@ -303,7 +303,8 @@ output snapshot. Custom history storage must retain both metadata fields. Editin
 content while keeping the reasoning metadata is rejected. To redact history, start a new
 conversation with the edited messages and without the old reasoning state. Do not carry
 encrypted reasoning or output snapshots into that new conversation, since they may retain
-the original content.
+the original content. The assistant media history restriction also applies to generated images
+retained in output snapshots, even if the message's media list was cleared.
 
 Streaming assembles consecutive text and summary detail fragments, while retaining
 encrypted and unknown detail types as opaque items. Assistant metadata contains

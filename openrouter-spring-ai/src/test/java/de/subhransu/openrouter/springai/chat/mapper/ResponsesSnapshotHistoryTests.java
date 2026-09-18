@@ -40,23 +40,7 @@ class ResponsesSnapshotHistoryTests {
 				  {"type":"function_call","call_id":"call1","name":"lookup","arguments":"{}"},
 				  {"type":"reasoning","id":"r2","encrypted_content":"synthetic-second"}]}
 				""", ResponsesResult.class);
-		AssistantMessage original;
-		if (streamed) {
-			AtomicReference<ChatResponse> aggregated = new AtomicReference<>();
-			Flux<ResponsesStreamEvent> events = Flux.range(0, wire.output().size())
-				.map(index -> new ResponsesStreamEvent("response.output_item.done", null, wire.output().get(index),
-						null, null, null, null, null, null, null, index, null))
-				.startWith(
-						new ResponsesStreamEvent("response.output_text.delta", "SYNTHETIC_OLD_TEXT", null, null, null))
-				.concatWithValues(new ResponsesStreamEvent("response.completed", null, null, wire, null));
-			new MessageAggregator()
-				.aggregate(new OpenRouterResponsesStreamingResponseMapper().map(events), aggregated::set)
-				.blockLast();
-			original = aggregated.get().getResult().getOutput();
-		}
-		else {
-			original = new OpenRouterResponsesResponseMapper().map(wire).getResult().getOutput();
-		}
+		AssistantMessage original = history(wire, streamed);
 		OpenRouterChatOptions options = OpenRouterChatOptions.builder()
 			.model("synthetic")
 			.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
@@ -129,6 +113,57 @@ class ResponsesSnapshotHistoryTests {
 				.hasMessageContaining("cannot replay reasoning without an output snapshot");
 		}
 		verifyNoInteractions(api);
+	}
+
+	@ParameterizedTest
+	@ValueSource(booleans = { false, true })
+	void rejectsRemovedGeneratedMediaInSnapshotsBeforeDispatch(boolean streamed) {
+		ResponsesResult wire = this.mapper.readValue("""
+				{"status":"completed","output":[
+				  {"type":"reasoning","id":"r1","encrypted_content":"synthetic-secret"},
+				  {"type":"image_generation_call","result":"AQID","output_format":"png"}]}
+				""", ResponsesResult.class);
+		AssistantMessage original = history(wire, streamed);
+		assertThat(this.mapper.valueToTree(original.getMetadata().get(ReasoningMetadata.RESPONSES_OUTPUT_ITEMS))
+			.at("/1/result")
+			.asString()).isEqualTo("AQID");
+		AssistantMessage redacted = AssistantMessage.builder()
+			.content(original.getText())
+			.properties(original.getMetadata())
+			.build();
+		OpenRouterApi api = mock(OpenRouterApi.class);
+		OpenRouterChatModel model = OpenRouterChatModel.builder().openRouterApi(api).build();
+		Prompt prompt = new Prompt(List.of(redacted),
+				OpenRouterChatOptions.builder()
+					.model("synthetic")
+					.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
+					.build());
+		assertThatThrownBy(() -> model.call(prompt)).isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("assistant media history");
+		assertThatThrownBy(() -> model.stream(prompt).blockLast()).isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("assistant media history");
+		verifyNoInteractions(api);
+	}
+
+	private AssistantMessage history(ResponsesResult wire, boolean streamed) {
+		AssistantMessage original;
+		if (streamed) {
+			AtomicReference<ChatResponse> aggregated = new AtomicReference<>();
+			Flux<ResponsesStreamEvent> events = Flux.range(0, wire.output().size())
+				.map(index -> new ResponsesStreamEvent("response.output_item.done", null, wire.output().get(index),
+						null, null, null, null, null, null, null, index, null))
+				.startWith(new ResponsesStreamEvent("response.output_text.delta",
+						OpenRouterResponsesResponseMapper.text(wire.output()), null, null, null))
+				.concatWithValues(new ResponsesStreamEvent("response.completed", null, null, wire, null));
+			new MessageAggregator()
+				.aggregate(new OpenRouterResponsesStreamingResponseMapper().map(events), aggregated::set)
+				.blockLast();
+			original = aggregated.get().getResult().getOutput();
+		}
+		else {
+			original = new OpenRouterResponsesResponseMapper().map(wire).getResult().getOutput();
+		}
+		return original;
 	}
 
 }

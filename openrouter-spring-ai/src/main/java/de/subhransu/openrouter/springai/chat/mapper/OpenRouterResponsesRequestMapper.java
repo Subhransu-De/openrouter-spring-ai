@@ -174,6 +174,11 @@ public final class OpenRouterResponsesRequestMapper {
 		// Validate the serialized shape, including raw items and deserialized metadata.
 		List<ResponsesOutputItem> snapshot = Arrays
 			.asList(this.objectMapper.convertValue(outputItems, ResponsesOutputItem[].class));
+		if (!GeneratedImageMapper.responsesMedia(snapshot).isEmpty()) {
+			throw new IllegalArgumentException(
+					"OPENAI_RESPONSES does not support assistant media history in output snapshots; "
+							+ "start a new conversation without its reasoning state");
+		}
 		List<AssistantMessage.ToolCall> calls = message instanceof AssistantMessage assistant ? assistant.getToolCalls()
 				: List.of();
 		if (!Objects.equals(OpenRouterResponsesResponseMapper.text(snapshot),
