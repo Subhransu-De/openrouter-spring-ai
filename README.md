@@ -436,6 +436,13 @@ the non-chat surfaces: an embeddings triage matcher, a digital inspection bay th
 bundled dashboard photo (image input, both request modes), and a paint bay that generates
 images through the Image API (sync and streaming) and chat-completions modalities.
 
+The modality bays correlate completed chat, embedding, and image observations with the
+scene operation. Evidence includes timing, errors, modality-specific counts and sizes,
+and available usage and cost, with the same sanitization applied to telemetry snapshots
+and persisted reports. Image streams publish observation evidence after completion,
+error, or cancellation. Calls and stream subscriptions must start inside the sample's
+operation scope. These checks use synthetic model responses in the sample test suite.
+
 It doubles as the library's live test harness. Every run asserts its own structural
 outcome (service record written, every required tool actually invoked, usage metadata present,
 non-empty final answer, and streaming signals when requested) and fails loudly otherwise — these
