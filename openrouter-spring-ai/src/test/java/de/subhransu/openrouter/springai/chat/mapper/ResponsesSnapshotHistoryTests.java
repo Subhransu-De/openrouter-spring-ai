@@ -108,6 +108,26 @@ class ResponsesSnapshotHistoryTests {
 			assertThatThrownBy(() -> model.stream(prompt).blockLast()).isInstanceOf(IllegalArgumentException.class)
 				.hasMessageContaining("stale assistant output snapshot");
 		}
+		for (String snapshot : List.of("missing", "invalid", "empty")) {
+			var metadata = new LinkedHashMap<>(original.getMetadata());
+			if ("missing".equals(snapshot)) {
+				metadata.remove(ReasoningMetadata.RESPONSES_OUTPUT_ITEMS);
+			}
+			else {
+				metadata.put(ReasoningMetadata.RESPONSES_OUTPUT_ITEMS,
+						"empty".equals(snapshot) ? List.of() : "invalid snapshot");
+			}
+			AssistantMessage incomplete = AssistantMessage.builder()
+				.content(original.getText())
+				.properties(metadata)
+				.toolCalls(original.getToolCalls())
+				.build();
+			Prompt prompt = new Prompt(List.of(incomplete), options);
+			assertThatThrownBy(() -> model.call(prompt)).isInstanceOf(IllegalArgumentException.class)
+				.hasMessageContaining("cannot replay reasoning without an output snapshot");
+			assertThatThrownBy(() -> model.stream(prompt).blockLast()).isInstanceOf(IllegalArgumentException.class)
+				.hasMessageContaining("cannot replay reasoning without an output snapshot");
+		}
 		verifyNoInteractions(api);
 	}
 

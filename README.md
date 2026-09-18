@@ -298,8 +298,9 @@ relative to text and function calls during replay.
 Request mappers replay this state when the assistant message is included in conversation
 history. Keep the original assistant message and its metadata when adding tool results.
 Responses rejects history before sending a request if the assistant text, tool calls,
-or `openrouter.refusal` differ from the saved output snapshot. This includes editing or
-removing content while keeping the reasoning metadata. To redact history, start a new
+or `openrouter.refusal` differ from the saved output snapshot, or reasoning metadata has no
+output snapshot. Custom history storage must retain both metadata fields. Editing or removing
+content while keeping the reasoning metadata is rejected. To redact history, start a new
 conversation with the edited messages and without the old reasoning state. Do not carry
 encrypted reasoning or output snapshots into that new conversation, since they may retain
 the original content.

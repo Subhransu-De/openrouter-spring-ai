@@ -139,13 +139,15 @@ public final class OpenRouterResponsesRequestMapper {
 			Object reasoning = message.getMetadata().get(ReasoningMetadata.RESPONSES_ITEMS);
 			if (reasoning instanceof List<?> reasoningItems && !reasoningItems.isEmpty()) {
 				Object output = message.getMetadata().get(ReasoningMetadata.RESPONSES_OUTPUT_ITEMS);
-				if (output instanceof List<?> outputItems) {
+				if (output instanceof List<?> outputItems && !outputItems.isEmpty()) {
 					validateSnapshot(message, outputItems);
 					// Reasoning must retain its position relative to messages and calls.
 					// Rebuilding these separately changes the provider's continuation.
 					return new ArrayList<>(outputItems);
 				}
-				items.addAll(reasoningItems);
+				throw new IllegalArgumentException(
+						"OPENAI_RESPONSES cannot replay reasoning without an output snapshot; "
+								+ "retain the original assistant message or start a new conversation without its reasoning state");
 			}
 			List<ResponsesContent> content = new ArrayList<>();
 			if (StringUtils.hasLength(message.getText())) {
