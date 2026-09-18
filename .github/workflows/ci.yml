@@ -98,7 +98,14 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ matrix.java-version }}
-          cache: maven
+
+      # A run-scoped key always misses, so every run saves back whatever it had to download.
+      - name: Cache Maven repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: maven-package-java${{ matrix.java-version }}-${{ github.run_id }}
+          restore-keys: maven-package-java${{ matrix.java-version }}-
 
       - name: Maven build
         run: mvn -B -DskipTests package
@@ -157,7 +164,14 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ matrix.java-version }}
-          cache: maven
+
+      # Keyed apart from the package job: verify resolves a wider plugin set than package.
+      - name: Cache Maven repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: maven-verify-java${{ matrix.java-version }}-${{ github.run_id }}
+          restore-keys: maven-verify-java${{ matrix.java-version }}-
 
       - name: Maven test
         run: mvn -B ${{ matrix.java-version == '25' && '-Pmodernizer-java25' || '' }} verify
