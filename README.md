@@ -23,15 +23,15 @@ applications should opt into it explicitly.
 The supported consumer API consists of the following types under
 `de.subhransu.openrouter.springai`. Existing public visibility is unchanged.
 
-| API | Supported use |
-| --- | --- |
-| `chat`, `embedding`, `image` | Models and their builders, options and option builders, routing/reasoning/format records, usage and generated-image metadata. Use the Spring AI model interfaces for calls and streams. |
-| `OpenRouterIdentifiers` | Provider identifiers used to select this integration. |
-| `api.OpenRouterApi`, `api.OpenRouterRequestMode` | Direct HTTP calls and client construction, including `RestClient.Builder`, `WebClient.Builder`, Jackson, attribution, timeouts, and response limits. |
-| `api.dto` | Low-level request and response records used by `OpenRouterApi`. Consumers may construct requests and inspect responses; wire fields can be absent. Responses mode remains experimental. |
-| `chat.OpenRouterToolFailurePolicy`, `chat.OpenRouterToolExecutionExceptionProcessor` | Custom tool-manager failure policy and failure rendering. The policy accessor must return the actual, non-null processor. Tool execution belongs to Spring AI's advisor. |
-| `errors`, `chat.errors`, `api.errors.OpenRouterApiException` | Exception types, diagnostic records, category enums, and inspection interfaces. Missing diagnostics are nullable. |
-| `autoconfigure.*Properties` and `spring.ai.openrouter.*` | Boot property binding. Custom model, API, and tool beans use the existing auto-configuration backoff rules. |
+| API                                                                                  | Supported use                                                                                                                                                                           |
+| ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `chat`, `embedding`, `image`                                                         | Models and their builders, options and option builders, routing/reasoning/format records, usage and generated-image metadata. Use the Spring AI model interfaces for calls and streams. |
+| `OpenRouterIdentifiers`                                                              | Provider identifiers used to select this integration.                                                                                                                                   |
+| `api.OpenRouterApi`, `api.OpenRouterRequestMode`                                     | Direct HTTP calls and client construction, including `RestClient.Builder`, `WebClient.Builder`, Jackson, attribution, timeouts, and response limits.                                    |
+| `api.dto`                                                                            | Low-level request and response records used by `OpenRouterApi`. Consumers may construct requests and inspect responses; wire fields can be absent. Responses mode remains experimental. |
+| `chat.OpenRouterToolFailurePolicy`, `chat.OpenRouterToolExecutionExceptionProcessor` | Custom tool-manager failure policy and failure rendering. The policy accessor must return the actual, non-null processor. Tool execution belongs to Spring AI's advisor.                |
+| `errors`, `chat.errors`, `api.errors.OpenRouterApiException`                         | Exception types, diagnostic records, category enums, and inspection interfaces. Missing diagnostics are nullable.                                                                       |
+| `autoconfigure.*Properties` and `spring.ai.openrouter.*`                             | Boot property binding. Custom model, API, and tool beans use the existing auto-configuration backoff rules.                                                                             |
 
 Mapper packages, `internal`, `support.OptionSnapshots`, error factories/classifiers,
 `OpenRouterExceptionMessage`, `OpenRouterErrorResponse`, deserializers, runtime hints, and auto-configuration
