@@ -86,7 +86,7 @@ public class OpenRouterChatProperties {
 
 	private @Nullable OpenRouterReasoningOptions reasoning;
 
-	private @Nullable ToolCallAggregation toolCallAggregation = new ToolCallAggregation();
+	private ToolCallAggregation toolCallAggregation = new ToolCallAggregation();
 
 	/**
 	 * Allow a custom tool calling manager whose provider-visible failure policy cannot be
@@ -360,27 +360,27 @@ public class OpenRouterChatProperties {
 		this.reasoning = reasoning;
 	}
 
-	public @Nullable ToolCallAggregation getToolCallAggregation() {
+	public ToolCallAggregation getToolCallAggregation() {
 		return this.toolCallAggregation;
 	}
 
-	public void setToolCallAggregation(@Nullable ToolCallAggregation toolCallAggregation) {
+	public void setToolCallAggregation(ToolCallAggregation toolCallAggregation) {
 		this.toolCallAggregation = toolCallAggregation;
 	}
 
 	public static class ToolCallAggregation {
 
-		private @Nullable DataSize maxSize = DataSize.ofMegabytes(1);
+		private DataSize maxSize = DataSize.ofMegabytes(1);
 
 		private int maxChunks = 1024;
 
-		private @Nullable Duration maxDuration = Duration.ofMinutes(2);
+		private Duration maxDuration = Duration.ofMinutes(2);
 
-		public @Nullable DataSize getMaxSize() {
+		public DataSize getMaxSize() {
 			return this.maxSize;
 		}
 
-		public void setMaxSize(@Nullable DataSize maxSize) {
+		public void setMaxSize(DataSize maxSize) {
 			this.maxSize = maxSize;
 		}
 
@@ -392,11 +392,11 @@ public class OpenRouterChatProperties {
 			this.maxChunks = maxChunks;
 		}
 
-		public @Nullable Duration getMaxDuration() {
+		public Duration getMaxDuration() {
 			return this.maxDuration;
 		}
 
-		public void setMaxDuration(@Nullable Duration maxDuration) {
+		public void setMaxDuration(Duration maxDuration) {
 			this.maxDuration = maxDuration;
 		}
 
