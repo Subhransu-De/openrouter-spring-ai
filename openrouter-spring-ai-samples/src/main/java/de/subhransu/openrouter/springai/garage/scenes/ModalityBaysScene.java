@@ -108,6 +108,14 @@ public final class ModalityBaysScene extends GarageSceneSupport {
       }
     }
 
+    List<Map<String, Object>> observations = List.of();
+    try {
+      if (!probesByFeature.isEmpty()) {
+        observations = context.telemetry().awaitObservationsFor(operationId, Duration.ofSeconds(1));
+      }
+    } catch (IllegalStateException failure) {
+      failures.add(failure.getMessage());
+    }
     if (!failures.isEmpty()) {
       IllegalStateException failure =
           new IllegalStateException(
@@ -117,8 +125,6 @@ public final class ModalityBaysScene extends GarageSceneSupport {
       throw failure;
     }
 
-    List<Map<String, Object>> observations = probesByFeature.isEmpty() ? List.of()
-        : context.telemetry().awaitObservationsFor(operationId, Duration.ofSeconds(1));
     Map<String, Object> details = new LinkedHashMap<>();
     details.put("probes", probes);
     details.put("observations", observations);
