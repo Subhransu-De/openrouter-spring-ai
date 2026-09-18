@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.autoconfigure;
 
+import org.jspecify.annotations.Nullable;
 import de.subhransu.openrouter.springai.chat.OpenRouterToolExecutionExceptionProcessor;
 import de.subhransu.openrouter.springai.chat.OpenRouterToolFailurePolicy;
 import java.lang.ref.Reference;
@@ -149,7 +150,7 @@ final class OpenRouterToolCallingManagerGuard implements BeanPostProcessor, Smar
 		}
 
 		@Override
-		public boolean equals(Object other) {
+		public boolean equals(@Nullable Object other) {
 			if (this == other) {
 				return true;
 			}

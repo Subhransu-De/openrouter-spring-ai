@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.autoconfigure;
 
+import org.jspecify.annotations.Nullable;
 import de.subhransu.openrouter.springai.image.OpenRouterImageOptions;
 import java.util.List;
 import java.util.Map;
@@ -10,31 +11,31 @@ public class OpenRouterImageProperties {
 
 	public static final String CONFIG_PREFIX = "spring.ai.openrouter.image";
 
-	private String model;
+	private @Nullable String model;
 
-	private Integer n;
+	private @Nullable Integer n;
 
-	private Integer width;
+	private @Nullable Integer width;
 
-	private Integer height;
+	private @Nullable Integer height;
 
-	private String resolution;
+	private @Nullable String resolution;
 
-	private String aspectRatio;
+	private @Nullable String aspectRatio;
 
-	private String quality;
+	private @Nullable String quality;
 
-	private String outputFormat;
+	private @Nullable String outputFormat;
 
-	private String background;
+	private @Nullable String background;
 
-	private Integer outputCompression;
+	private @Nullable Integer outputCompression;
 
-	private Integer seed;
+	private @Nullable Integer seed;
 
-	private List<String> inputReferences;
+	private @Nullable List<String> inputReferences;
 
-	private Map<String, Object> providerOptions;
+	private @Nullable Map<String, @Nullable Object> providerOptions;
 
 	public OpenRouterImageOptions toOptions() {
 		return OpenRouterImageOptions.builder()
@@ -54,107 +55,107 @@ public class OpenRouterImageProperties {
 			.build();
 	}
 
-	public String getModel() {
+	public @Nullable String getModel() {
 		return this.model;
 	}
 
-	public void setModel(String model) {
+	public void setModel(@Nullable String model) {
 		this.model = model;
 	}
 
-	public Integer getN() {
+	public @Nullable Integer getN() {
 		return this.n;
 	}
 
-	public void setN(Integer n) {
+	public void setN(@Nullable Integer n) {
 		this.n = n;
 	}
 
-	public Integer getWidth() {
+	public @Nullable Integer getWidth() {
 		return this.width;
 	}
 
-	public void setWidth(Integer width) {
+	public void setWidth(@Nullable Integer width) {
 		this.width = width;
 	}
 
-	public Integer getHeight() {
+	public @Nullable Integer getHeight() {
 		return this.height;
 	}
 
-	public void setHeight(Integer height) {
+	public void setHeight(@Nullable Integer height) {
 		this.height = height;
 	}
 
-	public String getResolution() {
+	public @Nullable String getResolution() {
 		return this.resolution;
 	}
 
-	public void setResolution(String resolution) {
+	public void setResolution(@Nullable String resolution) {
 		this.resolution = resolution;
 	}
 
-	public String getAspectRatio() {
+	public @Nullable String getAspectRatio() {
 		return this.aspectRatio;
 	}
 
-	public void setAspectRatio(String aspectRatio) {
+	public void setAspectRatio(@Nullable String aspectRatio) {
 		this.aspectRatio = aspectRatio;
 	}
 
-	public String getQuality() {
+	public @Nullable String getQuality() {
 		return this.quality;
 	}
 
-	public void setQuality(String quality) {
+	public void setQuality(@Nullable String quality) {
 		this.quality = quality;
 	}
 
-	public String getOutputFormat() {
+	public @Nullable String getOutputFormat() {
 		return this.outputFormat;
 	}
 
-	public void setOutputFormat(String outputFormat) {
+	public void setOutputFormat(@Nullable String outputFormat) {
 		this.outputFormat = outputFormat;
 	}
 
-	public String getBackground() {
+	public @Nullable String getBackground() {
 		return this.background;
 	}
 
-	public void setBackground(String background) {
+	public void setBackground(@Nullable String background) {
 		this.background = background;
 	}
 
-	public Integer getOutputCompression() {
+	public @Nullable Integer getOutputCompression() {
 		return this.outputCompression;
 	}
 
-	public void setOutputCompression(Integer outputCompression) {
+	public void setOutputCompression(@Nullable Integer outputCompression) {
 		this.outputCompression = outputCompression;
 	}
 
-	public Integer getSeed() {
+	public @Nullable Integer getSeed() {
 		return this.seed;
 	}
 
-	public void setSeed(Integer seed) {
+	public void setSeed(@Nullable Integer seed) {
 		this.seed = seed;
 	}
 
-	public List<String> getInputReferences() {
+	public @Nullable List<String> getInputReferences() {
 		return this.inputReferences;
 	}
 
-	public void setInputReferences(List<String> inputReferences) {
+	public void setInputReferences(@Nullable List<String> inputReferences) {
 		this.inputReferences = inputReferences;
 	}
 
-	public Map<String, Object> getProviderOptions() {
+	public @Nullable Map<String, @Nullable Object> getProviderOptions() {
 		return this.providerOptions;
 	}
 
-	public void setProviderOptions(Map<String, Object> providerOptions) {
+	public void setProviderOptions(@Nullable Map<String, @Nullable Object> providerOptions) {
 		this.providerOptions = providerOptions;
 	}
 

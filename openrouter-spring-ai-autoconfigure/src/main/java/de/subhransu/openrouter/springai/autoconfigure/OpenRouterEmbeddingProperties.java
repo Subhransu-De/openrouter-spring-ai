@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.autoconfigure;
 
+import org.jspecify.annotations.Nullable;
 import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
 import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingOptions;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -9,15 +10,15 @@ public class OpenRouterEmbeddingProperties {
 
 	public static final String CONFIG_PREFIX = "spring.ai.openrouter.embedding";
 
-	private String model;
+	private @Nullable String model;
 
-	private Integer dimensions;
+	private @Nullable Integer dimensions;
 
-	private String encodingFormat;
+	private @Nullable String encodingFormat;
 
-	private String user;
+	private @Nullable String user;
 
-	private OpenRouterProviderPreferences provider;
+	private @Nullable OpenRouterProviderPreferences provider;
 
 	public OpenRouterEmbeddingOptions toOptions() {
 		return OpenRouterEmbeddingOptions.builder()
@@ -29,43 +30,43 @@ public class OpenRouterEmbeddingProperties {
 			.build();
 	}
 
-	public String getModel() {
+	public @Nullable String getModel() {
 		return this.model;
 	}
 
-	public void setModel(String model) {
+	public void setModel(@Nullable String model) {
 		this.model = model;
 	}
 
-	public Integer getDimensions() {
+	public @Nullable Integer getDimensions() {
 		return this.dimensions;
 	}
 
-	public void setDimensions(Integer dimensions) {
+	public void setDimensions(@Nullable Integer dimensions) {
 		this.dimensions = dimensions;
 	}
 
-	public String getEncodingFormat() {
+	public @Nullable String getEncodingFormat() {
 		return this.encodingFormat;
 	}
 
-	public void setEncodingFormat(String encodingFormat) {
+	public void setEncodingFormat(@Nullable String encodingFormat) {
 		this.encodingFormat = encodingFormat;
 	}
 
-	public String getUser() {
+	public @Nullable String getUser() {
 		return this.user;
 	}
 
-	public void setUser(String user) {
+	public void setUser(@Nullable String user) {
 		this.user = user;
 	}
 
-	public OpenRouterProviderPreferences getProvider() {
+	public @Nullable OpenRouterProviderPreferences getProvider() {
 		return this.provider;
 	}
 
-	public void setProvider(OpenRouterProviderPreferences provider) {
+	public void setProvider(@Nullable OpenRouterProviderPreferences provider) {
 		this.provider = provider;
 	}
 

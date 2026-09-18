@@ -28,6 +28,10 @@ class OpenRouterSerializationRuntimeHintsTests {
 		assertThat(resources).isNotEmpty();
 		var reader = new SimpleMetadataReaderFactory();
 		for (var resource : resources) {
+			// Package annotations are not wire types and need no serialization hints.
+			if ("package-info.class".equals(resource.getFilename())) {
+				continue;
+			}
 			Class<?> type = Class.forName(reader.getMetadataReader(resource).getClassMetadata().getClassName());
 			assertThat(hints.reflection().getTypeHint(type)).as(type.getName()).isNotNull();
 			for (var constructor : type.getDeclaredConstructors()) {

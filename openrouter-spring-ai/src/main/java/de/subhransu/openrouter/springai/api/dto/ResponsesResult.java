@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.api.dto;
 
+import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -10,23 +11,26 @@ import java.util.List;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonInclude(Include.NON_NULL)
-public record ResponsesResult(String id, String object, @JsonProperty("created_at") Long createdAt, String model,
-		String status, List<ResponsesOutputItem> output, Usage usage, StreamError error,
-		@JsonProperty("incomplete_details") IncompleteDetails incompleteDetails,
-		@JsonDeserialize(using = TolerantJsonStringDeserializer.class) @JsonProperty("error_type") String errorType) {
+public record ResponsesResult(@Nullable String id, @Nullable String object,
+		@JsonProperty("created_at") @Nullable Long createdAt, @Nullable String model, @Nullable String status,
+		@Nullable List<@Nullable ResponsesOutputItem> output, @Nullable Usage usage, @Nullable StreamError error,
+		@JsonProperty("incomplete_details") @Nullable IncompleteDetails incompleteDetails, @JsonDeserialize(
+				using = TolerantJsonStringDeserializer.class) @JsonProperty("error_type") @Nullable String errorType) {
 
-	public ResponsesResult(String id, String object, Long createdAt, String model, String status,
-			List<ResponsesOutputItem> output, Usage usage, StreamError error, IncompleteDetails incompleteDetails) {
+	public ResponsesResult(@Nullable String id, @Nullable String object, @Nullable Long createdAt,
+			@Nullable String model, @Nullable String status, @Nullable List<@Nullable ResponsesOutputItem> output,
+			@Nullable Usage usage, @Nullable StreamError error, @Nullable IncompleteDetails incompleteDetails) {
 		this(id, object, createdAt, model, status, output, usage, error, incompleteDetails, null);
 	}
 
-	public ResponsesResult(String id, String object, Long createdAt, String model, String status,
-			List<ResponsesOutputItem> output, Usage usage, StreamError error) {
+	public ResponsesResult(@Nullable String id, @Nullable String object, @Nullable Long createdAt,
+			@Nullable String model, @Nullable String status, @Nullable List<@Nullable ResponsesOutputItem> output,
+			@Nullable Usage usage, @Nullable StreamError error) {
 		this(id, object, createdAt, model, status, output, usage, error, null, null);
 	}
 
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(Include.NON_NULL)
-	public record IncompleteDetails(String reason) {
+	public record IncompleteDetails(@Nullable String reason) {
 	}
 }

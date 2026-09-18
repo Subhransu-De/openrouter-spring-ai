@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.api;
 
+import org.jspecify.annotations.Nullable;
 import java.io.IOException;
 import org.springframework.http.HttpRequest;
 import org.springframework.http.client.ClientHttpRequestExecution;
@@ -9,13 +10,14 @@ import org.springframework.util.StringUtils;
 
 final class OpenRouterAttributionInterceptor implements ClientHttpRequestInterceptor {
 
-	private final String httpReferer;
+	private final @Nullable String httpReferer;
 
-	private final String applicationTitle;
+	private final @Nullable String applicationTitle;
 
-	private final String applicationCategories;
+	private final @Nullable String applicationCategories;
 
-	OpenRouterAttributionInterceptor(String httpReferer, String applicationTitle, String applicationCategories) {
+	OpenRouterAttributionInterceptor(@Nullable String httpReferer, @Nullable String applicationTitle,
+			@Nullable String applicationCategories) {
 		this.httpReferer = httpReferer;
 		this.applicationTitle = applicationTitle;
 		this.applicationCategories = applicationCategories;

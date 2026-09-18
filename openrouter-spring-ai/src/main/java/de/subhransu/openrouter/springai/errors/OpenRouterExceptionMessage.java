@@ -16,6 +16,7 @@ import org.springframework.util.StringUtils;
  *
  * @author Subhransu De
  */
+@org.jspecify.annotations.NullUnmarked
 public final class OpenRouterExceptionMessage {
 
 	/** Maximum length of any retained provider-controlled diagnostic string. */

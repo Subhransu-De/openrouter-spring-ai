@@ -25,6 +25,7 @@ import org.springframework.aot.hint.RuntimeHintsRegistrar;
  *
  * @author Subhransu De
  */
+@org.jspecify.annotations.NullUnmarked
 public final class OpenRouterSerializationRuntimeHints implements RuntimeHintsRegistrar {
 
 	@Override

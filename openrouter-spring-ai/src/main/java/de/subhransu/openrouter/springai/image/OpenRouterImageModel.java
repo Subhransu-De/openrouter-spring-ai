@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.image;
 
+import org.jspecify.annotations.Nullable;
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.dto.ImagesRequest;
 import de.subhransu.openrouter.springai.api.dto.ImagesResponse;
@@ -137,13 +138,13 @@ public class OpenRouterImageModel implements ImageModel {
 
 	public static final class Builder {
 
-		private OpenRouterApi openRouterApi;
+		private @Nullable OpenRouterApi openRouterApi;
 
-		private OpenRouterImageOptions defaultOptions;
+		private @Nullable OpenRouterImageOptions defaultOptions;
 
-		private RetryTemplate retryTemplate;
+		private @Nullable RetryTemplate retryTemplate;
 
-		private ObservationRegistry observationRegistry;
+		private @Nullable ObservationRegistry observationRegistry;
 
 		private Builder() {
 		}
@@ -153,17 +154,17 @@ public class OpenRouterImageModel implements ImageModel {
 			return this;
 		}
 
-		public Builder defaultOptions(OpenRouterImageOptions defaultOptions) {
+		public Builder defaultOptions(@Nullable OpenRouterImageOptions defaultOptions) {
 			this.defaultOptions = defaultOptions;
 			return this;
 		}
 
-		public Builder retryTemplate(RetryTemplate retryTemplate) {
+		public Builder retryTemplate(@Nullable RetryTemplate retryTemplate) {
 			this.retryTemplate = retryTemplate;
 			return this;
 		}
 
-		public Builder observationRegistry(ObservationRegistry observationRegistry) {
+		public Builder observationRegistry(@Nullable ObservationRegistry observationRegistry) {
 			this.observationRegistry = observationRegistry;
 			return this;
 		}

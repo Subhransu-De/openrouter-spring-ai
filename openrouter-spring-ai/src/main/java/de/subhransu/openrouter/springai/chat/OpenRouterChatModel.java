@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.chat;
 
+import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.ObjectMapper;
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
@@ -231,17 +232,17 @@ public class OpenRouterChatModel implements ChatModel {
 
 	public static final class Builder {
 
-		private OpenRouterApi openRouterApi;
+		private @Nullable OpenRouterApi openRouterApi;
 
-		private OpenRouterChatOptions defaultOptions;
+		private @Nullable OpenRouterChatOptions defaultOptions;
 
-		private ToolCallingManager toolCallingManager;
+		private @Nullable ToolCallingManager toolCallingManager;
 
-		private RetryTemplate retryTemplate;
+		private @Nullable RetryTemplate retryTemplate;
 
-		private ObservationRegistry observationRegistry;
+		private @Nullable ObservationRegistry observationRegistry;
 
-		private ObjectMapper objectMapper;
+		private @Nullable ObjectMapper objectMapper;
 
 		private long toolCallAggregationMaxBytes = OpenRouterStreamingToolCallAggregator.DEFAULT_MAX_BYTES;
 
@@ -257,7 +258,7 @@ public class OpenRouterChatModel implements ChatModel {
 			return this;
 		}
 
-		public Builder defaultOptions(OpenRouterChatOptions defaultOptions) {
+		public Builder defaultOptions(@Nullable OpenRouterChatOptions defaultOptions) {
 			this.defaultOptions = defaultOptions;
 			return this;
 		}
@@ -267,22 +268,22 @@ public class OpenRouterChatModel implements ChatModel {
 		 * <em>execution</em> is not handled by this model; register a
 		 * {@code ToolCallingAdvisor} on the {@code ChatClient} instead.
 		 */
-		public Builder toolCallingManager(ToolCallingManager toolCallingManager) {
+		public Builder toolCallingManager(@Nullable ToolCallingManager toolCallingManager) {
 			this.toolCallingManager = toolCallingManager;
 			return this;
 		}
 
-		public Builder retryTemplate(RetryTemplate retryTemplate) {
+		public Builder retryTemplate(@Nullable RetryTemplate retryTemplate) {
 			this.retryTemplate = retryTemplate;
 			return this;
 		}
 
-		public Builder observationRegistry(ObservationRegistry observationRegistry) {
+		public Builder observationRegistry(@Nullable ObservationRegistry observationRegistry) {
 			this.observationRegistry = observationRegistry;
 			return this;
 		}
 
-		public Builder objectMapper(ObjectMapper objectMapper) {
+		public Builder objectMapper(@Nullable ObjectMapper objectMapper) {
 			this.objectMapper = objectMapper;
 			return this;
 		}

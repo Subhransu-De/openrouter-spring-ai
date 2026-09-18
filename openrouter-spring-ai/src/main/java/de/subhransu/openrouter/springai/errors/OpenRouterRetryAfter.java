@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.errors;
 
+import org.jspecify.annotations.Nullable;
 import java.time.Duration;
 import java.time.Instant;
 
@@ -11,5 +12,5 @@ import java.time.Instant;
  * @param retryAt absolute retry time for the HTTP-date form, otherwise {@code null}
  * @author Subhransu De
  */
-public record OpenRouterRetryAfter(String value, Duration delay, Instant retryAt) {
+public record OpenRouterRetryAfter(String value, @Nullable Duration delay, @Nullable Instant retryAt) {
 }

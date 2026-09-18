@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.autoconfigure;
 
+import org.jspecify.annotations.Nullable;
 import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.util.unit.DataSize;
@@ -10,17 +11,17 @@ public class OpenRouterConnectionProperties {
 
 	public static final String CONFIG_PREFIX = "spring.ai.openrouter.connection";
 
-	private Duration timeout = Duration.ofMinutes(2);
+	private @Nullable Duration timeout = Duration.ofMinutes(2);
 
 	private DataSize maxResponseBodySize = DataSize.ofMegabytes(64);
 
 	private DataSize maxErrorBodySize = DataSize.ofKilobytes(64);
 
-	public Duration getTimeout() {
+	public @Nullable Duration getTimeout() {
 		return this.timeout;
 	}
 
-	public void setTimeout(Duration timeout) {
+	public void setTimeout(@Nullable Duration timeout) {
 		this.timeout = timeout;
 	}
 

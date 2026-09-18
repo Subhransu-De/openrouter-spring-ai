@@ -25,6 +25,7 @@ import org.springframework.util.StringUtils;
  *
  * @author Subhransu De
  */
+@org.jspecify.annotations.NullUnmarked
 public final class OpenRouterHttpExceptionFactory {
 
 	private static final DateTimeFormatter ASCTIME_FORMATTER = DateTimeFormatter.ofPattern("MMM d HH:mm:ss uuuu",

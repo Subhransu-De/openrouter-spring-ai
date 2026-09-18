@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.embedding;
 
+import org.jspecify.annotations.Nullable;
 import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
 import org.springframework.ai.embedding.EmbeddingOptions;
 
@@ -12,15 +13,15 @@ import org.springframework.ai.embedding.EmbeddingOptions;
  */
 public class OpenRouterEmbeddingOptions implements EmbeddingOptions {
 
-	private String model;
+	private @Nullable String model;
 
-	private Integer dimensions;
+	private @Nullable Integer dimensions;
 
-	private String encodingFormat;
+	private @Nullable String encodingFormat;
 
-	private String user;
+	private @Nullable String user;
 
-	private OpenRouterProviderPreferences provider;
+	private @Nullable OpenRouterProviderPreferences provider;
 
 	public static Builder builder() {
 		return new Builder();
@@ -34,7 +35,7 @@ public class OpenRouterEmbeddingOptions implements EmbeddingOptions {
 		return this.mutate().build();
 	}
 
-	public static OpenRouterEmbeddingOptions fromOptions(EmbeddingOptions options) {
+	public static @Nullable OpenRouterEmbeddingOptions fromOptions(@Nullable EmbeddingOptions options) {
 		if (options == null) {
 			return null;
 		}
@@ -47,7 +48,7 @@ public class OpenRouterEmbeddingOptions implements EmbeddingOptions {
 			.build();
 	}
 
-	public OpenRouterEmbeddingOptions merge(OpenRouterEmbeddingOptions runtimeOptions) {
+	public OpenRouterEmbeddingOptions merge(@Nullable OpenRouterEmbeddingOptions runtimeOptions) {
 		if (runtimeOptions == null) {
 			return this.copy();
 		}
@@ -60,49 +61,49 @@ public class OpenRouterEmbeddingOptions implements EmbeddingOptions {
 			.build();
 	}
 
-	private static <T> T value(T runtimeValue, T defaultValue) {
+	private static <T> @Nullable T value(@Nullable T runtimeValue, @Nullable T defaultValue) {
 		return runtimeValue != null ? runtimeValue : defaultValue;
 	}
 
 	@Override
-	public String getModel() {
+	public @Nullable String getModel() {
 		return this.model;
 	}
 
-	public void setModel(String model) {
+	public void setModel(@Nullable String model) {
 		this.model = model;
 	}
 
 	@Override
-	public Integer getDimensions() {
+	public @Nullable Integer getDimensions() {
 		return this.dimensions;
 	}
 
-	public void setDimensions(Integer dimensions) {
+	public void setDimensions(@Nullable Integer dimensions) {
 		this.dimensions = dimensions;
 	}
 
-	public String getEncodingFormat() {
+	public @Nullable String getEncodingFormat() {
 		return this.encodingFormat;
 	}
 
-	public void setEncodingFormat(String encodingFormat) {
+	public void setEncodingFormat(@Nullable String encodingFormat) {
 		this.encodingFormat = encodingFormat;
 	}
 
-	public String getUser() {
+	public @Nullable String getUser() {
 		return this.user;
 	}
 
-	public void setUser(String user) {
+	public void setUser(@Nullable String user) {
 		this.user = user;
 	}
 
-	public OpenRouterProviderPreferences getProvider() {
+	public @Nullable OpenRouterProviderPreferences getProvider() {
 		return this.provider;
 	}
 
-	public void setProvider(OpenRouterProviderPreferences provider) {
+	public void setProvider(@Nullable OpenRouterProviderPreferences provider) {
 		this.provider = provider;
 	}
 
@@ -123,27 +124,27 @@ public class OpenRouterEmbeddingOptions implements EmbeddingOptions {
 			this.options.setProvider(source.getProvider());
 		}
 
-		public Builder model(String model) {
+		public Builder model(@Nullable String model) {
 			this.options.setModel(model);
 			return this;
 		}
 
-		public Builder dimensions(Integer dimensions) {
+		public Builder dimensions(@Nullable Integer dimensions) {
 			this.options.setDimensions(dimensions);
 			return this;
 		}
 
-		public Builder encodingFormat(String encodingFormat) {
+		public Builder encodingFormat(@Nullable String encodingFormat) {
 			this.options.setEncodingFormat(encodingFormat);
 			return this;
 		}
 
-		public Builder user(String user) {
+		public Builder user(@Nullable String user) {
 			this.options.setUser(user);
 			return this;
 		}
 
-		public Builder provider(OpenRouterProviderPreferences provider) {
+		public Builder provider(@Nullable OpenRouterProviderPreferences provider) {
 			this.options.setProvider(provider);
 			return this;
 		}

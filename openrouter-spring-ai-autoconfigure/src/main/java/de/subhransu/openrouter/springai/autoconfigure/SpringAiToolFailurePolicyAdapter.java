@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.autoconfigure;
 
+import org.jspecify.annotations.Nullable;
 import java.lang.reflect.Field;
 import org.springframework.ai.model.tool.DefaultToolCallingManager;
 import org.springframework.ai.tool.execution.DefaultToolExecutionExceptionProcessor;
@@ -17,7 +18,7 @@ final class SpringAiToolFailurePolicyAdapter {
 	private SpringAiToolFailurePolicyAdapter() {
 	}
 
-	static ToolExecutionExceptionProcessor processor(DefaultToolCallingManager manager) {
+	static @Nullable ToolExecutionExceptionProcessor processor(DefaultToolCallingManager manager) {
 		return (ToolExecutionExceptionProcessor) readField(DefaultToolCallingManager.class,
 				"toolExecutionExceptionProcessor", manager);
 	}
@@ -26,7 +27,7 @@ final class SpringAiToolFailurePolicyAdapter {
 		return Boolean.TRUE.equals(readField(DefaultToolExecutionExceptionProcessor.class, "alwaysThrow", processor));
 	}
 
-	static Object readField(Class<?> type, String name, Object target) {
+	static @Nullable Object readField(Class<?> type, String name, Object target) {
 		try {
 			Field field = ReflectionUtils.findField(type, name);
 			if (field == null) {

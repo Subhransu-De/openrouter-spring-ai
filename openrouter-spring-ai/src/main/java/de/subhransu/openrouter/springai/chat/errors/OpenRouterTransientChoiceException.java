@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.chat.errors;
 
+import org.jspecify.annotations.Nullable;
 import org.springframework.ai.retry.TransientAiException;
 
 /**
@@ -9,15 +10,15 @@ import org.springframework.ai.retry.TransientAiException;
  */
 public final class OpenRouterTransientChoiceException extends TransientAiException implements OpenRouterChoiceFailure {
 
-	private final OpenRouterChoiceErrorDetails errorDetails;
+	private final @Nullable OpenRouterChoiceErrorDetails errorDetails;
 
-	public OpenRouterTransientChoiceException(String message, OpenRouterChoiceErrorDetails errorDetails) {
+	public OpenRouterTransientChoiceException(String message, @Nullable OpenRouterChoiceErrorDetails errorDetails) {
 		super(message);
 		this.errorDetails = errorDetails;
 	}
 
 	@Override
-	public OpenRouterChoiceErrorDetails getErrorDetails() {
+	public @Nullable OpenRouterChoiceErrorDetails getErrorDetails() {
 		return this.errorDetails;
 	}
 

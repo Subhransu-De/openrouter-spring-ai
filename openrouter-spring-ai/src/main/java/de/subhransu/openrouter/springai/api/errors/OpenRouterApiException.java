@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.api.errors;
 
+import org.jspecify.annotations.Nullable;
 import de.subhransu.openrouter.springai.errors.OpenRouterExceptionMessage;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorClassifier;
@@ -24,34 +25,34 @@ import org.springframework.http.HttpStatusCode;
  */
 public class OpenRouterApiException extends RuntimeException {
 
-	private final HttpStatusCode statusCode;
+	private final @Nullable HttpStatusCode statusCode;
 
-	private final String responseBody;
+	private final @Nullable String responseBody;
 
-	private final OpenRouterErrorDetails errorDetails;
+	private final @Nullable OpenRouterErrorDetails errorDetails;
 
-	public OpenRouterApiException(String message, HttpStatusCode statusCode, String responseBody) {
+	public OpenRouterApiException(String message, @Nullable HttpStatusCode statusCode, @Nullable String responseBody) {
 		this(message, statusCode, responseBody, new OpenRouterErrorDetails(null, message, null, null, null,
 				OpenRouterErrorClassifier.category(statusCode != null ? statusCode.value() : -1, null, null, message)));
 	}
 
-	public OpenRouterApiException(String message, HttpStatusCode statusCode, String responseBody,
-			OpenRouterErrorDetails errorDetails) {
+	public OpenRouterApiException(String message, @Nullable HttpStatusCode statusCode, @Nullable String responseBody,
+			@Nullable OpenRouterErrorDetails errorDetails) {
 		super(message);
 		this.statusCode = statusCode;
 		this.responseBody = OpenRouterExceptionMessage.sanitize(responseBody);
 		this.errorDetails = errorDetails;
 	}
 
-	public HttpStatusCode getStatusCode() {
+	public @Nullable HttpStatusCode getStatusCode() {
 		return this.statusCode;
 	}
 
-	public String getResponseBody() {
+	public @Nullable String getResponseBody() {
 		return this.responseBody;
 	}
 
-	public OpenRouterErrorDetails getErrorDetails() {
+	public @Nullable OpenRouterErrorDetails getErrorDetails() {
 		return this.errorDetails;
 	}
 

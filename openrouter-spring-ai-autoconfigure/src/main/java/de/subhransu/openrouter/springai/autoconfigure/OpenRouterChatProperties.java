@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.autoconfigure;
 
+import org.jspecify.annotations.Nullable;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
@@ -18,74 +19,74 @@ public class OpenRouterChatProperties {
 
 	public static final String CONFIG_PREFIX = "spring.ai.openrouter.chat";
 
-	private String model;
+	private @Nullable String model;
 
-	private List<String> models;
+	private @Nullable List<String> models;
 
 	/**
 	 * Wire protocol used for chat requests. Chat Completions is the supported default;
 	 * Responses is an experimental, explicitly selected compatibility mode.
 	 */
-	private OpenRouterRequestMode requestMode = OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS;
+	private @Nullable OpenRouterRequestMode requestMode = OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS;
 
-	private Double temperature;
+	private @Nullable Double temperature;
 
-	private Double topP;
+	private @Nullable Double topP;
 
-	private Integer topK;
+	private @Nullable Integer topK;
 
-	private Integer maxTokens;
+	private @Nullable Integer maxTokens;
 
-	private Integer maxCompletionTokens;
+	private @Nullable Integer maxCompletionTokens;
 
-	private List<String> stop;
+	private @Nullable List<String> stop;
 
-	private Integer seed;
+	private @Nullable Integer seed;
 
-	private Double presencePenalty;
+	private @Nullable Double presencePenalty;
 
-	private Double frequencyPenalty;
+	private @Nullable Double frequencyPenalty;
 
-	private String user;
+	private @Nullable String user;
 
 	/**
 	 * Explicit output format. Takes precedence over output-schema.
 	 */
 	@NestedConfigurationProperty
-	private OpenRouterResponseFormat responseFormat;
+	private @Nullable OpenRouterResponseFormat responseFormat;
 
 	/**
 	 * Portable JSON schema document. Leaves strict unset and uses the name response.
 	 */
-	private String outputSchema;
+	private @Nullable String outputSchema;
 
-	private Boolean parallelToolCalls;
+	private @Nullable Boolean parallelToolCalls;
 
-	private String toolChoice;
+	private @Nullable String toolChoice;
 
-	private Double repetitionPenalty;
+	private @Nullable Double repetitionPenalty;
 
-	private Double minP;
+	private @Nullable Double minP;
 
-	private Double topA;
+	private @Nullable Double topA;
 
-	private String route;
+	private @Nullable String route;
 
-	private Boolean includeUsage;
+	private @Nullable Boolean includeUsage;
 
-	private List<String> modalities;
+	private @Nullable List<String> modalities;
 
-	private Map<String, Object> imageConfig;
+	private @Nullable Map<String, @Nullable Object> imageConfig;
 
-	private OpenRouterServiceTier serviceTier;
+	private @Nullable OpenRouterServiceTier serviceTier;
 
-	private Map<String, Object> metadata;
+	private @Nullable Map<String, @Nullable Object> metadata;
 
-	private OpenRouterProviderPreferences provider;
+	private @Nullable OpenRouterProviderPreferences provider;
 
-	private OpenRouterReasoningOptions reasoning;
+	private @Nullable OpenRouterReasoningOptions reasoning;
 
-	private ToolCallAggregation toolCallAggregation = new ToolCallAggregation();
+	private @Nullable ToolCallAggregation toolCallAggregation = new ToolCallAggregation();
 
 	/**
 	 * Allow a custom tool calling manager whose provider-visible failure policy cannot be
@@ -127,27 +128,27 @@ public class OpenRouterChatProperties {
 			.build();
 	}
 
-	public String getModel() {
+	public @Nullable String getModel() {
 		return this.model;
 	}
 
-	public void setModel(String model) {
+	public void setModel(@Nullable String model) {
 		this.model = model;
 	}
 
-	public List<String> getModels() {
+	public @Nullable List<String> getModels() {
 		return this.models;
 	}
 
-	public void setModels(List<String> models) {
+	public void setModels(@Nullable List<String> models) {
 		this.models = models;
 	}
 
-	public OpenRouterRequestMode getRequestMode() {
+	public @Nullable OpenRouterRequestMode getRequestMode() {
 		return this.requestMode;
 	}
 
-	public void setRequestMode(OpenRouterRequestMode requestMode) {
+	public void setRequestMode(@Nullable OpenRouterRequestMode requestMode) {
 		this.requestMode = requestMode;
 	}
 
@@ -159,227 +160,227 @@ public class OpenRouterChatProperties {
 		this.allowUnsafeToolFailureResults = allowUnsafeToolFailureResults;
 	}
 
-	public Double getTemperature() {
+	public @Nullable Double getTemperature() {
 		return this.temperature;
 	}
 
-	public void setTemperature(Double temperature) {
+	public void setTemperature(@Nullable Double temperature) {
 		this.temperature = temperature;
 	}
 
-	public Double getTopP() {
+	public @Nullable Double getTopP() {
 		return this.topP;
 	}
 
-	public void setTopP(Double topP) {
+	public void setTopP(@Nullable Double topP) {
 		this.topP = topP;
 	}
 
-	public Integer getTopK() {
+	public @Nullable Integer getTopK() {
 		return this.topK;
 	}
 
-	public void setTopK(Integer topK) {
+	public void setTopK(@Nullable Integer topK) {
 		this.topK = topK;
 	}
 
-	public Integer getMaxTokens() {
+	public @Nullable Integer getMaxTokens() {
 		return this.maxTokens;
 	}
 
-	public void setMaxTokens(Integer maxTokens) {
+	public void setMaxTokens(@Nullable Integer maxTokens) {
 		this.maxTokens = maxTokens;
 	}
 
-	public Integer getMaxCompletionTokens() {
+	public @Nullable Integer getMaxCompletionTokens() {
 		return this.maxCompletionTokens;
 	}
 
-	public void setMaxCompletionTokens(Integer maxCompletionTokens) {
+	public void setMaxCompletionTokens(@Nullable Integer maxCompletionTokens) {
 		this.maxCompletionTokens = maxCompletionTokens;
 	}
 
-	public List<String> getStop() {
+	public @Nullable List<String> getStop() {
 		return this.stop;
 	}
 
-	public void setStop(List<String> stop) {
+	public void setStop(@Nullable List<String> stop) {
 		this.stop = stop;
 	}
 
-	public Integer getSeed() {
+	public @Nullable Integer getSeed() {
 		return this.seed;
 	}
 
-	public void setSeed(Integer seed) {
+	public void setSeed(@Nullable Integer seed) {
 		this.seed = seed;
 	}
 
-	public Double getPresencePenalty() {
+	public @Nullable Double getPresencePenalty() {
 		return this.presencePenalty;
 	}
 
-	public void setPresencePenalty(Double presencePenalty) {
+	public void setPresencePenalty(@Nullable Double presencePenalty) {
 		this.presencePenalty = presencePenalty;
 	}
 
-	public Double getFrequencyPenalty() {
+	public @Nullable Double getFrequencyPenalty() {
 		return this.frequencyPenalty;
 	}
 
-	public void setFrequencyPenalty(Double frequencyPenalty) {
+	public void setFrequencyPenalty(@Nullable Double frequencyPenalty) {
 		this.frequencyPenalty = frequencyPenalty;
 	}
 
-	public String getUser() {
+	public @Nullable String getUser() {
 		return this.user;
 	}
 
-	public void setUser(String user) {
+	public void setUser(@Nullable String user) {
 		this.user = user;
 	}
 
-	public OpenRouterResponseFormat getResponseFormat() {
+	public @Nullable OpenRouterResponseFormat getResponseFormat() {
 		return this.responseFormat;
 	}
 
-	public void setResponseFormat(OpenRouterResponseFormat responseFormat) {
+	public void setResponseFormat(@Nullable OpenRouterResponseFormat responseFormat) {
 		this.responseFormat = responseFormat;
 	}
 
-	public String getOutputSchema() {
+	public @Nullable String getOutputSchema() {
 		return this.outputSchema;
 	}
 
-	public void setOutputSchema(String outputSchema) {
+	public void setOutputSchema(@Nullable String outputSchema) {
 		this.outputSchema = outputSchema;
 	}
 
-	public Boolean getParallelToolCalls() {
+	public @Nullable Boolean getParallelToolCalls() {
 		return this.parallelToolCalls;
 	}
 
-	public void setParallelToolCalls(Boolean parallelToolCalls) {
+	public void setParallelToolCalls(@Nullable Boolean parallelToolCalls) {
 		this.parallelToolCalls = parallelToolCalls;
 	}
 
-	public String getToolChoice() {
+	public @Nullable String getToolChoice() {
 		return this.toolChoice;
 	}
 
-	public void setToolChoice(String toolChoice) {
+	public void setToolChoice(@Nullable String toolChoice) {
 		this.toolChoice = toolChoice;
 	}
 
-	public Double getRepetitionPenalty() {
+	public @Nullable Double getRepetitionPenalty() {
 		return this.repetitionPenalty;
 	}
 
-	public void setRepetitionPenalty(Double repetitionPenalty) {
+	public void setRepetitionPenalty(@Nullable Double repetitionPenalty) {
 		this.repetitionPenalty = repetitionPenalty;
 	}
 
-	public Double getMinP() {
+	public @Nullable Double getMinP() {
 		return this.minP;
 	}
 
-	public void setMinP(Double minP) {
+	public void setMinP(@Nullable Double minP) {
 		this.minP = minP;
 	}
 
-	public Double getTopA() {
+	public @Nullable Double getTopA() {
 		return this.topA;
 	}
 
-	public void setTopA(Double topA) {
+	public void setTopA(@Nullable Double topA) {
 		this.topA = topA;
 	}
 
-	public String getRoute() {
+	public @Nullable String getRoute() {
 		return this.route;
 	}
 
-	public void setRoute(String route) {
+	public void setRoute(@Nullable String route) {
 		this.route = route;
 	}
 
-	public Boolean getIncludeUsage() {
+	public @Nullable Boolean getIncludeUsage() {
 		return this.includeUsage;
 	}
 
-	public void setIncludeUsage(Boolean includeUsage) {
+	public void setIncludeUsage(@Nullable Boolean includeUsage) {
 		this.includeUsage = includeUsage;
 	}
 
-	public List<String> getModalities() {
+	public @Nullable List<String> getModalities() {
 		return this.modalities;
 	}
 
-	public void setModalities(List<String> modalities) {
+	public void setModalities(@Nullable List<String> modalities) {
 		this.modalities = modalities;
 	}
 
-	public Map<String, Object> getImageConfig() {
+	public @Nullable Map<String, @Nullable Object> getImageConfig() {
 		return this.imageConfig;
 	}
 
-	public void setImageConfig(Map<String, Object> imageConfig) {
+	public void setImageConfig(@Nullable Map<String, @Nullable Object> imageConfig) {
 		this.imageConfig = imageConfig;
 	}
 
-	public OpenRouterServiceTier getServiceTier() {
+	public @Nullable OpenRouterServiceTier getServiceTier() {
 		return this.serviceTier;
 	}
 
-	public void setServiceTier(OpenRouterServiceTier serviceTier) {
+	public void setServiceTier(@Nullable OpenRouterServiceTier serviceTier) {
 		this.serviceTier = serviceTier;
 	}
 
-	public Map<String, Object> getMetadata() {
+	public @Nullable Map<String, @Nullable Object> getMetadata() {
 		return this.metadata;
 	}
 
-	public void setMetadata(Map<String, Object> metadata) {
+	public void setMetadata(@Nullable Map<String, @Nullable Object> metadata) {
 		this.metadata = metadata;
 	}
 
-	public OpenRouterProviderPreferences getProvider() {
+	public @Nullable OpenRouterProviderPreferences getProvider() {
 		return this.provider;
 	}
 
-	public void setProvider(OpenRouterProviderPreferences provider) {
+	public void setProvider(@Nullable OpenRouterProviderPreferences provider) {
 		this.provider = provider;
 	}
 
-	public OpenRouterReasoningOptions getReasoning() {
+	public @Nullable OpenRouterReasoningOptions getReasoning() {
 		return this.reasoning;
 	}
 
-	public void setReasoning(OpenRouterReasoningOptions reasoning) {
+	public void setReasoning(@Nullable OpenRouterReasoningOptions reasoning) {
 		this.reasoning = reasoning;
 	}
 
-	public ToolCallAggregation getToolCallAggregation() {
+	public @Nullable ToolCallAggregation getToolCallAggregation() {
 		return this.toolCallAggregation;
 	}
 
-	public void setToolCallAggregation(ToolCallAggregation toolCallAggregation) {
+	public void setToolCallAggregation(@Nullable ToolCallAggregation toolCallAggregation) {
 		this.toolCallAggregation = toolCallAggregation;
 	}
 
 	public static class ToolCallAggregation {
 
-		private DataSize maxSize = DataSize.ofMegabytes(1);
+		private @Nullable DataSize maxSize = DataSize.ofMegabytes(1);
 
 		private int maxChunks = 1024;
 
-		private Duration maxDuration = Duration.ofMinutes(2);
+		private @Nullable Duration maxDuration = Duration.ofMinutes(2);
 
-		public DataSize getMaxSize() {
+		public @Nullable DataSize getMaxSize() {
 			return this.maxSize;
 		}
 
-		public void setMaxSize(DataSize maxSize) {
+		public void setMaxSize(@Nullable DataSize maxSize) {
 			this.maxSize = maxSize;
 		}
 
@@ -391,11 +392,11 @@ public class OpenRouterChatProperties {
 			this.maxChunks = maxChunks;
 		}
 
-		public Duration getMaxDuration() {
+		public @Nullable Duration getMaxDuration() {
 			return this.maxDuration;
 		}
 
-		public void setMaxDuration(Duration maxDuration) {
+		public void setMaxDuration(@Nullable Duration maxDuration) {
 			this.maxDuration = maxDuration;
 		}
 

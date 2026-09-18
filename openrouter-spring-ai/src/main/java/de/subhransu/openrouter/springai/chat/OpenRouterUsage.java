@@ -1,17 +1,19 @@
 package de.subhransu.openrouter.springai.chat;
 
+import org.jspecify.annotations.Nullable;
 import org.springframework.ai.chat.metadata.DefaultUsage;
 
 public class OpenRouterUsage extends DefaultUsage {
 
-	private final Integer cachedTokens;
+	private final @Nullable Integer cachedTokens;
 
-	private final Integer reasoningTokens;
+	private final @Nullable Integer reasoningTokens;
 
-	private final Double cost;
+	private final @Nullable Double cost;
 
-	public OpenRouterUsage(Integer promptTokens, Integer generationTokens, Integer totalTokens, Integer cachedTokens,
-			Integer reasoningTokens, Double cost, Object nativeUsage) {
+	public OpenRouterUsage(@Nullable Integer promptTokens, @Nullable Integer generationTokens,
+			@Nullable Integer totalTokens, @Nullable Integer cachedTokens, @Nullable Integer reasoningTokens,
+			@Nullable Double cost, @Nullable Object nativeUsage) {
 		super(promptTokens, generationTokens, totalTokens, nativeUsage,
 				cachedTokens != null ? cachedTokens.longValue() : null, null);
 		this.cachedTokens = cachedTokens;
@@ -19,15 +21,15 @@ public class OpenRouterUsage extends DefaultUsage {
 		this.cost = cost;
 	}
 
-	public Integer getCachedTokens() {
+	public @Nullable Integer getCachedTokens() {
 		return this.cachedTokens;
 	}
 
-	public Integer getReasoningTokens() {
+	public @Nullable Integer getReasoningTokens() {
 		return this.reasoningTokens;
 	}
 
-	public Double getCost() {
+	public @Nullable Double getCost() {
 		return this.cost;
 	}
 

@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.embedding;
 
+import org.jspecify.annotations.Nullable;
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.dto.EmbeddingsResponse;
 import de.subhransu.openrouter.springai.embedding.mapper.OpenRouterEmbeddingRequestMapper;
@@ -96,13 +97,13 @@ public class OpenRouterEmbeddingModel implements EmbeddingModel {
 
 	public static final class Builder {
 
-		private OpenRouterApi openRouterApi;
+		private @Nullable OpenRouterApi openRouterApi;
 
-		private OpenRouterEmbeddingOptions defaultOptions;
+		private @Nullable OpenRouterEmbeddingOptions defaultOptions;
 
-		private RetryTemplate retryTemplate;
+		private @Nullable RetryTemplate retryTemplate;
 
-		private ObservationRegistry observationRegistry;
+		private @Nullable ObservationRegistry observationRegistry;
 
 		private Builder() {
 		}
@@ -112,17 +113,17 @@ public class OpenRouterEmbeddingModel implements EmbeddingModel {
 			return this;
 		}
 
-		public Builder defaultOptions(OpenRouterEmbeddingOptions defaultOptions) {
+		public Builder defaultOptions(@Nullable OpenRouterEmbeddingOptions defaultOptions) {
 			this.defaultOptions = defaultOptions;
 			return this;
 		}
 
-		public Builder retryTemplate(RetryTemplate retryTemplate) {
+		public Builder retryTemplate(@Nullable RetryTemplate retryTemplate) {
 			this.retryTemplate = retryTemplate;
 			return this;
 		}
 
-		public Builder observationRegistry(ObservationRegistry observationRegistry) {
+		public Builder observationRegistry(@Nullable ObservationRegistry observationRegistry) {
 			this.observationRegistry = observationRegistry;
 			return this;
 		}

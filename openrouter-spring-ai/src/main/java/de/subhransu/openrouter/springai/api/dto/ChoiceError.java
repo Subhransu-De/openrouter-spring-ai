@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.api.dto;
 
+import org.jspecify.annotations.Nullable;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
@@ -18,10 +19,15 @@ import java.util.Map;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonInclude(Include.NON_NULL)
-public record ChoiceError(String code, String message, Map<String, Object> metadata) {
+public record ChoiceError(@Nullable String code, @Nullable String message,
+		@Nullable Map<String, @Nullable Object> metadata) {
 
 	public ChoiceError {
 		metadata = metadata == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(metadata));
+	}
+
+	public Map<String, @Nullable Object> metadata() {
+		return this.metadata;
 	}
 
 }

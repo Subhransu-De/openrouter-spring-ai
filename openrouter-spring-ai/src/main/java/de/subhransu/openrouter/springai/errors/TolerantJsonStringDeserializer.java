@@ -11,6 +11,7 @@ import tools.jackson.databind.ValueDeserializer;
  *
  * @author Subhransu De
  */
+@org.jspecify.annotations.NullUnmarked
 public final class TolerantJsonStringDeserializer extends ValueDeserializer<String> {
 
 	@Override

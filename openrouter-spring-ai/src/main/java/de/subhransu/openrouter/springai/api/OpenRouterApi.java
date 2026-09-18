@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.api;
 
+import org.jspecify.annotations.Nullable;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionChunk;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionRequest;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionResponse;
@@ -64,7 +65,7 @@ public class OpenRouterApi {
 
 	private final OpenRouterHttpExceptionFactory httpExceptionFactory;
 
-	private final Duration timeout;
+	private final @Nullable Duration timeout;
 
 	private final int maxResponseBodyBytes;
 
@@ -120,7 +121,7 @@ public class OpenRouterApi {
 			.build();
 	}
 
-	private static void addIfPresent(HttpHeaders headers, String name, String value) {
+	private static void addIfPresent(HttpHeaders headers, String name, @Nullable String value) {
 		if (StringUtils.hasText(value)) {
 			headers.set(name, value);
 		}
@@ -399,23 +400,23 @@ public class OpenRouterApi {
 
 	public static final class Builder {
 
-		private String baseUrl = DEFAULT_BASE_URL;
+		private @Nullable String baseUrl = DEFAULT_BASE_URL;
 
-		private String apiKey;
+		private @Nullable String apiKey;
 
-		private String httpReferer;
+		private @Nullable String httpReferer;
 
-		private String applicationTitle;
+		private @Nullable String applicationTitle;
 
-		private String applicationCategories;
+		private @Nullable String applicationCategories;
 
-		private RestClient.Builder restClientBuilder;
+		private RestClient.@Nullable Builder restClientBuilder;
 
-		private WebClient.Builder webClientBuilder;
+		private WebClient.@Nullable Builder webClientBuilder;
 
 		private ObjectMapper objectMapper = new ObjectMapper();
 
-		private Duration timeout;
+		private @Nullable Duration timeout;
 
 		private int maxResponseBodyBytes = DEFAULT_MAX_RESPONSE_BODY_BYTES;
 
@@ -424,7 +425,7 @@ public class OpenRouterApi {
 		private Builder() {
 		}
 
-		public Builder baseUrl(String baseUrl) {
+		public Builder baseUrl(@Nullable String baseUrl) {
 			this.baseUrl = baseUrl;
 			return this;
 		}
@@ -434,27 +435,27 @@ public class OpenRouterApi {
 			return this;
 		}
 
-		public Builder httpReferer(String httpReferer) {
+		public Builder httpReferer(@Nullable String httpReferer) {
 			this.httpReferer = httpReferer;
 			return this;
 		}
 
-		public Builder applicationTitle(String applicationTitle) {
+		public Builder applicationTitle(@Nullable String applicationTitle) {
 			this.applicationTitle = applicationTitle;
 			return this;
 		}
 
-		public Builder applicationCategories(String applicationCategories) {
+		public Builder applicationCategories(@Nullable String applicationCategories) {
 			this.applicationCategories = applicationCategories;
 			return this;
 		}
 
-		public Builder restClientBuilder(RestClient.Builder restClientBuilder) {
+		public Builder restClientBuilder(RestClient.@Nullable Builder restClientBuilder) {
 			this.restClientBuilder = restClientBuilder;
 			return this;
 		}
 
-		public Builder webClientBuilder(WebClient.Builder webClientBuilder) {
+		public Builder webClientBuilder(WebClient.@Nullable Builder webClientBuilder) {
 			this.webClientBuilder = webClientBuilder;
 			return this;
 		}
@@ -472,7 +473,7 @@ public class OpenRouterApi {
 		 * configured on its request factory by the caller (the auto-configuration builds
 		 * a timeout-aware factory onto the supplied builder).
 		 */
-		public Builder timeout(Duration timeout) {
+		public Builder timeout(@Nullable Duration timeout) {
 			this.timeout = timeout;
 			return this;
 		}

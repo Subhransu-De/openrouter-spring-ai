@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.errors;
 
+import org.jspecify.annotations.Nullable;
 import org.springframework.ai.retry.NonTransientAiException;
 import org.springframework.http.HttpStatusCode;
 
@@ -55,16 +56,17 @@ public final class OpenRouterLimitExceededException extends NonTransientAiExcept
 
 	private final long observedValue;
 
-	private final HttpStatusCode statusCode;
+	private final @Nullable HttpStatusCode statusCode;
 
-	private final String responseBody;
+	private final @Nullable String responseBody;
 
-	private final OpenRouterErrorDetails errorDetails;
+	private final @Nullable OpenRouterErrorDetails errorDetails;
 
-	private final String endpoint;
+	private final @Nullable String endpoint;
 
-	public OpenRouterLimitExceededException(Limit limit, long configuredLimit, long observedValue, String endpoint,
-			HttpStatusCode statusCode, String responseBody, OpenRouterErrorDetails errorDetails) {
+	public OpenRouterLimitExceededException(Limit limit, long configuredLimit, long observedValue,
+			@Nullable String endpoint, @Nullable HttpStatusCode statusCode, @Nullable String responseBody,
+			@Nullable OpenRouterErrorDetails errorDetails) {
 		super(message(limit, configuredLimit, observedValue, endpoint));
 		this.limit = limit;
 		this.configuredLimit = configuredLimit;
@@ -75,7 +77,7 @@ public final class OpenRouterLimitExceededException extends NonTransientAiExcept
 		this.endpoint = endpoint;
 	}
 
-	private static String message(Limit limit, long configuredLimit, long observedValue, String endpoint) {
+	private static String message(Limit limit, long configuredLimit, long observedValue, @Nullable String endpoint) {
 		String target = endpoint != null ? "OpenRouter " + endpoint : "OpenRouter";
 		return target + " exceeded the configured " + limit.description + " limit of " + configuredLimit + " "
 				+ limit.unit + " (observed at least " + observedValue + "). Increase `" + limit.property
@@ -95,27 +97,27 @@ public final class OpenRouterLimitExceededException extends NonTransientAiExcept
 	}
 
 	@Override
-	public HttpStatusCode getStatusCode() {
+	public @Nullable HttpStatusCode getStatusCode() {
 		return this.statusCode;
 	}
 
 	@Override
-	public String getResponseBody() {
+	public @Nullable String getResponseBody() {
 		return this.responseBody;
 	}
 
 	@Override
-	public OpenRouterErrorDetails getErrorDetails() {
+	public @Nullable OpenRouterErrorDetails getErrorDetails() {
 		return this.errorDetails;
 	}
 
 	@Override
-	public OpenRouterRetryAfter getRetryAfter() {
+	public @Nullable OpenRouterRetryAfter getRetryAfter() {
 		return null;
 	}
 
 	@Override
-	public String getEndpoint() {
+	public @Nullable String getEndpoint() {
 		return this.endpoint;
 	}
 

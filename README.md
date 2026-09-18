@@ -18,6 +18,55 @@ and attribution headers — all behind the standard Spring AI `ChatModel` contra
 Chat Completions is the production default. The optional Responses request mode is experimental;
 applications should opt into it explicitly.
 
+### Supported API and nullability
+
+The supported consumer API consists of the following types under
+`de.subhransu.openrouter.springai`. Existing public visibility is unchanged.
+
+| API | Supported use |
+| --- | --- |
+| `chat`, `embedding`, `image` | Models and their builders, options and option builders, routing/reasoning/format records, usage and generated-image metadata. Use the Spring AI model interfaces for calls and streams. |
+| `OpenRouterIdentifiers` | Provider identifiers used to select this integration. |
+| `api.OpenRouterApi`, `api.OpenRouterRequestMode` | Direct HTTP calls and client construction, including `RestClient.Builder`, `WebClient.Builder`, Jackson, attribution, timeouts, and response limits. |
+| `api.dto` | Low-level request and response records used by `OpenRouterApi`. Consumers may construct requests and inspect responses; wire fields can be absent. Responses mode remains experimental. |
+| `chat.OpenRouterToolFailurePolicy`, `chat.OpenRouterToolExecutionExceptionProcessor` | Custom tool-manager failure policy and failure rendering. The policy accessor must return the actual, non-null processor. Tool execution belongs to Spring AI's advisor. |
+| `errors`, `chat.errors`, `api.errors.OpenRouterApiException` | Exception types, diagnostic records, category enums, and inspection interfaces. Missing diagnostics are nullable. |
+| `autoconfigure.*Properties` and `spring.ai.openrouter.*` | Boot property binding. Custom model, API, and tool beans use the existing auto-configuration backoff rules. |
+
+Mapper packages, `internal`, `support.OptionSnapshots`, error factories/classifiers,
+`OpenRouterExceptionMessage`, `OpenRouterErrorResponse`, deserializers, runtime hints, and auto-configuration
+implementation methods are implementation details even where Java visibility is public.
+They are not supported extension points and may change between releases. Prefer the
+consumer types above. This policy does not move classes or remove existing methods.
+
+Consumer packages declare JSpecify `@NullMarked`; `@Nullable` marks optional values.
+A nullable list or map does not imply nullable elements. Request lists and Spring AI
+tool callback/context entries retain their non-null element contracts. JSON metadata
+maps allow null values, and response arrays can contain null entries. Handle missing
+response fields before dereferencing them, including usage, cost, and media metadata.
+Implementation helpers with unaudited contracts remain explicitly `@NullUnmarked`
+or outside marked packages. These annotations do not add runtime validation.
+
+Java method descriptors and the Java 17 baseline are unchanged. Existing Java callers
+continue to compile. Kotlin with strict JSpecify checking and null-aware Java analyzers
+may now reject unchecked dereferences of values that were already nullable at runtime.
+Use null checks or Kotlin safe calls. The consumer compilation tests cover optional
+options, response fields and elements, Spring AI option types, and a custom failure policy.
+
+A null runtime option means "inherit the configured default", not "clear it". For
+example, if defaults include `seed(7)`, merging a runtime option with
+`requestMode(OPENAI_RESPONSES).seed(null)` retains seed 7 and fails Responses validation.
+Use defaults without that Chat Completions-only option when switching modes. Calling
+`defaults.mutate().seed(null).build()` creates a separate defaults object with no seed;
+it does not clear a seed when that object is merged back into the original defaults.
+
+Builders, copies, merges, and model defaults snapshot option containers. JSON maps and
+lists are copied recursively; opaque callbacks and application objects retain identity.
+This does not promise arbitrary deep immutability or general thread safety. Existing
+option setters and Boot property beans remain mutable. Do not mutate shared options
+concurrently with calls. The ownership regressions for #18 remain in
+`OptionSnapshotTests` and `OpenRouterChatModelSnapshotTests`.
+
 ### Request-mode option contract
 
 Both modes map `outputSchema` and `responseFormat`: Chat Completions uses
