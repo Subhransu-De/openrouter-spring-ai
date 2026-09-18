@@ -36,7 +36,7 @@ public final class OpenRouterResponsesResponseMapper {
 		Map<String, Object> properties = ReasoningMetadata.responses(response.output());
 		RefusalMetadata.put(properties, RefusalMetadata.responses(response.output()));
 		AssistantMessage assistantMessage = AssistantMessage.builder()
-			.content(text(response))
+			.content(text(response.output()))
 			.properties(properties)
 			.toolCalls(toolCalls)
 			.media(GeneratedImageMapper.responsesMedia(response.output()))
@@ -91,19 +91,18 @@ public final class OpenRouterResponsesResponseMapper {
 			.toList();
 	}
 
-	private String text(ResponsesResult response) {
-		if (CollectionUtils.isEmpty(response.output())) {
+	static String text(List<ResponsesOutputItem> output) {
+		if (CollectionUtils.isEmpty(output)) {
 			return "";
 		}
-		return response.output()
-			.stream()
+		return output.stream()
 			.filter(item -> "message".equals(item.type()))
-			.map(this::text)
+			.map(OpenRouterResponsesResponseMapper::text)
 			.filter(Objects::nonNull)
 			.reduce("", String::concat);
 	}
 
-	private String text(ResponsesOutputItem item) {
+	private static String text(ResponsesOutputItem item) {
 		if (CollectionUtils.isEmpty(item.content())) {
 			return "";
 		}

@@ -164,7 +164,8 @@ class ReasoningRoundTripTests {
 		AssistantMessage sync = new OpenRouterResponsesResponseMapper().map(wire).getResult().getOutput();
 		assertOrderedReplay(sync, output);
 		Flux<ResponsesStreamEvent> events = Flux.fromIterable(wire.output())
-			.map(item -> new ResponsesStreamEvent("response.output_item.done", null, item, null, null));
+			.map(item -> new ResponsesStreamEvent("response.output_item.done", null, item, null, null))
+			.startWith(new ResponsesStreamEvent("response.output_text.delta", "checking", null, null, null));
 		for (boolean terminal : List.of(false, true)) {
 			Flux<ResponsesStreamEvent> stream = terminal
 					? events.concatWithValues(new ResponsesStreamEvent("response.completed", null, null, wire, null))

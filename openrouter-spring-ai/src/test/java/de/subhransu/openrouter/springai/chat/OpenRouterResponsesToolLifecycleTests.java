@@ -96,6 +96,14 @@ class OpenRouterResponsesToolLifecycleTests {
 		}
 		assertThat((List<?>) requests.getAllValues().get(1).input())
 			.anySatisfy(item -> assertThat(item).isEqualTo(reasoning));
+		var mapper = JsonMapper.builder().build();
+		var input = mapper.readTree(mapper.writeValueAsString(requests.getAllValues().get(1))).get("input");
+		assertThat(input.get(1)).isEqualTo(mapper.valueToTree(reasoning));
+		assertThat(input.get(2)).isEqualTo(mapper.valueToTree(call(FIRST_CALL_ID, itemStatus, "{}")));
+		assertThat(input.get(3))
+			.isEqualTo(mapper.valueToTree(call("synthetic_call_2", itemStatus, "{\"optional\":true}")));
+		assertThat(input.get(4).get("type").asString()).isEqualTo("function_call_output");
+		assertThat(input.get(5).get("type").asString()).isEqualTo("function_call_output");
 	}
 
 	@ParameterizedTest

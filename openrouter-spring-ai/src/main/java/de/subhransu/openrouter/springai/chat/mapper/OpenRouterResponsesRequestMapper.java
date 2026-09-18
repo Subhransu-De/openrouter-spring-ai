@@ -16,8 +16,10 @@ import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
 import de.subhransu.openrouter.springai.chat.OpenRouterReasoningOptions;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import tools.jackson.databind.node.ObjectNode;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
@@ -138,6 +140,7 @@ public final class OpenRouterResponsesRequestMapper {
 			if (reasoning instanceof List<?> reasoningItems && !reasoningItems.isEmpty()) {
 				Object output = message.getMetadata().get(ReasoningMetadata.RESPONSES_OUTPUT_ITEMS);
 				if (output instanceof List<?> outputItems) {
+					validateSnapshot(message, outputItems);
 					// Reasoning must retain its position relative to messages and calls.
 					// Rebuilding these separately changes the provider's continuation.
 					return new ArrayList<>(outputItems);
@@ -163,6 +166,22 @@ public final class OpenRouterResponsesRequestMapper {
 			return items;
 		}
 		return List.of(inputMessage(mapRole(message.getMessageType()), message));
+	}
+
+	private void validateSnapshot(Message message, List<?> outputItems) {
+		// Validate the serialized shape, including raw items and deserialized metadata.
+		List<ResponsesOutputItem> snapshot = Arrays
+			.asList(this.objectMapper.convertValue(outputItems, ResponsesOutputItem[].class));
+		List<AssistantMessage.ToolCall> calls = message instanceof AssistantMessage assistant ? assistant.getToolCalls()
+				: List.of();
+		if (!Objects.equals(OpenRouterResponsesResponseMapper.text(snapshot),
+				message.getText() != null ? message.getText() : "")
+				|| !Objects.equals(OpenRouterResponsesResponseMapper.toolCalls(null, null, snapshot), calls) || !Objects
+					.equals(RefusalMetadata.responses(snapshot), message.getMetadata().get(RefusalMetadata.REFUSAL))) {
+			throw new IllegalArgumentException("OPENAI_RESPONSES cannot replay a stale assistant output snapshot: "
+					+ "text, tool calls, or refusal metadata changed; retain the original assistant message "
+					+ "or start a new conversation without its reasoning state");
+		}
 	}
 
 	private ResponsesInputMessage inputMessage(String role, Message message) {
