@@ -26,7 +26,8 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 			ReasoningMetadata.Accumulator reasoning = new ReasoningMetadata.Accumulator();
 			List<ResponsesOutputItem> pending = new ArrayList<>();
 			RefusalMetadata.Accumulator refusal = new RefusalMetadata.Accumulator();
-			return events.map(event -> map(event, reasoning, pending, refusal))
+			TextState text = new TextState();
+			return events.map(event -> map(event, reasoning, pending, refusal, text))
 				.concatWith(Mono
 					.defer(() -> pending.isEmpty() ? Mono.empty() : Mono.error(new OpenRouterTruncatedResponseException(
 							"Responses stream ended before tool round completion"))));
@@ -34,11 +35,12 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 	}
 
 	public ChatResponse map(ResponsesStreamEvent event) {
-		return map(event, new ReasoningMetadata.Accumulator(), new ArrayList<>(), new RefusalMetadata.Accumulator());
+		return map(event, new ReasoningMetadata.Accumulator(), new ArrayList<>(), new RefusalMetadata.Accumulator(),
+				new TextState());
 	}
 
 	private ChatResponse map(ResponsesStreamEvent event, ReasoningMetadata.Accumulator accumulator,
-			List<ResponsesOutputItem> pending, RefusalMetadata.Accumulator refusal) {
+			List<ResponsesOutputItem> pending, RefusalMetadata.Accumulator refusal, TextState textState) {
 		String type = event.type();
 		boolean incomplete = "response.incomplete".equals(type);
 		if ("error".equals(type) || type != null && type.endsWith(".error")) {
@@ -47,10 +49,8 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 					error, event.errorType());
 		}
 
-		// Deltas are the single source of streamed text. Terminal events such as
-		// response.output_text.done and response.output_item.done repeat the full text of
-		// content already streamed as deltas, so emitting them again would duplicate
-		// output.
+		// Prefer deltas; recover terminal-only text at completion without repeating
+		// content already emitted by the stream.
 		String text = "";
 		String reasoning = null;
 		String finishReason = null;
@@ -59,6 +59,7 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 		List<Media> media = List.of();
 		if ("response.output_text.delta".equals(type)) {
 			text = event.delta() != null ? event.delta() : "";
+			textState.hasText |= !text.isEmpty();
 		}
 		else if ("response.reasoning_text.delta".equals(type) || "response.reasoning_summary_text.delta".equals(type)) {
 			reasoning = event.delta();
@@ -129,6 +130,12 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 			snapshot = accumulator.replace(ReasoningMetadata.responses(result.output()));
 		}
 		RefusalMetadata.put(snapshot, refusal.update(event));
+		if (("response.completed".equals(type) || incomplete) && !textState.hasText
+				&& snapshot.get(ReasoningMetadata.RESPONSES_OUTPUT_ITEMS) instanceof List<?> output) {
+			text = OpenRouterResponsesResponseMapper
+				.text(output.stream().map(ResponsesOutputItem.class::cast).toList());
+			textState.hasText = !text.isEmpty();
+		}
 		AssistantMessage assistantMessage = AssistantMessage.builder()
 			.properties(snapshot)
 			.content(text)
@@ -175,6 +182,12 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 			return merged;
 		}
 		return nested;
+	}
+
+	private static final class TextState {
+
+		private boolean hasText;
+
 	}
 
 }
