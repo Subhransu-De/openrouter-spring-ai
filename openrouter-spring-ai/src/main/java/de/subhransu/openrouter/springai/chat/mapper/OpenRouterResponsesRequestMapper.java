@@ -1,7 +1,5 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import de.subhransu.openrouter.springai.api.dto.ProviderPreferences;
 import de.subhransu.openrouter.springai.api.dto.ReasoningOptions;
@@ -13,6 +11,7 @@ import de.subhransu.openrouter.springai.api.dto.ResponsesOutputItem;
 import de.subhransu.openrouter.springai.api.dto.ResponsesRequest;
 import de.subhransu.openrouter.springai.api.dto.ResponsesTool;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
+import de.subhransu.openrouter.springai.chat.OpenRouterCacheBreakpoint;
 import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
 import de.subhransu.openrouter.springai.chat.OpenRouterReasoningOptions;
 import java.util.ArrayList;
@@ -43,6 +42,12 @@ public final class OpenRouterResponsesRequestMapper {
 
 	public ResponsesRequest map(List<Message> messages, OpenRouterChatOptions options, boolean stream,
 			List<ToolDefinition> toolDefinitions) {
+		for (Message message : messages) {
+			if (message.getMetadata().containsKey(OpenRouterCacheBreakpoint.METADATA_KEY)) {
+				throw new IllegalArgumentException("OPENAI_RESPONSES does not support cache_control breakpoints; "
+						+ "use OPENAI_CHAT_COMPLETIONS");
+			}
+		}
 		rejectUnsupported("stopSequences", options.getStopSequences());
 		rejectUnsupported("seed", options.getSeed());
 		rejectUnsupported("repetitionPenalty", options.getRepetitionPenalty());
@@ -58,8 +63,8 @@ public final class OpenRouterResponsesRequestMapper {
 				mapReasoning(options.getReasoning()), options.getRoute(),
 				options.getServiceTier() != null ? options.getServiceTier().value() : null, options.getUser(),
 				options.getParallelToolCalls(), ToolChoiceMapper.map(options.getToolChoice(), true, this.objectMapper),
-				mapTools(toolDefinitions), options.getModalities(), options.getImageConfig(), mapText(options),
-				options.getExtraBody());
+				mapTools(toolDefinitions, options.getToolStrict()), options.getModalities(), options.getImageConfig(),
+				mapText(options), options.getExtraBody());
 	}
 
 	private static void rejectUnsupported(String name, Object value) {
@@ -82,23 +87,14 @@ public final class OpenRouterResponsesRequestMapper {
 		return Map.of("format", format);
 	}
 
-	private List<ResponsesTool> mapTools(List<ToolDefinition> toolDefinitions) {
+	private List<ResponsesTool> mapTools(List<ToolDefinition> toolDefinitions, Boolean strict) {
 		if (CollectionUtils.isEmpty(toolDefinitions)) {
 			return null;
 		}
 		return toolDefinitions.stream()
 			.map(toolDefinition -> new ResponsesTool("function", toolDefinition.name(), toolDefinition.description(),
-					readTree(toolDefinition.inputSchema())))
+					ToolSchemaValidator.read(this.objectMapper, toolDefinition, strict), strict))
 			.toList();
-	}
-
-	private JsonNode readTree(String json) {
-		try {
-			return this.objectMapper.readTree(json);
-		}
-		catch (JacksonException ex) {
-			throw new IllegalArgumentException("Invalid JSON schema", ex);
-		}
 	}
 
 	private String mapInstructions(List<Message> messages) {

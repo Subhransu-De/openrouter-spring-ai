@@ -3,12 +3,15 @@ package de.subhransu.openrouter.springai.autoconfigure;
 import org.jspecify.annotations.Nullable;
 import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
 import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingOptions;
+import org.springframework.ai.document.MetadataMode;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(OpenRouterEmbeddingProperties.CONFIG_PREFIX)
 public class OpenRouterEmbeddingProperties {
 
 	public static final String CONFIG_PREFIX = "spring.ai.openrouter.embedding";
+
+	private MetadataMode metadataMode = MetadataMode.NONE;
 
 	private @Nullable String model;
 
@@ -28,6 +31,14 @@ public class OpenRouterEmbeddingProperties {
 			.user(this.user)
 			.provider(this.provider)
 			.build();
+	}
+
+	public MetadataMode getMetadataMode() {
+		return this.metadataMode;
+	}
+
+	public void setMetadataMode(MetadataMode metadataMode) {
+		this.metadataMode = metadataMode;
 	}
 
 	public @Nullable String getModel() {

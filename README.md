@@ -92,9 +92,8 @@ Both modes map `outputSchema` and `responseFormat`: Chat Completions uses
 `response_format`, and Responses uses `text.format`. An explicit `responseFormat`
 takes precedence over `outputSchema`. Portable schemas leave `strict` unset;
 `OpenRouterResponseFormat.jsonSchema(name, strict, schema)` preserves an explicit
-`true` or `false`. Schema enforcement depends on the selected provider. Function tools
-leave `strict` unset in both modes; this library does not currently expose a function-tool
-strictness option or rewrite tool schemas to satisfy strict-mode requirements.
+`true` or `false`. Schema enforcement depends on the selected provider. Function-tool strictness is
+controlled independently with `toolStrict`, described below.
 
 Configure structured-output defaults under the flattened chat namespace (no
 `options` segment):
@@ -195,6 +194,36 @@ Responses output annotations and opaque tool fields remain available in the exis
 `openrouter.responses.output_items` snapshot through each item's `rawItem()` / `wireValue()`.
 The existing ordered reasoning replay policy is unchanged. Citation data is preserved
 when returned; this does not add web-search or server-tool execution support.
+
+### Strict function tools
+
+Set `OpenRouterChatOptions.builder().toolStrict(true)` or
+`spring.ai.openrouter.chat.tool-strict=true` to request strict schemas for every
+function tool. This applies to calls and streams in both modes: Chat Completions
+sends `tools[].function.strict`; experimental Responses sends `tools[].strict`.
+There are no per-tool overrides. During option composition, an omitted/null option
+inherits the default; a non-null runtime option overrides it, including `false`. With no default, null
+omits the wire flag, preserving provider defaults; `false` explicitly disables
+strictness. Copying and composing options preserve these distinctions.
+
+The library validates rather than adapts schemas when `true`. Supply an object
+root, `additionalProperties: false` on every object, and a `required` array
+containing every property exactly once (empty objects use empty `properties` and
+`required`). Optional values must explicitly allow null **and** remain required,
+for example `"note": {"type": ["string", "null"]}` with `"note"` in `required`.
+The validator follows nested properties, array items, `anyOf`, definitions, and
+local JSON-pointer `$ref`s, including recursion. External/unresolved references,
+root `anyOf`, and unsupported composition such as `allOf`/`oneOf` are rejected
+before HTTP. Schemas are never rewritten; the callback retains its original schema.
+Omitted/false strictness preserves existing schema handling.
+
+Use a routed model/provider that supports strict function tools; this option does
+not discover capabilities or guarantee support across OpenRouter. Validation checks
+the common [strict function contract](https://developers.openai.com/api/docs/guides/function-calling#strict-mode),
+not every provider-specific schema keyword, size limit, or model restriction.
+Provider rejections propagate through normal API errors, without silently retrying
+as non-strict. `ToolCallingAdvisor` still owns execution; response-format strictness
+is unaffected.
 
 ### Retries and Responses failures
 
@@ -367,6 +396,53 @@ validation and transfers failure-result redaction responsibility to the applicat
 not disable the automatically supplied processor. Declaring an unrelated processor bean
 does not approve a manager that uses a different processor.
 
+### Explicit prompt-cache breakpoints
+
+For Chat Completions, attach a `List<OpenRouterCacheBreakpoint>` to a system or user
+message's metadata. Each exclusive `endIndex` splits the original text into a content
+block with `cache_control`; the remaining text and image media stay in their original
+order. Offsets use Java `String.length()` units, must increase, and cannot split a
+surrogate pair. For example (synthetic content):
+
+```java
+String reference = "Reference material to reuse.\n";
+UserMessage message = UserMessage.builder()
+    .text(reference + "Answer this turn's question.")
+    .metadata(Map.of(OpenRouterCacheBreakpoint.METADATA_KEY,
+        List.of(new OpenRouterCacheBreakpoint(reference.length()))))
+    .build();
+chatModel.call(new Prompt(message));
+```
+
+The default `Ttl.FIVE_MINUTES` emits `{"type":"ephemeral"}`; `Ttl.ONE_HOUR`
+adds `"ttl":"1h"`. Both calls and streams use these boundaries. There are no cache
+model defaults or Boot properties: placement belongs to individual messages, so there
+is no option precedence. Keep the typed metadata and unchanged text in conversation
+history, including tool continuations. Custom history stores must restore the typed
+breakpoints; generic maps are rejected. Recompute offsets when editing text.
+
+The integration supports at most four breakpoints per request, with all one-hour
+boundaries before five-minute boundaries. Assistant messages, tool results, tool
+definitions, and image blocks are not supported breakpoint targets. Invalid metadata,
+offsets, ordering, or placement fail explicitly.
+
+| Request protocol / provider                    | Supported placement and lifetime                                                                                                                                                                                   |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Chat Completions / Claude-compatible providers | System and user text blocks; five minutes or one hour.                                                                                                                                                             |
+| Chat Completions / supported Alibaba models    | Text blocks; use five minutes. Model and endpoint support varies.                                                                                                                                                  |
+| Chat Completions / supported Gemini models     | Text blocks; use five minutes. Only the final boundary is used; a boundary in the first system message caches the normalized system prompt, including its trailing text. Put dynamic text in a later user message. |
+| Chat Completions / other routes                | Provider-dependent; no guarantee of explicit caching or TTL preservation. Select a supporting route.                                                                                                               |
+| Responses                                      | This metadata is rejected. Its per-block `prompt_cache_breakpoint` has different semantics and is not implemented here.                                                                                            |
+
+Provider/model eligibility and minimum prompt sizes are enforced upstream; the library
+does not infer capabilities from model names or fallback routing. Consult
+[OpenRouter's prompt caching guide](https://openrouter.ai/docs/guides/best-practices/prompt-caching)
+for current restrictions. This explicit content API is narrower than Spring AI's
+Anthropic caching strategies: it does not automatically select message or tool
+boundaries. Provider implicit caching remains available without these markers.
+Request-level automatic caching, `prompt_cache_key`, and cache usage accounting are
+separate capabilities.
+
 ### Reasoning conversation state
 
 Assistant message metadata carries `openrouter.reasoning` (text) and
@@ -448,6 +524,22 @@ float[] vector = embeddingModel.embed("The quick brown fox");
 Provider routing (`spring.ai.openrouter.embedding.provider.*`) works the same way as for
 chat. Only `float` embeddings are decoded; requesting `encoding_format: base64` fails fast.
 
+Document embedding keeps raw text by default (`metadata-mode: none`). To include metadata,
+set `spring.ai.openrouter.embedding.metadata-mode: embed`, or use
+`OpenRouterEmbeddingModel.builder().metadataMode(MetadataMode.EMBED)` in Java. Both
+`embed(Document)` and batched document embedding use the document's content formatter;
+`EMBED` honors its excluded embedding metadata keys. `ALL` and `INFERENCE` are also supported.
+`NONE` bypasses formatting and preserves the original text. Changing the policy changes
+embedding input, so existing vector collections may need re-embedding.
+
+`dimensions()` returns positive configured dimensions without an API call. Otherwise it
+caches the first successful discovery per model instance, with concurrent callers sharing
+that discovery. Failed or invalid responses are not cached. The cache belongs to the
+model's copied default configuration (including model, dimensions and provider routing);
+per-request overrides never update it. Build a new model for a different default
+configuration; modifying the options originally supplied to the builder does not change
+an existing model or its cached dimensions.
+
 ### Image inputs
 
 Attach image media to a `UserMessage` and it is sent as OpenRouter `image_url` content
@@ -493,6 +585,16 @@ String base64 = response.getResult().getOutput().getB64Json();
 The OpenRouter-native knobs (`resolution`, `aspect-ratio`, `quality`, `output-format`,
 `background`, `output-compression`, `seed`) are available on `OpenRouterImageOptions`,
 along with `inputReferences` for image-to-image work and `providerOptions` passthrough.
+Generic Spring AI `ImageOptions` map `model` and `n` directly and translate paired
+`width`/`height` into pixel `size` (a lone dimension is rejected after merging defaults).
+`responseFormat` must be omitted or exactly `b64_json`; any other non-null format,
+including `url`, and any non-null `style` fail with `IllegalArgumentException` before
+HTTP transport in both `call` and `stream`. These portable settings have no wire fields.
+Use `OpenRouterImageOptions.fromOptions(...)` to convert generic defaults; generic
+per-request options override mapped fields while retaining unset native defaults,
+including `quality`, `outputFormat`, and `providerOptions`. Native `outputFormat`
+selects image encoding (for example, `webp`), not URL versus base64 delivery.
+
 `OpenRouterImageModel.stream(ImagePrompt)` exposes OpenRouter's SSE image streaming:
 partial previews arrive first (see `OpenRouterImageGenerationMetadata.partialImageIndex()`),
 then completed images with usage and cost. The stream ends at `[DONE]`, not at the

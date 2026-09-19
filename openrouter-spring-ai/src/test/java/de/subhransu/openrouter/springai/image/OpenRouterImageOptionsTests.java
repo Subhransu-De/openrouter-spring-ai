@@ -22,12 +22,17 @@ class OpenRouterImageOptionsTests {
 			.build();
 
 		OpenRouterImageOptions merged = defaults
-			.merge(OpenRouterImageOptions.builder().model("openai/gpt-image-1").aspectRatio("16:9").build());
+			.merge(OpenRouterImageOptions.fromOptions(OpenRouterImageOptions.builder()
+				.model("openai/gpt-image-1")
+				.aspectRatio("16:9")
+				.providerOptions(Map.of("options", Map.of("test", Map.of("watermark", false))))
+				.build()));
 
 		assertThat(merged.getModel()).isEqualTo("openai/gpt-image-1");
 		assertThat(merged.getAspectRatio()).isEqualTo("16:9");
 		assertThat(merged.getQuality()).isEqualTo("high");
 		assertThat(merged.getOutputFormat()).isEqualTo("webp");
+		assertThat(merged.getProviderOptions()).containsEntry("options", Map.of("test", Map.of("watermark", false)));
 	}
 
 	@Test

@@ -119,6 +119,7 @@ class OpenRouterChatOptionsRobustnessTests {
 			.user("user-7")
 			.responseFormat(OpenRouterResponseFormat.jsonObject())
 			.parallelToolCalls(true)
+			.toolStrict(true)
 			.toolChoice("auto")
 			.provider(new OpenRouterProviderPreferences(true, false, "deny", List.of("openai"), List.of("azure"),
 					List.of("fp16"), "throughput"))

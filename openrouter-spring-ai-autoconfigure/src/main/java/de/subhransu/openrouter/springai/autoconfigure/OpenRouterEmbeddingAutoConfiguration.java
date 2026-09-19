@@ -35,6 +35,7 @@ public class OpenRouterEmbeddingAutoConfiguration {
 		OpenRouterEmbeddingModel embeddingModel = OpenRouterEmbeddingModel.builder()
 			.openRouterApi(openRouterApi)
 			.defaultOptions(embeddingProperties.toOptions())
+			.metadataMode(embeddingProperties.getMetadataMode())
 			.retryTemplate(retryTemplateProvider.getIfAvailable())
 			.observationRegistry(observationRegistryProvider.getIfAvailable())
 			.build();

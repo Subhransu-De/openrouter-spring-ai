@@ -64,6 +64,9 @@ public class OpenRouterChatProperties {
 
 	private @Nullable Map<String, @Nullable Object> providerExtraBody;
 
+	/** Strictness for all function tools; unset preserves the provider default. */
+	private @Nullable Boolean toolStrict;
+
 	private @Nullable Boolean parallelToolCalls;
 
 	private @Nullable String toolChoice;
@@ -118,6 +121,7 @@ public class OpenRouterChatProperties {
 			.outputSchema(this.outputSchema)
 			.extraBody(this.extraBody)
 			.providerExtraBody(this.providerExtraBody)
+			.toolStrict(this.toolStrict)
 			.parallelToolCalls(this.parallelToolCalls)
 			.toolChoice(this.toolChoice)
 			.repetitionPenalty(this.repetitionPenalty)
@@ -276,6 +280,14 @@ public class OpenRouterChatProperties {
 
 	public void setOutputSchema(@Nullable String outputSchema) {
 		this.outputSchema = outputSchema;
+	}
+
+	public @Nullable Boolean getToolStrict() {
+		return this.toolStrict;
+	}
+
+	public void setToolStrict(@Nullable Boolean toolStrict) {
+		this.toolStrict = toolStrict;
 	}
 
 	public @Nullable Boolean getParallelToolCalls() {

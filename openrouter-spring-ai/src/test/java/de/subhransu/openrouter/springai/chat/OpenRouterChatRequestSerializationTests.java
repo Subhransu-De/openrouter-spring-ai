@@ -607,7 +607,8 @@ class OpenRouterChatRequestSerializationTests {
 		method.invoke(builder, value);
 		var options = builder.build();
 		var messages = List.<Message>of(new UserMessage("hi"));
-		var tools = "toolCallbacks".equals(name) ? List.of(weatherTool()) : List.<ToolDefinition>of();
+		var tools = "toolCallbacks".equals(name) || "toolStrict".equals(name) ? List.of(weatherTool())
+				: List.<ToolDefinition>of();
 		for (boolean stream : List.of(false, true)) {
 			JsonNode chat = this.objectMapper.valueToTree(this.chatMapper.map(messages, options, stream, tools));
 			if (chatPath != null) {
@@ -649,6 +650,7 @@ class OpenRouterChatRequestSerializationTests {
 						"/text/format/schema" },
 				{ "parallelToolCalls", false, "/parallel_tool_calls", "/parallel_tool_calls" },
 				{ "toolChoice", "required", "/tool_choice", "/tool_choice" },
+				{ "toolStrict", false, "/tools/0/function/strict", "/tools/0/strict" },
 				{ "provider", new OpenRouterProviderPreferences(true, null, null, null, null, null, null), "/provider",
 						"/provider" },
 				{ "reasoning", new OpenRouterReasoningOptions("high", null, null, null), "/reasoning", "/reasoning" },
