@@ -92,7 +92,8 @@ final class AudioOutputMapper {
 				choice.delta() == null || choice.delta().toolCalls() == null || choice.delta().toolCalls().isEmpty(),
 				"Audio and tool calls in the same choice are unsupported");
 		if (choice.finishReason() != null) {
-			if (!"stop".equals(choice.finishReason()) || assembly.bytes.size() == 0) {
+			byte[] completedAudio = assembly.bytes.toByteArray();
+			if (!"stop".equals(choice.finishReason()) || completedAudio.length == 0) {
 				throw new OpenRouterTruncatedResponseException(
 						"Audio choice ended without complete audio and a stop finish reason");
 			}
@@ -108,7 +109,7 @@ final class AudioOutputMapper {
 			metadata.put(METADATA, Map.copyOf(snapshot));
 			media.add(Media.builder()
 				.mimeType(MimeTypeUtils.parseMimeType(mimeType(this.options.format())))
-				.data(assembly.bytes.toByteArray())
+				.data(completedAudio)
 				.build());
 			this.retainedBytes -= assembly.retainedBytes;
 			this.pending.remove(index);
