@@ -101,7 +101,9 @@ class OpenRouterStructuredOutputPropertiesTests {
 				var request = new org.springframework.mock.http.client.reactive.MockClientHttpRequest(method, uri);
 				var response = new org.springframework.mock.http.client.reactive.MockClientHttpResponse(HttpStatus.OK);
 				response.getHeaders().setContentType(MediaType.TEXT_EVENT_STREAM);
-				response.setBody("data: [DONE]\n\n");
+				response.setBody(mode == OpenRouterRequestMode.OPENAI_RESPONSES
+						? "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"output\":[]}}\n\n"
+						: "data: [DONE]\n\n");
 				return callback.apply(request)
 					.then(Mono.defer(request::getBodyAsString))
 					.doOnNext(body::set)
