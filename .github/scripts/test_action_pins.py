@@ -36,21 +36,22 @@ class ActionPinsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             fixtures = {
-                "workflows/build.yaml": "jobs:\n  build:\n    steps:\n      - {uses: 'owner/action@v1'}\n",
-                "workflows/reuse.yml": "jobs:\n  build:\n    uses: owner/repo/.github/workflows/build.yml@main\n",
-                "actions/nested/action.yaml": "runs:\n  using: composite\n  steps:\n    - uses: >-\n        owner/action@v2\n",
+                ".github/workflows/build.yaml": "jobs:\n  build:\n    steps:\n      - {uses: 'owner/action@v1'}\n",
+                ".github/workflows/reuse.yml": "jobs:\n  build:\n    uses: owner/repo/.github/workflows/build.yml@main\n",
+                ".github/actions/nested/action.yaml": "runs:\n  using: composite\n  steps:\n    - uses: >-\n        owner/action@v2\n",
                 "actions/container/action.yml": "runs:\n  using: docker\n  image: docker://alpine:3\n",
                 "actions/local/action.yml": "runs:\n  using: docker\n  image: Dockerfile\n",
-                "codeql/config.yml": "queries:\n  - uses: security-and-quality\n",
-                "workflows/local.yml": "jobs:\n  build:\n    steps:\n      - uses: ./.github/actions/local\n      - run: 'echo uses: owner/action@main'\n",
+                ".github/codeql/config.yml": "queries:\n  - uses: security-and-quality\n",
+                ".github/workflows/local.yml": "jobs:\n  build:\n    steps:\n      - uses: ./ci/my-action\n      - run: 'echo uses: owner/action@main'\n",
+                "ci/my-action/action.yml": "runs:\n  using: composite\n  steps:\n    - uses: owner/action@main\n",
             }
             for name, contents in fixtures.items():
                 path = root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(contents, encoding="utf-8")
             failures = check(root)
-            self.assertEqual(len(failures), 4, failures)
-            for name in list(fixtures)[:4]:
+            self.assertEqual(len(failures), 5, failures)
+            for name in [*list(fixtures)[:4], "ci/my-action/action.yml"]:
                 self.assertTrue(
                     any(str(root / name) in failure for failure in failures)
                 )

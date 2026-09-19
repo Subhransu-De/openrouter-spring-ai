@@ -44,7 +44,7 @@ def check(root):
             continue
         if (
             path.name not in {"action.yml", "action.yaml"}
-            and path.parent != root / "workflows"
+            and path.parent != root / ".github" / "workflows"
         ):
             continue
         try:
@@ -58,6 +58,6 @@ def check(root):
 
 
 if __name__ == "__main__":
-    failures = check(Path(sys.argv[1]) if len(sys.argv) > 1 else Path(".github"))
+    failures = check(Path(sys.argv[1]) if len(sys.argv) > 1 else Path("."))
     print("\n".join(failures) if failures else "All action references are immutable.")
     sys.exit(bool(failures))
