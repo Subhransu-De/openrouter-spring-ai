@@ -1,12 +1,20 @@
-# openrouter-spring-ai
+<p align="center">
+  <img src="assets/soft-weave-transparent.png" alt="OpenRouter Spring AI tree logo" width="200">
+</p>
 
-[![Maven Central](https://img.shields.io/maven-central/v/de.subhransu/openrouter-spring-ai-starter?label=Maven%20Central)](https://central.sonatype.com/artifact/de.subhransu/openrouter-spring-ai-starter)
-![Java 17 | 21 | 25](https://img.shields.io/badge/Java-17%20%7C%2021%20%7C%2025-orange)
-[![MIT License](https://img.shields.io/github/license/Subhransu-De/openrouter-spring-ai)](LICENSE)
+<h1 align="center">OpenRouter Spring AI</h1>
 
-[![Build](https://github.com/Subhransu-De/openrouter-spring-ai/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Subhransu-De/openrouter-spring-ai/actions/workflows/ci.yml)
-[![Nightly Compatibility Tests](https://github.com/Subhransu-De/openrouter-spring-ai/actions/workflows/garage-nightly.yml/badge.svg?branch=main)](https://github.com/Subhransu-De/openrouter-spring-ai/actions/workflows/garage-nightly.yml)
-[![CodeQL](https://github.com/Subhransu-De/openrouter-spring-ai/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/Subhransu-De/openrouter-spring-ai/actions/workflows/codeql.yml)
+<p align="center">Native OpenRouter integration for Spring AI</p>
+
+<p align="center">
+  <a href="https://central.sonatype.com/artifact/de.subhransu/openrouter-spring-ai-starter"><img src="https://img.shields.io/maven-central/v/de.subhransu/openrouter-spring-ai-starter?label=Maven%20Central&amp;style=flat" alt="Maven Central"></a>
+  <img src="https://img.shields.io/badge/Java-17%20%7C%2021%20%7C%2025-orange?style=flat" alt="Java 17, 21, and 25">
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Subhransu-De/openrouter-spring-ai?label=License&amp;style=flat" alt="MIT License"></a>
+  <br>
+  <a href="https://github.com/Subhransu-De/openrouter-spring-ai/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Subhransu-De/openrouter-spring-ai/ci.yml?branch=main&amp;label=Build&amp;style=flat" alt="Build status"></a>
+  <a href="https://github.com/Subhransu-De/openrouter-spring-ai/actions/workflows/garage-nightly.yml"><img src="https://img.shields.io/github/actions/workflow/status/Subhransu-De/openrouter-spring-ai/garage-nightly.yml?branch=main&amp;label=Nightly&amp;style=flat" alt="Nightly compatibility test status"></a>
+  <a href="https://github.com/Subhransu-De/openrouter-spring-ai/actions/workflows/codeql.yml"><img src="https://img.shields.io/github/actions/workflow/status/Subhransu-De/openrouter-spring-ai/codeql.yml?branch=main&amp;label=CodeQL&amp;style=flat" alt="CodeQL status"></a>
+</p>
 
 A native [Spring AI](https://spring.io/projects/spring-ai) chat provider for
 [OpenRouter](https://openrouter.ai). Instead of pointing the OpenAI client at OpenRouter's URL
