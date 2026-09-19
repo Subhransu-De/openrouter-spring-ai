@@ -104,7 +104,7 @@ class ChatClientOptionCompositionTests {
 		invoke(client, responses().build(), streaming);
 		assertThat(this.paths).containsExactly("/chat/completions", "/responses");
 		assertThat(this.requests)
-			.allSatisfy(request -> assertThat(request.path("model").asText()).isEqualTo("synthetic-model"));
+			.allSatisfy(request -> assertThat(request.path("model").stringValue()).isEqualTo("synthetic-model"));
 		assertThat(this.requests.get(1).has("stream_options")).isFalse();
 		assertThat(this.requests.get(1).has("seed")).isFalse();
 	}
@@ -121,7 +121,7 @@ class ChatClientOptionCompositionTests {
 			model.call(prompt);
 		}
 		assertThat(this.paths).containsExactly("/chat/completions");
-		assertThat(this.requests.get(0).path("model").asText()).isEqualTo("runtime-model");
+		assertThat(this.requests.get(0).path("model").stringValue()).isEqualTo("runtime-model");
 	}
 
 	private OpenRouterChatModel model(OpenRouterChatOptions defaults) {
