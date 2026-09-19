@@ -476,11 +476,11 @@ Responses streaming reuses the model builder's `toolCallAggregationMaxBytes`,
 `toolCallAggregationMaxChunks`, and `toolCallAggregationMaxDuration` settings and the Boot
 properties under `spring.ai.openrouter.chat.tool-call-aggregation`:
 
-| Property | Default | Responses scope |
-| --- | --- | --- |
-| `max-size` | `1MB` (1,048,576 bytes) | Cumulative serialized UTF-8 JSON bytes admitted from the first state-bearing event through the terminal event |
-| `max-chunks` | `1024` | Events in that interval, and separately the number of retained output items or items in a response snapshot |
-| `max-duration` | `2m` | Absolute elapsed time from the first state-bearing event; activity and keepalives do not reset it |
+| Property       | Default                 | Responses scope                                                                                               |
+| -------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `max-size`     | `1MB` (1,048,576 bytes) | Cumulative serialized UTF-8 JSON bytes admitted from the first state-bearing event through the terminal event |
+| `max-chunks`   | `1024`                  | Events in that interval, and separately the number of retained output items or items in a response snapshot   |
+| `max-duration` | `2m`                    | Absolute elapsed time from the first state-bearing event; activity and keepalives do not reset it             |
 
 State-bearing events include output items, function-argument fragments, reasoning, refusals,
 and nonempty response output snapshots. Once started, the budget counts every event,
