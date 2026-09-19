@@ -52,6 +52,8 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 
 	private @Nullable Boolean parallelToolCalls;
 
+	private @Nullable Boolean toolStrict;
+
 	private @Nullable Object toolChoice;
 
 	private @Nullable OpenRouterProviderPreferences provider;
@@ -135,6 +137,7 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 		builder.user(value(runtimeOptions.user, this.user));
 		builder.responseFormat(value(runtimeOptions.responseFormat, this.responseFormat));
 		builder.parallelToolCalls(value(runtimeOptions.parallelToolCalls, this.parallelToolCalls));
+		builder.toolStrict(value(runtimeOptions.toolStrict, this.toolStrict));
 		builder.toolChoice(value(runtimeOptions.toolChoice, this.toolChoice));
 		builder.provider(value(runtimeOptions.provider, this.provider));
 		builder.reasoning(value(runtimeOptions.reasoning, this.reasoning));
@@ -241,6 +244,10 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 
 	public @Nullable Boolean getParallelToolCalls() {
 		return this.parallelToolCalls;
+	}
+
+	public @Nullable Boolean getToolStrict() {
+		return this.toolStrict;
 	}
 
 	public @Nullable Object getToolChoice() {
@@ -377,6 +384,7 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 			this.options.user = source.user;
 			this.options.responseFormat = source.responseFormat;
 			this.options.parallelToolCalls = source.parallelToolCalls;
+			this.options.toolStrict = source.toolStrict;
 			this.options.toolChoice = OptionSnapshots.value(source.toolChoice);
 			this.options.provider = source.provider;
 			this.options.reasoning = source.reasoning;
@@ -504,6 +512,16 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 
 		public Builder responseFormat(@Nullable OpenRouterResponseFormat responseFormat) {
 			this.options.responseFormat = responseFormat;
+			return this;
+		}
+
+		/**
+		 * Strictness for every function tool: null omits the flag, false disables it,
+		 * true validates the supplied schema without rewriting it. Provider support is
+		 * required. Independent of response-format strictness.
+		 */
+		public Builder toolStrict(@Nullable Boolean toolStrict) {
+			this.options.toolStrict = toolStrict;
 			return this;
 		}
 

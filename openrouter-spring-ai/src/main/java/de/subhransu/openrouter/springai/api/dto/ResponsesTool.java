@@ -9,5 +9,11 @@ import tools.jackson.databind.JsonNode;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonInclude(Include.NON_NULL)
 public record ResponsesTool(@Nullable String type, @Nullable String name, @Nullable String description,
-		@Nullable JsonNode parameters) {
+		@Nullable JsonNode parameters, @Nullable Boolean strict) {
+
+	public ResponsesTool(@Nullable String type, @Nullable String name, @Nullable String description,
+			@Nullable JsonNode parameters) {
+		this(type, name, description, parameters, null);
+	}
+
 }
