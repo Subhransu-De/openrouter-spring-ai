@@ -67,6 +67,8 @@ class OpenRouterApiStreamingContractTests {
 
 	private static final String DONE_ONLY_SSE = "data: [DONE]\n\n";
 
+	private static final String RESPONSES_COMPLETED_SSE = "data: {\"type\":\"response.completed\"}\n\n";
+
 	private ChatCompletionRequest chatRequest() {
 		return new ChatCompletionRequest("openai/gpt-5.4-mini", null,
 				List.of(new ChatMessage("user", "hello", null, null, null)), null, null, null, null, null, null, null,
@@ -96,7 +98,7 @@ class OpenRouterApiStreamingContractTests {
 
 	@Test
 	void responsesStreamTargetsResponsesEndpoint() {
-		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE, DONE_ONLY_SSE);
+		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE, RESPONSES_COMPLETED_SSE);
 
 		capture.api().responsesStream(responsesRequest()).blockLast(Duration.ofSeconds(5));
 
@@ -120,7 +122,7 @@ class OpenRouterApiStreamingContractTests {
 
 	@Test
 	void responsesStreamSendsAuthorizationAndStreamTrueOnTheWire() {
-		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE, DONE_ONLY_SSE);
+		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE, RESPONSES_COMPLETED_SSE);
 
 		capture.api().responsesStream(responsesRequest()).blockLast(Duration.ofSeconds(5));
 
@@ -293,8 +295,9 @@ class OpenRouterApiStreamingContractTests {
 			default -> throw new IllegalArgumentException(endpoint);
 		};
 		for (String newline : List.of("\n", "\r\n")) {
-			String sse = ": keepalive\n\ndata: " + json.replace("\n", "\n: comment\ndata: ")
-					+ "\n\ndata: [DONE]\n\ndata: {invalid}\n\n";
+			String sse = ": keepalive\n\ndata: " + json.replace("\n", "\n: comment\ndata: ") + "\n\n"
+					+ (endpoint.equals("responses") ? RESPONSES_COMPLETED_SSE : "")
+					+ "data: [DONE]\n\ndata: {invalid}\n\n";
 			byte[] bytes = sse.replace("\n", newline).getBytes(StandardCharsets.UTF_8);
 			Flux<DataBuffer> body = Flux.range(0, (bytes.length + bufferSize - 1) / bufferSize)
 				.map(i -> new DefaultDataBufferFactory().wrap(java.util.Arrays.copyOfRange(bytes, i * bufferSize,
@@ -310,7 +313,9 @@ class OpenRouterApiStreamingContractTests {
 			Flux<String> values = switch (endpoint) {
 				case "chat" ->
 					api.chatCompletionStream(chatRequest()).map(chunk -> chunk.choices().get(0).delta().content());
-				case "responses" -> api.responsesStream(responsesRequest()).map(event -> event.delta());
+				case "responses" -> api.responsesStream(responsesRequest())
+					.filter(event -> event.delta() != null)
+					.map(event -> event.delta());
 				case "images" -> api.imagesStream(imagesRequest()).map(event -> event.b64Json());
 				default -> throw new IllegalArgumentException(endpoint);
 			};
@@ -397,18 +402,18 @@ class OpenRouterApiStreamingContractTests {
 		StepVerifier.create(capture.api().responsesStream(responsesRequest())).assertNext(event -> {
 			assertThat(event.type()).isEqualTo("response.output_text.delta");
 			assertThat(event.delta()).isEqualTo("hello");
-		}).verifyComplete();
+		}).expectError(OpenRouterTruncatedResponseException.class).verify();
 	}
 
 	@ParameterizedTest
-	@CsvSource({ "chat,false", "chat,true", "responses,false", "responses,true", "images,false", "images,true" })
+	@CsvSource({ "chat,false", "chat,true", "images,false", "images,true" })
 	void doneCompletesAndCancelsOpenBody(String endpoint, boolean timeout) {
 		assertTerminalBody(endpoint, timeout, "data: {\"choices\":[{\"index\":0,\"delta\":{}}]}\n\ndata: [DONE]\n\n",
 				1);
 	}
 
 	@ParameterizedTest
-	@ValueSource(strings = { "chat", "responses", "images" })
+	@ValueSource(strings = { "chat", "images" })
 	void coalescedDoneStopsBeforeTrailingMalformedData(String endpoint) {
 		assertTerminalBody(endpoint, false,
 				"data: {\"choices\":[{\"index\":0,\"delta\":{}}]}\ndata: data: [DONE]\ndata: {invalid}\n\n", 1);
@@ -507,7 +512,8 @@ class OpenRouterApiStreamingContractTests {
 				? "data: {\"type\":\"response.output_text.delta\",\"delta\":\"hello\"}\n\n"
 				: "data: {\"type\":\"image_generation.partial_image\",\"b64_json\":\"aW1hZ2U=\"}\n\n";
 		AtomicInteger requests = new AtomicInteger();
-		AtomicReference<String> body = new AtomicReference<>(partial + DONE_ONLY_SSE);
+		String terminal = endpoint.equals("responses") ? RESPONSES_COMPLETED_SSE : DONE_ONLY_SSE;
+		AtomicReference<String> body = new AtomicReference<>(partial + terminal);
 		OpenRouterApi api = OpenRouterApi.builder()
 			.apiKey("test-key")
 			.webClientBuilder(WebClient.builder().exchangeFunction(request -> {
@@ -520,7 +526,7 @@ class OpenRouterApiStreamingContractTests {
 			.build();
 		Flux<?> stream = endpoint.equals("responses") ? api.responsesStream(responsesRequest())
 				: api.imagesStream(imagesRequest());
-		StepVerifier.create(stream).expectNextCount(1).verifyComplete();
+		StepVerifier.create(stream).expectNextCount(endpoint.equals("responses") ? 2 : 1).verifyComplete();
 		body.set(partial);
 		StepVerifier.create(stream).expectNextCount(1).expectError(OpenRouterTruncatedResponseException.class).verify();
 		// Cancellation after a preview is intentional, even without protocol termination.
@@ -529,8 +535,8 @@ class OpenRouterApiStreamingContractTests {
 		StepVerifier.create(stream).expectError(OpenRouterTruncatedResponseException.class).verify();
 		body.set("");
 		StepVerifier.create(stream).expectError(OpenRouterTruncatedResponseException.class).verify();
-		body.set(partial + DONE_ONLY_SSE);
-		StepVerifier.create(stream).expectNextCount(1).verifyComplete();
+		body.set(partial + terminal);
+		StepVerifier.create(stream).expectNextCount(endpoint.equals("responses") ? 2 : 1).verifyComplete();
 		assertThat(requests).hasValue(6);
 	}
 
