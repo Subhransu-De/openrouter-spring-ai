@@ -2,11 +2,11 @@
 
 [![Maven Central](https://img.shields.io/maven-central/v/de.subhransu/openrouter-spring-ai-starter?label=Maven%20Central)](https://central.sonatype.com/artifact/de.subhransu/openrouter-spring-ai-starter)
 ![Java 17 | 21 | 25](https://img.shields.io/badge/Java-17%20%7C%2021%20%7C%2025-orange)
-[![MIT License](https://img.shields.io/github/license/Subhransu-De/spring-ai-openrouter-starter)](LICENSE)
+[![MIT License](https://img.shields.io/github/license/Subhransu-De/openrouter-spring-ai)](LICENSE)
 
-[![Build](https://github.com/Subhransu-De/spring-ai-openrouter-starter/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Subhransu-De/spring-ai-openrouter-starter/actions/workflows/ci.yml)
-[![Nightly Compatibility Tests](https://github.com/Subhransu-De/spring-ai-openrouter-starter/actions/workflows/garage-nightly.yml/badge.svg?branch=main)](https://github.com/Subhransu-De/spring-ai-openrouter-starter/actions/workflows/garage-nightly.yml)
-[![CodeQL](https://github.com/Subhransu-De/spring-ai-openrouter-starter/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/Subhransu-De/spring-ai-openrouter-starter/actions/workflows/codeql.yml)
+[![Build](https://github.com/Subhransu-De/openrouter-spring-ai/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Subhransu-De/openrouter-spring-ai/actions/workflows/ci.yml)
+[![Nightly Compatibility Tests](https://github.com/Subhransu-De/openrouter-spring-ai/actions/workflows/garage-nightly.yml/badge.svg?branch=main)](https://github.com/Subhransu-De/openrouter-spring-ai/actions/workflows/garage-nightly.yml)
+[![CodeQL](https://github.com/Subhransu-De/openrouter-spring-ai/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/Subhransu-De/openrouter-spring-ai/actions/workflows/codeql.yml)
 
 A native [Spring AI](https://spring.io/projects/spring-ai) chat provider for
 [OpenRouter](https://openrouter.ai). Instead of pointing the OpenAI client at OpenRouter's URL
@@ -23,6 +23,11 @@ and attribution headers — all behind the standard Spring AI `ChatModel` contra
 
 Chat Completions is the production default. The optional Responses request mode is experimental;
 applications should opt into it explicitly.
+
+The repository is now `Subhransu-De/openrouter-spring-ai`; Maven coordinates and Java
+packages are unchanged. Published `0.1.0-RC1` metadata retains its historical broken
+module backlinks and cannot be changed in place. The corrected links will ship in the
+next release; use that release once it is published.
 
 ### Supported API and nullability
 
@@ -338,6 +343,13 @@ status as `openrouter.responses.status`, and the typed incomplete details as
 parts and messages; streaming text remains incremental without repeating terminal text.
 If a completed stream delivers no text deltas, its saved output snapshot supplies the text.
 
+Responses streams require `response.completed`, `response.incomplete`, `response.failed`,
+or a terminal error event. `[DONE]` or EOF alone raises `OpenRouterTruncatedResponseException`,
+even for an empty or text-only stream. The legacy `response.done` shape shown in the
+[OpenRouter basic-usage guide](https://openrouter.ai/docs/api_reference/responses/basic-usage)
+is explicitly unsupported and raises `OpenRouterProtocolException`; it does not map final
+metadata. Chat Completions and image streams continue to accept `[DONE]`.
+
 Responses streaming requires a response snapshot before releasing buffered tool calls
 and rejects malformed response payloads. Optional fields may be absent and unknown fields
 are ignored, but invalid typed fields fail decoding rather than discarding response
@@ -420,6 +432,15 @@ truncated response, even if it delivered a completed image. `n` is an upper boun
 providers may return fewer images, and support for multiple images and native streaming
 depends on the endpoint. Check the [OpenRouter image API capabilities](https://openrouter.ai/docs/guides/overview/multimodal/image-generation)
 before combining them.
+
+Image JSON responses must contain a `data` array; an empty array remains a valid
+empty result. Each entry and each completed SSE event must contain nonblank
+`b64_json` or `url`. The JSON streaming fallback preserves both forms. Missing
+required content raises `OpenRouterProtocolException`; HTTP 200 error envelopes
+raise structured `OpenRouterApiException` errors before success conversion.
+Synchronous Chat Completions choices require a `message` object, but its text may be
+empty (including tool, refusal, and media messages). Usage-only chat stream chunks
+and image partial previews remain supported.
 
 Image-capable _chat_ models work too: set
 `OpenRouterChatOptions.builder().modalities(List.of("image", "text"))` (optionally with

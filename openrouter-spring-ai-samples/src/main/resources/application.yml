@@ -21,7 +21,7 @@ spring:
         # Connect/read timeout for both HTTP clients; also caps stalls between streamed chunks.
         timeout: ${GARAGE_CONNECTION_TIMEOUT:90s}
       app:
-        http-referer: ${GARAGE_HTTP_REFERER:https://github.com/Subhransu-De/spring-ai-openrouter-starter}
+        http-referer: ${GARAGE_HTTP_REFERER:https://github.com/Subhransu-De/openrouter-spring-ai}
         title: Garage Sample
         categories:
           - samples

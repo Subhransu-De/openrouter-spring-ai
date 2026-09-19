@@ -53,31 +53,32 @@ public final class OpenRouterChatResponseMapper {
 	}
 
 	private Generation mapGeneration(Choice choice, String model) {
-		if (choice.message() != null && !CollectionUtils.isEmpty(choice.message().toolCalls())
+		if (choice.message() == null) {
+			throw new OpenRouterProtocolException("OpenRouter chat completion choice requires a message");
+		}
+		if (!CollectionUtils.isEmpty(choice.message().toolCalls())
 				&& !FinishReasonMapper.isToolCallCompletion(choice.finishReason())) {
 			throw new OpenRouterTruncatedResponseException(
 					"Tool call choice ended without a tool-call completion reason");
 		}
 
-		AssistantContentMapper.MappedContent content = AssistantContentMapper
-			.map(choice.message() != null ? choice.message().content() : null);
+		AssistantContentMapper.MappedContent content = AssistantContentMapper.map(choice.message().content());
 		List<Media> media = new ArrayList<>(content.media());
-		media.addAll(GeneratedImageMapper.media(choice.message() != null ? choice.message().images() : null));
-		Map<String, Object> properties = ReasoningMetadata.chat(
-				choice.message() != null ? choice.message().reasoning() : null,
-				choice.message() != null ? choice.message().reasoningDetails() : null);
-		RefusalMetadata.put(properties, choice.message() != null ? choice.message().refusal() : null);
+		media.addAll(GeneratedImageMapper.media(choice.message().images()));
+		Map<String, Object> properties = ReasoningMetadata.chat(choice.message().reasoning(),
+				choice.message().reasoningDetails());
+		RefusalMetadata.put(properties, choice.message().refusal());
 		AssistantMessage assistantMessage = AssistantMessage.builder()
 			.content(content.text())
 			.properties(properties)
-			.toolCalls(mapToolCalls(choice.message() != null ? choice.message().toolCalls() : null))
+			.toolCalls(mapToolCalls(choice.message().toolCalls()))
 			.media(media)
 			.build();
 
 		ChatGenerationMetadata metadata = ChatGenerationMetadata.builder()
 			.finishReason(FinishReasonMapper.map(choice.finishReason()))
 			.metadata("openrouter.model", model)
-			.metadata("openrouter.reasoning", choice.message() != null ? choice.message().reasoning() : null)
+			.metadata("openrouter.reasoning", choice.message().reasoning())
 			.metadata("openrouter.native_finish_reason", choice.nativeFinishReason())
 			.metadata(RefusalMetadata.REFUSAL, properties.get(RefusalMetadata.REFUSAL))
 			.build();

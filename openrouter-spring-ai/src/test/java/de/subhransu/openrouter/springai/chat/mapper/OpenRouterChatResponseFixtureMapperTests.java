@@ -422,13 +422,12 @@ class OpenRouterChatResponseFixtureMapperTests {
 	// ---------------------------------------------------------------------
 
 	@Test
-	void nullMessageMapsToEmptyText() {
+	void nullMessageIsRejected() {
 		ChatCompletionResponse response = new ChatCompletionResponse("gen-1", "chat.completion", 1L, "m", "p",
 				List.of(new Choice(0, null, null, "stop", "stop")), null);
 
-		ChatResponse mapped = this.responseMapper.map(response);
-
-		assertThat(mapped.getResult().getOutput().getText()).isEmpty();
+		assertThatThrownBy(() -> this.responseMapper.map(response))
+			.isInstanceOf(de.subhransu.openrouter.springai.errors.OpenRouterProtocolException.class);
 	}
 
 	@Test

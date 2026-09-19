@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.core.codec.DecodingException;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.HttpHeaders;
@@ -215,6 +216,9 @@ public class OpenRouterApi {
 					return response.bodyToFlux(STRING_SSE_TYPE).map(event -> new ImageStreamBody(event, null));
 				}
 				return response.bodyToMono(ImagesResponse.class)
+					.onErrorMap(DecodingException.class,
+							ex -> new OpenRouterProtocolException("Invalid OpenRouter image response JSON"))
+					.switchIfEmpty(Mono.error(new OpenRouterProtocolException("Empty OpenRouter image response")))
 					.map(images -> new ImageStreamBody(null, images))
 					.flux();
 			})
@@ -230,15 +234,13 @@ public class OpenRouterApi {
 	}
 
 	private List<ImagesStreamEvent> completedEvents(ImagesResponse images) {
-		if (images.data() == null || images.data().isEmpty()) {
-			return List.of();
-		}
+		OpenRouterImageResponseValidator.validate(images);
 		List<ImagesStreamEvent> events = new ArrayList<>(images.data().size());
 		for (int i = 0; i < images.data().size(); i++) {
 			ImagesResponse.ImageData data = images.data().get(i);
 			boolean last = i == images.data().size() - 1;
 			events.add(new ImagesStreamEvent(ImagesStreamEvent.COMPLETED, null, data.b64Json(), data.mediaType(),
-					images.created(), last ? images.usage() : null, null));
+					images.created(), last ? images.usage() : null, null, data.url()));
 		}
 		return events;
 	}
@@ -335,7 +337,7 @@ public class OpenRouterApi {
 
 	private <T> Flux<T> decodeStream(Flux<ServerSentEvent<String>> events, Class<T> eventType) {
 		return Flux.defer(() -> {
-			AtomicBoolean done = new AtomicBoolean();
+			AtomicBoolean protocolTerminated = new AtomicBoolean();
 			return eventData(events).concatMapIterable(this::streamPayloads)
 				.map(String::trim)
 				.filter(line -> line.startsWith("data:") || line.startsWith("{") || "[DONE]".equals(line))
@@ -344,7 +346,10 @@ public class OpenRouterApi {
 				// payload.
 				.takeWhile(line -> {
 					if ("[DONE]".equals(line)) {
-						done.set(true);
+						// Responses requires its own terminal event before transport EOF.
+						if (eventType != ResponsesStreamEvent.class) {
+							protocolTerminated.set(true);
+						}
 						return false;
 					}
 					return true;
@@ -352,12 +357,12 @@ public class OpenRouterApi {
 				.map(line -> readEvent(line, eventType))
 				.doOnNext(event -> {
 					if (isTerminalEvent(event) || event instanceof ChatCompletionChunk chunk && chunk.error() != null) {
-						done.set(true);
+						protocolTerminated.set(true);
 					}
 				})
 				// Preserve final metadata and errors for the model-layer mappers.
 				.takeUntil(this::isTerminalEvent)
-				.concatWith(Flux.defer(() -> !done.get()
+				.concatWith(Flux.defer(() -> !protocolTerminated.get()
 						? Flux.error(new OpenRouterTruncatedResponseException(
 								eventType.getSimpleName() + " stream ended before protocol termination"))
 						: Flux.empty()));
@@ -380,6 +385,11 @@ public class OpenRouterApi {
 	private <T> T readEvent(String line, Class<T> eventType) {
 		try {
 			T event = this.objectMapper.readValue(line, eventType);
+			if (event instanceof ResponsesStreamEvent response && "response.done".equals(response.type())) {
+				throw new OpenRouterProtocolException(
+						"Legacy response.done is unsupported; expected response.completed, "
+								+ "response.incomplete, or response.failed");
+			}
 			if (event instanceof ChatCompletionChunk chunk && chunk.error() == null
 					&& ((CollectionUtils.isEmpty(chunk.choices()) && chunk.usage() == null)
 							|| (chunk.choices() != null && chunk.choices().stream().anyMatch(Objects::isNull)))) {
