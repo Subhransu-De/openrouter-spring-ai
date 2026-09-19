@@ -13,6 +13,46 @@ permissions:
   contents: read
 
 jobs:
+  actionlint:
+    name: Workflow validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Install actionlint
+        working-directory: ${{ runner.temp }}
+        run: |
+          curl --fail --silent --show-error --location --retry 3 --output actionlint.tar.gz \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          echo '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  actionlint.tar.gz' | sha256sum --check --strict
+          mkdir -p actionlint-bin
+          tar -xzf actionlint.tar.gz -C actionlint-bin actionlint
+          echo "$PWD/actionlint-bin" >> "$GITHUB_PATH"
+          shellcheck --version
+      - name: Verify workflow and shell diagnostics
+        run: |
+          # Synthetic input stays outside .github/workflows and is never executed.
+          cat > "$RUNNER_TEMP/invalid-workflow.yml" <<'YAML'
+          on: push
+          jobs:
+            test:
+              needs: nonexistent
+              runs-on: ubuntu-latest
+              steps:
+                - run: echo $SYNTHETIC_VALUE
+          YAML
+          if actionlint -oneline "$RUNNER_TEMP/invalid-workflow.yml" > "$RUNNER_TEMP/diagnostics.txt" 2>&1; then
+            echo 'Expected synthetic workflow to fail validation'
+            exit 1
+          fi
+          cat "$RUNNER_TEMP/diagnostics.txt"
+          grep -E 'invalid-workflow.yml:3:[0-9]+:.*nonexistent.*\[job-needs\]' "$RUNNER_TEMP/diagnostics.txt"
+          grep -E 'invalid-workflow.yml:7:[0-9]+:.*SC2086.*\[shellcheck\]' "$RUNNER_TEMP/diagnostics.txt"
+      - name: Check all tracked workflows
+        run: git ls-files -z '.github/workflows/*.yml' '.github/workflows/*.yaml' | xargs -0 --no-run-if-empty actionlint -color
+
   action-pins:
     name: Immutable action references
     runs-on: ubuntu-latest
