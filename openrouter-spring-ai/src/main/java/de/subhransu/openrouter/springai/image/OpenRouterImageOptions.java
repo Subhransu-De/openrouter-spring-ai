@@ -67,6 +67,14 @@ public class OpenRouterImageOptions implements ImageOptions {
 		if (options instanceof OpenRouterImageOptions openRouterOptions) {
 			return openRouterOptions.copy();
 		}
+		if (options.getResponseFormat() != null && !"b64_json".equals(options.getResponseFormat())) {
+			throw new IllegalArgumentException(
+					"OpenRouter image responseFormat must be null or 'b64_json'; URL output cannot be requested");
+		}
+		if (options.getStyle() != null) {
+			throw new IllegalArgumentException(
+					"OpenRouter does not support portable image style; leave style unset and use providerOptions for provider-specific settings");
+		}
 		return OpenRouterImageOptions.builder()
 			.model(options.getModel())
 			.n(options.getN())
