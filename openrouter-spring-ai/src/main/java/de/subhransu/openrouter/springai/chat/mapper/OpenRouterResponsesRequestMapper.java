@@ -13,6 +13,7 @@ import de.subhransu.openrouter.springai.api.dto.ResponsesOutputItem;
 import de.subhransu.openrouter.springai.api.dto.ResponsesRequest;
 import de.subhransu.openrouter.springai.api.dto.ResponsesTool;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
+import de.subhransu.openrouter.springai.chat.OpenRouterCacheBreakpoint;
 import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
 import de.subhransu.openrouter.springai.chat.OpenRouterReasoningOptions;
 import java.util.ArrayList;
@@ -43,6 +44,12 @@ public final class OpenRouterResponsesRequestMapper {
 
 	public ResponsesRequest map(List<Message> messages, OpenRouterChatOptions options, boolean stream,
 			List<ToolDefinition> toolDefinitions) {
+		for (Message message : messages) {
+			if (message.getMetadata().containsKey(OpenRouterCacheBreakpoint.METADATA_KEY)) {
+				throw new IllegalArgumentException("OPENAI_RESPONSES does not support cache_control breakpoints; "
+						+ "use OPENAI_CHAT_COMPLETIONS");
+			}
+		}
 		rejectUnsupported("stopSequences", options.getStopSequences());
 		rejectUnsupported("seed", options.getSeed());
 		rejectUnsupported("repetitionPenalty", options.getRepetitionPenalty());
