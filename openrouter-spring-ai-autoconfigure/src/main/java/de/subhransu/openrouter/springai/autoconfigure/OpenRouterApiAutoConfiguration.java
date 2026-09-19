@@ -38,7 +38,7 @@ public class OpenRouterApiAutoConfiguration {
 			ObjectProvider<WebClient.Builder> webClientBuilderProvider,
 			ObjectProvider<ObjectMapper> objectMapperProvider) {
 		OpenRouterCommonProperties.App app = commonProperties.getApp();
-		RestClient.Builder restClientBuilder = restClientBuilderProvider.getIfAvailable(RestClient::builder);
+		RestClient.Builder restClientBuilder = restClientBuilderProvider.getIfAvailable(RestClient::builder).clone();
 		ClientHttpRequestFactoryBuilder<?> requestFactoryBuilder = requestFactoryBuilderProvider
 			.getIfAvailable(ClientHttpRequestFactoryBuilder::detect);
 		HttpClientSettings httpClientSettings = httpClientSettingsProvider.getIfAvailable(HttpClientSettings::defaults);

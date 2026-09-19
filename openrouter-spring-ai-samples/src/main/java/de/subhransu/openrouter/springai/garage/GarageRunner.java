@@ -495,19 +495,22 @@ final class GarageRunner implements CommandLineRunner {
         GARAGE sample
 
         Live scenes require OPENROUTER_API_KEY. Offline contracts do not.
+        No selection flags: service-story in Chat Completions, the library default.
+        --text, --vision and --full deliberately select both modes unless explicitly overridden.
+        Reports retain unsupported/partial outcomes; selection is not live verification.
 
         Options:
           --list-scenes                  List scenes and feature ids
-          --text                         Text, tools, streaming and text contracts
+          --text                         Text, tools, streaming and text contracts in both modes
           --embedding                    Embedding checks only; combinable with --text
-          --vision                       Image-input understanding checks
+          --vision                       Image-input understanding checks in both modes
           --image                        Image generation (sync by default)
           --scene=<id,id>                Run selected scenes
           --offline-contracts            Run recovery + dyno contracts without an API key
-          --full                         Run every scene in both request modes
+          --full                         Every scene and modality, all image surfaces, both modes
           --auto                         Deprecated no-op; failed checks always fail the run
           --stream                       Add the streaming-dispatch scene
-          --request-mode=<mode>          chat, responses, both, or all
+          --request-mode=<mode>          chat, responses, both, or all; overrides suite defaults
           --topic=<text>                 Customer/car request to inspect
           --fallback-models=<ids>        Comma-separated fallback models
           --output=<path>                Output root, default: outputs

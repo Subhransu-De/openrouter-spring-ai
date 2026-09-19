@@ -374,6 +374,8 @@ public final class OpenRouterStreamingToolCallAggregator {
 					ready.add(choiceChunk);
 				}
 				else {
+					Assert.state(choice.delta() == null || choice.delta().audio() == null,
+							"Audio and tool calls in the same choice are unsupported");
 					long chunkBytes = serializedBytes(choiceChunk);
 					buffered.add(choiceChunk, chunkBytes);
 					retain(chunkBytes);
