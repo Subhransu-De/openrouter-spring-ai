@@ -48,6 +48,20 @@ class OpenRouterStructuredOutputPropertiesTests {
 				AutoConfigurations.of(OpenRouterApiAutoConfiguration.class, OpenRouterChatAutoConfiguration.class))
 		.withPropertyValues("spring.ai.openrouter.api-key=test-key", PREFIX + "model=test/model");
 
+	@Test
+	void toolStrictPropertyRetainsOmittedFalseAndTrue() {
+		for (Boolean strict : new Boolean[] { null, false, true }) {
+			String[] properties = strict == null ? new String[0] : new String[] { PREFIX + "tool-strict=" + strict };
+			this.runner.withPropertyValues(properties).run(context -> {
+				assertThat(context).hasNotFailed();
+				assertThat(context.getBean(OpenRouterChatProperties.class).toOptions().getToolStrict())
+					.isEqualTo(strict);
+				var defaults = (OpenRouterChatOptions) context.getBean(OpenRouterChatModel.class).getOptions();
+				assertThat(defaults.getToolStrict()).isEqualTo(strict);
+			});
+		}
+	}
+
 	@ParameterizedTest
 	@EnumSource(OpenRouterRequestMode.class)
 	void propertiesMatchJavaOptionsOnBothTransports(OpenRouterRequestMode mode) {

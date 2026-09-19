@@ -1,7 +1,5 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import de.subhransu.openrouter.springai.api.dto.ProviderPreferences;
 import de.subhransu.openrouter.springai.api.dto.ReasoningOptions;
@@ -64,7 +62,8 @@ public final class OpenRouterResponsesRequestMapper {
 				mapReasoning(options.getReasoning()), options.getRoute(),
 				options.getServiceTier() != null ? options.getServiceTier().value() : null, options.getUser(),
 				options.getParallelToolCalls(), ToolChoiceMapper.map(options.getToolChoice(), true, this.objectMapper),
-				mapTools(toolDefinitions), options.getModalities(), options.getImageConfig(), mapText(options));
+				mapTools(toolDefinitions, options.getToolStrict()), options.getModalities(), options.getImageConfig(),
+				mapText(options));
 	}
 
 	private static void rejectUnsupported(String name, Object value) {
@@ -87,23 +86,14 @@ public final class OpenRouterResponsesRequestMapper {
 		return Map.of("format", format);
 	}
 
-	private List<ResponsesTool> mapTools(List<ToolDefinition> toolDefinitions) {
+	private List<ResponsesTool> mapTools(List<ToolDefinition> toolDefinitions, Boolean strict) {
 		if (CollectionUtils.isEmpty(toolDefinitions)) {
 			return null;
 		}
 		return toolDefinitions.stream()
 			.map(toolDefinition -> new ResponsesTool("function", toolDefinition.name(), toolDefinition.description(),
-					readTree(toolDefinition.inputSchema())))
+					ToolSchemaValidator.read(this.objectMapper, toolDefinition, strict), strict))
 			.toList();
-	}
-
-	private JsonNode readTree(String json) {
-		try {
-			return this.objectMapper.readTree(json);
-		}
-		catch (JacksonException ex) {
-			throw new IllegalArgumentException("Invalid JSON schema", ex);
-		}
 	}
 
 	private String mapInstructions(List<Message> messages) {

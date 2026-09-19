@@ -8,5 +8,11 @@ import tools.jackson.databind.JsonNode;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonInclude(Include.NON_NULL)
-public record Function(@Nullable String name, @Nullable String description, @Nullable JsonNode parameters) {
+public record Function(@Nullable String name, @Nullable String description, @Nullable JsonNode parameters,
+		@Nullable Boolean strict) {
+
+	public Function(@Nullable String name, @Nullable String description, @Nullable JsonNode parameters) {
+		this(name, description, parameters, null);
+	}
+
 }

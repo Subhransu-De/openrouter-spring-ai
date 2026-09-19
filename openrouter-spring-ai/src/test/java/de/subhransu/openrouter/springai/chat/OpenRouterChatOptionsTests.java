@@ -17,6 +17,22 @@ class OpenRouterChatOptionsTests {
 
 	private static final String MODEL = "openai/gpt-5.4-mini";
 
+	@Test
+	void toolStrictRetainsTriStateAcrossCopiesAndComposition() {
+		for (Boolean defaults : new Boolean[] { null, false, true }) {
+			var options = OpenRouterChatOptions.builder().toolStrict(defaults).build();
+			assertThat(OpenRouterChatOptions.fromOptions(options).getToolStrict()).isEqualTo(defaults);
+			assertThat(options.mutate().clone().build().getToolStrict()).isEqualTo(defaults);
+			for (Boolean runtime : new Boolean[] { null, false, true }) {
+				Boolean expected = runtime != null ? runtime : defaults;
+				var request = OpenRouterChatOptions.builder().toolStrict(runtime);
+				assertThat(options.merge(request.build()).getToolStrict()).isEqualTo(expected);
+				assertThat(options.mutate().combineWith(request).build().getToolStrict()).isEqualTo(expected);
+				assertThat(options.getToolStrict()).isEqualTo(defaults);
+			}
+		}
+	}
+
 	@ParameterizedTest
 	@ValueSource(booleans = { false, true })
 	void combineAppendsCollectionsAndOverridesScalarsWithoutMutatingSources(boolean portable) {

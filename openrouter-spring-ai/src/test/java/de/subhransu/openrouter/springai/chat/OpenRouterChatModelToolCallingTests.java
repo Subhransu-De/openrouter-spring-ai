@@ -24,6 +24,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.ToolCallingAdvisor;
@@ -57,6 +59,10 @@ class OpenRouterChatModelToolCallingTests {
 		})
 		.description("Look up the weather")
 		.inputType(Map.class)
+		.inputSchema(
+				"""
+						{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false}
+						""")
 		.build();
 
 	private ChatClient toolCallingClient(OpenRouterChatModel model) {
@@ -96,8 +102,9 @@ class OpenRouterChatModelToolCallingTests {
 		});
 	}
 
-	@Test
-	void advisorExecutesToolsAndSendsResultsBackInChatCompletionsMode() {
+	@ParameterizedTest
+	@ValueSource(booleans = { false, true })
+	void advisorExecutesToolsAndSendsResultsBackInChatCompletionsMode(boolean strict) {
 		OpenRouterApi api = mock(OpenRouterApi.class);
 		when(api.chatCompletion(any())).thenReturn(
 				chatCompletionResponse(new ChatMessage("assistant", null, null, null,
@@ -108,7 +115,11 @@ class OpenRouterChatModelToolCallingTests {
 
 		ChatResponse response = toolCallingClient(model)
 			.prompt(new Prompt(List.of(new UserMessage(WEATHER_PROMPT)),
-					OpenRouterChatOptions.builder().model(MINI_MODEL).toolCallbacks(List.of(this.weatherTool)).build()))
+					OpenRouterChatOptions.builder()
+						.model(MINI_MODEL)
+						.toolStrict(strict)
+						.toolCallbacks(List.of(this.weatherTool))
+						.build()))
 			.call()
 			.chatResponse();
 
@@ -119,6 +130,8 @@ class OpenRouterChatModelToolCallingTests {
 		ChatCompletionRequest first = captor.getAllValues().get(0);
 		assertThat(first.tools()).hasSize(1);
 		assertThat(first.tools().get(0).function().name()).isEqualTo("get_weather");
+		assertThat(captor.getAllValues())
+			.allSatisfy(request -> assertThat(request.tools().get(0).function().strict()).isEqualTo(strict));
 		ChatCompletionRequest second = captor.getAllValues().get(1);
 		assertThat(second.tools()).hasSize(1);
 		assertThat(second.messages()).anySatisfy(message -> {
@@ -127,8 +140,9 @@ class OpenRouterChatModelToolCallingTests {
 		});
 	}
 
-	@Test
-	void advisorExecutesToolsAndSendsResultsBackInResponsesMode() {
+	@ParameterizedTest
+	@ValueSource(booleans = { false, true })
+	void advisorExecutesToolsAndSendsResultsBackInResponsesMode(boolean strict) {
 		OpenRouterApi api = mock(OpenRouterApi.class);
 		when(api.responses(any())).thenReturn(
 				responsesResult(new ResponsesOutputItem("item-1", "function_call", "completed", null, null, "call-1",
@@ -142,6 +156,7 @@ class OpenRouterChatModelToolCallingTests {
 					OpenRouterChatOptions.builder()
 						.model("openai/gpt-5.4")
 						.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
+						.toolStrict(strict)
 						.toolCallbacks(List.of(this.weatherTool))
 						.build()))
 			.call()
@@ -154,6 +169,8 @@ class OpenRouterChatModelToolCallingTests {
 		ResponsesRequest first = captor.getAllValues().get(0);
 		assertThat(first.tools()).hasSize(1);
 		assertThat(first.tools().get(0).name()).isEqualTo("get_weather");
+		assertThat(captor.getAllValues())
+			.allSatisfy(request -> assertThat(request.tools().get(0).strict()).isEqualTo(strict));
 		ResponsesRequest second = captor.getAllValues().get(1);
 		List<?> input = (List<?>) second.input();
 		assertThat(input).anySatisfy(item -> {

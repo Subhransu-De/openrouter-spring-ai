@@ -92,9 +92,8 @@ Both modes map `outputSchema` and `responseFormat`: Chat Completions uses
 `response_format`, and Responses uses `text.format`. An explicit `responseFormat`
 takes precedence over `outputSchema`. Portable schemas leave `strict` unset;
 `OpenRouterResponseFormat.jsonSchema(name, strict, schema)` preserves an explicit
-`true` or `false`. Schema enforcement depends on the selected provider. Function tools
-leave `strict` unset in both modes; this library does not currently expose a function-tool
-strictness option or rewrite tool schemas to satisfy strict-mode requirements.
+`true` or `false`. Schema enforcement depends on the selected provider. Function-tool strictness is
+controlled independently with `toolStrict`, described below.
 
 Configure structured-output defaults under the flattened chat namespace (no
 `options` segment):
@@ -134,6 +133,36 @@ map to their corresponding wire fields. `requestMode` selects the endpoint;
 `{type: "function", name: "lookup"}`. Both named shapes are converted to the selected
 endpoint's form. Legacy `{type: "auto"}`, `{type: "none"}`, and
 `{type: "required"}` objects are normalized to strings. Other shapes are rejected. These rules apply to calls and streams.
+
+### Strict function tools
+
+Set `OpenRouterChatOptions.builder().toolStrict(true)` or
+`spring.ai.openrouter.chat.tool-strict=true` to request strict schemas for every
+function tool. This applies to calls and streams in both modes: Chat Completions
+sends `tools[].function.strict`; experimental Responses sends `tools[].strict`.
+There are no per-tool overrides. During option composition, an omitted/null option
+inherits the default; a non-null runtime option overrides it, including `false`. With no default, null
+omits the wire flag, preserving provider defaults; `false` explicitly disables
+strictness. Copying and composing options preserve these distinctions.
+
+The library validates rather than adapts schemas when `true`. Supply an object
+root, `additionalProperties: false` on every object, and a `required` array
+containing every property exactly once (empty objects use empty `properties` and
+`required`). Optional values must explicitly allow null **and** remain required,
+for example `"note": {"type": ["string", "null"]}` with `"note"` in `required`.
+The validator follows nested properties, array items, `anyOf`, definitions, and
+local JSON-pointer `$ref`s, including recursion. External/unresolved references,
+root `anyOf`, and unsupported composition such as `allOf`/`oneOf` are rejected
+before HTTP. Schemas are never rewritten; the callback retains its original schema.
+Omitted/false strictness preserves existing schema handling.
+
+Use a routed model/provider that supports strict function tools; this option does
+not discover capabilities or guarantee support across OpenRouter. Validation checks
+the common [strict function contract](https://developers.openai.com/api/docs/guides/function-calling#strict-mode),
+not every provider-specific schema keyword, size limit, or model restriction.
+Provider rejections propagate through normal API errors, without silently retrying
+as non-strict. `ToolCallingAdvisor` still owns execution; response-format strictness
+is unaffected.
 
 ### Retries and Responses failures
 
