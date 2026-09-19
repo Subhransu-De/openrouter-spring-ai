@@ -128,24 +128,24 @@ makes a billable OpenRouter request. No clone or local library installation is n
 For incremental text, use `client.prompt().user("Say hello.").stream().content()`
 and subscribe to the returned `Flux<String>` for the application's lifetime.
 
-| Property | Default / meaning |
-| --- | --- |
-| `spring.ai.model.chat`, `.embedding`, `.image` | Each defaults to `openrouter`; the example disables unused modalities. |
-| `spring.ai.openrouter.api-key` | Required while an OpenRouter modality is enabled; no default credential. |
-| `spring.ai.openrouter.base-url` | `https://openrouter.ai/api/v1` |
-| `spring.ai.openrouter.chat.model` | Unset; select a model explicitly. |
-| `spring.ai.openrouter.chat.request-mode` | `openai-chat-completions`; `openai-responses` is experimental. |
-| `spring.ai.openrouter.chat.include-usage` | Unset; do not configure it globally when composing Responses requests. |
-| `spring.ai.openrouter.connection.timeout` | `2m` |
-| `spring.ai.openrouter.connection.max-response-body-size` | `64MB` per response / SSE event, not per stream. |
+| Property                                                 | Default / meaning                                                        |
+| -------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `spring.ai.model.chat`, `.embedding`, `.image`           | Each defaults to `openrouter`; the example disables unused modalities.   |
+| `spring.ai.openrouter.api-key`                           | Required while an OpenRouter modality is enabled; no default credential. |
+| `spring.ai.openrouter.base-url`                          | `https://openrouter.ai/api/v1`                                           |
+| `spring.ai.openrouter.chat.model`                        | Unset; select a model explicitly.                                        |
+| `spring.ai.openrouter.chat.request-mode`                 | `openai-chat-completions`; `openai-responses` is experimental.           |
+| `spring.ai.openrouter.chat.include-usage`                | Unset; do not configure it globally when composing Responses requests.   |
+| `spring.ai.openrouter.connection.timeout`                | `2m`                                                                     |
+| `spring.ai.openrouter.connection.max-response-body-size` | `64MB` per response / SSE event, not per stream.                         |
 
 ### Release compatibility
 
-| Source / artifact | Java release target | Spring Boot | Spring AI |
-| --- | --- | --- | --- |
-| [RC1: `74da429`](https://github.com/Subhransu-De/openrouter-spring-ai/tree/v0.1.0-RC1) | 17 | 4.1.1 | 2.0.1 |
-| [RC2: `23473f7`](https://github.com/Subhransu-De/openrouter-spring-ai/tree/v0.1.0-RC2) | 17 | 4.1.1 | 2.0.1 |
-| Unreleased main (`0.1.0-SNAPSHOT`) | 17 | 4.1.1 | 2.0.1 |
+| Source / artifact                                                                      | Java release target | Spring Boot | Spring AI |
+| -------------------------------------------------------------------------------------- | ------------------- | ----------- | --------- |
+| [RC1: `74da429`](https://github.com/Subhransu-De/openrouter-spring-ai/tree/v0.1.0-RC1) | 17                  | 4.1.1       | 2.0.1     |
+| [RC2: `23473f7`](https://github.com/Subhransu-De/openrouter-spring-ai/tree/v0.1.0-RC2) | 17                  | 4.1.1       | 2.0.1     |
+| Unreleased main (`0.1.0-SNAPSHOT`)                                                     | 17                  | 4.1.1       | 2.0.1     |
 
 Baselines come from the tagged/root POMs and
 [published RC2 parent POM](https://repo.maven.apache.org/maven2/de/subhransu/openrouter-spring-ai-parent/0.1.0-RC2/openrouter-spring-ai-parent-0.1.0-RC2.pom).
@@ -476,12 +476,12 @@ or registry entries marked unsupported in Responses.
 
 ## Modules
 
-| Module                               | What it is                                                                                       |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| Module                               | What it is                                                                    |
+| ------------------------------------ | ----------------------------------------------------------------------------- |
 | `openrouter-spring-ai`               | Core: API client, wire DTOs, mappers, chat/embedding/image models and options |
-| `openrouter-spring-ai-autoconfigure` | Spring Boot auto-configuration and `spring.ai.openrouter.*` binding                              |
-| `openrouter-spring-ai-starter`       | The starter — the one dependency applications add                                                |
-| `openrouter-spring-ai-samples`       | The Garage demo application (see below)                                                          |
+| `openrouter-spring-ai-autoconfigure` | Spring Boot auto-configuration and `spring.ai.openrouter.*` binding           |
+| `openrouter-spring-ai-starter`       | The starter — the one dependency applications add                             |
+| `openrouter-spring-ai-samples`       | The Garage demo application (see below)                                       |
 
 Module names, property prefixes, and layering deliberately mirror Spring AI's official
 providers.
@@ -1067,18 +1067,18 @@ and all modalities. With no selection flags, the original service-story demo run
 `--scene=<ids>` can narrow a capability suite; selected modality flags require
 `modality-bays` in that list. `--offline-contracts` runs only local contracts.
 
-| Selection | Request modes | Selected work |
-| --- | --- | --- |
-| No flags | Chat Completions | `service-story` |
-| `--request-mode=chat` | Chat Completions | `service-story` |
-| `--request-mode=responses` | Responses | `service-story` |
-| `--text` | Both | Text, tools, streaming, structured-output and offline text contracts |
-| `--text --request-mode=chat` | Chat Completions | Same text suite, narrowed to chat |
-| `--text --request-mode=responses` | Responses | Same suite; unsupported registry rows remain explicit |
-| `--full` | Both | Every scene, embeddings, vision and all image surfaces |
-| `--embedding` | Chat Completions selection; mode-independent API | Embeddings only |
-| `--vision` | Both | Image input only; add `--request-mode=chat` to narrow it |
-| `--image` | Chat Completions selection; mode-independent Image API | Synchronous image generation only |
+| Selection                         | Request modes                                          | Selected work                                                        |
+| --------------------------------- | ------------------------------------------------------ | -------------------------------------------------------------------- |
+| No flags                          | Chat Completions                                       | `service-story`                                                      |
+| `--request-mode=chat`             | Chat Completions                                       | `service-story`                                                      |
+| `--request-mode=responses`        | Responses                                              | `service-story`                                                      |
+| `--text`                          | Both                                                   | Text, tools, streaming, structured-output and offline text contracts |
+| `--text --request-mode=chat`      | Chat Completions                                       | Same text suite, narrowed to chat                                    |
+| `--text --request-mode=responses` | Responses                                              | Same suite; unsupported registry rows remain explicit                |
+| `--full`                          | Both                                                   | Every scene, embeddings, vision and all image surfaces               |
+| `--embedding`                     | Chat Completions selection; mode-independent API       | Embeddings only                                                      |
+| `--vision`                        | Both                                                   | Image input only; add `--request-mode=chat` to narrow it             |
+| `--image`                         | Chat Completions selection; mode-independent Image API | Synchronous image generation only                                    |
 
 Garage deliberately selects both modes for `--text`, `--vision` and `--full`; the library and
 ordinary demo still default to Chat Completions. Explicit mode flags override suite

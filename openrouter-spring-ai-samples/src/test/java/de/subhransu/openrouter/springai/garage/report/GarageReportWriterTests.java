@@ -17,9 +17,9 @@ import de.subhransu.openrouter.springai.garage.scenes.SceneResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.Arrays;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -66,10 +66,11 @@ class GarageReportWriterTests {
     }
     String readme = Files.readString(root.resolve("README.md"));
     String label = selection.isEmpty() ? "No flags" : "`" + selection + "`";
-    String row = Arrays.stream(readme.split("\\R")).filter(line -> line.startsWith("| " + label + " |")).findFirst().orElseThrow();
+    String[] row = Arrays.stream(readme.split("\\R")).map(line -> line.split("\\|"))
+        .filter(cells -> cells.length > 2 && cells[1].strip().equals(label)).findFirst().orElseThrow();
     String expectedMode = command.requestModes().size() == 2 ? "Both"
         : command.requestModes().contains(OpenRouterRequestMode.OPENAI_RESPONSES) ? "Responses" : "Chat Completions";
-    assertThat(row).contains("| " + expectedMode);
+    assertThat(row[2].strip()).startsWith(expectedMode);
   }
 
   @ParameterizedTest
