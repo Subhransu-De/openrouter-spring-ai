@@ -1232,7 +1232,7 @@ duplicate literals to keep registry rows and test inputs explicit. Sample CPD re
 fixture duplication is intentional; Gradle has no CPD task. Sample formatter and
 Enforcer exclusions are unchanged.
 
-On JDK 25, `mvn -B -Pmodernizer-java25 verify` also runs Modernizer 3.4.0 with an
+On JDK 25, `mvn -B -Pmodernizer-java25 verify` also runs Modernizer with an
 explicit Java 25 analysis target on every module's production and test bytecode.
 The profile activates automatically on JDK 25+. The JDK 25 Maven CI leg is the
 shared Modernizer enforcement point for both build systems; Gradle `check` does
