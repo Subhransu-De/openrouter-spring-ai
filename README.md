@@ -332,6 +332,13 @@ status as `openrouter.responses.status`, and the typed incomplete details as
 parts and messages; streaming text remains incremental without repeating terminal text.
 If a completed stream delivers no text deltas, its saved output snapshot supplies the text.
 
+Responses streams require `response.completed`, `response.incomplete`, `response.failed`,
+or a terminal error event. `[DONE]` or EOF alone raises `OpenRouterTruncatedResponseException`,
+even for an empty or text-only stream. The legacy `response.done` shape shown in the
+[OpenRouter basic-usage guide](https://openrouter.ai/docs/api_reference/responses/basic-usage)
+is explicitly unsupported and raises `OpenRouterProtocolException`; it does not map final
+metadata. Chat Completions and image streams continue to accept `[DONE]`.
+
 Responses streaming requires a response snapshot before releasing buffered tool calls
 and rejects malformed response payloads. Optional fields may be absent and unknown fields
 are ignored, but invalid typed fields fail decoding rather than discarding response
