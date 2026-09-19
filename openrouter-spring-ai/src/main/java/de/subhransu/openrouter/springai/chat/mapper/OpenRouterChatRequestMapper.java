@@ -39,6 +39,7 @@ public final class OpenRouterChatRequestMapper {
 	public ChatCompletionRequest map(List<Message> messages, OpenRouterChatOptions options, boolean stream,
 			List<ToolDefinition> toolDefinitions) {
 		List<Tool> tools = mapTools(toolDefinitions);
+		CacheBreakpointMapper.validate(messages);
 		return new ChatCompletionRequest(options.getModel(), options.getModels(), mapMessages(messages),
 				options.getTemperature(), options.getTopP(), options.getTopK(), options.getFrequencyPenalty(),
 				options.getPresencePenalty(), options.getRepetitionPenalty(), options.getMinP(), options.getTopA(),
@@ -72,9 +73,18 @@ public final class OpenRouterChatRequestMapper {
 		return mapped;
 	}
 
-	// Text-only messages keep the plain-string content shape; media promotes the
-	// content to the multimodal parts array per the OpenRouter image-inputs spec.
+	// Unmarked text-only messages keep the plain-string content shape. Cache
+	// boundaries and media require the content parts array.
 	private Object mapContent(Message message) {
+		if (!CacheBreakpointMapper.breakpoints(message).isEmpty()) {
+			List<ContentPart> parts = CacheBreakpointMapper.textParts(message);
+			if (message instanceof UserMessage userMessage) {
+				for (Media media : userMessage.getMedia()) {
+					parts.add(ContentPart.image(MediaUrlMapper.imageUrl(media)));
+				}
+			}
+			return parts;
+		}
 		if (!(message instanceof UserMessage userMessage) || CollectionUtils.isEmpty(userMessage.getMedia())) {
 			return message.getText();
 		}

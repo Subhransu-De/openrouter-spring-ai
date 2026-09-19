@@ -9,7 +9,12 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonInclude(Include.NON_NULL)
 public record ContentPart(@Nullable String type, @Nullable String text,
-		@JsonProperty("image_url") @Nullable ImageUrl imageUrl) {
+		@JsonProperty("image_url") @Nullable ImageUrl imageUrl,
+		@JsonProperty("cache_control") @Nullable CacheControl cacheControl) {
+
+	public ContentPart(@Nullable String type, @Nullable String text, @Nullable ImageUrl imageUrl) {
+		this(type, text, imageUrl, null);
+	}
 
 	public static ContentPart text(String text) {
 		return new ContentPart("text", text, null);
