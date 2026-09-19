@@ -415,6 +415,15 @@ providers may return fewer images, and support for multiple images and native st
 depends on the endpoint. Check the [OpenRouter image API capabilities](https://openrouter.ai/docs/guides/overview/multimodal/image-generation)
 before combining them.
 
+Image JSON responses must contain a `data` array; an empty array remains a valid
+empty result. Each entry and each completed SSE event must contain nonblank
+`b64_json` or `url`. The JSON streaming fallback preserves both forms. Missing
+required content raises `OpenRouterProtocolException`; HTTP 200 error envelopes
+raise structured `OpenRouterApiException` errors before success conversion.
+Synchronous Chat Completions choices require a `message` object, but its text may be
+empty (including tool, refusal, and media messages). Usage-only chat stream chunks
+and image partial previews remain supported.
+
 Image-capable _chat_ models work too: set
 `OpenRouterChatOptions.builder().modalities(List.of("image", "text"))` (optionally with
 `imageConfig`) and generated images arrive as `AssistantMessage` media — in sync calls
