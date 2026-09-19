@@ -16,12 +16,15 @@
   <a href="https://github.com/Subhransu-De/openrouter-spring-ai/actions/workflows/codeql.yml"><img src="https://img.shields.io/github/actions/workflow/status/Subhransu-De/openrouter-spring-ai/codeql.yml?branch=main&amp;label=CodeQL&amp;style=flat" alt="CodeQL status"></a>
 </p>
 
-A native [Spring AI](https://spring.io/projects/spring-ai) chat provider for
-[OpenRouter](https://openrouter.ai). Instead of pointing the OpenAI client at OpenRouter's URL
-and losing everything that makes OpenRouter distinct, this library models the OpenRouter surface
-directly: model fallbacks, provider routing, cross-provider reasoning tokens, cost accounting,
-and attribution headers — all behind the standard Spring AI `ChatModel` contract and
-`spring.ai.openrouter.*` properties, built the same way Spring AI builds its official providers.
+A native [Spring AI](https://spring.io/projects/spring-ai) integration for
+[OpenRouter](https://openrouter.ai), with typed model fallbacks, provider routing,
+reasoning replay, cost accounting, and attribution headers under `spring.ai.openrouter.*`.
+Spring AI's OpenAI integration can also send OpenRouter-specific fields through
+[`extraBody`](https://github.com/spring-projects/spring-ai/blob/v2.0.1/models/spring-ai-openai/src/main/java/org/springframework/ai/openai/OpenAiChatOptions.java).
+This library adds typed routing and OpenRouter-specific response and reasoning handling;
+it does not promise universal provider parity. It owns its `RestClient`/`WebClient`
+transport and wire mapping, unlike the vendor SDK cores used by Spring AI 2.0.1's
+OpenAI and Anthropic integrations.
 
 > **Community project:** This library is independently maintained and is not affiliated with,
 > endorsed by, or an official project of OpenRouter or Spring AI.
@@ -34,8 +37,173 @@ applications should opt into it explicitly.
 
 The repository is now `Subhransu-De/openrouter-spring-ai`; Maven coordinates and Java
 packages are unchanged. Published `0.1.0-RC1` metadata retains its historical broken
-module backlinks and cannot be changed in place. The corrected links will ship in the
-next release; use that release once it is published.
+module backlinks and cannot be changed in place. RC2 contains the corrected links.
+
+## Install and make a first call
+
+Use the published `de.subhransu:openrouter-spring-ai-starter:0.1.0-RC2` from Maven
+Central. For a new application, create this `pom.xml`:
+
+```xml
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.1.1</version>
+        <relativePath/>
+    </parent>
+    <groupId>example</groupId>
+    <artifactId>hello-openrouter</artifactId>
+    <version>1.0.0</version>
+    <properties><java.version>17</java.version></properties>
+    <dependencies>
+        <dependency>
+            <groupId>de.subhransu</groupId>
+            <artifactId>openrouter-spring-ai-starter</artifactId>
+            <version>0.1.0-RC2</version>
+        </dependency>
+    </dependencies>
+    <build><plugins><plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+    </plugin></plugins></build>
+</project>
+```
+
+Or create `build.gradle.kts`:
+
+```kotlin
+plugins {
+    java
+    id("org.springframework.boot") version "4.1.1"
+}
+repositories { mavenCentral() }
+java { sourceCompatibility = JavaVersion.VERSION_17 }
+dependencies {
+    implementation(platform("org.springframework.boot:spring-boot-dependencies:4.1.1"))
+    implementation("de.subhransu:openrouter-spring-ai-starter:0.1.0-RC2")
+}
+```
+
+The starter includes Spring AI's ChatClient auto-configuration. Set these application
+properties in `src/main/resources/application.properties`, supply `OPENROUTER_API_KEY`
+and a suitable `OPENROUTER_MODEL` in the environment, and use the injected builder:
+
+```properties
+spring.ai.model.chat=openrouter
+spring.ai.model.embedding=none
+spring.ai.model.image=none
+spring.ai.openrouter.api-key=${OPENROUTER_API_KEY}
+spring.ai.openrouter.chat.model=${OPENROUTER_MODEL}
+```
+
+```java
+package example;
+
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+
+@SpringBootApplication
+public class Application {
+    public static void main(String[] args) {
+        SpringApplication.run(Application.class, args);
+    }
+
+    @Bean
+    CommandLineRunner hello(ChatClient.Builder builder) {
+        ChatClient client = builder.build();
+        return args -> System.out.println(client.prompt().user("Say hello.").call().content());
+    }
+}
+```
+
+Save the class as `src/main/java/example/Application.java`. Run `mvn spring-boot:run`
+or `gradle bootRun` with JDK 17 or later. The first call uses the configured model and
+makes a billable OpenRouter request. No clone or local library installation is needed.
+
+For incremental text, use `client.prompt().user("Say hello.").stream().content()`
+and subscribe to the returned `Flux<String>` for the application's lifetime.
+
+| Property                                                 | Default / meaning                                                        |
+| -------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `spring.ai.model.chat`, `.embedding`, `.image`           | Each defaults to `openrouter`; the example disables unused modalities.   |
+| `spring.ai.openrouter.api-key`                           | Required while an OpenRouter modality is enabled; no default credential. |
+| `spring.ai.openrouter.base-url`                          | `https://openrouter.ai/api/v1`                                           |
+| `spring.ai.openrouter.chat.model`                        | Unset; select a model explicitly.                                        |
+| `spring.ai.openrouter.chat.request-mode`                 | `openai-chat-completions`; `openai-responses` is experimental.           |
+| `spring.ai.openrouter.chat.include-usage`                | Unset; do not configure it globally when composing Responses requests.   |
+| `spring.ai.openrouter.connection.timeout`                | `2m`                                                                     |
+| `spring.ai.openrouter.connection.max-response-body-size` | `64MB` per response / SSE event, not per stream.                         |
+
+### Release compatibility
+
+| Source / artifact                                                                      | Java release target | Spring Boot | Spring AI |
+| -------------------------------------------------------------------------------------- | ------------------- | ----------- | --------- |
+| [RC1: `74da429`](https://github.com/Subhransu-De/openrouter-spring-ai/tree/v0.1.0-RC1) | 17                  | 4.1.1       | 2.0.1     |
+| [RC2: `23473f7`](https://github.com/Subhransu-De/openrouter-spring-ai/tree/v0.1.0-RC2) | 17                  | 4.1.1       | 2.0.1     |
+| Unreleased main (`0.1.0-SNAPSHOT`)                                                     | 17                  | 4.1.1       | 2.0.1     |
+
+Baselines come from the tagged/root POMs and
+[published RC2 parent POM](https://repo.maven.apache.org/maven2/de/subhransu/openrouter-spring-ai-parent/0.1.0-RC2/openrouter-spring-ai-parent-0.1.0-RC2.pom).
+CI targets JDK 17, 21, and 25; this does not establish compatibility with arbitrary
+Boot or Spring AI versions. Use the matching BOM baseline in the consuming application.
+
+[RC2, released September 19, 2026](https://github.com/Subhransu-De/openrouter-spring-ai/releases/tag/v0.1.0-RC2),
+includes option snapshot isolation (#18/#85), image stream completion (#20/#119),
+and malformed-terminal validation (#60/#101/#117), among other fixes in its release notes.
+Those fixes must not be attributed to RC1 merely because their issues are closed.
+See the [RC2 README](https://github.com/Subhransu-De/openrouter-spring-ai/blob/v0.1.0-RC2/README.md)
+for its API. The sections below describe **main**: strict function tools, explicit cache
+breakpoints, optional request/response extensions, embedding metadata/dimension discovery,
+cumulative Responses state limits, PDF/audio/video inputs, and chat audio output are
+post-RC2 additions. They require a source build until a release includes them.
+
+### Options: replacement and composition
+
+Raw `ChatModel.call(new Prompt(text, options))` and `stream(...)` replace the model's
+defaults whenever prompt options are supplied. With no prompt options, model defaults
+apply. A portable `ChatOptions` does not carry OpenRouter's request mode: supplying it
+to a Responses-configured raw model selects Chat Completions again. Supply complete
+`OpenRouterChatOptions` (including model and mode) or derive them from `getOptions()`.
+
+`ChatClient` instead composes model defaults with the effective options builder.
+Null means inherit; non-null scalar values override (builder composition appends
+stop/tool lists). In Spring AI 2.0.1, `.options(builder)` replaces the client-level
+`.defaultOptions(builder)` customizer; it does not erase the model defaults.
+`client.prompt(Prompt)` composes supplied prompt options with the client customizer.
+For example, given an injected `OpenRouterApi api`, this synthetic mode switch fails
+before HTTP because the model defaults retain `includeUsage=true`:
+
+```java
+var chatModel = OpenRouterChatModel.builder()
+    .openRouterApi(api)
+    .defaultOptions(OpenRouterChatOptions.builder()
+        .model("your-model").includeUsage(true).build())
+    .build();
+ChatClient client = ChatClient.builder(chatModel).build();
+client.prompt().user("Say hello.")
+    .options(OpenRouterChatOptions.builder()
+        .requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
+        .includeUsage(null))
+    .call().content();
+```
+
+Setting `includeUsage(false)` also fails: Responses rejects any non-null value.
+An inherited `seed` or stop sequence fails for the same reason. For clients that switch
+modes, leave Chat Completions-only options unset in **both model and client defaults**;
+set `includeUsage(true)` only on individual Chat Completions requests. Alternatively,
+create separate models/clients with mode-appropriate defaults. Mutating a request to
+null does not clear a value inherited during composition.
+
+Embedding and image models merge supplied options with their defaults directly;
+unset fields inherit. Their behavior is intentionally different from raw chat replacement.
+The implemented Spring AI interfaces are `ChatModel`/`StreamingChatModel`,
+`EmbeddingModel`, and `ImageModel`. `OpenRouterImageModel.stream()` is a provider
+extension, and accepting a `Document` for embedding does not implement `DocumentEmbeddingModel`.
 
 ### Supported API and nullability
 
@@ -327,7 +495,7 @@ Java callers can configure the same limits with `OpenRouterApi.Builder`.
 
 ## Status
 
-Done and live-verified:
+Implemented on main, with synthetic contract coverage (not a claim of current live provider success):
 
 - [x] Chat via OpenRouter's OpenAI-compatible `POST /chat/completions` endpoint
 - [x] Synchronous calls and SSE streaming
@@ -353,20 +521,34 @@ Done and live-verified:
 
 Planned:
 
-- [ ] Typed DTO fields for currently skipped response data (`reasoning_details`, `logprobs`, …)
 - [ ] The models catalogue endpoint
-- [ ] OpenRouter server-side tools (web search plugin) and citation annotations
-- [x] PDF, WAV/MP3 audio and video chat inputs (Chat Completions and Responses)
+- [ ] OpenRouter server-side tools (web search plugin); returned annotations are already preserved
 - [ ] Text-to-speech and transcription
+
+PDF, WAV/MP3 audio and video chat inputs, plus streaming chat audio output, are
+implemented on main; these are not standalone speech/transcription interfaces.
+Reasoning details and optional response extensions are preserved as described below.
+
+Configured means an option or scene is selected. Synthetic-tested means deterministic
+fixtures exercise the contract. Live-verified requires a dated successful run for its
+exact commit and request mode; a workflow definition or badge alone is not that evidence.
+Consult [Garage workflow runs](https://github.com/Subhransu-De/openrouter-spring-ai/actions/workflows/garage-nightly.yml)
+and their per-mode reports for live evidence. No current all-capabilities live success
+is asserted here. Unsupported, incomplete, failed and partial outcomes remain explicit.
+For a dated example, the [September 19, 2026 nightly run](https://github.com/Subhransu-De/openrouter-spring-ai/actions/runs/35438094408)
+succeeded at commit `4203c88af0ba88cc320ff190297007c17a79babe` with
+`--text --embedding --vision --request-mode=both`. That evidence applies to that
+commit and selection, excludes image generation, and does not certify later additions
+or registry entries marked unsupported in Responses.
 
 ## Modules
 
-| Module                               | What it is                                                                                       |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------ |
-| `openrouter-spring-ai`               | Core: API client, wire DTOs, mappers, `OpenRouterChatModel`, `OpenRouterEmbeddingModel`, options |
-| `openrouter-spring-ai-autoconfigure` | Spring Boot auto-configuration and `spring.ai.openrouter.*` binding                              |
-| `openrouter-spring-ai-starter`       | The starter — the one dependency applications add                                                |
-| `openrouter-spring-ai-samples`       | The Garage demo application (see below)                                                          |
+| Module                               | What it is                                                                    |
+| ------------------------------------ | ----------------------------------------------------------------------------- |
+| `openrouter-spring-ai`               | Core: API client, wire DTOs, mappers, chat/embedding/image models and options |
+| `openrouter-spring-ai-autoconfigure` | Spring Boot auto-configuration and `spring.ai.openrouter.*` binding           |
+| `openrouter-spring-ai-starter`       | The starter — the one dependency applications add                             |
+| `openrouter-spring-ai-samples`       | The Garage demo application (see below)                                       |
 
 Module names, property prefixes, and layering deliberately mirror Spring AI's official
 providers.
@@ -876,7 +1058,8 @@ conventions.
 [`openrouter-spring-ai-samples`](openrouter-spring-ai-samples) is a small story: a garage
 foreman model inspects a customer's car, delegates one job to a specialist model, and writes a
 service record. A normal run stays easy to read; `--full` turns it into a capability tour across
-OpenRouter's OpenAI-compatible chat-completions format. Together they exercise system and user
+both Chat Completions and experimental Responses (with registry-declared limitations).
+Together they exercise system and user
 messages, sync chat, streaming, tool calling with mixed parameter schemas, real file I/O side
 effects, model-to-model delegation, model fallback lists, provider routing preferences, service
 tier, reasoning options, usage and cost metadata, and request metadata. Its modality bays cover
@@ -894,18 +1077,29 @@ operation scope. These checks use synthetic model responses in the sample test s
 It doubles as the library's live test harness. Every run asserts its own structural
 outcome (service record written, every required tool actually invoked, usage metadata present,
 non-empty final answer, and streaming signals when requested) and fails loudly otherwise — these
-assertions have caught real bugs that the model's confident prose hid, like tools being silently
-dropped from requests or streamed images blowing the default SSE codec limit. Every live
-finding becomes a replayable unit test.
+assertions check tool execution and response contracts independently of the model's prose.
+Synthetic regressions exercise those contracts without provider access.
 
 The service-story reasoning check accepts reasoning text or positive reasoning-token usage
 from any Foreman tool-loop round; the final answer need not repeat that evidence.
 
 ```bash
-mvn -pl openrouter-spring-ai-samples package
-OPENROUTER_API_KEY=$(cat openrouter.key) java -jar openrouter-spring-ai-samples/target/*.jar \
-    --topic="1987 diesel pickup, hard cold starts" --full
+mvn -B -pl openrouter-spring-ai-samples -am -DskipTests package
+java -jar openrouter-spring-ai-samples/target/openrouter-spring-ai-samples-0.1.0-SNAPSHOT.jar --help
 ```
+
+Run from the repository root; `-am` builds the sibling modules without a prior install.
+The equivalent Gradle command (CI uses Gradle 9.7.1) is:
+
+```bash
+gradle --no-daemon :openrouter-spring-ai-samples:bootJar
+java -jar openrouter-spring-ai-samples/build/libs/openrouter-spring-ai-samples-0.1.0-SNAPSHOT.jar --help
+```
+
+The filename follows the source POM revision, not the published starter version.
+After setting `OPENROUTER_API_KEY` in the environment, replace `--help` with
+`--text --output=/absolute/path/outside/the/checkout`. For credential-free checks use
+`--offline-contracts` with the same output option. Live selections make billable API calls.
 
 Garage diagnostic JSON, Markdown, and sweep files retain only allowlisted fields and fixed
 labels, numeric measurements, booleans, and generated operation identifiers. Free-form text,
@@ -939,6 +1133,30 @@ request modes; `--request-mode=chat` narrows it. `--full` additionally includes 
 and all modalities. With no selection flags, the original service-story demo runs.
 `--scene=<ids>` can narrow a capability suite; selected modality flags require
 `modality-bays` in that list. `--offline-contracts` runs only local contracts.
+
+| Selection                         | Request modes                                          | Selected work                                                        |
+| --------------------------------- | ------------------------------------------------------ | -------------------------------------------------------------------- |
+| No flags                          | Chat Completions                                       | `service-story`                                                      |
+| `--request-mode=chat`             | Chat Completions                                       | `service-story`                                                      |
+| `--request-mode=responses`        | Responses                                              | `service-story`                                                      |
+| `--text`                          | Both                                                   | Text, tools, streaming, structured-output and offline text contracts |
+| `--text --request-mode=chat`      | Chat Completions                                       | Same text suite, narrowed to chat                                    |
+| `--text --request-mode=responses` | Responses                                              | Same suite; unsupported registry rows remain explicit                |
+| `--full`                          | Both                                                   | Every scene, embeddings, vision and all image surfaces               |
+| `--embedding`                     | Chat Completions selection; mode-independent API       | Embeddings only                                                      |
+| `--vision`                        | Both                                                   | Image input only; add `--request-mode=chat` to narrow it             |
+| `--image`                         | Chat Completions selection; mode-independent Image API | Synchronous image generation only                                    |
+
+Garage deliberately selects both modes for `--text`, `--vision` and `--full`; the library and
+ordinary demo still default to Chat Completions. Explicit mode flags override suite
+defaults. `--full --request-mode=responses` is rejected because its chat-image surface
+requires Chat Completions; use individual capabilities instead. The current Garage
+registry does not verify Responses structured output, streamed tool aggregation or
+recovery contracts, even where the library has synthetic coverage. Embeddings and
+image generation are checked once per selection, not duplicated across modes.
+`--list-scenes` lists the same registry used by generated reports; report rows alone
+do not mean their features were executed. CLI selection/default behavior follows
+#103; modality observation correlation follows #105.
 
 Boot arguments such as `--spring.profiles.active=coverage` and
 `--spring.main.banner-mode=off` work alongside Garage flags. Namespaced properties

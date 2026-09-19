@@ -17,6 +17,7 @@ import de.subhransu.openrouter.springai.garage.scenes.SceneResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.io.TempDir;
@@ -29,6 +30,48 @@ class GarageReportWriterTests {
   @TempDir Path output;
 
   record PrivatePayload(String prompt) {}
+
+  @ParameterizedTest
+  @ValueSource(strings = {"", "--request-mode=chat", "--request-mode=responses", "--text",
+      "--text --request-mode=chat", "--text --request-mode=responses", "--full",
+      "--embedding", "--vision", "--image"})
+  void documentedSelectionsRetainRegistryAndModeOutcomes(String selection) throws Exception {
+    GarageCommand command = GarageCommand.from(selection.isEmpty() ? new String[0] : selection.split(" "),
+        new GarageProperties());
+    GarageEvidence evidence = new GarageEvidence();
+    ObjectMapper mapper = new ObjectMapper();
+    var reports = new GarageReportWriter(mapper, evidence,
+        mock(GarageTelemetry.class), mock(GarageTransportEvidence.class))
+        .write(this.output, command, List.of(), List.of());
+    var registry = mapper.readTree(reports.json().toFile()).get("featureRegistry");
+    assertThat(registry.size()).isEqualTo(GarageFeature.values().length);
+    String markdown = Files.readString(reports.markdown());
+    for (GarageFeature feature : GarageFeature.values()) {
+      var row = registry.get(feature.ordinal());
+      assertThat(row.get("id").stringValue()).isEqualTo(feature.id());
+      assertThat(markdown).contains(feature.title());
+      var modes = feature.coverageModes(command.requestModes());
+      assertThat(row.get("modeStatuses").size()).isEqualTo(modes.size());
+      for (int index = 0; index < modes.size(); index++) {
+        var mode = modes.get(index);
+        var status = row.get("modeStatuses").get(index);
+        assertThat(status.get("requestMode").stringValue()).isEqualTo(mode.name());
+        assertThat(status.get("status").stringValue())
+            .isEqualTo(feature.supports(mode) ? "not-executed" : "unsupported-in-mode");
+      }
+    }
+    Path root = Path.of("").toAbsolutePath();
+    while (!Files.isRegularFile(root.resolve("README.md")) || !Files.isDirectory(root.resolve(".github"))) {
+      root = root.getParent();
+    }
+    String readme = Files.readString(root.resolve("README.md"));
+    String label = selection.isEmpty() ? "No flags" : "`" + selection + "`";
+    String[] row = Arrays.stream(readme.split("\\R")).map(line -> line.split("\\|"))
+        .filter(cells -> cells.length > 2 && cells[1].strip().equals(label)).findFirst().orElseThrow();
+    String expectedMode = command.requestModes().size() == 2 ? "Both"
+        : command.requestModes().contains(OpenRouterRequestMode.OPENAI_RESPONSES) ? "Responses" : "Chat Completions";
+    assertThat(row[2].strip()).startsWith(expectedMode);
+  }
 
   @ParameterizedTest
   @ValueSource(strings = {"OPENAI_CHAT_COMPLETIONS", "OPENAI_RESPONSES"})
