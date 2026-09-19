@@ -877,6 +877,12 @@ contracts; it does not certify arbitrary application DTOs or live upstream provi
 
 ## Build quality checks
 
+For GitHub Actions changes, install actionlint 1.7.12 and ShellCheck, then run
+`actionlint -color` from the repository root. CI's `Workflow validation` job checks
+all tracked workflows on every pull request (including forks) and main push,
+with ShellCheck enabled for embedded shell scripts. Synthetic invalid input also
+verifies dependency validation and file/line shell diagnostics.
+
 The library and samples compile with `--release 17`. Run `mvn -B verify` and
 `gradle --no-daemon check` for tests and static analysis. Checkstyle runs on JDK 21+
 only. Library sources use Spring formatting; samples retain their existing layout
