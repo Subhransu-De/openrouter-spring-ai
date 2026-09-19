@@ -9,7 +9,17 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.chat.OpenRouterUsage;
+import java.time.Duration;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.springframework.ai.image.ImageOptions;
+import org.springframework.web.reactive.function.client.ExchangeStrategies;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.ai.image.ImageOptionsBuilder;
 import org.springframework.ai.image.ImagePrompt;
 import org.springframework.ai.image.ImageResponse;
@@ -198,6 +208,119 @@ class OpenRouterImageModelTests {
 			OpenRouterUsage usage = completed.getMetadata().get("openrouter.usage");
 			assertThat(usage.getCost()).isEqualTo(0.03);
 		}).verifyComplete();
+	}
+
+	static Stream<Arguments> compatiblePortableOptions() {
+		return Stream.of(false, true)
+			.flatMap(stream -> Stream.of(false, true)
+				.flatMap(
+						defaults -> Stream.of(null, "b64_json").map(format -> Arguments.of(stream, defaults, format))));
+	}
+
+	@ParameterizedTest
+	@MethodSource("compatiblePortableOptions")
+	void portableOptionsPreserveWireFields(boolean stream, boolean asDefaults, String format) {
+		ImageOptions portable = ImageOptionsBuilder.builder()
+			.model(MODEL)
+			.n(2)
+			.width(128)
+			.height(256)
+			.responseFormat(format)
+			.build();
+		OpenRouterImageOptions defaults = OpenRouterImageOptions.builder()
+			.model("test/default")
+			.n(1)
+			.width(512)
+			.height(512)
+			.quality("high")
+			.outputFormat("webp")
+			.providerOptions(Map.of("options", Map.of("test", Map.of("watermark", false))))
+			.build();
+		if (asDefaults) {
+			defaults = defaults.merge(OpenRouterImageOptions.fromOptions(portable));
+		}
+		AtomicReference<String> body = new AtomicReference<>();
+		RestClient.Builder rest = RestClient.builder();
+		MockRestServiceServer server = MockRestServiceServer.bindTo(rest).build();
+		if (!stream) {
+			server.expect(requestTo(BASE_URL + "/images"))
+				.andExpect(request -> body
+					.set(((org.springframework.mock.http.client.MockClientHttpRequest) request).getBodyAsString()))
+				.andRespond(withSuccess(SUCCESS_BODY, MediaType.APPLICATION_JSON));
+		}
+		WebClient.Builder web = WebClient.builder().exchangeFunction(request -> {
+			var outgoing = new org.springframework.mock.http.client.reactive.MockClientHttpRequest(request.method(),
+					request.url());
+			return request.writeTo(outgoing, ExchangeStrategies.withDefaults())
+				.then(Mono.defer(outgoing::getBodyAsString))
+				.doOnNext(body::set)
+				.map(ignored -> ClientResponse.create(HttpStatus.OK)
+					.header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+					.body(SUCCESS_BODY)
+					.build());
+		});
+		OpenRouterImageModel model = OpenRouterImageModel.builder()
+			.openRouterApi(OpenRouterApi.builder()
+				.apiKey("test-key")
+				.baseUrl(BASE_URL)
+				.restClientBuilder(rest)
+				.webClientBuilder(web)
+				.build())
+			.defaultOptions(defaults)
+			.build();
+		ImagePrompt prompt = asDefaults ? new ImagePrompt("a blue cube") : new ImagePrompt("a blue cube", portable);
+		if (stream) {
+			StepVerifier.create(model.stream(prompt))
+				.assertNext(response -> assertThat(response.getResult().getOutput().getB64Json()).isEqualTo("aW1hZ2Ux"))
+				.expectComplete()
+				.verify(Duration.ofSeconds(5));
+		}
+		else {
+			assertThat(model.call(prompt).getResult().getOutput().getB64Json()).isEqualTo("aW1hZ2Ux");
+		}
+		var json = new ObjectMapper().readTree(body.get());
+		assertThat(json.path("model").asString()).isEqualTo(MODEL);
+		assertThat(json.path("n").asInt()).isEqualTo(2);
+		assertThat(json.path("size").asString()).isEqualTo("128x256");
+		assertThat(json.path("quality").asString()).isEqualTo("high");
+		assertThat(json.path("output_format").asString()).isEqualTo("webp");
+		assertThat(json.at("/provider/options/test/watermark").asBoolean(true)).isFalse();
+		assertThat(json.has("response_format")).isFalse();
+		assertThat(json.has("style")).isFalse();
+		assertThat(json.path("stream").asBoolean(false)).isEqualTo(stream);
+		server.verify();
+	}
+
+	static Stream<Arguments> unsupportedPortableOptions() {
+		return Stream.of(false, true)
+			.flatMap(stream -> Stream.of("url", "", "B64_JSON", "unknown")
+				.flatMap(value -> Stream.of(
+						Arguments.of(stream, ImageOptionsBuilder.builder().responseFormat(value).build(),
+								"responseFormat"),
+						Arguments.of(stream, ImageOptionsBuilder.builder().style(value).build(), "style"))));
+	}
+
+	@ParameterizedTest
+	@MethodSource("unsupportedPortableOptions")
+	void rejectsUnsupportedPortableOptionsBeforeTransport(boolean stream, ImageOptions options, String field) {
+		OpenRouterApi api = org.mockito.Mockito.mock(OpenRouterApi.class);
+		OpenRouterImageModel model = OpenRouterImageModel.builder()
+			.openRouterApi(api)
+			.defaultOptions(OpenRouterImageOptions.builder().model(MODEL).quality("high").build())
+			.build();
+		ImagePrompt prompt = new ImagePrompt("a blue cube", options);
+		assertThatThrownBy(() -> {
+			if (stream) {
+				model.stream(prompt).blockLast(Duration.ofSeconds(5));
+			}
+			else {
+				model.call(prompt);
+			}
+		}).isInstanceOf(IllegalArgumentException.class).hasMessageContaining(field);
+		assertThatThrownBy(() -> OpenRouterImageOptions.fromOptions(options))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining(field);
+		org.mockito.Mockito.verifyNoInteractions(api);
 	}
 
 	private record Fixture(OpenRouterImageModel model, MockRestServiceServer server) {
