@@ -1,5 +1,7 @@
 package de.subhransu.openrouter.springai.garage.evidence;
 
+import de.subhransu.openrouter.springai.chat.OpenRouterUsage;
+import de.subhransu.openrouter.springai.garage.GarageResponses;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -26,6 +28,7 @@ public final class GarageToolLoop implements CallAdvisor, StreamAdvisor {
   private final Set<String> callIds = new HashSet<>();
   private final Set<String> completedTools = new HashSet<>();
   private ChatResponse lastResponse;
+  private boolean reasoningObserved;
 
   @Override
   public String getName() {
@@ -76,6 +79,10 @@ public final class GarageToolLoop implements CallAdvisor, StreamAdvisor {
       throw new IllegalStateException("Tool loop model response was missing");
     }
     this.lastResponse = response.chatResponse();
+    // A final answer may need no reasoning after earlier tool-selection rounds.
+    this.reasoningObserved |= StringUtils.hasText(GarageResponses.reasoning(this.lastResponse))
+        || this.lastResponse.getMetadata().getUsage() instanceof OpenRouterUsage usage
+            && usage.getReasoningTokens() != null && usage.getReasoningTokens() > 0;
     for (ToolCall call : response.chatResponse().getResult().getOutput().getToolCalls()) {
       if (!StringUtils.hasText(call.id()) || !this.callIds.add(call.id())) {
         throw new IllegalStateException("Tool call ID was missing or reused");
@@ -86,6 +93,10 @@ public final class GarageToolLoop implements CallAdvisor, StreamAdvisor {
 
   public ChatResponse lastResponse() {
     return this.lastResponse;
+  }
+
+  public boolean reasoningObserved() {
+    return this.reasoningObserved;
   }
 
   public void assertCompleted(List<String> requiredTools) {
