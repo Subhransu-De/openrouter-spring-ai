@@ -18,9 +18,17 @@ public record Delta(@Nullable String role, @Nullable String content, @Nullable S
 		@JsonProperty("tool_calls") @Nullable List<@Nullable ToolCall> toolCalls,
 		@Nullable List<@Nullable ContentPart> images,
 		@JsonProperty("reasoning_details") @Nullable List<@Nullable JsonNode> reasoningDetails,
-		@Nullable String refusal, @JsonAnyGetter @JsonAnySetter @Nullable Map<String, @Nullable Object> extensions) {
+		@Nullable String refusal, @Nullable AudioOutput audio,
+		@JsonAnyGetter @JsonAnySetter @Nullable Map<String, @Nullable Object> extensions) {
 	public Delta {
 		extensions = extensions == null ? Map.of() : OptionSnapshots.map(extensions);
+	}
+
+	public Delta(@Nullable String role, @Nullable String content, @Nullable String reasoning,
+			@Nullable List<@Nullable ToolCall> toolCalls, @Nullable List<@Nullable ContentPart> images,
+			@Nullable List<@Nullable JsonNode> reasoningDetails, @Nullable String refusal,
+			@Nullable Map<String, @Nullable Object> extensions) {
+		this(role, content, reasoning, toolCalls, images, reasoningDetails, refusal, null, extensions);
 	}
 
 	public Delta(@Nullable String role, @Nullable String content, @Nullable String reasoning,

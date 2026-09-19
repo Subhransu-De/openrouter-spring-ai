@@ -150,7 +150,7 @@ public class OpenRouterChatModel implements ChatModel {
 				case OPENAI_CHAT_COMPLETIONS -> {
 					ChatCompletionRequest request = buildChatCompletionsRequest(prompt, options, true);
 					yield this.streamingResponseMapper.map(this.streamingToolCallAggregator
-						.aggregate(this.openRouterApi.chatCompletionStream(request)));
+						.aggregate(this.openRouterApi.chatCompletionStream(request)), options.getAudio());
 				}
 				case OPENAI_RESPONSES -> {
 					ResponsesRequest request = this.responsesRequestMapper.map(prompt.getInstructions(), options, true,
