@@ -149,11 +149,7 @@ class GarageToolSceneContractTests {
   @EnumSource(OpenRouterRequestMode.class)
   void serviceStoryRequiresAllFourModelDirectedToolsAndFollowUp(OpenRouterRequestMode mode) throws Exception {
     OpenRouterApi api = mock(OpenRouterApi.class);
-    stubStory(api, List.of(
-        storyCall("inspect_vehicle_profile", "{\"concern\":\"synthetic\",\"severity\":4,\"safetyCritical\":true}"),
-        storyCall("hand_to_specialist", "{\"job\":\"synthetic inspection\"}"),
-        storyCall("score_repair_plan", "{\"safetyRisk\":4,\"reliabilityRisk\":3,\"costRisk\":2}"),
-        storyCall("log_to_jobsheet", "{\"title\":\"Synthetic\",\"markdown\":\"Inspect brakes\"}")));
+    stubStory(api, requiredStoryCalls());
     var test = context(api, "service-story", mode);
     var result = new ServiceStoryScene().execute(test.context());
     assertThat(result.status()).isEqualTo(SceneResult.Status.PASSED);
@@ -192,16 +188,20 @@ class GarageToolSceneContractTests {
     stubStory(api, calls, 1, 1, null);
   }
 
+  private List<ToolCall> requiredStoryCalls() {
+    return List.of(
+        storyCall("inspect_vehicle_profile", "{\"concern\":\"synthetic\",\"severity\":4,\"safetyCritical\":true}"),
+        storyCall("hand_to_specialist", "{\"job\":\"synthetic inspection\"}"),
+        storyCall("score_repair_plan", "{\"safetyRisk\":4,\"reliabilityRisk\":3,\"costRisk\":2}"),
+        storyCall("log_to_jobsheet", "{\"title\":\"Synthetic\",\"markdown\":\"Inspect brakes\"}"));
+  }
+
   @ParameterizedTest
   @ValueSource(strings = {"early-tokens", "early-text", "final-tokens", "no-reasoning"})
   void serviceStoryChecksReasoningAcrossForemanRounds(String evidence) throws Exception {
     for (OpenRouterRequestMode mode : OpenRouterRequestMode.values()) {
       OpenRouterApi api = mock(OpenRouterApi.class);
-      stubStory(api, List.of(
-          storyCall("inspect_vehicle_profile", "{\"concern\":\"synthetic\",\"severity\":4,\"safetyCritical\":true}"),
-          storyCall("hand_to_specialist", "{\"job\":\"synthetic inspection\"}"),
-          storyCall("score_repair_plan", "{\"safetyRisk\":4,\"reliabilityRisk\":3,\"costRisk\":2}"),
-          storyCall("log_to_jobsheet", "{\"title\":\"Synthetic\",\"markdown\":\"Inspect brakes\"}")),
+      stubStory(api, requiredStoryCalls(),
           evidence.equals("early-tokens") ? 3 : 0,
           evidence.equals("final-tokens") ? 2 : 0,
           evidence.equals("early-text") ? "Synthetic tool selection reasoning" : null);
