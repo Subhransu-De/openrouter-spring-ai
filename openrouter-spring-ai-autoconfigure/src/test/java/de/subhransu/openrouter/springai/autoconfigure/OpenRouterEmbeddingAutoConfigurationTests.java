@@ -5,7 +5,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingModel;
 import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingOptions;
 import io.micrometer.observation.ObservationRegistry;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.document.Document;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.embedding.EmbeddingRequest;
 import org.springframework.ai.embedding.EmbeddingResponse;
@@ -27,6 +29,9 @@ class OpenRouterEmbeddingAutoConfigurationTests {
 		this.contextRunner.withPropertyValues(API_KEY_PROPERTY).run(context -> {
 			assertThat(context).hasSingleBean(OpenRouterEmbeddingModel.class);
 			assertThat(context).hasSingleBean(EmbeddingModel.class);
+			assertThat(context.getBean(EmbeddingModel.class)
+				.getEmbeddingContent(new Document("synthetic passage", Map.of("topic", "synthetic-topic"))))
+				.isEqualTo("synthetic passage");
 		});
 	}
 
@@ -35,6 +40,7 @@ class OpenRouterEmbeddingAutoConfigurationTests {
 		this.contextRunner
 			.withPropertyValues(API_KEY_PROPERTY, "spring.ai.openrouter.embedding.model=openai/text-embedding-3-small",
 					"spring.ai.openrouter.embedding.dimensions=256",
+					"spring.ai.openrouter.embedding.metadata-mode=embed",
 					"spring.ai.openrouter.embedding.encoding-format=float",
 					"spring.ai.openrouter.embedding.user=embed-user")
 			.run(context -> {
@@ -43,6 +49,10 @@ class OpenRouterEmbeddingAutoConfigurationTests {
 					.getField(embeddingModel, "defaultOptions");
 				assertThat(options.getModel()).isEqualTo("openai/text-embedding-3-small");
 				assertThat(options.getDimensions()).isEqualTo(256);
+				assertThat(embeddingModel.dimensions()).isEqualTo(256);
+				assertThat(embeddingModel
+					.getEmbeddingContent(new Document("synthetic passage", Map.of("topic", "synthetic-topic"))))
+					.isEqualTo("topic: synthetic-topic\n\nsynthetic passage");
 				assertThat(options.getEncodingFormat()).isEqualTo("float");
 				assertThat(options.getUser()).isEqualTo("embed-user");
 			});
