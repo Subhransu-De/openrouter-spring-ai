@@ -18,12 +18,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Install policy parser
-        run: python3 -m pip install PyYAML==6.0.3
-      - name: Test and enforce action pins
+      - name: Install action auditor
+        run: python3 -m pip install zizmor==1.30.1
+      - name: Enforce action pins
         run: |
-          python3 -m unittest discover -s .github/scripts -p 'test_*.py'
-          python3 .github/scripts/check_action_pins.py
+          zizmor --offline --no-config --no-ignores --strict-collection --format=json --no-exit-codes . > "$RUNNER_TEMP/action-audit.json"
+          jq -e '[.[] | select(.ident == "unpinned-uses")] | if length == 0 then true else ., false end' "$RUNNER_TEMP/action-audit.json"
 
   native-smoke:
     name: Native JSON and SSE smoke
