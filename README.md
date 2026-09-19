@@ -12,7 +12,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/Subhransu-De/openrouter-spring-ai?label=License&amp;style=flat" alt="MIT License"></a>
   <br>
   <a href="https://github.com/Subhransu-De/openrouter-spring-ai/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Subhransu-De/openrouter-spring-ai/ci.yml?branch=main&amp;label=Build&amp;style=flat" alt="Build status"></a>
-  <a href="https://github.com/Subhransu-De/openrouter-spring-ai/actions/workflows/garage-nightly.yml"><img src="https://img.shields.io/github/actions/workflow/status/Subhransu-De/openrouter-spring-ai/garage-nightly.yml?branch=main&amp;label=Nightly&amp;style=flat" alt="Nightly compatibility test status"></a>
+  <a href="https://github.com/Subhransu-De/openrouter-spring-ai/actions/workflows/garage-nightly.yml"><img src="https://img.shields.io/github/actions/workflow/status/Subhransu-De/openrouter-spring-ai/garage-nightly.yml?branch=main&amp;label=Nightly%20check&amp;style=flat" alt="Nightly compatibility test status"></a>
   <a href="https://github.com/Subhransu-De/openrouter-spring-ai/actions/workflows/codeql.yml"><img src="https://img.shields.io/github/actions/workflow/status/Subhransu-De/openrouter-spring-ai/codeql.yml?branch=main&amp;label=CodeQL&amp;style=flat" alt="CodeQL status"></a>
 </p>
 
