@@ -186,6 +186,7 @@ Spring AI assistant metadata exposes `openrouter.message.extensions`,
 `openrouter.choice.extensions` (including log probabilities), and
 `openrouter.tool_call.extensions` (keyed by call ID). Response metadata exposes
 `openrouter.response.extensions`. Streamed message annotations append in arrival order;
+Choice `logprobs.content` and `logprobs.refusal` token arrays also accumulate;
 other opaque fields use the latest value per key. Tool fields survive argument-fragment
 aggregation, and assistant extension metadata is cumulative per choice and subscription.
 These fields are inspection-only and are not automatically replayed as request fields.

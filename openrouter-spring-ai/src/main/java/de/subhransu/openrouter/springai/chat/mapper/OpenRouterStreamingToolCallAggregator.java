@@ -238,7 +238,7 @@ public final class OpenRouterStreamingToolCallAggregator {
 		return new Choice(value(earlier.index(), later.index()), value(earlier.message(), later.message()),
 				mergeDeltas(earlier.delta(), later.delta()), value(later.finishReason(), earlier.finishReason()),
 				value(later.nativeFinishReason(), earlier.nativeFinishReason()), value(later.error(), earlier.error()),
-				ExtensionMetadata.merge(earlier.extensions(), later.extensions()));
+				ExtensionMetadata.mergeChoice(earlier.extensions(), later.extensions()));
 	}
 
 	private Delta mergeDeltas(Delta earlier, Delta later) {

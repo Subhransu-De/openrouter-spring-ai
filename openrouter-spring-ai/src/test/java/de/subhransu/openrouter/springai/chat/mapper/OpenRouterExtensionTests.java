@@ -26,6 +26,58 @@ class OpenRouterExtensionTests {
 	private final ObjectMapper json = new ObjectMapper();
 
 	@Test
+	void numericExtensionMapsRejectNonNumericLeavesAndNonFiniteValues() {
+		for (String key : List.of("logit_bias", "max_price", "preferred_min_throughput", "preferred_max_latency")) {
+			for (Object invalid : List.of(true, List.of(1), Map.of("nested", 1), Double.NaN, Double.POSITIVE_INFINITY,
+					"not-a-number")) {
+				Map<String, Object> values = new LinkedHashMap<>();
+				values.put("42", invalid);
+				assertThatThrownBy(() -> {
+					if ("logit_bias".equals(key)) {
+						OpenRouterChatOptions.builder().extraBody(Map.of(key, values));
+					}
+					else {
+						OpenRouterChatOptions.builder().providerExtraBody(Map.of(key, values));
+					}
+				}).isInstanceOf(IllegalArgumentException.class);
+			}
+		}
+	}
+
+	@Test
+	void streamedLogprobsAccumulateThroughToolBufferingAndResubscription() {
+		for (boolean tools : List.of(false, true)) {
+			List<ChatCompletionChunk> chunks = new ArrayList<>();
+			for (int index = 0; index < 3; index++) {
+				String delta = tools ? (index == 0
+						? "{\"tool_calls\":[{\"index\":0,\"id\":\"call-1\",\"type\":\"function\",\"function\":{\"name\":\"lookup\",\"arguments\":\"{\"}}]}"
+						: index == 1 ? "{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"}\"}}]}" : "{}")
+						: "{\"content\":\"synthetic\"}";
+				String probabilities = index == 2 ? "null" : "{\"content\":[{\"token\":\"t" + index
+						+ "\",\"logprob\":-1}],\"refusal\":[{\"token\":\"r" + index + "\",\"logprob\":-2}]}";
+				chunks.add(this.json.readValue("{\"choices\":[{\"index\":0,\"delta\":" + delta + ",\"logprobs\":"
+						+ probabilities + ",\"finish_reason\":"
+						+ (index == 2 ? this.json.writeValueAsString(tools ? "tool_calls" : "stop") : "null") + "}]}",
+						ChatCompletionChunk.class));
+			}
+			var stream = new OpenRouterStreamingResponseMapper()
+				.map(new OpenRouterStreamingToolCallAggregator().aggregate(Flux.fromIterable(chunks)));
+			for (int attempt = 0; attempt < 2; attempt++) {
+				StepVerifier.create(stream.collectList()).assertNext(responses -> {
+					assertThat(responses).hasSize(tools ? 1 : 3);
+					var output = responses.get(responses.size() - 1).getResult().getOutput();
+					var logprobs = this.json.valueToTree(output.getMetadata().get(ExtensionMetadata.CHOICE))
+						.get("logprobs");
+					assertThat(logprobs.get("content").size()).isEqualTo(2);
+					assertThat(logprobs.get("content").get(0).get("token").asString()).isEqualTo("t0");
+					assertThat(logprobs.get("content").get(1).get("token").asString()).isEqualTo("t1");
+					assertThat(logprobs.get("refusal").size()).isEqualTo(2);
+				}).verifyComplete();
+			}
+		}
+	}
+
+	@Test
 	void requestExtensionsAreFlattenedWithFalseZeroAndNullPreserved() {
 		Map<String, Object> fields = new LinkedHashMap<>();
 		fields.put("logprobs", true);

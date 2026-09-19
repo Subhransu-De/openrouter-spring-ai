@@ -104,10 +104,14 @@ final class ReasoningMetadata {
 					if ((ExtensionMetadata.MESSAGE.equals(key) || ExtensionMetadata.CHOICE.equals(key)
 							|| ExtensionMetadata.TOOLS.equals(key)) && earlier instanceof Map<?, ?> first
 							&& later instanceof Map<?, ?> second) {
-						return ExtensionMetadata.MESSAGE.equals(key)
-								? ExtensionMetadata.mergeMessage((Map<String, Object>) first,
-										(Map<String, Object>) second)
-								: ExtensionMetadata.merge((Map<String, Object>) first, (Map<String, Object>) second);
+						return switch (key) {
+							case ExtensionMetadata.MESSAGE -> ExtensionMetadata
+								.mergeMessage((Map<String, Object>) first, (Map<String, Object>) second);
+							case ExtensionMetadata.CHOICE -> ExtensionMetadata.mergeChoice((Map<String, Object>) first,
+									(Map<String, Object>) second);
+							default ->
+								ExtensionMetadata.merge((Map<String, Object>) first, (Map<String, Object>) second);
+						};
 					}
 					if (earlier instanceof String first && later instanceof String second) {
 						return first + second;

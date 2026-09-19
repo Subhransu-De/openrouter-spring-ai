@@ -130,7 +130,13 @@ public final class RequestExtensions {
 					if (!(name instanceof String)) {
 						throw new IllegalArgumentException("Extension object keys must be strings");
 					}
-					numbers.put((String) name, number instanceof String text ? new BigDecimal(text) : number);
+					Object normalizedNumber = number instanceof String text ? new BigDecimal(text) : number;
+					boolean nullablePercentile = normalizedNumber == null
+							&& (MIN_THROUGHPUT.equals(key) || MAX_LATENCY.equals(key));
+					if (!(normalizedNumber instanceof Number) && !nullablePercentile) {
+						throw new IllegalArgumentException(key + " entries must be numbers");
+					}
+					numbers.put((String) name, normalizedNumber);
 				});
 				normalized = numbers;
 			}
@@ -141,7 +147,10 @@ public final class RequestExtensions {
 	}
 
 	private static void validateJson(Object value) {
-		if (value instanceof Map<?, ?> map) {
+		if (value instanceof Number number && !Double.isFinite(number.doubleValue())) {
+			throw new IllegalArgumentException("Extension numbers must be finite");
+		}
+		else if (value instanceof Map<?, ?> map) {
 			map.forEach((key, nested) -> {
 				if (!(key instanceof String)) {
 					throw new IllegalArgumentException("Extension object keys must be strings");

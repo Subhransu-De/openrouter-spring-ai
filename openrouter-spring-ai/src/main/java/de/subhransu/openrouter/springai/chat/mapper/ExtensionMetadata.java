@@ -71,4 +71,30 @@ final class ExtensionMetadata {
 		return OptionSnapshots.map(result);
 	}
 
+	@SuppressWarnings("unchecked")
+	static Map<String, Object> mergeChoice(Map<String, Object> earlier, Map<String, Object> later) {
+		Map<String, Object> result = new LinkedHashMap<>(merge(earlier, later));
+		if (earlier != null && earlier.get("logprobs") instanceof Map<?, ?> first) {
+			Object next = later != null ? later.get("logprobs") : null;
+			if (next == null) {
+				result.put("logprobs", first);
+			}
+			else if (next instanceof Map<?, ?> second) {
+				Map<String, Object> logprobs = new LinkedHashMap<>(
+						merge((Map<String, Object>) first, (Map<String, Object>) second));
+				for (String key : List.of("content", "refusal")) {
+					if (first.get(key) instanceof List<?> previous) {
+						List<Object> entries = new ArrayList<>(previous);
+						if (second.get(key) instanceof List<?> additional) {
+							entries.addAll(additional);
+						}
+						logprobs.put(key, entries);
+					}
+				}
+				result.put("logprobs", logprobs);
+			}
+		}
+		return OptionSnapshots.map(result);
+	}
+
 }
