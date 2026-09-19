@@ -5,6 +5,7 @@ import de.subhransu.openrouter.springai.api.dto.Choice;
 import de.subhransu.openrouter.springai.api.dto.ToolCall;
 import de.subhransu.openrouter.springai.api.errors.OpenRouterApiExceptionFactory;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
+import de.subhransu.openrouter.springai.support.OptionSnapshots;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,7 +22,7 @@ public final class OpenRouterStreamingResponseMapper {
 	private final OpenRouterChoiceErrorExceptionFactory choiceErrorExceptionFactory = new OpenRouterChoiceErrorExceptionFactory();
 
 	public ChatResponse map(ChatCompletionChunk chunk) {
-		return map(chunk, new LinkedHashMap<>(), new LinkedHashMap<>());
+		return map(chunk, new LinkedHashMap<>(), new LinkedHashMap<>(), new LinkedHashMap<>());
 	}
 
 	/**
@@ -35,12 +36,13 @@ public final class OpenRouterStreamingResponseMapper {
 		return Flux.defer(() -> {
 			Map<Integer, PartialOutputAccumulator> partialOutputs = new LinkedHashMap<>();
 			Map<Integer, ReasoningMetadata.Accumulator> reasoning = new LinkedHashMap<>();
-			return chunks.map(chunk -> map(chunk, partialOutputs, reasoning));
+			Map<String, Object> extensions = new LinkedHashMap<>();
+			return chunks.map(chunk -> map(chunk, partialOutputs, reasoning, extensions));
 		});
 	}
 
 	private ChatResponse map(ChatCompletionChunk chunk, Map<Integer, PartialOutputAccumulator> partialOutputs,
-			Map<Integer, ReasoningMetadata.Accumulator> reasoning) {
+			Map<Integer, ReasoningMetadata.Accumulator> reasoning, Map<String, Object> extensions) {
 		if (chunk.error() != null) {
 			// Mid-stream failures arrive as a normal chunk with a top-level error object
 			// over HTTP 200; without this the truncated stream would look like a clean
@@ -63,7 +65,8 @@ public final class OpenRouterStreamingResponseMapper {
 				.filter(choice -> choice.finishReason() != null)
 				.forEach(choice -> reasoning.remove(choiceIndex(choice)));
 		}
-		return new ChatResponse(generations, mapMetadata(chunk));
+		extensions.putAll(chunk.extensions());
+		return new ChatResponse(generations, mapMetadata(chunk, extensions));
 	}
 
 	private void accumulatePartialOutput(ChatCompletionChunk chunk,
@@ -120,6 +123,8 @@ public final class OpenRouterStreamingResponseMapper {
 				choice.delta() != null ? choice.delta().reasoning() : null,
 				choice.delta() != null ? choice.delta().reasoningDetails() : null);
 		RefusalMetadata.put(properties, choice.delta() != null ? choice.delta().refusal() : null);
+		ExtensionMetadata.put(properties, choice.delta() != null ? choice.delta().extensions() : null,
+				choice.extensions(), choice.delta() != null ? choice.delta().toolCalls() : null);
 		Map<String, Object> snapshot = reasoning.append(properties);
 		AssistantMessage assistantMessage = AssistantMessage.builder()
 			.content(choice.delta() != null && choice.delta().content() != null ? choice.delta().content() : "")
@@ -150,11 +155,12 @@ public final class OpenRouterStreamingResponseMapper {
 			.toList();
 	}
 
-	private ChatResponseMetadata mapMetadata(ChatCompletionChunk chunk) {
+	private ChatResponseMetadata mapMetadata(ChatCompletionChunk chunk, Map<String, Object> extensions) {
 		return ChatResponseMetadata.builder()
 			.id(chunk.id())
 			.model(chunk.model())
 			.usage(UsageMapper.map(chunk.usage()))
+			.keyValue(ExtensionMetadata.RESPONSE, OptionSnapshots.map(extensions))
 			.keyValue("openrouter.provider", chunk.provider())
 			.keyValue("openrouter.object", chunk.object())
 			.keyValue("openrouter.created", chunk.created())

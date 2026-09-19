@@ -198,7 +198,7 @@ public final class OpenRouterStreamingToolCallAggregator {
 
 	private ChatCompletionChunk withChoice(ChatCompletionChunk chunk, Choice choice) {
 		return new ChatCompletionChunk(chunk.id(), chunk.object(), chunk.created(), chunk.model(), chunk.provider(),
-				List.of(choice), chunk.usage(), chunk.error());
+				List.of(choice), chunk.usage(), chunk.error(), chunk.extensions());
 	}
 
 	private ChatCompletionChunk merge(List<ChatCompletionChunk> buffered) {
@@ -230,13 +230,15 @@ public final class OpenRouterStreamingToolCallAggregator {
 		}
 		return new ChatCompletionChunk(value(first.id(), last.id()), value(first.object(), last.object()),
 				value(first.created(), last.created()), value(first.model(), last.model()),
-				value(first.provider(), last.provider()), new ArrayList<>(choices.values()), usage, null);
+				value(first.provider(), last.provider()), new ArrayList<>(choices.values()), usage, null,
+				buffered.stream().map(ChatCompletionChunk::extensions).reduce(Map.of(), ExtensionMetadata::merge));
 	}
 
 	private Choice mergeChoices(Choice earlier, Choice later) {
 		return new Choice(value(earlier.index(), later.index()), value(earlier.message(), later.message()),
 				mergeDeltas(earlier.delta(), later.delta()), value(later.finishReason(), earlier.finishReason()),
-				value(later.nativeFinishReason(), earlier.nativeFinishReason()), value(later.error(), earlier.error()));
+				value(later.nativeFinishReason(), earlier.nativeFinishReason()), value(later.error(), earlier.error()),
+				ExtensionMetadata.mergeChoice(earlier.extensions(), later.extensions()));
 	}
 
 	private Delta mergeDeltas(Delta earlier, Delta later) {
@@ -250,7 +252,8 @@ public final class OpenRouterStreamingToolCallAggregator {
 				concat(earlier.reasoning(), later.reasoning()), mergeToolCalls(earlier.toolCalls(), later.toolCalls()),
 				ReasoningMetadata.concat(earlier.images(), later.images()),
 				ReasoningMetadata.concat(earlier.reasoningDetails(), later.reasoningDetails()),
-				concat(earlier.refusal(), later.refusal()));
+				concat(earlier.refusal(), later.refusal()),
+				ExtensionMetadata.mergeMessage(earlier.extensions(), later.extensions()));
 	}
 
 	private List<ToolCall> mergeToolCalls(List<ToolCall> earlier, List<ToolCall> later) {
@@ -297,7 +300,8 @@ public final class OpenRouterStreamingToolCallAggregator {
 					concat(earlierFunction.arguments(), laterFunction.arguments()));
 		}
 		return new ToolCall(value(earlier.id(), later.id()), value(earlier.type(), later.type()), function,
-				value(earlier.index(), later.index()));
+				value(earlier.index(), later.index()),
+				ExtensionMetadata.merge(earlier.extensions(), later.extensions()));
 	}
 
 	private String mergeFunctionNames(String earlier, String later) {

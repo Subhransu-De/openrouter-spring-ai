@@ -16,6 +16,7 @@ import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
 import de.subhransu.openrouter.springai.chat.OpenRouterReasoningOptions;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.MessageType;
@@ -44,11 +45,12 @@ public final class OpenRouterChatRequestMapper {
 				options.getMaxTokens(), options.getMaxCompletionTokens(), options.getStopSequences(), options.getSeed(),
 				options.getUser(), stream, new OutputFormatMapper(this.objectMapper).map(options), tools,
 				ToolChoiceMapper.map(options.getToolChoice(), false, this.objectMapper), options.getParallelToolCalls(),
-				mapProvider(options.getProvider()), mapReasoning(options.getReasoning()),
+				mapProvider(options.getProvider(), options.getProviderExtraBody()),
+				mapReasoning(options.getReasoning()),
 				options.getServiceTier() != null ? options.getServiceTier().value() : null, options.getMetadata(),
 				options.getRoute(),
 				options.getIncludeUsage() != null ? new UsageConfig(options.getIncludeUsage()) : null,
-				options.getModalities(), options.getImageConfig());
+				options.getModalities(), options.getImageConfig(), options.getExtraBody());
 	}
 
 	private List<ChatMessage> mapMessages(List<Message> messages) {
@@ -135,13 +137,14 @@ public final class OpenRouterChatRequestMapper {
 			.toList();
 	}
 
-	private ProviderPreferences mapProvider(OpenRouterProviderPreferences provider) {
+	private ProviderPreferences mapProvider(OpenRouterProviderPreferences provider, Map<String, Object> extraBody) {
 		if (provider == null) {
-			return null;
+			return extraBody == null || extraBody.isEmpty() ? null
+					: new ProviderPreferences(null, null, null, null, null, null, null, extraBody);
 		}
 		return new ProviderPreferences(provider.allowFallbacks(), provider.requireParameters(),
 				provider.dataCollection(), provider.order(), provider.ignore(), provider.quantizations(),
-				provider.sort());
+				provider.sort(), extraBody);
 	}
 
 	private ReasoningOptions mapReasoning(OpenRouterReasoningOptions reasoning) {

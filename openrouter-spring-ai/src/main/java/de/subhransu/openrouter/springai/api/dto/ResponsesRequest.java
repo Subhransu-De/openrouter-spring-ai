@@ -1,6 +1,8 @@
 package de.subhransu.openrouter.springai.api.dto;
 
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
 import org.jspecify.annotations.Nullable;
+import de.subhransu.openrouter.springai.support.RequestExtensions;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
@@ -23,7 +25,26 @@ public record ResponsesRequest(@Nullable String model, @Nullable List<String> mo
 		@JsonProperty("tool_choice") @Nullable Object toolChoice, @Nullable List<ResponsesTool> tools,
 		@Nullable List<String> modalities,
 		@JsonProperty("image_config") @Nullable Map<String, @Nullable Object> imageConfig,
-		@Nullable Map<String, @Nullable Object> text) {
+		@Nullable Map<String, @Nullable Object> text,
+		@JsonAnyGetter @Nullable Map<String, @Nullable Object> extraBody) {
+	public ResponsesRequest {
+		extraBody = RequestExtensions.chat(extraBody, true);
+	}
+
+	public ResponsesRequest(@Nullable String model, @Nullable List<String> models, Object input,
+			@Nullable String instructions, @Nullable Integer maxOutputTokens, @Nullable Boolean stream,
+			@Nullable Double temperature, @Nullable Double topP, @Nullable Integer topK,
+			@Nullable Double frequencyPenalty, @Nullable Double presencePenalty,
+			@Nullable Map<String, @Nullable Object> metadata, @Nullable ProviderPreferences provider,
+			@Nullable ReasoningOptions reasoning, @Nullable String route, @Nullable String serviceTier,
+			@Nullable String user, @Nullable Boolean parallelToolCalls, @Nullable Object toolChoice,
+			@Nullable List<ResponsesTool> tools, @Nullable List<String> modalities,
+			@Nullable Map<String, @Nullable Object> imageConfig, @Nullable Map<String, @Nullable Object> text) {
+		this(model, models, input, instructions, maxOutputTokens, stream, temperature, topP, topK, frequencyPenalty,
+				presencePenalty, metadata, provider, reasoning, route, serviceTier, user, parallelToolCalls, toolChoice,
+				tools, modalities, imageConfig, text, null);
+	}
+
 	public ResponsesRequest(@Nullable String model, @Nullable List<String> models, Object input,
 			@Nullable String instructions, @Nullable Integer maxOutputTokens, @Nullable Boolean stream,
 			@Nullable Double temperature, @Nullable Double topP, @Nullable Integer topK,

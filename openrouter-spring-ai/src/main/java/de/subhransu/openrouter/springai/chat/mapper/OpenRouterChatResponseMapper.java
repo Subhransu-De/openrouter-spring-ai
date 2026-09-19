@@ -68,6 +68,8 @@ public final class OpenRouterChatResponseMapper {
 		Map<String, Object> properties = ReasoningMetadata.chat(choice.message().reasoning(),
 				choice.message().reasoningDetails());
 		RefusalMetadata.put(properties, choice.message().refusal());
+		ExtensionMetadata.put(properties, choice.message().extensions(), choice.extensions(),
+				choice.message().toolCalls());
 		AssistantMessage assistantMessage = AssistantMessage.builder()
 			.content(content.text())
 			.properties(properties)
@@ -102,6 +104,7 @@ public final class OpenRouterChatResponseMapper {
 			.id(response.id())
 			.model(response.model())
 			.usage(UsageMapper.map(response.usage()));
+		builder.keyValue(ExtensionMetadata.RESPONSE, response.extensions());
 		builder.keyValue("openrouter.provider", response.provider());
 		builder.keyValue("openrouter.object", response.object());
 		builder.keyValue("openrouter.created", response.created());

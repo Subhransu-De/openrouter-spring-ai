@@ -60,6 +60,10 @@ public class OpenRouterChatProperties {
 	 */
 	private @Nullable String outputSchema;
 
+	private @Nullable Map<String, @Nullable Object> extraBody;
+
+	private @Nullable Map<String, @Nullable Object> providerExtraBody;
+
 	/** Strictness for all function tools; unset preserves the provider default. */
 	private @Nullable Boolean toolStrict;
 
@@ -115,6 +119,8 @@ public class OpenRouterChatProperties {
 			.user(this.user)
 			.responseFormat(this.responseFormat)
 			.outputSchema(this.outputSchema)
+			.extraBody(this.extraBody)
+			.providerExtraBody(this.providerExtraBody)
 			.toolStrict(this.toolStrict)
 			.parallelToolCalls(this.parallelToolCalls)
 			.toolChoice(this.toolChoice)
@@ -250,6 +256,22 @@ public class OpenRouterChatProperties {
 
 	public void setResponseFormat(@Nullable OpenRouterResponseFormat responseFormat) {
 		this.responseFormat = responseFormat;
+	}
+
+	public @Nullable Map<String, @Nullable Object> getProviderExtraBody() {
+		return this.providerExtraBody;
+	}
+
+	public void setProviderExtraBody(@Nullable Map<String, @Nullable Object> providerExtraBody) {
+		this.providerExtraBody = providerExtraBody;
+	}
+
+	public @Nullable Map<String, @Nullable Object> getExtraBody() {
+		return this.extraBody;
+	}
+
+	public void setExtraBody(@Nullable Map<String, @Nullable Object> extraBody) {
+		this.extraBody = extraBody;
 	}
 
 	public @Nullable String getOutputSchema() {

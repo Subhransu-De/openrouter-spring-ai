@@ -1,5 +1,9 @@
 package de.subhransu.openrouter.springai.api.dto;
 
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import de.subhransu.openrouter.springai.support.OptionSnapshots;
+import com.fasterxml.jackson.annotation.JsonAnySetter;
+import java.util.Map;
 import org.jspecify.annotations.Nullable;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -10,5 +14,16 @@ import java.util.List;
 @JsonInclude(Include.NON_NULL)
 public record ChatCompletionChunk(@Nullable String id, @Nullable String object, @Nullable Long created,
 		@Nullable String model, @Nullable String provider, @Nullable List<@Nullable Choice> choices,
-		@Nullable Usage usage, @Nullable StreamError error) {
+		@Nullable Usage usage, @Nullable StreamError error,
+		@JsonAnyGetter @JsonAnySetter @Nullable Map<String, @Nullable Object> extensions) {
+	public ChatCompletionChunk {
+		extensions = extensions == null ? Map.of() : OptionSnapshots.map(extensions);
+	}
+
+	public ChatCompletionChunk(@Nullable String id, @Nullable String object, @Nullable Long created,
+			@Nullable String model, @Nullable String provider, @Nullable List<@Nullable Choice> choices,
+			@Nullable Usage usage, @Nullable StreamError error) {
+		this(id, object, created, model, provider, choices, usage, error, null);
+	}
+
 }

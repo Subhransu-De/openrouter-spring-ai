@@ -116,6 +116,7 @@ public class NativeSmoke {
 		var chat = api.chatCompletion(chat(false));
 		check("hello".equals(chat.choices().get(0).message().content()), "chat content");
 		check(chat.usage().totalTokens() == 3, "chat usage");
+		check(Boolean.TRUE.equals(chat.extensions().get("future_field")), "chat extension preservation");
 		fixture.expect("/responses", false, RESPONSE);
 		var response = api.responses(responses(false));
 		check("hello".equals(response.output().get(0).content().get(0).text()), "Responses content");
@@ -143,6 +144,7 @@ public class NativeSmoke {
 		var chunks = collect(api.chatCompletionStream(chat(true)));
 		check(chunks.size() == 3 && "hello".equals(chunks.get(0).choices().get(0).delta().content()),
 				"SSE chat text/termination");
+		check(Boolean.TRUE.equals(chunks.get(0).extensions().get("future_field")), "SSE extension preservation");
 		check("echo".equals(chunks.get(1).choices().get(0).delta().toolCalls().get(0).function().name()),
 				"SSE tool name");
 		check("}".equals(chunks.get(2).choices().get(0).delta().toolCalls().get(0).function().arguments()),

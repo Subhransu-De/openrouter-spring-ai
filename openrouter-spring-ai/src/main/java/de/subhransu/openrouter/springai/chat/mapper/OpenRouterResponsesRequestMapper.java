@@ -58,12 +58,13 @@ public final class OpenRouterResponsesRequestMapper {
 				mapInstructions(messages),
 				options.getMaxCompletionTokens() != null ? options.getMaxCompletionTokens() : options.getMaxTokens(),
 				stream, options.getTemperature(), options.getTopP(), options.getTopK(), options.getFrequencyPenalty(),
-				options.getPresencePenalty(), options.getMetadata(), mapProvider(options.getProvider()),
+				options.getPresencePenalty(), options.getMetadata(),
+				mapProvider(options.getProvider(), options.getProviderExtraBody()),
 				mapReasoning(options.getReasoning()), options.getRoute(),
 				options.getServiceTier() != null ? options.getServiceTier().value() : null, options.getUser(),
 				options.getParallelToolCalls(), ToolChoiceMapper.map(options.getToolChoice(), true, this.objectMapper),
 				mapTools(toolDefinitions, options.getToolStrict()), options.getModalities(), options.getImageConfig(),
-				mapText(options));
+				mapText(options), options.getExtraBody());
 	}
 
 	private static void rejectUnsupported(String name, Object value) {
@@ -211,13 +212,14 @@ public final class OpenRouterResponsesRequestMapper {
 		};
 	}
 
-	private ProviderPreferences mapProvider(OpenRouterProviderPreferences provider) {
+	private ProviderPreferences mapProvider(OpenRouterProviderPreferences provider, Map<String, Object> extraBody) {
 		if (provider == null) {
-			return null;
+			return extraBody == null || extraBody.isEmpty() ? null
+					: new ProviderPreferences(null, null, null, null, null, null, null, extraBody);
 		}
 		return new ProviderPreferences(provider.allowFallbacks(), provider.requireParameters(),
 				provider.dataCollection(), provider.order(), provider.ignore(), provider.quantizations(),
-				provider.sort());
+				provider.sort(), extraBody);
 	}
 
 	private ReasoningOptions mapReasoning(OpenRouterReasoningOptions reasoning) {

@@ -659,6 +659,8 @@ class OpenRouterChatRequestSerializationTests {
 				{ "route", "fallback", "/route", "/route" },
 				{ "modalities", List.of("text"), "/modalities", "/modalities" },
 				{ "imageConfig", Map.of("aspect_ratio", "1:1"), "/image_config", "/image_config" },
+				{ "extraBody", Map.of("prompt_cache_key", "synthetic"), "/prompt_cache_key", "/prompt_cache_key" },
+				{ "providerExtraBody", Map.of("zdr", false), "/provider/zdr", "/provider/zdr" },
 				{ "toolCallbacks", List.of(), "/tools/0/function/name", "/tools/0/name" },
 				{ "toolContext", Map.of("test", "value"), null, null },
 				{ "stopSequences", List.of("STOP"), "/stop", "rejected" }, { "seed", 0, "/seed", "rejected" },
