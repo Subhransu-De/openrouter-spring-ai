@@ -561,11 +561,11 @@ UserMessage message = UserMessage.builder()
 
 Both synchronous and streaming calls accept these `UserMessage` attachments:
 
-| Media | MIME types | Chat Completions | Responses | Source |
-| --- | --- | --- | --- | --- |
-| PDF | `application/pdf` | `file` with `file_data` | `input_file` with `file_data` or `file_url` | HTTP(S) URL, bytes or base64 data URL |
-| Audio | `audio/wav`, `audio/mpeg` | `input_audio` with raw base64 and `wav`/`mp3` format | Same | Bytes or base64 data URL; remote URLs rejected |
-| Video | `video/mp4`, `video/mpeg`, `video/mov`, `video/webm` | `video_url` object | `input_video` with string `video_url` | HTTP(S) URL, bytes or base64 data URL |
+| Media | MIME types                                           | Chat Completions                                     | Responses                                   | Source                                         |
+| ----- | ---------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------- | ---------------------------------------------- |
+| PDF   | `application/pdf`                                    | `file` with `file_data`                              | `input_file` with `file_data` or `file_url` | HTTP(S) URL, bytes or base64 data URL          |
+| Audio | `audio/wav`, `audio/mpeg`                            | `input_audio` with raw base64 and `wav`/`mp3` format | Same                                        | Bytes or base64 data URL; remote URLs rejected |
+| Video | `video/mp4`, `video/mpeg`, `video/mov`, `video/webm` | `video_url` object                                   | `input_video` with string `video_url`       | HTTP(S) URL, bytes or base64 data URL          |
 
 ```java
 UserMessage message = UserMessage.builder()
