@@ -1,12 +1,14 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 import de.subhransu.openrouter.springai.api.dto.ResponsesOutputItem;
 import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
 import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
 import de.subhransu.openrouter.springai.api.dto.StreamError;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -21,17 +23,23 @@ import reactor.core.publisher.Mono;
 
 public final class OpenRouterResponsesStreamingResponseMapper {
 
+	private final ResponsesStreamBudget budget;
+
+	public OpenRouterResponsesStreamingResponseMapper() {
+		this(new ObjectMapper(), OpenRouterStreamingToolCallAggregator.DEFAULT_MAX_BYTES,
+				OpenRouterStreamingToolCallAggregator.DEFAULT_MAX_CHUNKS,
+				OpenRouterStreamingToolCallAggregator.DEFAULT_MAX_DURATION);
+	}
+
+	public OpenRouterResponsesStreamingResponseMapper(ObjectMapper objectMapper, long maxBytes, int maxChunks,
+			Duration maxDuration) {
+		this.budget = new ResponsesStreamBudget(objectMapper, maxBytes, maxChunks, maxDuration);
+	}
+
 	public Flux<ChatResponse> map(Flux<ResponsesStreamEvent> events) {
-		return Flux.defer(() -> {
-			ReasoningMetadata.Accumulator reasoning = new ReasoningMetadata.Accumulator();
-			List<ResponsesOutputItem> pending = new ArrayList<>();
-			RefusalMetadata.Accumulator refusal = new RefusalMetadata.Accumulator();
-			TextState text = new TextState();
-			return events.map(event -> map(event, reasoning, pending, refusal, text))
-				.concatWith(Mono
-					.defer(() -> pending.isEmpty() ? Mono.empty() : Mono.error(new OpenRouterTruncatedResponseException(
-							"Responses stream ended before tool round completion"))));
-		});
+		return Flux.using(State::new,
+				state -> this.budget.apply(events).map(state::map).concatWith(Mono.defer(state::complete)),
+				State::clear);
 	}
 
 	public ChatResponse map(ResponsesStreamEvent event) {
@@ -183,6 +191,34 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 			return merged;
 		}
 		return nested;
+	}
+
+	private final class State {
+
+		private final ReasoningMetadata.Accumulator reasoning = new ReasoningMetadata.Accumulator();
+
+		private final List<ResponsesOutputItem> pending = new ArrayList<>();
+
+		private final RefusalMetadata.Accumulator refusal = new RefusalMetadata.Accumulator();
+
+		private final TextState text = new TextState();
+
+		private synchronized ChatResponse map(ResponsesStreamEvent event) {
+			return OpenRouterResponsesStreamingResponseMapper.this.map(event, this.reasoning, this.pending,
+					this.refusal, this.text);
+		}
+
+		private synchronized Mono<ChatResponse> complete() {
+			return this.pending.isEmpty() ? Mono.empty() : Mono
+				.error(new OpenRouterTruncatedResponseException("Responses stream ended before tool round completion"));
+		}
+
+		private synchronized void clear() {
+			this.pending.clear();
+			this.reasoning.clear();
+			this.refusal.clear();
+		}
+
 	}
 
 	private static final class TextState {

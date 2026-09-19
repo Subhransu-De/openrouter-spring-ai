@@ -470,6 +470,34 @@ so Spring AI message aggregation retains the complete reasoning state. Text cont
 incremental. The existing generation metadata key `openrouter.reasoning` remains available
 for streamed reasoning deltas and synchronous reasoning text.
 
+### Responses stream state limits
+
+Responses streaming reuses the model builder's `toolCallAggregationMaxBytes`,
+`toolCallAggregationMaxChunks`, and `toolCallAggregationMaxDuration` settings and the Boot
+properties under `spring.ai.openrouter.chat.tool-call-aggregation`:
+
+| Property | Default | Responses scope |
+| --- | --- | --- |
+| `max-size` | `1MB` (1,048,576 bytes) | Cumulative serialized UTF-8 JSON bytes admitted from the first state-bearing event through the terminal event |
+| `max-chunks` | `1024` | Events in that interval, and separately the number of retained output items or items in a response snapshot |
+| `max-duration` | `2m` | Absolute elapsed time from the first state-bearing event; activity and keepalives do not reset it |
+
+State-bearing events include output items, function-argument fragments, reasoning, refusals,
+and nonempty response output snapshots. Once started, the budget counts every event,
+including text, keepalives, and repeated item/terminal snapshots. Byte accounting is therefore
+conservative: it bounds admitted state, not exact JVM heap usage. Equality is allowed for
+byte, chunk, and item limits; the duration expires at its deadline. Limits apply independently
+per subscription to the single Responses output sequence and include all output indexes.
+They are model-level settings, not per-request options. Synchronous Responses and Chat
+Completions behavior are unchanged.
+
+Exceeding a limit raises `OpenRouterLimitExceededException` with a `RESPONSES_STATE_*`
+limit and `/responses` endpoint before the violating event can release tools. State and the
+deadline subscription are released on completion, error, or cancellation. Normal completed
+rounds retain their reasoning replay order. These cumulative limits are separate from the
+connection's per-event codec size and idle timeout: small events or keepalives cannot evade
+them. Increase the aggregation settings explicitly for larger expected Responses rounds.
+
 ### Refusals and incomplete output
 
 Both request modes expose provider refusal explanations under `openrouter.refusal` in

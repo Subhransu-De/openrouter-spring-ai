@@ -101,7 +101,9 @@ public class OpenRouterChatModel implements ChatModel {
 				builder.toolCallAggregationMaxDuration);
 		this.responsesRequestMapper = new OpenRouterResponsesRequestMapper(objectMapper);
 		this.responsesResponseMapper = new OpenRouterResponsesResponseMapper();
-		this.responsesStreamingResponseMapper = new OpenRouterResponsesStreamingResponseMapper();
+		this.responsesStreamingResponseMapper = new OpenRouterResponsesStreamingResponseMapper(objectMapper,
+				builder.toolCallAggregationMaxBytes, builder.toolCallAggregationMaxChunks,
+				builder.toolCallAggregationMaxDuration);
 	}
 
 	@Override

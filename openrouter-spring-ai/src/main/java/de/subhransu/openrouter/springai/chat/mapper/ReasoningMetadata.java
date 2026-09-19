@@ -86,6 +86,10 @@ final class ReasoningMetadata {
 
 		private final Map<String, Object> metadata = new LinkedHashMap<>();
 
+		void clear() {
+			this.metadata.clear();
+		}
+
 		Map<String, Object> replace(Map<String, Object> complete) {
 			this.metadata.putAll(complete);
 			return new LinkedHashMap<>(this.metadata);

@@ -30,6 +30,18 @@ public final class OpenRouterLimitExceededException extends NonTransientAiExcept
 				"spring.ai.openrouter.chat.tool-call-aggregation.max-chunks"),
 
 		STREAMING_TOOL_CALL_DURATION("streamed tool-call assembly", "milliseconds",
+				"spring.ai.openrouter.chat.tool-call-aggregation.max-duration"),
+
+		RESPONSES_STATE_BYTES("Responses cumulative state", "bytes",
+				"spring.ai.openrouter.chat.tool-call-aggregation.max-size"),
+
+		RESPONSES_STATE_CHUNKS("Responses cumulative state", "chunks",
+				"spring.ai.openrouter.chat.tool-call-aggregation.max-chunks"),
+
+		RESPONSES_STATE_ITEMS("Responses output snapshot", "items",
+				"spring.ai.openrouter.chat.tool-call-aggregation.max-chunks"),
+
+		RESPONSES_STATE_DURATION("Responses cumulative state", "milliseconds",
 				"spring.ai.openrouter.chat.tool-call-aggregation.max-duration");
 
 		private final String description;
