@@ -54,7 +54,7 @@ class OpenRouterCacheBreakpointTests {
 			.build();
 		List<Message> history = new ArrayList<>(List.of(system, user));
 		JsonNode original = wire(history, stream);
-		assertThat(original.at("/messages/0/content/0/cache_control/ttl").asText()).isEqualTo("1h");
+		assertThat(original.at("/messages/0/content/0/cache_control/ttl").asString()).isEqualTo("1h");
 		assertThat(original.at("/messages/1/content")).isEqualTo(this.json.readTree("""
 				[{"type":"text","text":"prefix","cache_control":{"type":"ephemeral","ttl":"1h"}},
 				 {"type":"text","text":"middle","cache_control":{"type":"ephemeral"}},
@@ -72,10 +72,10 @@ class OpenRouterCacheBreakpointTests {
 		JsonNode replay = wire(history, stream);
 		assertThat(replay.at("/messages/0")).isEqualTo(original.at("/messages/0"));
 		assertThat(replay.at("/messages/1")).isEqualTo(original.at("/messages/1"));
-		assertThat(replay.at("/messages/2/tool_calls/0/id").asText()).isEqualTo("call-1");
-		assertThat(replay.at("/messages/3/tool_call_id").asText()).isEqualTo("call-1");
-		assertThat(replay.at("/messages/3/content").asText()).isEqualTo("result");
-		assertThat(replay.at("/messages/4/content").asText()).isEqualTo("continue");
+		assertThat(replay.at("/messages/2/tool_calls/0/id").asString()).isEqualTo("call-1");
+		assertThat(replay.at("/messages/3/tool_call_id").asString()).isEqualTo("call-1");
+		assertThat(replay.at("/messages/3/content").asString()).isEqualTo("result");
+		assertThat(replay.at("/messages/4/content").asString()).isEqualTo("continue");
 		assertThat(replay.has("cache_control")).isFalse();
 		assertThat(user.getText()).isEqualTo("prefixmiddle tail");
 		assertThat(boundaries).containsExactly(new OpenRouterCacheBreakpoint(6, Ttl.ONE_HOUR),
@@ -144,7 +144,8 @@ class OpenRouterCacheBreakpointTests {
 
 	@Test
 	void unmarkedContentRetainsWireCompatibilityAndUnknownFieldsAreTolerated() {
-		assertThat(wire(List.of(new UserMessage("text")), false).at("/messages/0/content").asText()).isEqualTo("text");
+		assertThat(wire(List.of(new UserMessage("text")), false).at("/messages/0/content").asString())
+			.isEqualTo("text");
 		assertThat(this.json.writeValueAsString(new ContentPart("text", "text", null)))
 			.isEqualTo("{\"type\":\"text\",\"text\":\"text\"}");
 		ContentPart part = this.json.readValue("""
