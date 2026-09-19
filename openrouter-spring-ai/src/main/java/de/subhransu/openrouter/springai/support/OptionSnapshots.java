@@ -1,6 +1,5 @@
 package de.subhransu.openrouter.springai.support;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -18,7 +17,7 @@ public final class OptionSnapshots {
 	}
 
 	public static <T> List<T> list(List<T> values) {
-		return values == null ? null : Collections.unmodifiableList(new ArrayList<>(values));
+		return values == null ? null : values.stream().toList();
 	}
 
 	public static <K> Map<K, Object> map(Map<K, ?> values) {
