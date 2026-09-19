@@ -71,6 +71,8 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 
 	private @Nullable List<String> modalities;
 
+	private @Nullable OpenRouterAudioOptions audio;
+
 	private @Nullable Map<String, @Nullable Object> imageConfig;
 
 	private @Nullable Map<String, @Nullable Object> extraBody;
@@ -151,6 +153,7 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 		builder.route(value(runtimeOptions.route, this.route));
 		builder.includeUsage(value(runtimeOptions.includeUsage, this.includeUsage));
 		builder.modalities(value(runtimeOptions.modalities, this.modalities));
+		builder.audio(value(runtimeOptions.audio, this.audio));
 		builder.imageConfig(value(runtimeOptions.imageConfig, this.imageConfig));
 		builder.extraBody(mergeMaps(this.extraBody, runtimeOptions.extraBody));
 		builder.providerExtraBody(mergeMaps(this.providerExtraBody, runtimeOptions.providerExtraBody));
@@ -285,6 +288,10 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 		return this.includeUsage;
 	}
 
+	public @Nullable OpenRouterAudioOptions getAudio() {
+		return this.audio;
+	}
+
 	public @Nullable List<String> getModalities() {
 		return readOnlyList(this.modalities);
 	}
@@ -408,6 +415,7 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 			this.options.route = source.route;
 			this.options.includeUsage = source.includeUsage;
 			this.options.modalities = copyList(source.modalities);
+			this.options.audio = source.audio;
 			this.options.imageConfig = copyMap(source.imageConfig);
 			this.options.extraBody = copyMap(source.extraBody);
 			this.options.providerExtraBody = copyMap(source.providerExtraBody);
@@ -585,6 +593,14 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 
 		public Builder includeUsage(@Nullable Boolean includeUsage) {
 			this.options.includeUsage = includeUsage;
+			return this;
+		}
+
+		/**
+		 * Voice and encoding for audio output; requires streaming and the audio modality.
+		 */
+		public Builder audio(@Nullable OpenRouterAudioOptions audio) {
+			this.options.audio = audio;
 			return this;
 		}
 

@@ -89,14 +89,9 @@ public class OpenRouterApi {
 		this.maxResponseBodyBytes = builder.maxResponseBodyBytes;
 		this.maxErrorBodyBytes = builder.maxErrorBodyBytes;
 
-		// The RestClient's connect/read timeout is a transport concern carried by its
-		// request factory.
-		// The factory varies by classpath (Apache/Jetty/Reactor/JDK), so the
-		// auto-configuration builds
-		// a timeout-configured factory onto the supplied builder rather than this
-		// transport-agnostic
-		// core. The timeout field here drives only the streaming WebClient guard (see
-		// applyTimeout).
+		// Blocking timeouts belong to the request factory. Auto-configuration installs
+		// a timeout-configured factory on its own builder clone; programmatic callers
+		// supply their factory. This timeout field only guards streaming idle gaps.
 		RestClient.Builder restClientBuilder = builder.restClientBuilder != null ? builder.restClientBuilder.clone()
 				: RestClient.builder();
 		this.restClient = restClientBuilder.baseUrl(baseUrl)
@@ -481,7 +476,7 @@ public class OpenRouterApi {
 		 * headers and error bodies) and gaps between SSE events, including keep-alives.
 		 * The blocking {@link RestClient}'s connect/read timeout is a transport concern
 		 * configured on its request factory by the caller (the auto-configuration builds
-		 * a timeout-aware factory onto the supplied builder).
+		 * a timeout-aware factory onto a clone of the supplied builder).
 		 */
 		public Builder timeout(@Nullable Duration timeout) {
 			this.timeout = timeout;

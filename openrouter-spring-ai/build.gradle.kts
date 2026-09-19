@@ -14,6 +14,7 @@ dependencies {
 	testImplementation("org.springframework.ai:spring-ai-client-chat")
 	testImplementation("io.micrometer:micrometer-observation-test")
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
+	testImplementation("ch.qos.logback:logback-classic")
 	testImplementation("io.projectreactor:reactor-test")
 	testImplementation("com.tngtech.archunit:archunit-junit5:$archunitVersion")
 }

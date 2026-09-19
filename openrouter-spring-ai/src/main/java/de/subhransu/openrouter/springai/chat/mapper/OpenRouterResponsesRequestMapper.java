@@ -42,6 +42,7 @@ public final class OpenRouterResponsesRequestMapper {
 
 	public ResponsesRequest map(List<Message> messages, OpenRouterChatOptions options, boolean stream,
 			List<ToolDefinition> toolDefinitions) {
+		AudioOutputMapper.validateRequest(messages, options, stream, true);
 		for (Message message : messages) {
 			if (message.getMetadata().containsKey(OpenRouterCacheBreakpoint.METADATA_KEY)) {
 				throw new IllegalArgumentException("OPENAI_RESPONSES does not support cache_control breakpoints; "

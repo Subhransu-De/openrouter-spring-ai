@@ -1,6 +1,7 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
 import tools.jackson.databind.ObjectMapper;
+import de.subhransu.openrouter.springai.api.dto.AudioConfig;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionRequest;
 import de.subhransu.openrouter.springai.api.dto.ChatMessage;
 import de.subhransu.openrouter.springai.api.dto.ContentPart;
@@ -37,6 +38,7 @@ public final class OpenRouterChatRequestMapper {
 
 	public ChatCompletionRequest map(List<Message> messages, OpenRouterChatOptions options, boolean stream,
 			List<ToolDefinition> toolDefinitions) {
+		AudioOutputMapper.validateRequest(messages, options, stream, false);
 		List<Tool> tools = mapTools(toolDefinitions, options.getToolStrict());
 		CacheBreakpointMapper.validate(messages);
 		return new ChatCompletionRequest(options.getModel(), options.getModels(), mapMessages(messages),
@@ -50,7 +52,9 @@ public final class OpenRouterChatRequestMapper {
 				options.getServiceTier() != null ? options.getServiceTier().value() : null, options.getMetadata(),
 				options.getRoute(),
 				options.getIncludeUsage() != null ? new UsageConfig(options.getIncludeUsage()) : null,
-				options.getModalities(), options.getImageConfig(), options.getExtraBody());
+				options.getModalities(), options.getImageConfig(), options.getAudio() != null
+						? new AudioConfig(options.getAudio().voice(), options.getAudio().format()) : null,
+				options.getExtraBody());
 	}
 
 	private List<ChatMessage> mapMessages(List<Message> messages) {

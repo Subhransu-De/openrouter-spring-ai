@@ -25,6 +25,9 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -41,6 +44,21 @@ import tools.jackson.databind.ObjectMapper;
 class GarageRunnerFailureTests {
 
   @TempDir Path output;
+
+  @Test
+  @ExtendWith(OutputCaptureExtension.class)
+  void helpExplainsModeDefaultsAndListsRegistryFeatures(CapturedOutput captured) throws Exception {
+    GarageScene scene = scene();
+    when(scene.features()).thenReturn(List.of(GarageFeature.values()));
+    GarageRunner runner = runner(scene, new GarageEvidence(), writer());
+    runner.run("--help");
+    assertThat(captured).contains("service-story in Chat Completions", "--text, --vision and --full",
+        "both modes unless explicitly overridden", "unsupported/partial");
+    runner.run("--list-scenes");
+    for (GarageFeature feature : GarageFeature.values()) {
+      assertThat(captured).contains(feature.id());
+    }
+  }
 
   @Test
   void failedSceneReportsAndFailsWithoutAuto() throws Exception {

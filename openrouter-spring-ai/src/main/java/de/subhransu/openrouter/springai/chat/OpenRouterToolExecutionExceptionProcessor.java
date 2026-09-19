@@ -73,7 +73,7 @@ public final class OpenRouterToolExecutionExceptionProcessor implements ToolExec
 		if (observation != null) {
 			observation.error(exception);
 		}
-		String toolName = exception.getToolDefinition().name();
+		String toolName = exception.getToolDefinition().name().replace('\r', '_').replace('\n', '_');
 		if (logger.isWarnEnabled()) {
 			logger.warn("Tool callback '" + toolName + "' failed; returning a sanitized result to the provider");
 		}

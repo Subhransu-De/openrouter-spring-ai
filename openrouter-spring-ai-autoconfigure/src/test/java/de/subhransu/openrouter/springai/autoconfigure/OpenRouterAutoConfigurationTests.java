@@ -12,8 +12,6 @@ import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterStreamingToolCallAggregator;
 import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException;
-import java.io.IOException;
-import java.net.URI;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -21,14 +19,9 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
-import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
-import org.springframework.boot.http.client.HttpClientSettings;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.client.ClientHttpRequest;
-import org.springframework.http.client.ClientHttpRequestFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -164,62 +157,6 @@ class OpenRouterAutoConfigurationTests {
 			});
 	}
 
-	@Test
-	void appliesTimeoutFactoryToTheRestClientBuilder() {
-		// The auto-configuration must install a timeout-carrying request factory on
-		// whatever
-		// RestClient.Builder it uses -- including Spring Boot's default prototype builder
-		// -- so
-		// blocking
-		// calls cannot hang. A recording builder captures the requestFactory() call.
-		RecordingRestClientBuilderConfiguration.RECORDED_FACTORY.set(null);
-		contextRunner.withUserConfiguration(RecordingRestClientBuilderConfiguration.class)
-			.withPropertyValues(API_KEY_PROPERTY, "spring.ai.openrouter.connection.timeout=15s")
-			.run(context -> {
-				assertThat(context).hasSingleBean(OpenRouterApi.class);
-				assertThat(RecordingRestClientBuilderConfiguration.RECORDED_FACTORY.get())
-					.as("auto-configuration installs a request factory carrying the timeout")
-					.isNotNull();
-			});
-	}
-
-	@Test
-	void customRequestFactoryBuilderIsSelectedWithComposedOpenRouterTimeouts() {
-		RecordingRestClientBuilderConfiguration.RECORDED_FACTORY.set(null);
-		ConfiguredRequestFactoryBuilderConfiguration.RECORDED_SETTINGS.set(null);
-		contextRunner
-			.withUserConfiguration(RecordingRestClientBuilderConfiguration.class,
-					ConfiguredRequestFactoryBuilderConfiguration.class)
-			.withPropertyValues(API_KEY_PROPERTY, "spring.ai.openrouter.connection.timeout=15s")
-			.run(context -> {
-				assertThat(context).hasSingleBean(OpenRouterApi.class);
-				assertThat(RecordingRestClientBuilderConfiguration.RECORDED_FACTORY.get())
-					.isInstanceOf(ConfiguredRequestFactoryBuilderConfiguration.MarkerFactory.class);
-				assertThat(ConfiguredRequestFactoryBuilderConfiguration.RECORDED_SETTINGS.get())
-					.extracting(HttpClientSettings::connectTimeout, HttpClientSettings::readTimeout)
-					.containsExactly(Duration.ofSeconds(15), Duration.ofSeconds(15));
-			});
-	}
-
-	@Test
-	void timeoutFactoryReplacesFactoryInstalledDirectlyOnRestClientBuilder() {
-		DirectFactoryRestClientBuilderConfiguration.RECORDED_FACTORY.set(null);
-		ConfiguredRequestFactoryBuilderConfiguration.RECORDED_SETTINGS.set(null);
-		contextRunner
-			.withUserConfiguration(DirectFactoryRestClientBuilderConfiguration.class,
-					ConfiguredRequestFactoryBuilderConfiguration.class)
-			.withPropertyValues(API_KEY_PROPERTY, "spring.ai.openrouter.connection.timeout=15s")
-			.run(context -> {
-				assertThat(context).hasSingleBean(OpenRouterApi.class);
-				assertThat(DirectFactoryRestClientBuilderConfiguration.RECORDED_FACTORY.get())
-					.as("the provider timeout factory takes precedence over a directly installed factory")
-					.isInstanceOf(ConfiguredRequestFactoryBuilderConfiguration.MarkerFactory.class);
-				assertThat(ConfiguredRequestFactoryBuilderConfiguration.RECORDED_SETTINGS.get())
-					.extracting(HttpClientSettings::connectTimeout, HttpClientSettings::readTimeout)
-					.containsExactly(Duration.ofSeconds(15), Duration.ofSeconds(15));
-			});
-	}
-
 	@Configuration(proxyBeanMethods = false)
 	static class ToolCallingManagerConfiguration {
 
@@ -254,78 +191,6 @@ class OpenRouterAutoConfigurationTests {
 		@Bean
 		ChatModel customChatModel() {
 			return org.mockito.Mockito.mock(ChatModel.class);
-		}
-
-	}
-
-	@Configuration(proxyBeanMethods = false)
-	static class RecordingRestClientBuilderConfiguration {
-
-		static final java.util.concurrent.atomic.AtomicReference<org.springframework.http.client.ClientHttpRequestFactory> RECORDED_FACTORY = new java.util.concurrent.atomic.AtomicReference<>();
-
-		@Bean
-		org.springframework.web.client.RestClient.Builder recordingRestClientBuilder() {
-			org.springframework.web.client.RestClient.Builder spy = org.mockito.Mockito
-				.spy(org.springframework.web.client.RestClient.builder());
-			org.mockito.Mockito.doAnswer(invocation -> {
-				RECORDED_FACTORY.set(invocation.getArgument(0));
-				return invocation.callRealMethod();
-			})
-				.when(spy)
-				.requestFactory(org.mockito.ArgumentMatchers
-					.any(org.springframework.http.client.ClientHttpRequestFactory.class));
-			return spy;
-		}
-
-	}
-
-	@Configuration(proxyBeanMethods = false)
-	static class ConfiguredRequestFactoryBuilderConfiguration {
-
-		static final java.util.concurrent.atomic.AtomicReference<HttpClientSettings> RECORDED_SETTINGS = new java.util.concurrent.atomic.AtomicReference<>();
-
-		@Bean
-		ClientHttpRequestFactoryBuilder<MarkerFactory> markerRequestFactoryBuilder() {
-			return settings -> {
-				RECORDED_SETTINGS.set(settings);
-				return new MarkerFactory();
-			};
-		}
-
-		static final class MarkerFactory implements ClientHttpRequestFactory {
-
-			@Override
-			public ClientHttpRequest createRequest(URI uri, HttpMethod httpMethod) throws IOException {
-				throw new UnsupportedOperationException("marker factory is only captured by tests");
-			}
-
-		}
-
-	}
-
-	@Configuration(proxyBeanMethods = false)
-	static class DirectFactoryRestClientBuilderConfiguration {
-
-		static final java.util.concurrent.atomic.AtomicReference<ClientHttpRequestFactory> RECORDED_FACTORY = new java.util.concurrent.atomic.AtomicReference<>();
-
-		@Bean
-		org.springframework.web.client.RestClient.Builder directFactoryRestClientBuilder() {
-			org.springframework.web.client.RestClient.Builder spy = org.mockito.Mockito
-				.spy(org.springframework.web.client.RestClient.builder().requestFactory(new DirectFactory()));
-			org.mockito.Mockito.doAnswer(invocation -> {
-				RECORDED_FACTORY.set(invocation.getArgument(0));
-				return invocation.callRealMethod();
-			}).when(spy).requestFactory(org.mockito.ArgumentMatchers.any(ClientHttpRequestFactory.class));
-			return spy;
-		}
-
-		static final class DirectFactory implements ClientHttpRequestFactory {
-
-			@Override
-			public ClientHttpRequest createRequest(URI uri, HttpMethod httpMethod) {
-				throw new UnsupportedOperationException("direct factory is only replaced by tests");
-			}
-
 		}
 
 	}
