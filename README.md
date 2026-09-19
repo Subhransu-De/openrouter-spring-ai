@@ -535,6 +535,9 @@ assertions have caught real bugs that the model's confident prose hid, like tool
 dropped from requests or streamed images blowing the default SSE codec limit. Every live
 finding becomes a replayable unit test.
 
+The service-story reasoning check accepts reasoning text or positive reasoning-token usage
+from any Foreman tool-loop round; the final answer need not repeat that evidence.
+
 ```bash
 mvn -pl openrouter-spring-ai-samples package
 OPENROUTER_API_KEY=$(cat openrouter.key) java -jar openrouter-spring-ai-samples/target/*.jar \

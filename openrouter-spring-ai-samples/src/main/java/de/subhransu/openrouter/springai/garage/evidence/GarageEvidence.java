@@ -33,7 +33,7 @@ public final class GarageEvidence {
       "durationNanos", "streaming", "returnDirect", "resultCharacters", "costUsd",
       "dimensions", "similarCosine", "unrelatedCosine", "imageBytes", "usage",
       "promptTokens", "completionTokens", "totalTokens", "count", "value", "measurements",
-      "cachedTokens", "reasoningTokens", "cost", "full", "offlineContracts", "capabilities",
+      "cachedTokens", "reasoningTokens", "reasoningObserved", "cost", "full", "offlineContracts", "capabilities",
       "imageSurface", "imageQuality", "modeStatuses", "modality", "inputCount", "width", "height",
       "name", "lowCardinality", "highCardinality", "tags", "statistic",
       "gen_ai.system", "gen_ai.operation.name", "gen_ai.request.model", "gen_ai.response.model",

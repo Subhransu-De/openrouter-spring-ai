@@ -189,19 +189,61 @@ class GarageToolSceneContractTests {
   }
 
   private void stubStory(OpenRouterApi api, List<ToolCall> calls) {
-    var usage = new Usage(10, 5, 15, 0, 1, 0.01, null, null, null);
+    stubStory(api, calls, 1, 1, null);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"early-tokens", "early-text", "final-tokens", "no-reasoning"})
+  void serviceStoryChecksReasoningAcrossForemanRounds(String evidence) throws Exception {
+    for (OpenRouterRequestMode mode : OpenRouterRequestMode.values()) {
+      OpenRouterApi api = mock(OpenRouterApi.class);
+      stubStory(api, List.of(
+          storyCall("inspect_vehicle_profile", "{\"concern\":\"synthetic\",\"severity\":4,\"safetyCritical\":true}"),
+          storyCall("hand_to_specialist", "{\"job\":\"synthetic inspection\"}"),
+          storyCall("score_repair_plan", "{\"safetyRisk\":4,\"reliabilityRisk\":3,\"costRisk\":2}"),
+          storyCall("log_to_jobsheet", "{\"title\":\"Synthetic\",\"markdown\":\"Inspect brakes\"}")),
+          evidence.equals("early-tokens") ? 3 : 0,
+          evidence.equals("final-tokens") ? 2 : 0,
+          evidence.equals("early-text") ? "Synthetic tool selection reasoning" : null);
+      var test = context(api, "service-story", mode);
+      if (evidence.equals("no-reasoning")) {
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+            () -> new ServiceStoryScene().execute(test.context()))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("reasoning text or reasoning-token evidence was missing");
+      } else {
+        var result = new ServiceStoryScene().execute(test.context());
+        assertThat(result.status()).isEqualTo(SceneResult.Status.PASSED);
+        assertThat(result.details()).containsEntry("reasoningObserved", true);
+        var persisted = new ObjectMapper().valueToTree(
+            test.context().evidence().sanitizeForEvidence(result.details()));
+        assertThat(persisted.path("reasoningObserved").asBoolean()).isTrue();
+      }
+    }
+  }
+
+  private void stubStory(OpenRouterApi api, List<ToolCall> calls,
+      int earlyReasoningTokens, int finalReasoningTokens, String reasoning) {
+    var usage = new Usage(10, 5, 15, 0, finalReasoningTokens, 0.01, null, null, null);
+    var toolUsage = new Usage(10, 5, 15, 0, earlyReasoningTokens, 0.01, null, null, null);
     var answer = new ChatCompletionResponse("synthetic", "chat.completion", 1L, "garage/model", null,
         List.of(new Choice(0, new ChatMessage("assistant", "Synthetic recommendation", null, null, null), null, "stop", "stop")), usage);
     var toolRound = new ChatCompletionResponse("synthetic-tools", "chat.completion", 1L, "garage/model", null,
-        List.of(new Choice(0, new ChatMessage("assistant", "", null, null, calls), null, "tool_calls", "tool_calls")), usage);
+        List.of(new Choice(0, new ChatMessage("assistant", "", null, null, calls, null, reasoning, null),
+            null, "tool_calls", "tool_calls")), toolUsage);
     when(api.chatCompletion(any())).thenReturn(calls.isEmpty() ? answer : toolRound, answer);
     var responseAnswer = new ResponsesResult("synthetic", "response", 1L, "garage/model", "completed",
         List.of(new ResponsesOutputItem("synthetic-message", "message", "completed", "assistant",
             List.of(new ResponsesContent("output_text", "Synthetic recommendation")))), usage, null);
-    var responseCalls = calls.stream().map(call -> new ResponsesOutputItem("item-" + call.id(),
-        "function_call", "completed", null, null, call.id(), call.function().name(), call.function().arguments(), null)).toList();
+    var responseCalls = new java.util.ArrayList<>(calls.stream().map(call -> new ResponsesOutputItem("item-" + call.id(),
+        "function_call", "completed", null, null, call.id(), call.function().name(), call.function().arguments(), null)).toList());
+    if (reasoning != null) {
+      responseCalls.add(0, new ObjectMapper().readValue("""
+          {"id":"synthetic-reasoning","type":"reasoning","summary":[{"type":"summary_text","text":"Synthetic tool selection reasoning"}]}
+          """, ResponsesOutputItem.class));
+    }
     when(api.responses(any())).thenReturn(calls.isEmpty() ? responseAnswer : new ResponsesResult(
-        "synthetic-tools", "response", 1L, "garage/model", "completed", responseCalls, usage, null), responseAnswer);
+        "synthetic-tools", "response", 1L, "garage/model", "completed", responseCalls, toolUsage, null), responseAnswer);
   }
 
   @Test

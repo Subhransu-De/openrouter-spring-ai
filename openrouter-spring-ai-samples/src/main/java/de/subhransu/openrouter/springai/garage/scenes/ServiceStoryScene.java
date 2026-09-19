@@ -2,7 +2,6 @@ package de.subhransu.openrouter.springai.garage.scenes;
 
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
-import de.subhransu.openrouter.springai.chat.OpenRouterUsage;
 import de.subhransu.openrouter.springai.garage.GarageResponses;
 import de.subhransu.openrouter.springai.garage.GarageTools;
 import de.subhransu.openrouter.springai.garage.evidence.EvidenceLevel;
@@ -121,11 +120,13 @@ public final class ServiceStoryScene extends GarageSceneSupport {
     List<Map<String, Object>> invocations = tools.invocations();
     List<Map<String, Object>> observations = context.telemetry().observationsFor(operationId);
     Map<String, Object> usage = GarageResponses.usage(response.getMetadata().getUsage());
-    List<String> failures = assertions(response, finalText, invocations, observations, usage);
+    List<String> failures = assertions(response, finalText, invocations, observations, usage,
+        toolLoop.reasoningObserved());
 
     Map<String, Object> observed = new LinkedHashMap<>();
     observed.put("response", Map.of("textCharacters", finalText.length(), "metadata", GarageResponses.metadata(response)));
     observed.put("usage", usage);
+    observed.put("reasoningObserved", toolLoop.reasoningObserved());
     observed.put("toolInvocations", invocations);
     observed.put("observations", observations);
     observed.put("transport", context.transportEvidence().forOperation(operationId));
@@ -167,7 +168,8 @@ public final class ServiceStoryScene extends GarageSceneSupport {
       String finalText,
       List<Map<String, Object>> invocations,
       List<Map<String, Object>> observations,
-      Map<String, Object> usage) {
+      Map<String, Object> usage,
+      boolean reasoningObserved) {
     List<String> failures = new ArrayList<>();
     if (!StringUtils.hasText(finalText)) {
       failures.add("final Foreman response was empty");
@@ -191,7 +193,7 @@ public final class ServiceStoryScene extends GarageSceneSupport {
     if (response.getMetadata().getId() == null || response.getMetadata().getModel() == null) {
       failures.add("response id or served model was missing");
     }
-    if (contextualReasoningMissing(response)) {
+    if (!reasoningObserved) {
       failures.add("reasoning text or reasoning-token evidence was missing");
     }
     if (usage.get("cost") == null
@@ -200,15 +202,6 @@ public final class ServiceStoryScene extends GarageSceneSupport {
       failures.add("cost, cached-token, or reasoning-token evidence was missing");
     }
     return failures;
-  }
-
-  private boolean contextualReasoningMissing(ChatResponse response) {
-    if (StringUtils.hasText(GarageResponses.reasoning(response))) {
-      return false;
-    }
-    return !(response.getMetadata().getUsage() instanceof OpenRouterUsage usage)
-        || usage.getReasoningTokens() == null
-        || usage.getReasoningTokens() <= 0;
   }
 
   private void appendFinalRecord(Path outputDirectory, String finalText) throws Exception {
