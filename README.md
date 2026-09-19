@@ -142,13 +142,13 @@ adds supported optional fields at the request root. This is a bounded extension 
 unknown keys and standard fields such as `model`, `messages`, `input`, `stream`,
 `provider`, and `tools` are rejected, even when their typed option is unset.
 
-| Extension keys | Chat Completions | Responses | Java / wire representation |
-| --- | --- | --- | --- |
-| `logit_bias`, `logprobs` | Supported | Rejected | Token-ID map / boolean at request root |
-| `top_logprobs`, `prompt_cache_key` | Supported | Supported | Integer / nullable string at request root |
-| `verbosity` | Supported | Rejected | String at request root; Responses `text.verbosity` is not exposed |
-| Provider `only`, `zdr`, `max_price` | Supported | Supported | List / boolean / object inside `provider`; hard routing restrictions |
-| Provider `sort`, `preferred_min_throughput`, `preferred_max_latency` | Supported | Supported | String or structured sort / number or percentile object; routing preferences |
+| Extension keys                                                       | Chat Completions | Responses | Java / wire representation                                                   |
+| -------------------------------------------------------------------- | ---------------- | --------- | ---------------------------------------------------------------------------- |
+| `logit_bias`, `logprobs`                                             | Supported        | Rejected  | Token-ID map / boolean at request root                                       |
+| `top_logprobs`, `prompt_cache_key`                                   | Supported        | Supported | Integer / nullable string at request root                                    |
+| `verbosity`                                                          | Supported        | Rejected  | String at request root; Responses `text.verbosity` is not exposed            |
+| Provider `only`, `zdr`, `max_price`                                  | Supported        | Supported | List / boolean / object inside `provider`; hard routing restrictions         |
+| Provider `sort`, `preferred_min_throughput`, `preferred_max_latency` | Supported        | Supported | String or structured sort / number or percentile object; routing preferences |
 
 The matrix follows the OpenRouter [parameter reference](https://openrouter.ai/docs/api_reference/parameters),
 [provider routing guide](https://openrouter.ai/docs/guides/routing/provider-selection),
