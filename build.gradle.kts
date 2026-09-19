@@ -149,6 +149,14 @@ subprojects {
 			publications {
 				create<MavenPublication>("mavenJava") {
 					from(components["java"])
+					pom {
+						url.set(pomProperty("url"))
+						scm {
+							connection.set(pomProperty("connection"))
+							developerConnection.set(pomProperty("developerConnection"))
+							url.set(pomProperty("url"))
+						}
+					}
 					versionMapping {
 						usage("java-api") {
 							fromResolutionOf("runtimeClasspath")

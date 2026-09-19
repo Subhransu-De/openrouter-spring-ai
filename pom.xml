@@ -9,7 +9,7 @@
 
   <name>OpenRouter Spring AI :: Parent</name>
   <description>Native, first-class OpenRouter provider for Spring AI.</description>
-  <url>https://github.com/Subhransu-De/spring-ai-openrouter-starter</url>
+  <url>https://github.com/Subhransu-De/openrouter-spring-ai</url>
 
   <licenses>
     <license>
@@ -33,10 +33,10 @@
     <module>openrouter-spring-ai-samples</module>
   </modules>
   <scm child.scm.connection.inherit.append.path="false" child.scm.developerConnection.inherit.append.path="false" child.scm.url.inherit.append.path="false">
-    <connection>scm:git:https://github.com/Subhransu-De/spring-ai-openrouter-starter.git</connection>
-    <developerConnection>scm:git:ssh://git@github.com/Subhransu-De/spring-ai-openrouter-starter.git</developerConnection>
+    <connection>scm:git:https://github.com/Subhransu-De/openrouter-spring-ai.git</connection>
+    <developerConnection>scm:git:ssh://git@github.com/Subhransu-De/openrouter-spring-ai.git</developerConnection>
     <tag>v${revision}</tag>
-    <url>https://github.com/Subhransu-De/spring-ai-openrouter-starter</url>
+    <url>https://github.com/Subhransu-De/openrouter-spring-ai</url>
   </scm>
 
   <properties>
