@@ -196,10 +196,8 @@ public final class ServiceStoryScene extends GarageSceneSupport {
     if (!reasoningObserved) {
       failures.add("reasoning text or reasoning-token evidence was missing");
     }
-    if (usage.get("cost") == null
-        || usage.get("cachedTokens") == null
-        || usage.get("reasoningTokens") == null) {
-      failures.add("cost, cached-token, or reasoning-token evidence was missing");
+    if (usage.get("cost") == null || usage.get("cachedTokens") == null) {
+      failures.add("cost or cached-token evidence was missing");
     }
     return failures;
   }

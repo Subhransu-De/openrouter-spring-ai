@@ -197,16 +197,17 @@ class GarageToolSceneContractTests {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"early-tokens", "early-text", "final-tokens", "no-reasoning"})
+  @ValueSource(strings = {"early-tokens", "early-text", "final-tokens", "no-reasoning",
+      "early-tokens-missing-final", "early-text-missing-final", "missing-reasoning"})
   void serviceStoryChecksReasoningAcrossForemanRounds(String evidence) throws Exception {
     for (OpenRouterRequestMode mode : OpenRouterRequestMode.values()) {
       OpenRouterApi api = mock(OpenRouterApi.class);
       stubStory(api, requiredStoryCalls(),
-          evidence.equals("early-tokens") ? 3 : 0,
-          evidence.equals("final-tokens") ? 2 : 0,
-          evidence.equals("early-text") ? "Synthetic tool selection reasoning" : null);
+          evidence.startsWith("early-tokens") ? 3 : 0,
+          evidence.contains("missing") ? null : evidence.equals("final-tokens") ? 2 : 0,
+          evidence.startsWith("early-text") ? "Synthetic tool selection reasoning" : null);
       var test = context(api, "service-story", mode);
-      if (evidence.equals("no-reasoning")) {
+      if (evidence.equals("no-reasoning") || evidence.equals("missing-reasoning")) {
         org.assertj.core.api.Assertions.assertThatThrownBy(
             () -> new ServiceStoryScene().execute(test.context()))
             .isInstanceOf(IllegalStateException.class)
@@ -223,7 +224,7 @@ class GarageToolSceneContractTests {
   }
 
   private void stubStory(OpenRouterApi api, List<ToolCall> calls,
-      int earlyReasoningTokens, int finalReasoningTokens, String reasoning) {
+      int earlyReasoningTokens, Integer finalReasoningTokens, String reasoning) {
     var usage = new Usage(10, 5, 15, 0, finalReasoningTokens, 0.01, null, null, null);
     var toolUsage = new Usage(10, 5, 15, 0, earlyReasoningTokens, 0.01, null, null, null);
     var answer = new ChatCompletionResponse("synthetic", "chat.completion", 1L, "garage/model", null,
