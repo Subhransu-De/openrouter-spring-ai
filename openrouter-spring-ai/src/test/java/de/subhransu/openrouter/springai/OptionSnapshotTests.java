@@ -21,6 +21,26 @@ import org.springframework.ai.tool.ToolCallback;
 class OptionSnapshotTests {
 
 	@Test
+	void listSnapshotsRetainNullsOrderDuplicatesAndOpaqueIdentity() {
+		Object opaque = new Object();
+		var input = new ArrayList<Object>();
+		input.add(opaque);
+		input.add(null);
+		input.add(opaque);
+		var snapshot = OptionSnapshots.list(input);
+		input.clear();
+		assertThat(snapshot).containsExactly(opaque, null, opaque);
+		assertThat(snapshot.get(0)).isSameAs(opaque);
+		assertThatThrownBy(() -> snapshot.set(0, new Object())).isInstanceOf(UnsupportedOperationException.class);
+		assertThatThrownBy(() -> snapshot.add(opaque)).isInstanceOf(UnsupportedOperationException.class);
+		assertThatThrownBy(snapshot::clear).isInstanceOf(UnsupportedOperationException.class);
+		assertThat(OptionSnapshots.list(null)).isNull();
+		var empty = OptionSnapshots.list(new ArrayList<>());
+		assertThat(empty).isEmpty();
+		assertThatThrownBy(() -> empty.add(opaque)).isInstanceOf(UnsupportedOperationException.class);
+	}
+
+	@Test
 	void recursiveListsRetainNullsOrderAndOpaqueIdentity() {
 		Object opaque = new Object();
 		var nested = new ArrayList<>(List.of(opaque));
