@@ -252,10 +252,10 @@ applying OpenRouter settings. Reusing an application singleton builder for an un
 client retains its original factory, base URL, and headers; OpenRouter credentials and
 attribution are applied only to the OpenRouter client.
 
-| Configuration | Blocking calls (all model families) | Streaming (chat, Responses, images) |
-| --- | --- | --- |
-| Programmatic `OpenRouterApi.Builder.timeout(...)` | Does not configure connect/read timeouts; supply a configured request factory via `restClientBuilder(...)` | Guards response-header/body waits and idle gaps between SSE events, including keepalives |
-| Boot `spring.ai.openrouter.connection.timeout` | Composes connect/read timeouts with `HttpClientSettings` through the `ClientHttpRequestFactoryBuilder` bean | Applies the same duration as the API's streaming idle guard |
+| Configuration                                     | Blocking calls (all model families)                                                                         | Streaming (chat, Responses, images)                                                      |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Programmatic `OpenRouterApi.Builder.timeout(...)` | Does not configure connect/read timeouts; supply a configured request factory via `restClientBuilder(...)`  | Guards response-header/body waits and idle gaps between SSE events, including keepalives |
+| Boot `spring.ai.openrouter.connection.timeout`    | Composes connect/read timeouts with `HttpClientSettings` through the `ClientHttpRequestFactoryBuilder` bean | Applies the same duration as the API's streaming idle guard                              |
 
 Boot installs its factory on the cloned builder, replacing any factory installed directly
 on that clone. Customize transport selection through `ClientHttpRequestFactoryBuilder`
