@@ -65,6 +65,24 @@ jobs:
           zizmor --offline --no-config --no-ignores --strict-collection --format=json --no-exit-codes . > "$RUNNER_TEMP/action-audit.json"
           jq -e '[.[] | select(.ident == "unpinned-uses")] | if length == 0 then true else ., false end' "$RUNNER_TEMP/action-audit.json"
 
+  security:
+    name: FindSecBugs security
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Verify security detectors and enforcement
+        run: python3 security-smoke-tests/check.py "$RUNNER_TEMP/security-smoke"
+      - name: Analyze production library classes
+        run: mvn -B -Psecurity -pl openrouter-spring-ai-autoconfigure -am -DskipTests verify
+
   native-smoke:
     name: Native JSON and SSE smoke
     runs-on: ubuntu-latest
