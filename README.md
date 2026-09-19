@@ -432,6 +432,16 @@ String base64 = response.getResult().getOutput().getB64Json();
 The OpenRouter-native knobs (`resolution`, `aspect-ratio`, `quality`, `output-format`,
 `background`, `output-compression`, `seed`) are available on `OpenRouterImageOptions`,
 along with `inputReferences` for image-to-image work and `providerOptions` passthrough.
+Generic Spring AI `ImageOptions` map `model` and `n` directly and translate paired
+`width`/`height` into pixel `size` (a lone dimension is rejected after merging defaults).
+`responseFormat` must be omitted or exactly `b64_json`; any other non-null format,
+including `url`, and any non-null `style` fail with `IllegalArgumentException` before
+HTTP transport in both `call` and `stream`. These portable settings have no wire fields.
+Use `OpenRouterImageOptions.fromOptions(...)` to convert generic defaults; generic
+per-request options override mapped fields while retaining unset native defaults,
+including `quality`, `outputFormat`, and `providerOptions`. Native `outputFormat`
+selects image encoding (for example, `webp`), not URL versus base64 delivery.
+
 `OpenRouterImageModel.stream(ImagePrompt)` exposes OpenRouter's SSE image streaming:
 partial previews arrive first (see `OpenRouterImageGenerationMetadata.partialImageIndex()`),
 then completed images with usage and cost. The stream ends at `[DONE]`, not at the
