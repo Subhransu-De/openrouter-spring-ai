@@ -129,6 +129,8 @@ class OpenRouterChatOptionsRobustnessTests {
 			.includeUsage(true)
 			.modalities(List.of("image", "text"))
 			.imageConfig(Map.of("aspect_ratio", "16:9"))
+			.extraBody(Map.of("prompt_cache_key", "synthetic"))
+			.providerExtraBody(Map.of("zdr", true))
 			.outputSchema("""
 					{
 					  "type": "object"

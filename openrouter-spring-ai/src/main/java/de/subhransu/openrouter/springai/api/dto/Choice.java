@@ -1,5 +1,9 @@
 package de.subhransu.openrouter.springai.api.dto;
 
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import de.subhransu.openrouter.springai.support.OptionSnapshots;
+import com.fasterxml.jackson.annotation.JsonAnySetter;
+import java.util.Map;
 import org.jspecify.annotations.Nullable;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -10,7 +14,16 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 @JsonInclude(Include.NON_NULL)
 public record Choice(@Nullable Integer index, @Nullable ChatMessage message, @Nullable Delta delta,
 		@JsonProperty("finish_reason") @Nullable String finishReason,
-		@JsonProperty("native_finish_reason") @Nullable Object nativeFinishReason, @Nullable ChoiceError error) {
+		@JsonProperty("native_finish_reason") @Nullable Object nativeFinishReason, @Nullable ChoiceError error,
+		@JsonAnyGetter @JsonAnySetter @Nullable Map<String, @Nullable Object> extensions) {
+	public Choice {
+		extensions = extensions == null ? Map.of() : OptionSnapshots.map(extensions);
+	}
+
+	public Choice(@Nullable Integer index, @Nullable ChatMessage message, @Nullable Delta delta,
+			@Nullable String finishReason, @Nullable Object nativeFinishReason, @Nullable ChoiceError error) {
+		this(index, message, delta, finishReason, nativeFinishReason, error, null);
+	}
 
 	public Choice(@Nullable Integer index, @Nullable ChatMessage message, @Nullable Delta delta,
 			@Nullable String finishReason, @Nullable Object nativeFinishReason) {

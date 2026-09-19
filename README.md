@@ -135,6 +135,67 @@ map to their corresponding wire fields. `requestMode` selects the endpoint;
 endpoint's form. Legacy `{type: "auto"}`, `{type: "none"}`, and
 `{type: "required"}` objects are normalized to strings. Other shapes are rejected. These rules apply to calls and streams.
 
+### Optional request and response extensions
+
+`OpenRouterChatOptions.builder().extraBody(Map.of("logprobs", true, "top_logprobs", 0))`
+adds supported optional fields at the request root. This is a bounded extension API:
+unknown keys and standard fields such as `model`, `messages`, `input`, `stream`,
+`provider`, and `tools` are rejected, even when their typed option is unset.
+
+| Extension keys | Chat Completions | Responses | Java / wire representation |
+| --- | --- | --- | --- |
+| `logit_bias`, `logprobs` | Supported | Rejected | Token-ID map / boolean at request root |
+| `top_logprobs`, `prompt_cache_key` | Supported | Supported | Integer / nullable string at request root |
+| `verbosity` | Supported | Rejected | String at request root; Responses `text.verbosity` is not exposed |
+| Provider `only`, `zdr`, `max_price` | Supported | Supported | List / boolean / object inside `provider`; hard routing restrictions |
+| Provider `sort`, `preferred_min_throughput`, `preferred_max_latency` | Supported | Supported | String or structured sort / number or percentile object; routing preferences |
+
+The matrix follows the OpenRouter [parameter reference](https://openrouter.ai/docs/api_reference/parameters),
+[provider routing guide](https://openrouter.ai/docs/guides/routing/provider-selection),
+and [Responses schema](https://openrouter.ai/docs/api/api-reference/responses/create-a-response).
+Model/provider support still applies; `top_logprobs` on Chat Completions requires
+`logprobs=true`. The same mapping and validation apply to calls and streams.
+`OpenRouterExtensionTests` covers serialization, endpoint rejection, routing, and
+response preservation; `OpenRouterExtensionPropertiesTests` covers Boot binding.
+
+Provider extensions use `OpenRouterChatOptions.builder().providerExtraBody(...)`.
+`OpenRouterProviderPreferences` retains its existing constructor and string `sort` accessor. An extension
+`sort` conflicts with a non-null typed `sort` and is rejected rather than overriding it.
+For example, the extension map can contain `Map.of("sort", Map.of("by", "latency", "partition", "none"))`.
+
+Boot binds root extensions under `spring.ai.openrouter.chat.extra-body` and provider
+extensions under `spring.ai.openrouter.chat.provider-extra-body`. Preserve wire key
+spelling with bracket notation in properties:
+
+```properties
+spring.ai.openrouter.chat.extra-body.[logprobs]=true
+spring.ai.openrouter.chat.extra-body.[top_logprobs]=0
+spring.ai.openrouter.chat.provider-extra-body.[zdr]=true
+spring.ai.openrouter.chat.provider-extra-body.[sort].by=latency
+```
+
+Root extension maps merge by key: runtime entries replace default entries, including
+explicit null values. Nested values replace whole objects; they do not merge recursively.
+Typed provider options replace the default typed provider object, as before;
+`providerExtraBody` merges independently by key, retaining default routing restrictions unless explicitly overridden. Maps and lists
+are snapshotted recursively. Boolean false, numeric zero, and explicit nulls remain on
+the wire; a null map inherits defaults. Extensions do not enable `n`, `store`, cache
+breakpoints, web-search requests, or server-tool configuration.
+
+Chat response DTOs retain unknown fields in `extensions()`, flattened on serialization.
+Spring AI assistant metadata exposes `openrouter.message.extensions`,
+`openrouter.choice.extensions` (including log probabilities), and
+`openrouter.tool_call.extensions` (keyed by call ID). Response metadata exposes
+`openrouter.response.extensions`. Streamed message annotations append in arrival order;
+other opaque fields use the latest value per key. Tool fields survive argument-fragment
+aggregation, and assistant extension metadata is cumulative per choice and subscription.
+These fields are inspection-only and are not automatically replayed as request fields.
+
+Responses output annotations and opaque tool fields remain available in the existing
+`openrouter.responses.output_items` snapshot through each item's `rawItem()` / `wireValue()`.
+The existing ordered reasoning replay policy is unchanged. Citation data is preserved
+when returned; this does not add web-search or server-tool execution support.
+
 ### Retries and Responses failures
 
 Synchronous Responses failures carried over HTTP 200 use

@@ -1,5 +1,9 @@
 package de.subhransu.openrouter.springai.api.dto;
 
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import de.subhransu.openrouter.springai.support.OptionSnapshots;
+import com.fasterxml.jackson.annotation.JsonAnySetter;
+import java.util.Map;
 import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -15,7 +19,17 @@ public record ChatMessage(@Nullable String role, @Nullable Object content, @Null
 		@JsonProperty("tool_calls") @Nullable List<@Nullable ToolCall> toolCalls,
 		@Nullable List<@Nullable ContentPart> images, @Nullable String reasoning,
 		@JsonProperty("reasoning_details") @Nullable List<@Nullable JsonNode> reasoningDetails,
-		@Nullable String refusal) {
+		@Nullable String refusal, @JsonAnyGetter @JsonAnySetter @Nullable Map<String, @Nullable Object> extensions) {
+	public ChatMessage {
+		extensions = extensions == null ? Map.of() : OptionSnapshots.map(extensions);
+	}
+
+	public ChatMessage(@Nullable String role, @Nullable Object content, @Nullable String name,
+			@Nullable String toolCallId, @Nullable List<@Nullable ToolCall> toolCalls,
+			@Nullable List<@Nullable ContentPart> images, @Nullable String reasoning,
+			@Nullable List<@Nullable JsonNode> reasoningDetails, @Nullable String refusal) {
+		this(role, content, name, toolCallId, toolCalls, images, reasoning, reasoningDetails, refusal, null);
+	}
 
 	public ChatMessage(@Nullable String role, @Nullable Object content, @Nullable String name,
 			@Nullable String toolCallId, @Nullable List<@Nullable ToolCall> toolCalls,

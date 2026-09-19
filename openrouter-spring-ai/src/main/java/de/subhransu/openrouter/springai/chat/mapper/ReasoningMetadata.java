@@ -91,6 +91,7 @@ final class ReasoningMetadata {
 			return new LinkedHashMap<>(this.metadata);
 		}
 
+		@SuppressWarnings("unchecked")
 		Map<String, Object> append(Map<String, Object> delta) {
 			if (delta.containsKey(DETAILS)) {
 				this.metadata.put(DETAILS, ReasoningDetailsMerger.merge(details(this.metadata), details(delta)));
@@ -100,6 +101,11 @@ final class ReasoningMetadata {
 					return;
 				}
 				this.metadata.merge(key, value, (earlier, later) -> {
+					if ((ExtensionMetadata.MESSAGE.equals(key) || ExtensionMetadata.CHOICE.equals(key)
+							|| ExtensionMetadata.TOOLS.equals(key)) && earlier instanceof Map<?, ?> first
+							&& later instanceof Map<?, ?> second) {
+						return ExtensionMetadata.merge((Map<String, Object>) first, (Map<String, Object>) second);
+					}
 					if (earlier instanceof String first && later instanceof String second) {
 						return first + second;
 					}

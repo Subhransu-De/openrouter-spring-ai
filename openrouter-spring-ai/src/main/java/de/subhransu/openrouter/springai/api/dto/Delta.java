@@ -1,5 +1,9 @@
 package de.subhransu.openrouter.springai.api.dto;
 
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import de.subhransu.openrouter.springai.support.OptionSnapshots;
+import com.fasterxml.jackson.annotation.JsonAnySetter;
+import java.util.Map;
 import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -14,7 +18,16 @@ public record Delta(@Nullable String role, @Nullable String content, @Nullable S
 		@JsonProperty("tool_calls") @Nullable List<@Nullable ToolCall> toolCalls,
 		@Nullable List<@Nullable ContentPart> images,
 		@JsonProperty("reasoning_details") @Nullable List<@Nullable JsonNode> reasoningDetails,
-		@Nullable String refusal) {
+		@Nullable String refusal, @JsonAnyGetter @JsonAnySetter @Nullable Map<String, @Nullable Object> extensions) {
+	public Delta {
+		extensions = extensions == null ? Map.of() : OptionSnapshots.map(extensions);
+	}
+
+	public Delta(@Nullable String role, @Nullable String content, @Nullable String reasoning,
+			@Nullable List<@Nullable ToolCall> toolCalls, @Nullable List<@Nullable ContentPart> images,
+			@Nullable List<@Nullable JsonNode> reasoningDetails, @Nullable String refusal) {
+		this(role, content, reasoning, toolCalls, images, reasoningDetails, refusal, null);
+	}
 
 	public Delta(@Nullable String role, @Nullable String content, @Nullable String reasoning,
 			@Nullable List<@Nullable ToolCall> toolCalls, @Nullable List<@Nullable ContentPart> images,

@@ -1,6 +1,7 @@
 package de.subhransu.openrouter.springai.chat;
 
 import org.jspecify.annotations.Nullable;
+import de.subhransu.openrouter.springai.support.RequestExtensions;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.support.OptionSnapshots;
 import java.util.ArrayList;
@@ -69,6 +70,10 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 	private @Nullable List<String> modalities;
 
 	private @Nullable Map<String, @Nullable Object> imageConfig;
+
+	private @Nullable Map<String, @Nullable Object> extraBody;
+
+	private @Nullable Map<String, @Nullable Object> providerExtraBody;
 
 	private @Nullable String outputSchema;
 
@@ -144,6 +149,8 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 		builder.includeUsage(value(runtimeOptions.includeUsage, this.includeUsage));
 		builder.modalities(value(runtimeOptions.modalities, this.modalities));
 		builder.imageConfig(value(runtimeOptions.imageConfig, this.imageConfig));
+		builder.extraBody(mergeMaps(this.extraBody, runtimeOptions.extraBody));
+		builder.providerExtraBody(mergeMaps(this.providerExtraBody, runtimeOptions.providerExtraBody));
 		builder.outputSchema(value(runtimeOptions.outputSchema, this.outputSchema));
 		// Framework merge semantics (ToolCallingChatOptions): runtime tool callbacks
 		// replace the defaults wholesale rather than accumulating, so the executing
@@ -279,6 +286,14 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 		return readOnlyMap(this.imageConfig);
 	}
 
+	public @Nullable Map<String, @Nullable Object> getProviderExtraBody() {
+		return readOnlyMap(this.providerExtraBody);
+	}
+
+	public @Nullable Map<String, @Nullable Object> getExtraBody() {
+		return readOnlyMap(this.extraBody);
+	}
+
 	@Override
 	public @Nullable String getOutputSchema() {
 		return this.outputSchema;
@@ -386,6 +401,8 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 			this.options.includeUsage = source.includeUsage;
 			this.options.modalities = copyList(source.modalities);
 			this.options.imageConfig = copyMap(source.imageConfig);
+			this.options.extraBody = copyMap(source.extraBody);
+			this.options.providerExtraBody = copyMap(source.providerExtraBody);
 			this.options.outputSchema = source.outputSchema;
 			this.options.toolCallbacks = copyList(source.toolCallbacks);
 			this.options.toolContext = copyMap(source.toolContext);
@@ -568,6 +585,16 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 		 */
 		public Builder imageConfig(@Nullable Map<String, @Nullable Object> imageConfig) {
 			this.options.imageConfig = copyMap(imageConfig);
+			return this;
+		}
+
+		public Builder providerExtraBody(@Nullable Map<String, @Nullable Object> providerExtraBody) {
+			this.options.providerExtraBody = RequestExtensions.provider(providerExtraBody, null);
+			return this;
+		}
+
+		public Builder extraBody(@Nullable Map<String, @Nullable Object> extraBody) {
+			this.options.extraBody = RequestExtensions.chat(extraBody, false);
 			return this;
 		}
 
