@@ -40,6 +40,10 @@ final class RefusalMetadata {
 
 		private final Map<Integer, Map<Integer, String>> parts = new TreeMap<>();
 
+		void clear() {
+			this.parts.clear();
+		}
+
 		String update(ResponsesStreamEvent event) {
 			int outputIndex = event.outputIndex() != null ? event.outputIndex() : 0;
 			int contentIndex = event.contentIndex() != null ? event.contentIndex() : 0;

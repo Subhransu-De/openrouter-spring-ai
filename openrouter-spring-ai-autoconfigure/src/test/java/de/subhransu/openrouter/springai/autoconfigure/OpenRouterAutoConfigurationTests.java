@@ -1,10 +1,17 @@
 package de.subhransu.openrouter.springai.autoconfigure;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
+import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
+import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
+import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterStreamingToolCallAggregator;
+import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException;
 import java.io.IOException;
 import java.net.URI;
 import java.time.Duration;
@@ -12,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
 import org.springframework.boot.http.client.HttpClientSettings;
@@ -21,6 +29,9 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.client.ClientHttpRequest;
 import org.springframework.http.client.ClientHttpRequestFactory;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 
 class OpenRouterAutoConfigurationTests {
 
@@ -89,6 +100,35 @@ class OpenRouterAutoConfigurationTests {
 					.isEqualTo(200);
 				assertThat(org.springframework.test.util.ReflectionTestUtils.getField(aggregator, "maxDuration"))
 					.isEqualTo(Duration.ofSeconds(30));
+			});
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "max-size=1B", "max-chunks=1", "max-duration=1s" })
+	void appliesBoundLimitsToResponsesStreams(String setting) {
+		OpenRouterApi api = mock(OpenRouterApi.class);
+		when(api.responsesStream(any())).thenReturn(Flux.defer(() -> Flux
+			.just(new ResponsesStreamEvent("response.reasoning_text.delta", "synthetic", null, null, null))
+			.concatWith(Mono.delay(Duration.ofSeconds(2))
+				.map(ignored -> new ResponsesStreamEvent("response.completed", null, null, null, null)))));
+		this.contextRunner.withBean(OpenRouterApi.class, () -> api)
+			.withPropertyValues(API_KEY_PROPERTY, "spring.ai.openrouter.chat.tool-call-aggregation." + setting)
+			.run(context -> {
+				var options = OpenRouterChatOptions.builder()
+					.model("synthetic")
+					.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
+					.build();
+				StepVerifier
+					.withVirtualTime(
+							() -> context.getBean(OpenRouterChatModel.class).stream(new Prompt("synthetic", options)))
+					.thenAwait(Duration.ofSeconds(3))
+					.thenConsumeWhile(response -> true)
+					.expectErrorSatisfies(error -> assertThat(error)
+						.isInstanceOfSatisfying(OpenRouterLimitExceededException.class, failure -> {
+							assertThat(failure.getEndpoint()).isEqualTo("/responses");
+							assertThat(failure.getLimit().getProperty()).endsWith(setting.split("=")[0]);
+						}))
+					.verify();
 			});
 	}
 
