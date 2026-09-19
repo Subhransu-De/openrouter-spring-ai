@@ -243,6 +243,73 @@ retried, including after partial output. Tool execution belongs to
 and response mapping. Garage uses two retries with a 200 ms delay only for
 `TransientAiException` and transport `ResourceAccessException` failures.
 
+### HTTP customization and timeout ownership
+
+The supported transport extension points are Spring's `RestClient.Builder` request
+interceptors and `WebClient.Builder` filters, supplied to `OpenRouterApi.builder()`.
+Boot auto-configuration uses the application-provided builders and clones them before
+applying OpenRouter settings. Reusing an application singleton builder for an unrelated
+client retains its original factory, base URL, and headers; OpenRouter credentials and
+attribution are applied only to the OpenRouter client.
+
+| Configuration                                     | Blocking calls (all model families)                                                                         | Streaming (chat, Responses, images)                                                      |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Programmatic `OpenRouterApi.Builder.timeout(...)` | Does not configure connect/read timeouts; supply a configured request factory via `restClientBuilder(...)`  | Guards response-header/body waits and idle gaps between SSE events, including keepalives |
+| Boot `spring.ai.openrouter.connection.timeout`    | Composes connect/read timeouts with `HttpClientSettings` through the `ClientHttpRequestFactoryBuilder` bean | Applies the same duration as the API's streaming idle guard                              |
+
+Boot installs its factory on the cloned builder, replacing any factory installed directly
+on that clone. Customize transport selection through `ClientHttpRequestFactoryBuilder`
+and other settings through `HttpClientSettings`. To own the factory completely, provide
+an `OpenRouterApi` bean; API auto-configuration backs off. Programmatic `timeout(null)`
+disables the streaming guard, without changing the supplied connector or blocking factory.
+
+There are no header or timeout fields in model request options. For request-scoped
+headers, install an interceptor that reads application-owned call context during a
+blocking invocation, or a filter that reads Reactor Context at subscription time.
+For example, this filter sends a synthetic correlation header:
+
+```java
+WebClient.Builder transport = WebClient.builder()
+    .filter((request, next) -> Mono.deferContextual(context -> {
+        ClientRequest.Builder outgoing = ClientRequest.from(request);
+        context.<String>getOrEmpty("correlation-id")
+            .ifPresent(id -> outgoing.header("X-Correlation-ID", id));
+        return next.exchange(outgoing.build());
+    }));
+OpenRouterApi api = OpenRouterApi.builder()
+    .apiKey(apiKey)
+    .webClientBuilder(transport)
+    .build();
+api.imagesStream(request)
+    .contextWrite(context -> context.put("correlation-id", "synthetic-123"));
+```
+
+Use `org.springframework.web.reactive.function.client.ClientRequest` and
+`reactor.core.publisher.Mono` in this example. Blocking call context must be cleared in
+`finally`; a thread-local does not propagate across reactive scheduler switches. Keep
+interceptors/filters safe for concurrent use: cloning a builder does not deep-copy
+their captured state. Do not mutate shared builders, factories, or default headers to
+customize a single call. Restrict custom headers to application-approved names; keep
+credentials and destinations fixed when constructing each client, and do not forward
+authorization through URI-rewriting filters or cross-origin redirects.
+
+Select a preconfigured API/model instance when calls need different connect/read or
+stream-idle policies. A caller can also apply Reactor `timeout(duration)` to a returned
+stream for a per-subscription signal deadline. That operator measures gaps in emitted
+items (not wire keepalives), cancels its subscription on expiry, and does not reconfigure
+transport timeouts or other subscriptions. It is not a total-stream deadline. Blocking
+per-invocation timeout overrides are not provided by this library's portable API.
+
+Automatic per-family client selection is deferred. Applications needing independent
+chat, embedding, or image transports can construct those models with separate
+`OpenRouterApi` instances using their existing model builders; Boot otherwise shares
+one API. Connection-pool metrics, credential-provider abstractions, and typed successful
+rate-limit snapshots are also deferred. An interceptor/filter may inspect selected
+successful-response headers before returning the response unchanged; do not consume
+its body or log credentials. HTTP errors separately expose parsed `Retry-After` through
+`OpenRouterHttpException.getRetryAfter()`. Successful response headers are not copied
+into model metadata, and inspecting them does not alter retry behavior.
+
 ### Response buffering limits
 
 `spring.ai.openrouter.connection.max-response-body-size` (default `64MB`) limits each
