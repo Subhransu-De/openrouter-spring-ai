@@ -66,8 +66,9 @@ class UsageWireMappingTests {
 		ImagesResponse images = this.mapper.readValue("{\"data\":[],\"usage\":" + usage + "}", ImagesResponse.class);
 		assertUsage(new OpenRouterImageResponseMapper().map(images).getMetadata().get("openrouter.usage"),
 				images.usage(), cached, reasoning);
-		ImagesStreamEvent imageEvent = this.mapper
-			.readValue("{\"type\":\"image_generation.completed\",\"usage\":" + usage + "}", ImagesStreamEvent.class);
+		ImagesStreamEvent imageEvent = this.mapper.readValue(
+				"{\"type\":\"image_generation.completed\",\"b64_json\":\"aW1hZ2U=\",\"usage\":" + usage + "}",
+				ImagesStreamEvent.class);
 		assertUsage(new OpenRouterImageResponseMapper().map(imageEvent).getMetadata().get("openrouter.usage"),
 				imageEvent.usage(), cached, reasoning);
 	}

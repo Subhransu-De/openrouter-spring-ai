@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.core.codec.DecodingException;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.HttpHeaders;
@@ -215,6 +216,9 @@ public class OpenRouterApi {
 					return response.bodyToFlux(STRING_SSE_TYPE).map(event -> new ImageStreamBody(event, null));
 				}
 				return response.bodyToMono(ImagesResponse.class)
+					.onErrorMap(DecodingException.class,
+							ex -> new OpenRouterProtocolException("Invalid OpenRouter image response JSON"))
+					.switchIfEmpty(Mono.error(new OpenRouterProtocolException("Empty OpenRouter image response")))
 					.map(images -> new ImageStreamBody(null, images))
 					.flux();
 			})
@@ -230,15 +234,13 @@ public class OpenRouterApi {
 	}
 
 	private List<ImagesStreamEvent> completedEvents(ImagesResponse images) {
-		if (images.data() == null || images.data().isEmpty()) {
-			return List.of();
-		}
+		OpenRouterImageResponseValidator.validate(images);
 		List<ImagesStreamEvent> events = new ArrayList<>(images.data().size());
 		for (int i = 0; i < images.data().size(); i++) {
 			ImagesResponse.ImageData data = images.data().get(i);
 			boolean last = i == images.data().size() - 1;
 			events.add(new ImagesStreamEvent(ImagesStreamEvent.COMPLETED, null, data.b64Json(), data.mediaType(),
-					images.created(), last ? images.usage() : null, null));
+					images.created(), last ? images.usage() : null, null, data.url()));
 		}
 		return events;
 	}

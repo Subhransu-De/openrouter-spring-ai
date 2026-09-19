@@ -7,6 +7,10 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionRequest;
 import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
+import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
+import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
+import io.micrometer.observation.tck.TestObservationRegistry;
+import org.springframework.ai.chat.prompt.Prompt;
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterChatResponseMapper;
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterStreamingResponseMapper;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
@@ -26,6 +30,39 @@ import tools.jackson.databind.ObjectMapper;
 class ChatResponseContractTests {
 
 	private final ChatCompletionRequest request = new ObjectMapper().readValue("{}", ChatCompletionRequest.class);
+
+	@ParameterizedTest
+	@ValueSource(strings = { "", ",\"message\":null" })
+	void completedChoicesRequireMessageObjects(String message) {
+		String body = "{\"choices\":[{\"index\":0,\"finish_reason\":\"stop\"" + message + "}]}";
+		TestObservationRegistry registry = TestObservationRegistry.create();
+		OpenRouterChatModel model = OpenRouterChatModel.builder()
+			.openRouterApi(blocking(body, HttpStatus.OK))
+			.defaultOptions(OpenRouterChatOptions.builder().model("test-model").build())
+			.observationRegistry(registry)
+			.build();
+		assertThatThrownBy(() -> model.call(new Prompt("synthetic prompt")))
+			.isInstanceOf(OpenRouterProtocolException.class)
+			.hasMessageContaining("requires a message");
+		io.micrometer.observation.tck.TestObservationRegistryAssert.assertThat(registry)
+			.hasObservationWithNameEqualTo("gen_ai.client.operation")
+			.that()
+			.hasBeenStopped()
+			.thenError()
+			.isInstanceOf(OpenRouterProtocolException.class);
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "\"content\":\"\"", "\"refusal\":\"synthetic refusal\"",
+			"\"tool_calls\":[{\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"test\",\"arguments\":\"{}\"}}]",
+			"\"images\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,aW1hZ2U=\"}}]" })
+	void emptyTextMessagesRemainValid(String content) {
+		String finish = content.contains("tool_calls") ? "tool_calls" : "stop";
+		String body = "{\"model\":\"test-model\",\"choices\":[{\"index\":0,\"finish_reason\":\"" + finish
+				+ "\",\"message\":{\"role\":\"assistant\"," + content + "}}]}";
+		assertThat(new OpenRouterChatResponseMapper().map(blocking(body, HttpStatus.OK).chatCompletion(this.request))
+			.getResults()).hasSize(1);
+	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "503", "\"503\"", "\"provider_unavailable\"", "null", "\"rate_limit_exceeded\"" })
