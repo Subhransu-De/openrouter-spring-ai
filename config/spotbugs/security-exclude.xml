@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+  <!-- Both log messages replace CR and LF in the tool name before interpolation.
+       OpenRouterToolExecutionExceptionProcessorTests checks the rendered messages
+       and preservation of the original debug exception. FindSecBugs does not
+       recognize this sanitization; keep this exclusion confined to these sinks. -->
+  <Match>
+    <Class name="de.subhransu.openrouter.springai.chat.OpenRouterToolExecutionExceptionProcessor"/>
+    <Method name="process" params="org.springframework.ai.tool.execution.ToolExecutionException" returns="java.lang.String"/>
+    <Bug pattern="CRLF_INJECTION_LOGS"/>
+  </Match>
+  <!-- URI.create validates the scheme's ASCII grammar before this comparison.
+       equalsIgnoreCase therefore cannot admit Unicode lookalikes; mixed-case
+       HTTP(S) schemes are valid and must remain supported. -->
+  <Match>
+    <Class name="de.subhransu.openrouter.springai.chat.mapper.MediaContentMapper"/>
+    <Method name="dataUrl" params="org.springframework.ai.content.Media,boolean" returns="java.lang.String"/>
+    <Bug pattern="IMPROPER_UNICODE"/>
+  </Match>
+</FindBugsFilter>

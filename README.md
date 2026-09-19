@@ -954,6 +954,34 @@ shared Modernizer enforcement point for both build systems; Gradle `check` does
 not invoke it. Modernizer checks its known API catalog, not every newer Java
 feature. Compiler release checking still protects Java 17 compatibility.
 
+Run `mvn -B -Psecurity -pl openrouter-spring-ai-autoconfigure -am -DskipTests verify`
+for FindSecBugs analysis of compiled core and autoconfiguration production classes.
+Tests, samples, and the dependency-only starter are excluded from security analysis.
+The opt-in profile uses maximum effort, reports all confidence levels (`Low` threshold),
+and fails on any selected SECURITY finding or analysis failure. Reports are written to
+each analyzed module's `target/findsecbugs.xml`. The security filter and detector plugin
+exist only inside this profile; ordinary SpotBugs analysis without `-Psecurity` remains
+unfiltered and writes its separate `target/spotbugsXml.xml` report.
+The method-specific exclusions in `config/spotbugs/security-exclude.xml` cover ASCII-validated
+URI scheme comparison and tool log sanitization that the detector does not recognize.
+Tool failure log messages replace CR and LF in tool names with underscores, with a
+regression test for both messages; original exceptions remain available in local debug
+diagnostics and observations.
+
+CI's single `FindSecBugs security` job on JDK 25 is the shared enforcement point for
+Maven and Gradle contributors; Gradle `check` does not run FindSecBugs. Compilation
+still targets Java 17. The job first runs `security-smoke-tests/check.py` with an
+external scratch directory. This harness compiles but never executes synthetic SQL
+fixtures, checks safe parameter binding and test-class exclusion, requires unsafe
+production SQL to fail, and verifies that general SpotBugs still detects a null bug.
+
+FindSecBugs overlaps CodeQL's `security-and-quality` suite on injection and other
+security patterns, but provides a local bytecode gate without a code-scanning service.
+CodeQL retains its broader source/data-flow analysis and independent workflow.
+The security job fails builds immediately; making its status a required branch check
+is deferred until its CI stability is established. This change does not alter branch
+protection or replace CodeQL.
+
 The Java 17-compatible recursive list snapshot and content joining simplifications
 are applied. `Math.clamp`, `List.getFirst`/`getLast`, and pattern switches in
 assistant content and terminal-event handling remain deferred until the minimum

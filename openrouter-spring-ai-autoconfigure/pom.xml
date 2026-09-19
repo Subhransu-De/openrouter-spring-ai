@@ -13,6 +13,10 @@
   <name>OpenRouter Spring AI :: Autoconfigure</name>
   <description>@AutoConfiguration and @ConfigurationProperties for the OpenRouter provider.</description>
 
+  <properties>
+    <findsecbugs.skip>false</findsecbugs.skip>
+  </properties>
+
   <dependencies>
     <dependency>
       <groupId>org.jspecify</groupId>

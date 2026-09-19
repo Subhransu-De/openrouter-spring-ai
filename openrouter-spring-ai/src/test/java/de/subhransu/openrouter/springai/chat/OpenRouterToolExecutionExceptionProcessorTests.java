@@ -2,10 +2,16 @@ package de.subhransu.openrouter.springai.chat;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.classic.spi.ThrowableProxy;
+import ch.qos.logback.core.read.ListAppender;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationRegistry;
 import io.micrometer.observation.tck.TestObservationRegistry;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.tool.definition.ToolDefinition;
 import org.springframework.ai.tool.execution.ToolExecutionException;
 
@@ -29,6 +35,36 @@ class OpenRouterToolExecutionExceptionProcessorTests {
 
 		assertThat(payload).isEqualTo(OpenRouterToolExecutionExceptionProcessor.DEFAULT_FAILURE_PAYLOAD)
 			.doesNotContain(SECRET, "local path", NESTED_DETAIL, "\n", "IllegalStateException");
+	}
+
+	@Test
+	void logMessagesKeepToolNamesOnOneLineAndRetainTheOriginalDebugException() {
+		Logger logger = (Logger) LoggerFactory.getLogger(OpenRouterToolExecutionExceptionProcessor.class);
+		Level previousLevel = logger.getLevel();
+		ListAppender<ILoggingEvent> appender = new ListAppender<>();
+		appender.start();
+		logger.addAppender(appender);
+		logger.setLevel(Level.DEBUG);
+		ToolDefinition definition = ToolDefinition.builder()
+			.name("lookup\r\nforged\nentry\rend")
+			.description("Synthetic tool")
+			.inputSchema("{\"type\":\"object\"}")
+			.build();
+		ToolExecutionException exception = new ToolExecutionException(definition,
+				new IllegalStateException("synthetic failure\r\nforged detail"));
+		try {
+			assertThat(new OpenRouterToolExecutionExceptionProcessor().process(exception))
+				.isEqualTo(OpenRouterToolExecutionExceptionProcessor.DEFAULT_FAILURE_PAYLOAD);
+			assertThat(appender.list).hasSize(2)
+				.allSatisfy(event -> assertThat(event.getFormattedMessage()).contains("lookup__forged_entry_end")
+					.doesNotContain("\r", "\n"));
+			assertThat(((ThrowableProxy) appender.list.get(1).getThrowableProxy()).getThrowable()).isSameAs(exception);
+		}
+		finally {
+			logger.setLevel(previousLevel);
+			logger.detachAppender(appender);
+			appender.stop();
+		}
 	}
 
 	@Test
