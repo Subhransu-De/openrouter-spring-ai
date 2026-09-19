@@ -1,6 +1,6 @@
 # openrouter-spring-ai
 
-[![Build](https://github.com/Subhransu-De/spring-ai-openrouter-starter/actions/workflows/ci.yml/badge.svg)](https://github.com/Subhransu-De/spring-ai-openrouter-starter/actions/workflows/ci.yml)
+[![Build](https://github.com/Subhransu-De/openrouter-spring-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/Subhransu-De/openrouter-spring-ai/actions/workflows/ci.yml)
 
 A native [Spring AI](https://spring.io/projects/spring-ai) chat provider for
 [OpenRouter](https://openrouter.ai). Instead of pointing the OpenAI client at OpenRouter's URL
@@ -17,6 +17,11 @@ and attribution headers — all behind the standard Spring AI `ChatModel` contra
 
 Chat Completions is the production default. The optional Responses request mode is experimental;
 applications should opt into it explicitly.
+
+The repository is now `Subhransu-De/openrouter-spring-ai`; Maven coordinates and Java
+packages are unchanged. Published `0.1.0-RC1` metadata retains its historical broken
+module backlinks and cannot be changed in place. The corrected links will ship in the
+next release; use that release once it is published.
 
 ### Supported API and nullability
 
