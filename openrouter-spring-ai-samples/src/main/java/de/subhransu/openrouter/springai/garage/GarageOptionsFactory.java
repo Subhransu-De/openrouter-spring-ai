@@ -32,7 +32,6 @@ public final class GarageOptionsFactory {
       String topic,
       List<ToolCallback> callbacks) {
     return common(operationId, "service-story", requestMode, model, fallbackModels, topic)
-        .parallelToolCalls(false)
         .toolChoice("auto")
         .toolCallbacks(callbacks)
         .build();
@@ -55,7 +54,6 @@ public final class GarageOptionsFactory {
       ToolCallback callback) {
     return common(operationId, "streaming-dispatch", requestMode, model, List.of(), topic)
         .maxCompletionTokens(this.properties.getMaxCompletionTokens())
-        .parallelToolCalls(false)
         .toolChoice("required")
         .toolCallbacks(callback)
         .build();
@@ -69,7 +67,6 @@ public final class GarageOptionsFactory {
       ToolCallback callback) {
     return common(operationId, "express-invoice", requestMode, model, List.of(), topic)
         .toolChoice("required")
-        .parallelToolCalls(false)
         .toolCallbacks(callback)
         .build();
   }

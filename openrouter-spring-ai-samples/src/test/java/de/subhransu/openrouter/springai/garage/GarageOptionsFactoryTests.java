@@ -24,6 +24,39 @@ class GarageOptionsFactoryTests {
   private final GarageOptionsFactory factory =
       new GarageOptionsFactory(new GarageProperties());
 
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.EnumSource(OpenRouterRequestMode.class)
+  void strictToolRequestsDoNotRequireParallelToolSupport(OpenRouterRequestMode mode) {
+    GarageProperties properties = new GarageProperties();
+    properties.setProviderRequireParameters(true);
+    GarageOptionsFactory optionsFactory = new GarageOptionsFactory(properties);
+    ToolCallback callback = tool();
+    var mapper = new tools.jackson.databind.ObjectMapper();
+    List<OpenRouterChatOptions> profiles = List.of(
+        optionsFactory.serviceStory("synthetic", mode, "garage/model", List.of(),
+            "synthetic inspection", List.of(callback)),
+        optionsFactory.streamingDispatch("synthetic", mode, "garage/model",
+            "synthetic inspection", callback),
+        optionsFactory.expressInvoice("synthetic", mode, "garage/model",
+            "synthetic inspection", callback));
+
+    for (OpenRouterChatOptions options : profiles) {
+      for (boolean stream : List.of(false, true)) {
+        Object request = mode == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS
+            ? new de.subhransu.openrouter.springai.chat.mapper.OpenRouterChatRequestMapper(mapper)
+                .map(List.of(), options, stream, List.of(callback.getToolDefinition()))
+            : new de.subhransu.openrouter.springai.chat.mapper.OpenRouterResponsesRequestMapper(mapper)
+                .map(List.of(), options, stream, List.of(callback.getToolDefinition()));
+        var wire = mapper.readTree(mapper.writeValueAsString(request));
+        // Strict routing treats even false as requiring support for this parameter.
+        assertThat(wire.has("parallel_tool_calls")).isFalse();
+        assertThat(wire.path("provider").path("require_parameters").asBoolean()).isTrue();
+        assertThat(wire.path("tools").size()).isEqualTo(1);
+        assertThat(wire.has("tool_choice")).isTrue();
+      }
+    }
+  }
+
   @Test
   void dynoProfilePopulatesEverySamplerAndContextField() {
     OpenRouterChatOptions options =
