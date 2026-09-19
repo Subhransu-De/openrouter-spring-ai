@@ -67,11 +67,11 @@ class GeneratedImageReuseTests {
 		assertThatIllegalArgumentException()
 			.isThrownBy(() -> new OpenRouterChatRequestMapper(this.json).map(List.of(assistant), this.options, stream,
 					List.of()))
-			.withMessageContaining("only image media");
+			.withMessageContaining("audio replay is unsupported");
 		assertThatIllegalArgumentException()
 			.isThrownBy(() -> new OpenRouterResponsesRequestMapper(this.json).map(List.of(assistant), this.options,
 					stream, List.of()))
-			.withMessageContaining("UserMessage");
+			.withMessageContaining("audio replay is unsupported");
 	}
 
 	@ParameterizedTest

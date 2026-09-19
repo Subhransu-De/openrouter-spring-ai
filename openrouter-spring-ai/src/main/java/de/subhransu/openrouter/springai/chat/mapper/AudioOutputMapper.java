@@ -1,0 +1,201 @@
+package de.subhransu.openrouter.springai.chat.mapper;
+
+import de.subhransu.openrouter.springai.api.dto.AudioOutput;
+import de.subhransu.openrouter.springai.api.dto.Choice;
+import de.subhransu.openrouter.springai.chat.OpenRouterAudioOptions;
+import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
+import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
+import java.io.ByteArrayOutputStream;
+import java.util.Base64;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import org.jspecify.annotations.Nullable;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.content.Media;
+import org.springframework.ai.retry.NonTransientAiException;
+import org.springframework.util.Assert;
+import org.springframework.util.MimeTypeUtils;
+
+/**
+ * Bounded audio assembly. Each wire data value encodes one independent byte fragment.
+ *
+ * @author OpenRouter Spring AI contributors
+ */
+final class AudioOutputMapper {
+
+	static final String METADATA = "openrouter.audio";
+
+	static final int MAX_BYTES = 16 * 1024 * 1024;
+
+	private final @Nullable OpenRouterAudioOptions options;
+
+	private final Map<Integer, Assembly> pending = new HashMap<>();
+
+	private final Set<Integer> finished = new HashSet<>();
+
+	private int retainedBytes;
+
+	AudioOutputMapper(@Nullable OpenRouterAudioOptions options) {
+		this.options = options;
+	}
+
+	static void validateRequest(List<Message> messages, OpenRouterChatOptions options, boolean stream,
+			boolean responses) {
+		boolean requested = options.getModalities() != null && options.getModalities().contains("audio");
+		if (requested || options.getAudio() != null) {
+			Assert.isTrue(stream && !responses, "Audio output requires streaming Chat Completions");
+			Assert.isTrue(requested && options.getAudio() != null,
+					"Audio output requires both audio options and the audio modality");
+		}
+		for (Message message : messages) {
+			if (message instanceof AssistantMessage assistant) {
+				Assert.isTrue(
+						!assistant.getMetadata().containsKey(METADATA) && assistant.getMedia()
+							.stream()
+							.noneMatch(media -> "audio".equals(media.getMimeType().getType())),
+						"Assistant audio replay is unsupported; create a text-only message explicitly to continue with the transcript");
+			}
+		}
+	}
+
+	synchronized boolean finished(Choice choice) {
+		return this.finished.contains(index(choice));
+	}
+
+	synchronized void append(Choice choice, Map<String, Object> metadata, List<Media> media) {
+		AudioOutput audio = choice.delta() != null ? choice.delta().audio() : null;
+		int index = index(choice);
+		if (choice.message() != null && choice.message().extensions().containsKey("audio")) {
+			throw new IllegalArgumentException(
+					"Audio output requires delta.audio fragments, not message.audio snapshots");
+		}
+		Assembly assembly = this.pending.get(index);
+		if (audio != null) {
+			Assert.state(this.options != null, "Received audio without configured output audio options");
+			if (assembly == null) {
+				if (this.pending.size() + this.finished.size() >= 128) {
+					throw new NonTransientAiException("Audio output exceeds the 128-choice limit");
+				}
+				assembly = new Assembly();
+				this.pending.put(index, assembly);
+			}
+			append(assembly, audio);
+		}
+		if (assembly == null) {
+			return;
+		}
+		Assert.state(
+				choice.delta() == null || choice.delta().toolCalls() == null || choice.delta().toolCalls().isEmpty(),
+				"Audio and tool calls in the same choice are unsupported");
+		if (choice.finishReason() != null) {
+			if (!"stop".equals(choice.finishReason()) || assembly.bytes.size() == 0) {
+				throw new OpenRouterTruncatedResponseException(
+						"Audio choice ended without complete audio and a stop finish reason");
+			}
+			Map<String, Object> snapshot = new HashMap<>();
+			snapshot.put("format", this.options.format());
+			snapshot.put("transcript", assembly.transcript.toString());
+			if (assembly.id != null) {
+				snapshot.put("id", assembly.id);
+			}
+			if (assembly.expiresAt != null) {
+				snapshot.put("expires_at", assembly.expiresAt);
+			}
+			metadata.put(METADATA, Map.copyOf(snapshot));
+			media.add(Media.builder()
+				.mimeType(MimeTypeUtils.parseMimeType(mimeType(this.options.format())))
+				.data(assembly.bytes.toByteArray())
+				.build());
+			this.retainedBytes -= assembly.retainedBytes;
+			this.pending.remove(index);
+			this.finished.add(index);
+		}
+	}
+
+	private void append(Assembly assembly, AudioOutput audio) {
+		Assert.state(audio.format() == null || this.options.format().equals(audio.format()),
+				"Conflicting audio output format");
+		Assert.state(audio.id() == null || assembly.id == null || assembly.id.equals(audio.id()),
+				"Conflicting audio identifiers in one choice");
+		if (audio.id() != null) {
+			if (assembly.id == null) {
+				retain(assembly, audio.id().length() * 2L);
+			}
+			assembly.id = audio.id();
+		}
+		if (audio.expiresAt() != null) {
+			assembly.expiresAt = audio.expiresAt();
+		}
+		if (audio.transcript() != null) {
+			retain(assembly, audio.transcript().length() * 2L);
+			assembly.transcript.append(audio.transcript());
+		}
+		if (audio.data() != null && !audio.data().isEmpty()) {
+			// Bound allocation before decoding. Padding can reduce the result by at most
+			// two bytes.
+			long upperBound = (audio.data().length() + 3L) / 4 * 3;
+			if (upperBound > MAX_BYTES - this.retainedBytes + 2L) {
+				throw limit();
+			}
+			byte[] bytes = Base64.getDecoder().decode(audio.data());
+			retain(assembly, bytes.length);
+			assembly.bytes.writeBytes(bytes);
+		}
+	}
+
+	private void retain(Assembly assembly, long bytes) {
+		if (bytes > MAX_BYTES - this.retainedBytes) {
+			throw limit();
+		}
+		this.retainedBytes += (int) bytes;
+		assembly.retainedBytes += (int) bytes;
+	}
+
+	private static NonTransientAiException limit() {
+		return new NonTransientAiException("Retained audio and transcript exceed the 16 MiB stream limit");
+	}
+
+	synchronized void complete() {
+		if (!this.pending.isEmpty()) {
+			throw new OpenRouterTruncatedResponseException("Stream ended with unfinished audio choices");
+		}
+	}
+
+	synchronized void clear() {
+		this.pending.clear();
+		this.finished.clear();
+		this.retainedBytes = 0;
+	}
+
+	private static int index(Choice choice) {
+		return choice.index() != null ? choice.index() : 0;
+	}
+
+	private static String mimeType(String format) {
+		return switch (format) {
+			case "mp3" -> "audio/mpeg";
+			case "pcm16" -> "audio/pcm";
+			case "opus" -> "audio/ogg;codecs=opus";
+			default -> "audio/" + format;
+		};
+	}
+
+	private static final class Assembly {
+
+		private final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+
+		private final StringBuilder transcript = new StringBuilder();
+
+		private @Nullable String id;
+
+		private @Nullable Long expiresAt;
+
+		private int retainedBytes;
+
+	}
+
+}

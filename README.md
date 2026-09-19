@@ -609,7 +609,8 @@ UserMessage message = UserMessage.builder()
 PDF filenames come from `Media.getName()`; set `.name(...)` to retain an original
 filename. Audio/video names are not sent. Other file types, audio formats, MIME
 parameters and mismatched data-URL MIME types are rejected explicitly. This does
-not add Anthropic Messages support, uploaded file IDs or audio output.
+not add Anthropic Messages support or uploaded file IDs. For generated audio, see
+[Chat audio output](#chat-audio-output).
 
 Each new inline attachment must contain 1 byte through 20 MiB of decoded data.
 The limit is checked before encoding bytes or decoding a base64 data URL. Empty
@@ -701,6 +702,57 @@ history. Responses mode rejects assistant media history explicitly: attach the m
 a `UserMessage` instead, retaining any assistant text/tool history separately. This applies
 to both synchronous and streaming requests. Image understanding still requires a model
 that supports image input.
+
+### Chat audio output
+
+Use an [audio-output-capable OpenRouter model](https://openrouter.ai/docs/guides/overview/multimodal/audio)
+with streaming Chat Completions. Voices and supported encodings depend on the model:
+
+```java
+var options = OpenRouterChatOptions.builder()
+    .model("your-audio-output-model")
+    .modalities(List.of("text", "audio"))
+    .audio(new OpenRouterAudioOptions("alloy", "pcm16"))
+    .build();
+chatModel.stream(new Prompt("Say hello.", options))
+    .subscribe(response -> response.getResults().forEach(generation ->
+        generation.getOutput().getMedia().forEach(media -> {
+            byte[] completeAudio = media.getDataAsByteArray();
+            // Save or play using a decoder appropriate for the requested format.
+        })));
+```
+
+Boot equivalents are `spring.ai.openrouter.chat.modalities=text,audio`,
+`spring.ai.openrouter.chat.audio.voice=alloy`, and
+`spring.ai.openrouter.chat.audio.format=pcm16`. Formats are `wav`, `mp3`, `flac`,
+`opus`, and `pcm16`; PCM bytes are raw audio, not a WAV file. Sample rate and other
+playback parameters must match the selected provider. No transcoding is performed.
+`call()` and Responses mode reject output audio; there is no blocking adapter.
+
+Each `delta.audio.data` value is decoded independently from base64, then its bytes
+are appended per choice. One complete Spring AI `Media` is emitted at that choice's
+`stop` finish reason. No partial media is emitted. Normal text remains incremental;
+the assembled transcript is exposed once in the final assistant metadata under
+`openrouter.audio`, alongside `format` and, when supplied, `id` and `expires_at`.
+The transcript is not appended to text, so simultaneous text and speech do not
+produce duplicate text. Repeated terminal events for completed audio choices do
+not emit a second transcript or media object. Wait for successful stream completion
+before treating the entire request as successful: a later transport/provider error
+still fails the stream.
+
+Retained decoded audio plus transcript/identifier characters (counted as two bytes
+each) are limited to 16 MiB across unfinished choices per subscription, with at
+most 128 audio choices per stream. Buffer capacity and temporary decoding/final
+copies add bounded overhead. Buffers are released on finish, cancellation, or error.
+Missing choice termination, invalid base64, conflicting identifiers/formats, and
+non-`stop` audio finishes fail explicitly. Each data value must encode a complete
+byte fragment; arbitrary splits inside a base64 value are unsupported. Audio mixed
+with tool calls in one choice and `message.audio` snapshots are unsupported.
+
+Assistant audio replay is rejected in both request modes, including identifier-only
+metadata. To continue using only its transcript, explicitly create a new text-only
+assistant message. This discards audio continuation state; audio IDs and expiry
+metadata are preserved for callers, not automatically replayed to the provider.
 
 ### Observability
 

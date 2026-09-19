@@ -610,6 +610,13 @@ class OpenRouterChatRequestSerializationTests {
 		var tools = "toolCallbacks".equals(name) || "toolStrict".equals(name) ? List.of(weatherTool())
 				: List.<ToolDefinition>of();
 		for (boolean stream : List.of(false, true)) {
+			if ("rejected".equals(chatPath)) {
+				assertThatThrownBy(() -> this.chatMapper.map(messages, options, stream, tools))
+					.isInstanceOf(IllegalArgumentException.class);
+				assertThatThrownBy(() -> this.responsesMapper.map(messages, options, stream, tools))
+					.isInstanceOf(IllegalArgumentException.class);
+				continue;
+			}
 			JsonNode chat = this.objectMapper.valueToTree(this.chatMapper.map(messages, options, stream, tools));
 			if (chatPath != null) {
 				assertThat(chat.at(chatPath).isMissingNode()).as(name).isFalse();
@@ -659,6 +666,7 @@ class OpenRouterChatRequestSerializationTests {
 				{ "route", "fallback", "/route", "/route" },
 				{ "modalities", List.of("text"), "/modalities", "/modalities" },
 				{ "imageConfig", Map.of("aspect_ratio", "1:1"), "/image_config", "/image_config" },
+				{ "audio", new OpenRouterAudioOptions("alloy", "pcm16"), "rejected", "rejected" },
 				{ "extraBody", Map.of("prompt_cache_key", "synthetic"), "/prompt_cache_key", "/prompt_cache_key" },
 				{ "providerExtraBody", Map.of("zdr", false), "/provider/zdr", "/provider/zdr" },
 				{ "toolCallbacks", List.of(), "/tools/0/function/name", "/tools/0/name" },

@@ -3,6 +3,7 @@ package de.subhransu.openrouter.springai.autoconfigure;
 import org.jspecify.annotations.Nullable;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
+import de.subhransu.openrouter.springai.chat.OpenRouterAudioOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
 import de.subhransu.openrouter.springai.chat.OpenRouterReasoningOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterResponseFormat;
@@ -83,6 +84,9 @@ public class OpenRouterChatProperties {
 
 	private @Nullable List<String> modalities;
 
+	@NestedConfigurationProperty
+	private @Nullable OpenRouterAudioOptions audio;
+
 	private @Nullable Map<String, @Nullable Object> imageConfig;
 
 	private @Nullable OpenRouterServiceTier serviceTier;
@@ -130,6 +134,7 @@ public class OpenRouterChatProperties {
 			.route(this.route)
 			.includeUsage(this.includeUsage)
 			.modalities(this.modalities)
+			.audio(this.audio)
 			.imageConfig(this.imageConfig)
 			.serviceTier(this.serviceTier)
 			.metadata(this.metadata)
@@ -344,6 +349,14 @@ public class OpenRouterChatProperties {
 
 	public void setIncludeUsage(@Nullable Boolean includeUsage) {
 		this.includeUsage = includeUsage;
+	}
+
+	public @Nullable OpenRouterAudioOptions getAudio() {
+		return this.audio;
+	}
+
+	public void setAudio(@Nullable OpenRouterAudioOptions audio) {
+		this.audio = audio;
 	}
 
 	public @Nullable List<String> getModalities() {

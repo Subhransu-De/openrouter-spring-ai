@@ -6,6 +6,8 @@ import de.subhransu.openrouter.springai.api.dto.ToolCall;
 import de.subhransu.openrouter.springai.api.errors.OpenRouterApiExceptionFactory;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import de.subhransu.openrouter.springai.support.OptionSnapshots;
+import de.subhransu.openrouter.springai.chat.OpenRouterAudioOptions;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -14,7 +16,9 @@ import org.springframework.ai.chat.metadata.ChatGenerationMetadata;
 import org.springframework.ai.chat.metadata.ChatResponseMetadata;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
+import org.springframework.ai.content.Media;
 import org.springframework.util.CollectionUtils;
+import org.jspecify.annotations.Nullable;
 import reactor.core.publisher.Flux;
 
 public final class OpenRouterStreamingResponseMapper {
@@ -22,7 +26,8 @@ public final class OpenRouterStreamingResponseMapper {
 	private final OpenRouterChoiceErrorExceptionFactory choiceErrorExceptionFactory = new OpenRouterChoiceErrorExceptionFactory();
 
 	public ChatResponse map(ChatCompletionChunk chunk) {
-		return map(chunk, new LinkedHashMap<>(), new LinkedHashMap<>(), new LinkedHashMap<>());
+		return map(chunk, new LinkedHashMap<>(), new LinkedHashMap<>(), new LinkedHashMap<>(),
+				new AudioOutputMapper(null));
 	}
 
 	/**
@@ -33,16 +38,24 @@ public final class OpenRouterStreamingResponseMapper {
 	 * @return mapped Spring AI responses
 	 */
 	public Flux<ChatResponse> map(Flux<ChatCompletionChunk> chunks) {
+		return map(chunks, null);
+	}
+
+	public Flux<ChatResponse> map(Flux<ChatCompletionChunk> chunks, @Nullable OpenRouterAudioOptions audioOptions) {
 		return Flux.defer(() -> {
 			Map<Integer, PartialOutputAccumulator> partialOutputs = new LinkedHashMap<>();
 			Map<Integer, ReasoningMetadata.Accumulator> reasoning = new LinkedHashMap<>();
 			Map<String, Object> extensions = new LinkedHashMap<>();
-			return chunks.map(chunk -> map(chunk, partialOutputs, reasoning, extensions));
+			AudioOutputMapper audio = new AudioOutputMapper(audioOptions);
+			return chunks.map(chunk -> map(chunk, partialOutputs, reasoning, extensions, audio))
+				.doOnComplete(audio::complete)
+				.doFinally(signal -> audio.clear());
 		});
 	}
 
 	private ChatResponse map(ChatCompletionChunk chunk, Map<Integer, PartialOutputAccumulator> partialOutputs,
-			Map<Integer, ReasoningMetadata.Accumulator> reasoning, Map<String, Object> extensions) {
+			Map<Integer, ReasoningMetadata.Accumulator> reasoning, Map<String, Object> extensions,
+			AudioOutputMapper audio) {
 		if (chunk.error() != null) {
 			// Mid-stream failures arrive as a normal chunk with a top-level error object
 			// over HTTP 200; without this the truncated stream would look like a clean
@@ -55,7 +68,8 @@ public final class OpenRouterStreamingResponseMapper {
 		List<Generation> generations = CollectionUtils.isEmpty(chunk.choices()) ? List.of()
 				: chunk.choices()
 					.stream()
-					.map(choice -> mapGeneration(choice, chunk.model(),
+					.filter(choice -> !audio.finished(choice))
+					.map(choice -> mapGeneration(choice, chunk.model(), audio,
 							reasoning.computeIfAbsent(choiceIndex(choice), key -> new ReasoningMetadata.Accumulator())))
 					.toList();
 		clearFinishedChoices(chunk, partialOutputs);
@@ -112,7 +126,8 @@ public final class OpenRouterStreamingResponseMapper {
 		return choice.index() != null ? choice.index() : 0;
 	}
 
-	private Generation mapGeneration(Choice choice, String model, ReasoningMetadata.Accumulator reasoning) {
+	private Generation mapGeneration(Choice choice, String model, AudioOutputMapper audio,
+			ReasoningMetadata.Accumulator reasoning) {
 		if (choice.delta() != null && !CollectionUtils.isEmpty(choice.delta().toolCalls())
 				&& !FinishReasonMapper.isToolCallCompletion(choice.finishReason())) {
 			throw new OpenRouterTruncatedResponseException(
@@ -125,12 +140,15 @@ public final class OpenRouterStreamingResponseMapper {
 		RefusalMetadata.put(properties, choice.delta() != null ? choice.delta().refusal() : null);
 		ExtensionMetadata.put(properties, choice.delta() != null ? choice.delta().extensions() : null,
 				choice.extensions(), choice.delta() != null ? choice.delta().toolCalls() : null);
+		List<Media> media = new ArrayList<>(
+				GeneratedImageMapper.media(choice.delta() != null ? choice.delta().images() : null));
+		audio.append(choice, properties, media);
 		Map<String, Object> snapshot = reasoning.append(properties);
 		AssistantMessage assistantMessage = AssistantMessage.builder()
 			.content(choice.delta() != null && choice.delta().content() != null ? choice.delta().content() : "")
 			.properties(snapshot)
 			.toolCalls(mapToolCalls(choice.delta() != null ? choice.delta().toolCalls() : null))
-			.media(GeneratedImageMapper.media(choice.delta() != null ? choice.delta().images() : null))
+			.media(media)
 			.build();
 		ChatGenerationMetadata metadata = ChatGenerationMetadata.builder()
 			.finishReason(FinishReasonMapper.map(choice.finishReason()))
