@@ -336,13 +336,13 @@ boundaries before five-minute boundaries. Assistant messages, tool results, tool
 definitions, and image blocks are not supported breakpoint targets. Invalid metadata,
 offsets, ordering, or placement fail explicitly.
 
-| Request protocol / provider | Supported placement and lifetime |
-| --- | --- |
-| Chat Completions / Claude-compatible providers | System and user text blocks; five minutes or one hour. |
-| Chat Completions / supported Alibaba models | Text blocks; use five minutes. Model and endpoint support varies. |
-| Chat Completions / supported Gemini models | Text blocks; use five minutes. Only the final boundary is used; a boundary in the first system message caches the normalized system prompt, including its trailing text. Put dynamic text in a later user message. |
-| Chat Completions / other routes | Provider-dependent; no guarantee of explicit caching or TTL preservation. Select a supporting route. |
-| Responses | This metadata is rejected. Its per-block `prompt_cache_breakpoint` has different semantics and is not implemented here. |
+| Request protocol / provider                    | Supported placement and lifetime                                                                                                                                                                                   |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Chat Completions / Claude-compatible providers | System and user text blocks; five minutes or one hour.                                                                                                                                                             |
+| Chat Completions / supported Alibaba models    | Text blocks; use five minutes. Model and endpoint support varies.                                                                                                                                                  |
+| Chat Completions / supported Gemini models     | Text blocks; use five minutes. Only the final boundary is used; a boundary in the first system message caches the normalized system prompt, including its trailing text. Put dynamic text in a later user message. |
+| Chat Completions / other routes                | Provider-dependent; no guarantee of explicit caching or TTL preservation. Select a supporting route.                                                                                                               |
+| Responses                                      | This metadata is rejected. Its per-block `prompt_cache_breakpoint` has different semantics and is not implemented here.                                                                                            |
 
 Provider/model eligibility and minimum prompt sizes are enforced upstream; the library
 does not infer capabilities from model names or fallback routing. Consult
