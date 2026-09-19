@@ -173,6 +173,33 @@ class OpenRouterExtensionTests {
 	}
 
 	@Test
+	void multipleChoicesKeepMessageAnnotationsSeparateAndRootFieldsOpaque() {
+		var first = this.json.readValue("""
+				{"annotations":[{"opaque":true}],"choices":[
+				{"index":0,"delta":{"content":"a","annotations":[{"id":1}]}},
+				{"index":1,"delta":{"content":"b","annotations":[{"id":2}]}}]}
+				""", ChatCompletionChunk.class);
+		var last = this.json.readValue("""
+				{"choices":[{"index":0,"delta":{},"finish_reason":"stop"},
+				{"index":1,"delta":{},"finish_reason":"stop"}]}
+				""", ChatCompletionChunk.class);
+		var stream = new OpenRouterStreamingResponseMapper()
+			.map(new OpenRouterStreamingToolCallAggregator().aggregate(Flux.just(first, last)));
+		StepVerifier.create(stream).thenConsumeWhile(response -> {
+			var root = this.json.valueToTree(response.getMetadata().get(ExtensionMetadata.RESPONSE));
+			assertThat(root.get("annotations").size()).isEqualTo(1);
+			assertThat(response.getResults()).hasSize(2);
+			for (int index = 0; index < 2; index++) {
+				var metadata = this.json.valueToTree(response.getResults().get(index).getOutput().getMetadata());
+				var annotations = metadata.get(ExtensionMetadata.MESSAGE).get("annotations");
+				assertThat(annotations.size()).isEqualTo(1);
+				assertThat(annotations.get(0).get("id").asInt()).isEqualTo(index + 1);
+			}
+			return true;
+		}).verifyComplete();
+	}
+
+	@Test
 	void streamedAnnotationsAndToolExtensionsSurviveAggregationAndResubscription() {
 		var first = chunk("""
 				{"annotations":[{"id":1}],"tool_calls":[{"index":0,"id":"call-1","type":"function",

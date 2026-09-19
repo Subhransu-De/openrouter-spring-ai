@@ -253,7 +253,7 @@ public final class OpenRouterStreamingToolCallAggregator {
 				ReasoningMetadata.concat(earlier.images(), later.images()),
 				ReasoningMetadata.concat(earlier.reasoningDetails(), later.reasoningDetails()),
 				concat(earlier.refusal(), later.refusal()),
-				ExtensionMetadata.merge(earlier.extensions(), later.extensions()));
+				ExtensionMetadata.mergeMessage(earlier.extensions(), later.extensions()));
 	}
 
 	private List<ToolCall> mergeToolCalls(List<ToolCall> earlier, List<ToolCall> later) {

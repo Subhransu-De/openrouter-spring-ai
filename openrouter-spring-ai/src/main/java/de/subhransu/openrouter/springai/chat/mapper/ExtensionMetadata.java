@@ -53,19 +53,20 @@ final class ExtensionMetadata {
 			result.putAll(earlier);
 		}
 		if (later != null) {
-			later.forEach((key, value) -> {
-				// Annotation arrays are incremental. Other opaque values are replaced
-				// whole by the latest value, without guessing provider semantics.
-				if ("annotations".equals(key) && result.get(key) instanceof List<?> first
-						&& value instanceof List<?> second) {
-					List<Object> combined = new ArrayList<>(first);
-					combined.addAll(second);
-					result.put(key, combined);
-				}
-				else {
-					result.put(key, value);
-				}
-			});
+			result.putAll(later);
+		}
+		return OptionSnapshots.map(result);
+	}
+
+	static Map<String, Object> mergeMessage(Map<String, Object> earlier, Map<String, Object> later) {
+		Map<String, Object> result = new LinkedHashMap<>(merge(earlier, later));
+		// Only message annotations have incremental semantics. Identically named
+		// fields at other wire locations remain opaque, with latest-value precedence.
+		if (earlier != null && later != null && earlier.get("annotations") instanceof List<?> first
+				&& later.get("annotations") instanceof List<?> second) {
+			List<Object> combined = new ArrayList<>(first);
+			combined.addAll(second);
+			result.put("annotations", combined);
 		}
 		return OptionSnapshots.map(result);
 	}
