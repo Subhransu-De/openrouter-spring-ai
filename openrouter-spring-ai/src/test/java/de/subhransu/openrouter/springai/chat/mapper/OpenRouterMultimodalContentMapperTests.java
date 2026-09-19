@@ -100,11 +100,11 @@ class OpenRouterMultimodalContentMapperTests {
 	}
 
 	@Test
-	void rejectsNonImageMediaInsteadOfSilentlyDroppingIt() {
+	void rejectsUnsupportedMediaInsteadOfSilentlyDroppingIt() {
 		UserMessage message = UserMessage.builder()
 			.text("watch this")
 			.media(Media.builder()
-				.mimeType(Media.Format.VIDEO_MP4)
+				.mimeType(MimeTypeUtils.parseMimeType("application/zip"))
 				.data(URI.create("https://example.test/clip.mp4"))
 				.build())
 			.build();
@@ -113,7 +113,7 @@ class OpenRouterMultimodalContentMapperTests {
 
 		assertThatThrownBy(() -> this.chatMapper.map(messages, options, false, List.of()))
 			.isInstanceOf(IllegalArgumentException.class)
-			.hasMessageContaining("video/mp4");
+			.hasMessageContaining("application/zip");
 	}
 
 	@Test

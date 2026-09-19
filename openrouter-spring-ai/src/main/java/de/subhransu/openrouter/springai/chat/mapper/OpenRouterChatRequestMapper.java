@@ -80,7 +80,7 @@ public final class OpenRouterChatRequestMapper {
 			List<ContentPart> parts = CacheBreakpointMapper.textParts(message);
 			if (message instanceof UserMessage userMessage) {
 				for (Media media : userMessage.getMedia()) {
-					parts.add(ContentPart.image(MediaUrlMapper.imageUrl(media)));
+					parts.add(MediaContentMapper.chat(media));
 				}
 			}
 			return parts;
@@ -93,7 +93,7 @@ public final class OpenRouterChatRequestMapper {
 			parts.add(ContentPart.text(userMessage.getText()));
 		}
 		for (Media media : userMessage.getMedia()) {
-			parts.add(ContentPart.image(MediaUrlMapper.imageUrl(media)));
+			parts.add(MediaContentMapper.chat(media));
 		}
 		return parts;
 	}

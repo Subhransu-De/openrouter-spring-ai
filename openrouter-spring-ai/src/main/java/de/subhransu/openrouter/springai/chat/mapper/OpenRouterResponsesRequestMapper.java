@@ -199,7 +199,7 @@ public final class OpenRouterResponsesRequestMapper {
 			content.add(new ResponsesContent("input_text", userMessage.getText()));
 		}
 		for (Media media : userMessage.getMedia()) {
-			content.add(new ResponsesContent("input_image", null, MediaUrlMapper.imageUrl(media)));
+			content.add(MediaContentMapper.responses(media));
 		}
 		return new ResponsesInputMessage(MESSAGE_TYPE, role, content);
 	}

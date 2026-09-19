@@ -289,7 +289,8 @@ Planned:
 - [ ] Typed DTO fields for currently skipped response data (`reasoning_details`, `logprobs`, …)
 - [ ] The models catalogue endpoint
 - [ ] OpenRouter server-side tools (web search plugin) and citation annotations
-- [ ] Video, audio and PDF input modalities; text-to-speech and transcription
+- [x] PDF, WAV/MP3 audio and video chat inputs (Chat Completions and Responses)
+- [ ] Text-to-speech and transcription
 
 ## Modules
 
@@ -584,8 +585,51 @@ UserMessage message = UserMessage.builder()
     .build();
 ```
 
-Non-image media (video, audio, PDF) is rejected explicitly for now rather than silently
-dropped; those modalities are on the roadmap.
+### PDF, audio and video inputs
+
+Both synchronous and streaming calls accept these `UserMessage` attachments:
+
+| Media | MIME types                                           | Chat Completions                                     | Responses                                   | Source                                         |
+| ----- | ---------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------- | ---------------------------------------------- |
+| PDF   | `application/pdf`                                    | `file` with `file_data`                              | `input_file` with `file_data` or `file_url` | HTTP(S) URL, bytes or base64 data URL          |
+| Audio | `audio/wav`, `audio/mpeg`                            | `input_audio` with raw base64 and `wav`/`mp3` format | Same                                        | Bytes or base64 data URL; remote URLs rejected |
+| Video | `video/mp4`, `video/mpeg`, `video/mov`, `video/webm` | `video_url` object                                   | `input_video` with string `video_url`       | HTTP(S) URL, bytes or base64 data URL          |
+
+```java
+UserMessage message = UserMessage.builder()
+    .text("Summarize the attached document")
+    .media(Media.builder()
+        .mimeType(MimeTypeUtils.parseMimeType("application/pdf"))
+        .name("report.pdf")
+        .data(URI.create("https://example.com/report.pdf"))
+        .build())
+    .build();
+```
+
+PDF filenames come from `Media.getName()`; set `.name(...)` to retain an original
+filename. Audio/video names are not sent. Other file types, audio formats, MIME
+parameters and mismatched data-URL MIME types are rejected explicitly. This does
+not add Anthropic Messages support, uploaded file IDs or audio output.
+
+Each new inline attachment must contain 1 byte through 20 MiB of decoded data.
+The limit is checked before encoding bytes or decoding a base64 data URL. Empty
+and invalid base64 content is rejected. Provider request, file, duration and
+attachment-count limits still apply, including to remote URLs; the local limit
+is not a guarantee of provider acceptance. Existing image behavior is unchanged.
+
+The integration never fetches attachment URLs. Spring AI materializes resources
+when constructing `Media`, before this integration can enforce its limit; callers
+must bound resource reads themselves or supply bounded bytes. Mapping does not
+modify caller-owned bytes or messages. Reusing unchanged messages replays the same
+attachments in order, after the message text, including across tool continuations.
+A remote URL is replayed as a URL and may serve different content later.
+
+Select a model/provider supporting the modality and format. OpenRouter validates
+routing compatibility and returns provider errors; the library does not maintain
+a static model allowlist. Video URL support is provider-specific (for example,
+Gemini on AI Studio accepts YouTube URLs). See the [multimodal guide](https://openrouter.ai/docs/guides/overview/multimodal/overview)
+and [endpoint schemas](https://openrouter.ai/openapi.json). No new Boot properties
+or options are required; attachments use the existing message API.
 
 ### Image generation
 

@@ -92,7 +92,7 @@ class OpenRouterStreamingObservationLifecycleTests {
 	void unsupportedMediaIsObservedBeforeTransport(Path path) {
 		UserMessage message = UserMessage.builder()
 			.text("synthetic attachment")
-			.media(Media.builder().mimeType(MimeType.valueOf("application/pdf")).data(new byte[] { 1 }).build())
+			.media(Media.builder().mimeType(MimeType.valueOf("application/zip")).data(new byte[] { 1 }).build())
 			.build();
 		Prompt prompt = new Prompt(List.of(message), chatPrompt(path, false).getOptions());
 		StepVerifier.create(chatModel().stream(prompt)).expectError(IllegalArgumentException.class).verify();
