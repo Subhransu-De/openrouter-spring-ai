@@ -3,7 +3,5 @@ name: "CodeQL config"
 queries:
   - uses: security-and-quality
 
-paths-ignore:
-  - "**/target/**"
-  - "**/generated-sources/**"
-  - "**/generated-test-sources/**"
+# Java manual-build scope is controlled by the Maven command in codeql.yml.
+# paths/paths-ignore do not restrict extraction in this build mode.
