@@ -61,8 +61,12 @@ jobs:
           build-mode: ${{ matrix.build-mode }}
           config-file: ./.github/codeql/codeql-config.yml
 
-      - name: Build for CodeQL
-        run: mvn -B -DskipTests package
+      - name: Build library production code for CodeQL
+        # Manual Java extraction follows compilation: omit Garage and do not compile tests.
+        run: >-
+          mvn -B
+          -pl openrouter-spring-ai,openrouter-spring-ai-autoconfigure,openrouter-spring-ai-starter
+          -am -Dmaven.test.skip=true clean package
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
