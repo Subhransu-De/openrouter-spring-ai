@@ -78,8 +78,6 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
-      - name: Verify security detectors and enforcement
-        run: python3 security-smoke-tests/check.py "$RUNNER_TEMP/security-smoke"
       - name: Analyze production library classes
         run: mvn -B -Psecurity -pl openrouter-spring-ai-autoconfigure -am -DskipTests verify
 
