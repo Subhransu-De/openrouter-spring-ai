@@ -1255,10 +1255,8 @@ diagnostics and observations.
 
 CI's single `FindSecBugs security` job on JDK 25 is the shared enforcement point for
 Maven and Gradle contributors; Gradle `check` does not run FindSecBugs. Compilation
-still targets Java 17. The job first runs `security-smoke-tests/check.py` with an
-external scratch directory. This harness compiles but never executes synthetic SQL
-fixtures, checks safe parameter binding and test-class exclusion, requires unsafe
-production SQL to fail, and verifies that general SpotBugs still detects a null bug.
+still targets Java 17. The job runs the Maven security profile directly against
+production library classes.
 
 FindSecBugs overlaps CodeQL's `security-and-quality` suite on injection and other
 security patterns, but provides a local bytecode gate without a code-scanning service.
