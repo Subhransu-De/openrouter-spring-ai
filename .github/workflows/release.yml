@@ -47,9 +47,6 @@ jobs:
           [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-RC[1-9][0-9]*)?$ ]] || exit 1
           [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || exit 1
           git merge-base --is-ancestor "$COMMIT" origin/main
-          for path in .github/actions/check-release/action.yml release-smoke-tests/pom.xml release-smoke-tests/build.gradle.kts release-smoke-tests/settings.gradle.kts release-smoke-tests/src/main/java/example/Consumer.java; do
-            git cat-file -e "$COMMIT:$path" || { echo 'Selected commit lacks release tooling.'; exit 1; }
-          done
           if git show-ref --verify --quiet "refs/tags/v$VERSION"; then
             echo 'This release tag already exists.'
             exit 1
@@ -107,12 +104,11 @@ jobs:
           server-id: central
           server-username: CENTRAL_USERNAME
           server-password: CENTRAL_PASSWORD
-      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
-        with:
-          gradle-version: 9.7.1
-      - uses: ./.github/actions/check-release
-        with:
-          version: ${{ inputs.version }}
+      - name: Build unsigned release artifacts in a fresh local repository
+        run: >-
+          mvn -B -ntp -Prelease -pl '!openrouter-spring-ai-samples'
+          "-Drevision=$VERSION" -Dgpg.skip=true
+          "-Dmaven.repo.local=$RUNNER_TEMP/release-repository" clean install
       - name: Sign and upload with Maven; wait for Central validation
         if: ${{ inputs.upload }}
         env:

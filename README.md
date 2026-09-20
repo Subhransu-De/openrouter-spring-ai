@@ -1195,23 +1195,6 @@ Maven and Gradle build the same three published thin library JARs. Versions and 
 baselines come from the root Maven POM, and CI builds and tests both build systems across the
 supported Java versions. The executable samples application is intentionally separate.
 
-The standalone `native-smoke-tests` consumer uses this checkout through a Gradle composite
-build. With GraalVM 25 and `native-image` installed, run:
-
-```bash
-gradle --no-daemon -p native-smoke-tests nativeCompile
-native-smoke-tests/build/native/nativeCompile/native-smoke
-```
-
-On Windows the executable has an `.exe` suffix. `gradle --no-daemon -p native-smoke-tests bootRun`
-runs the same fixtures on the JVM. CI compiles and executes the native consumer; compilation
-alone is not the gate. The checks use only a loopback HTTP server and synthetic data, without
-external credentials. They cover chat, Responses, embeddings, images, HTTP and in-band errors,
-SSE text/tool fragments, terminal metadata, image JSON fallback, and cancellation. Chat
-model auto-configuration is disabled in this consumer to verify that API serialization hints
-remain available independently of tool-manager hints. This verifies the provider's wire
-contracts; it does not certify arbitrary application DTOs or live upstream providers.
-
 ## Build quality checks
 
 For GitHub Actions changes, install actionlint 1.7.12 and ShellCheck, then run
