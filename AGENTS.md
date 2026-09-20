@@ -56,7 +56,7 @@ If a mode does not support an option, preserve or add explicit validation rather
 - Gradle focused equivalent: `gradle --no-daemon :openrouter-spring-ai:test --tests '*OpenRouterChatModelStreamingTests'`.
 - For dependency, build, or broad cross-module changes, run `mvn -B -DskipTests package`, `mvn -B verify`, `gradle --no-daemon assemble`, and `gradle --no-daemon check` as applicable to the affected builds.
 - Run affected-module `verify` (Maven) or `check` (Gradle) when quality rules or substantial Java changes warrant it. CI runs these quality gates, plus explicit POM/properties formatting and Java style checks. Checkstyle is enabled only on JDK 21+ and samples have exclusions.
-- For publication or packaging changes, inspect `.github/actions/check-release/action.yml` and `release-smoke-tests`; preserve the release packaging and consumer checks in CI.
+- For publication or packaging changes, inspect `.github/workflows/release.yml`; preserve the unsigned release build before the optional signed upload.
 - For runtime-hint or native compatibility changes, inspect the samples native build and run `gradle --no-daemon :openrouter-spring-ai-samples:nativeCompile` with the matching GraalVM when available.
 - Report commands, outcomes, and any unverified paths. A configured CI job is not evidence that the current head passed.
 
