@@ -32,15 +32,6 @@ jobs:
       - name: Build Garage without credentials
         run: mvn -B -pl openrouter-spring-ai-samples -am -DskipTests package
 
-      - name: Require the scoped weekly key
-        env:
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_CI_WEEKLY_KEY }}
-        run: |
-          if [[ -z "$OPENROUTER_API_KEY" ]]; then
-            echo "OPENROUTER_CI_WEEKLY_KEY is not configured." >&2
-            exit 1
-          fi
-
       - name: Select this week's image surface
         id: rotation
         shell: bash
@@ -65,43 +56,22 @@ jobs:
           esac
 
       - name: Run one Garage image-generation probe
+        uses: ./.github/actions/run-garage
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_CI_WEEKLY_KEY }}
-          IMAGE_SURFACE: ${{ steps.rotation.outputs.surface }}
-          IMAGE_MODEL: ${{ steps.rotation.outputs.model }}
-          IMAGE_QUALITY: ${{ steps.rotation.outputs.quality }}
-        run: |
-          jar_path=$(find openrouter-spring-ai-samples/target -maxdepth 1 -type f \
-            -name 'openrouter-spring-ai-samples-*.jar' ! -name '*.original' -print -quit)
-          test -n "$jar_path"
-          args=(
+        with:
+          key-name: OPENROUTER_CI_WEEKLY_KEY
+          image-quality: ${{ steps.rotation.outputs.quality }}
+          arguments: |
             --image
             --request-mode=chat
             --output=garage-output
-            "--image-surface=$IMAGE_SURFACE"
-            "--image-model=$IMAGE_MODEL"
-          )
-          if [[ -n "$IMAGE_QUALITY" ]]; then
-            args+=("--image-quality=$IMAGE_QUALITY")
-          fi
-          java -jar "$jar_path" "${args[@]}"
+            --image-surface=${{ steps.rotation.outputs.surface }}
+            --image-model=${{ steps.rotation.outputs.model }}
 
-      - name: Add capability report to job summary
+      - name: Publish Garage evidence
         if: always()
-        run: |
-          report=$(find garage-output -type f -name capability-report.md -print -quit 2>/dev/null || true)
-          if [[ -n "$report" ]]; then
-            cat "$report" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      - name: Upload sanitized Garage evidence
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/garage-evidence
         with:
-          name: garage-weekly-${{ github.run_id }}
-          path: |
-            garage-output/**/capability-report.md
-            garage-output/**/garage-run.json
-            garage-output/**/README.md
-          if-no-files-found: ignore
+          artifact-name: garage-weekly-${{ github.run_id }}
           retention-days: 90

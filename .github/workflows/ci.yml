@@ -52,6 +52,10 @@ jobs:
           grep -E 'invalid-workflow.yml:7:[0-9]+:.*SC2086.*\[shellcheck\]' "$RUNNER_TEMP/diagnostics.txt"
       - name: Check all tracked workflows
         run: git ls-files -z '.github/workflows/*.yml' '.github/workflows/*.yaml' | xargs -0 --no-run-if-empty actionlint -color
+      - name: Check shared action scripts
+        run: shellcheck .github/actions/*/*.sh
+      - name: Verify Garage actions with synthetic fixtures
+        run: bash .github/actions/tests/garage.sh
 
   action-pins:
     name: Immutable action references
@@ -290,54 +294,31 @@ jobs:
       - name: Build Garage without credentials
         run: mvn -B -pl openrouter-spring-ai-samples -am -DskipTests package
 
-      - name: Require the scoped pull request inference key
-        env:
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_CI_FREE_KEY }}
-        run: |
-          if [[ -z "$OPENROUTER_API_KEY" ]]; then
-            echo "OPENROUTER_CI_FREE_KEY is not configured." >&2
-            exit 1
-          fi
-
       - name: Run Garage pull request text checks
+        uses: ./.github/actions/run-garage
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_CI_FREE_KEY }}
-        run: |
-          jar_path=$(find openrouter-spring-ai-samples/target -maxdepth 1 -type f \
-            -name 'openrouter-spring-ai-samples-*.jar' ! -name '*.original' -print -quit)
-          test -n "$jar_path"
-          java -jar "$jar_path" \
-            --text \
-            --scene=streaming-dispatch,dyno-tuning,attribution-check-in,recovery-road-test \
-            --foreman-model=google/gemini-2.5-flash-lite \
-            --specialist-model=google/gemini-2.5-flash-lite \
-            --fallback-models= \
-            --request-mode=both \
-            --max-completion-tokens=256 \
-            --specialist-max-completion-tokens=128 \
-            --reasoning-effort=low \
-            --provider-sort=price \
-            --provider-order= \
-            --provider-ignore= \
-            --provider-quantizations= \
+        with:
+          key-name: OPENROUTER_CI_FREE_KEY
+          arguments: |
+            --text
+            --scene=streaming-dispatch,dyno-tuning,attribution-check-in,recovery-road-test
+            --foreman-model=google/gemini-2.5-flash-lite
+            --specialist-model=google/gemini-2.5-flash-lite
+            --fallback-models=
+            --request-mode=both
+            --max-completion-tokens=256
+            --specialist-max-completion-tokens=128
+            --reasoning-effort=low
+            --provider-sort=price
+            --provider-order=
+            --provider-ignore=
+            --provider-quantizations=
             --output=garage-output
 
-      - name: Add capability report to job summary
+      - name: Publish Garage evidence
         if: always()
-        run: |
-          report=$(find garage-output -type f -name capability-report.md -print -quit 2>/dev/null || true)
-          if [[ -n "$report" ]]; then
-            cat "$report" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      - name: Upload sanitized Garage evidence
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/garage-evidence
         with:
-          name: garage-pr-${{ github.event.pull_request.number }}
-          path: |
-            garage-output/**/capability-report.md
-            garage-output/**/garage-run.json
-            garage-output/**/README.md
-          if-no-files-found: ignore
+          artifact-name: garage-pr-${{ github.event.pull_request.number }}
           retention-days: 14
