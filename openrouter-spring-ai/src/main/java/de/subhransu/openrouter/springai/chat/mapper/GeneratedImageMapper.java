@@ -3,6 +3,7 @@ package de.subhransu.openrouter.springai.chat.mapper;
 import de.subhransu.openrouter.springai.api.dto.ContentPart;
 import de.subhransu.openrouter.springai.api.dto.ResponsesOutputItem;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 import org.springframework.ai.content.Media;
 import org.springframework.util.MimeType;
 import org.springframework.util.MimeTypeUtils;
@@ -22,7 +23,7 @@ final class GeneratedImageMapper {
 	private GeneratedImageMapper() {
 	}
 
-	static List<Media> media(List<ContentPart> images) {
+	static List<Media> media(@Nullable List<? extends @Nullable ContentPart> images) {
 		if (images == null || images.isEmpty()) {
 			return List.of();
 		}
@@ -33,7 +34,7 @@ final class GeneratedImageMapper {
 	}
 
 	// Use URL-backed Media in both modes so generated images can be reused as input.
-	static List<Media> responsesMedia(List<ResponsesOutputItem> output) {
+	static List<Media> responsesMedia(@Nullable List<? extends @Nullable ResponsesOutputItem> output) {
 		if (output == null || output.isEmpty()) {
 			return List.of();
 		}
@@ -44,7 +45,7 @@ final class GeneratedImageMapper {
 	}
 
 	private static Media responseMedia(ResponsesOutputItem item) {
-		String result = item.result();
+		String result = ResponseValues.required(item.result(), "generated image result");
 		String format = item.outputFormat() != null ? item.outputFormat() : "png";
 		MimeType mimeType = result.startsWith(DATA_URL_PREFIX) ? mimeType(result)
 				: MimeTypeUtils.parseMimeType("image/" + format);

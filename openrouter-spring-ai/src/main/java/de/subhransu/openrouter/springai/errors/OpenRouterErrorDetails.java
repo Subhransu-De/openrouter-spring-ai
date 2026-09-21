@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.errors;
 
+import java.util.Objects;
 import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
 
@@ -33,7 +34,7 @@ public record OpenRouterErrorDetails(@Nullable String code, @Nullable String mes
 	}
 
 	public OpenRouterErrorCategory category() {
-		return this.category;
+		return Objects.requireNonNull(this.category);
 	}
 
 }

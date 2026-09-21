@@ -1,12 +1,12 @@
 package de.subhransu.openrouter.springai.embedding;
 
-import org.jspecify.annotations.Nullable;
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.dto.EmbeddingsResponse;
 import de.subhransu.openrouter.springai.embedding.mapper.OpenRouterEmbeddingRequestMapper;
 import de.subhransu.openrouter.springai.embedding.mapper.OpenRouterEmbeddingResponseMapper;
 import de.subhransu.openrouter.springai.internal.Retries;
 import io.micrometer.observation.ObservationRegistry;
+import org.jspecify.annotations.Nullable;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.document.MetadataMode;
 import org.springframework.ai.embedding.EmbeddingModel;
@@ -84,7 +84,9 @@ public class OpenRouterEmbeddingModel implements EmbeddingModel {
 	@Override
 	public float[] embed(Document document) {
 		Assert.notNull(document, "Document must not be null");
-		return embed(getEmbeddingContent(document));
+		String content = getEmbeddingContent(document);
+		Assert.notNull(content, "Embedding document content must not be null");
+		return embed(content);
 	}
 
 	@Override
@@ -119,7 +121,7 @@ public class OpenRouterEmbeddingModel implements EmbeddingModel {
 		this.observationConvention = observationConvention;
 	}
 
-	private OpenRouterEmbeddingOptions buildRequestOptions(EmbeddingOptions runtimeOptions) {
+	private OpenRouterEmbeddingOptions buildRequestOptions(@Nullable EmbeddingOptions runtimeOptions) {
 		return runtimeOptions == null ? this.defaultOptions.copy()
 				: this.defaultOptions.merge(OpenRouterEmbeddingOptions.fromOptions(runtimeOptions));
 	}

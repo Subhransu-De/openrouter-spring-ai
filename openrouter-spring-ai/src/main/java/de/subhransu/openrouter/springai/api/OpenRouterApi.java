@@ -1,6 +1,5 @@
 package de.subhransu.openrouter.springai.api;
 
-import org.jspecify.annotations.Nullable;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionChunk;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionRequest;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionResponse;
@@ -26,6 +25,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.jspecify.annotations.Nullable;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.core.codec.DecodingException;
 import org.springframework.core.io.buffer.DataBuffer;
@@ -221,19 +221,21 @@ public class OpenRouterApi {
 			// guard.
 			.transform(this::applyTimeout)
 			.switchOnFirst((signal, body) -> {
-				if (signal.hasValue() && signal.get().images() != null) {
-					return body.concatMapIterable(item -> completedEvents(item.images()));
+				ImageStreamBody first = signal.get();
+				if (first != null && first.images() != null) {
+					return body.concatMapIterable(item -> completedEvents(Objects.requireNonNull(item.images())));
 				}
-				return decodeStream(body.map(ImageStreamBody::event), ImagesStreamEvent.class);
+				return decodeStream(body.map(item -> Objects.requireNonNull(item.event())), ImagesStreamEvent.class);
 			});
 	}
 
 	private List<ImagesStreamEvent> completedEvents(ImagesResponse images) {
 		OpenRouterImageResponseValidator.validate(images);
-		List<ImagesStreamEvent> events = new ArrayList<>(images.data().size());
-		for (int i = 0; i < images.data().size(); i++) {
-			ImagesResponse.ImageData data = images.data().get(i);
-			boolean last = i == images.data().size() - 1;
+		List<ImagesResponse.@Nullable ImageData> imageData = Objects.requireNonNull(images.data());
+		List<ImagesStreamEvent> events = new ArrayList<>(imageData.size());
+		for (int i = 0; i < imageData.size(); i++) {
+			ImagesResponse.ImageData data = Objects.requireNonNull(imageData.get(i));
+			boolean last = i == imageData.size() - 1;
 			events.add(new ImagesStreamEvent(ImagesStreamEvent.COMPLETED, null, data.b64Json(), data.mediaType(),
 					images.created(), last ? images.usage() : null, null, data.url()));
 		}
@@ -397,7 +399,7 @@ public class OpenRouterApi {
 		}
 	}
 
-	private record ImageStreamBody(ServerSentEvent<String> event, ImagesResponse images) {
+	private record ImageStreamBody(@Nullable ServerSentEvent<String> event, @Nullable ImagesResponse images) {
 	}
 
 	private record BoundedBody(byte[] bytes, boolean exceeded) {

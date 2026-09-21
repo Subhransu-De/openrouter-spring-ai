@@ -14,6 +14,11 @@ import de.subhransu.openrouter.springai.api.dto.Usage;
 import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
+import reactor.core.publisher.Flux;
+import reactor.test.StepVerifier;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
@@ -54,6 +59,20 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 	// ---------------------------------------------------------------------
 	// Sync result edge cases
 	// ---------------------------------------------------------------------
+
+	@ParameterizedTest
+	@ValueSource(strings = { "[null]", "[{\"type\":\"message\",\"content\":[null]}]",
+			"[{\"type\":\"function_call\",\"name\":\"lookup\",\"arguments\":\"{}\"}]" })
+	void malformedOutputFailsConsistentlyInSyncAndStreaming(String output) {
+		String json = "{\"status\":\"completed\",\"output\":" + output + "}";
+		ResponsesResult response = this.objectMapper.readValue(json, ResponsesResult.class);
+		assertThatThrownBy(() -> this.responseMapper.map(response)).isInstanceOf(OpenRouterProtocolException.class);
+		ResponsesStreamEvent event = this.objectMapper
+			.readValue("{\"type\":\"response.completed\",\"response\":" + json + "}", ResponsesStreamEvent.class);
+		StepVerifier.create(this.streamingMapper.map(Flux.just(event)))
+			.expectError(OpenRouterProtocolException.class)
+			.verify();
+	}
 
 	@Test
 	void concatenatesTextAcrossMultipleMessageOutputItems() {

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonAnyGetter;
 import de.subhransu.openrouter.springai.support.OptionSnapshots;
 import com.fasterxml.jackson.annotation.JsonAnySetter;
 import java.util.Map;
+import java.util.Objects;
 import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -20,6 +21,10 @@ public record Delta(@Nullable String role, @Nullable String content, @Nullable S
 		@JsonProperty("reasoning_details") @Nullable List<@Nullable JsonNode> reasoningDetails,
 		@Nullable String refusal, @Nullable AudioOutput audio,
 		@JsonAnyGetter @JsonAnySetter @Nullable Map<String, @Nullable Object> extensions) {
+	public Map<String, @Nullable Object> extensions() {
+		return Objects.requireNonNull(this.extensions);
+	}
+
 	public Delta {
 		extensions = extensions == null ? Map.of() : OptionSnapshots.map(extensions);
 	}

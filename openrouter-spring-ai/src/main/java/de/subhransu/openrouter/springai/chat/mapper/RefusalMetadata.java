@@ -6,6 +6,7 @@ import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import org.jspecify.annotations.Nullable;
 
 final class RefusalMetadata {
 
@@ -14,18 +15,18 @@ final class RefusalMetadata {
 	private RefusalMetadata() {
 	}
 
-	static void put(Map<String, Object> metadata, String refusal) {
+	static void put(Map<String, Object> metadata, @Nullable String refusal) {
 		if (refusal != null) {
 			metadata.put(REFUSAL, refusal);
 		}
 	}
 
-	static String responses(List<ResponsesOutputItem> output) {
+	static @Nullable String responses(@Nullable List<? extends @Nullable ResponsesOutputItem> output) {
 		String refusal = null;
 		if (output != null) {
-			for (ResponsesOutputItem item : output) {
+			for (ResponsesOutputItem item : ResponseValues.items(output, "output item")) {
 				if ("message".equals(item.type()) && item.content() != null) {
-					for (ResponsesContent part : item.content()) {
+					for (ResponsesContent part : ResponseValues.items(item.content(), "message content")) {
 						if ("refusal".equals(part.type())) {
 							refusal = (refusal != null ? refusal : "") + (part.refusal() != null ? part.refusal() : "");
 						}
@@ -44,7 +45,7 @@ final class RefusalMetadata {
 			this.parts.clear();
 		}
 
-		String update(ResponsesStreamEvent event) {
+		@Nullable String update(ResponsesStreamEvent event) {
 			int outputIndex = event.outputIndex() != null ? event.outputIndex() : 0;
 			int contentIndex = event.contentIndex() != null ? event.contentIndex() : 0;
 			if ("response.refusal.delta".equals(event.type())) {
@@ -59,7 +60,7 @@ final class RefusalMetadata {
 			}
 			if (("response.completed".equals(event.type()) || "response.incomplete".equals(event.type()))
 					&& event.response() != null && event.response().output() != null) {
-				List<ResponsesOutputItem> output = event.response().output();
+				List<ResponsesOutputItem> output = ResponseValues.items(event.response().output(), "output item");
 				for (int index = 0; index < output.size(); index++) {
 					snapshot(index, output.get(index));
 				}
@@ -71,7 +72,7 @@ final class RefusalMetadata {
 		private void snapshot(int outputIndex, ResponsesOutputItem item) {
 			if ("message".equals(item.type()) && item.content() != null) {
 				for (int index = 0; index < item.content().size(); index++) {
-					ResponsesContent part = item.content().get(index);
+					ResponsesContent part = ResponseValues.required(item.content().get(index), "message content");
 					if ("refusal".equals(part.type())) {
 						Map<Integer, String> content = this.parts.computeIfAbsent(outputIndex, key -> new TreeMap<>());
 						// Sparse snapshots must not erase an explanation already

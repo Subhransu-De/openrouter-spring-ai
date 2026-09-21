@@ -11,6 +11,7 @@ import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorClassifier;
 import java.util.Map;
 import java.util.Set;
+import org.jspecify.annotations.Nullable;
 import org.springframework.util.StringUtils;
 
 /**
@@ -45,11 +46,11 @@ final class OpenRouterChoiceErrorExceptionFactory {
 		return create(chunk.id(), chunk.model(), chunk.provider(), choice, bounded(partialOutput));
 	}
 
-	private RuntimeException create(String responseId, String model, String provider, Choice choice,
-			Diagnostic partialOutput) {
+	private RuntimeException create(@Nullable String responseId, @Nullable String model, @Nullable String provider,
+			Choice choice, Diagnostic partialOutput) {
 		ChoiceError error = choice.error();
 		String nativeFailureReason = failureReason(choice);
-		Map<String, Object> metadata = error != null ? error.metadata()
+		Map<String, @Nullable Object> metadata = error != null ? error.metadata()
 				: nativeFailureReason != null ? Map.of("native_finish_reason", nativeFailureReason) : Map.of();
 		String errorType = metadataText(metadata, "error_type");
 		if (error == null && !StringUtils.hasText(errorType)) {
@@ -78,7 +79,7 @@ final class OpenRouterChoiceErrorExceptionFactory {
 		return new OpenRouterNonTransientChoiceException("OpenRouter chat-completion choice failed", details);
 	}
 
-	private static String failureReason(Choice choice) {
+	private static @Nullable String failureReason(Choice choice) {
 		String nativeReason = choice.nativeFinishReason() != null ? choice.nativeFinishReason().toString() : null;
 		if (nativeReason != null && NATIVE_FAILURE_REASONS.contains(nativeReason)) {
 			return nativeReason;
@@ -87,7 +88,7 @@ final class OpenRouterChoiceErrorExceptionFactory {
 				? choice.finishReason() : null;
 	}
 
-	private String nativeErrorType(String nativeReason) {
+	private @Nullable String nativeErrorType(@Nullable String nativeReason) {
 		return switch (nativeReason != null ? nativeReason : "") {
 			case "insufficient_system_resources" -> "provider_unavailable";
 			case "insufficient_quota" -> "payment_required";
@@ -96,7 +97,7 @@ final class OpenRouterChoiceErrorExceptionFactory {
 		};
 	}
 
-	private Integer numericCode(String code) {
+	private @Nullable Integer numericCode(@Nullable String code) {
 		try {
 			return Integer.parseInt(code);
 		}
@@ -111,7 +112,7 @@ final class OpenRouterChoiceErrorExceptionFactory {
 		return bounded(AssistantContentMapper.map(content).text());
 	}
 
-	private Diagnostic bounded(String value) {
+	private Diagnostic bounded(@Nullable String value) {
 		if (!StringUtils.hasText(value)) {
 			return new Diagnostic(null, false);
 		}
@@ -122,12 +123,12 @@ final class OpenRouterChoiceErrorExceptionFactory {
 		return new Diagnostic(normalized.substring(0, MAX_DIAGNOSTIC_LENGTH) + "...", true);
 	}
 
-	private String metadataText(Map<String, Object> metadata, String key) {
+	private @Nullable String metadataText(Map<String, @Nullable Object> metadata, String key) {
 		Object value = metadata.get(key);
 		return value != null ? value.toString() : null;
 	}
 
-	private record Diagnostic(String text, boolean truncated) {
+	private record Diagnostic(@Nullable String text, boolean truncated) {
 	}
 
 }

@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.garage.scenes;
 
+import de.subhransu.openrouter.springai.garage.GarageResponses;
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
@@ -69,7 +70,7 @@ public final class RecoveryRoadTestScene extends GarageSceneSupport {
       Prompt prompt = new Prompt(new UserMessage("run the road test"), options);
 
       server.mode(GarageRoadTestServer.Mode.RETRY);
-      String retryResult = retryModel.call(prompt).getResult().getOutput().getText();
+      String retryResult = GarageResponses.text(retryModel.call(prompt));
       int retryAttempts = server.attempts();
 
       server.mode(GarageRoadTestServer.Mode.SYNC_TIMEOUT);

@@ -1,12 +1,13 @@
 package de.subhransu.openrouter.springai.api.dto;
 
-import org.jspecify.annotations.Nullable;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
+import org.jspecify.annotations.Nullable;
 
 /**
  * An error embedded in an OpenRouter chat-completion choice, in either a blocking
@@ -27,7 +28,7 @@ public record ChoiceError(@Nullable String code, @Nullable String message,
 	}
 
 	public Map<String, @Nullable Object> metadata() {
-		return this.metadata;
+		return Objects.requireNonNull(this.metadata);
 	}
 
 }

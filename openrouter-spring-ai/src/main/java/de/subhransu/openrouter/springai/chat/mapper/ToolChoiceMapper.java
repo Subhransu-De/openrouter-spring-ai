@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
+import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import java.util.Map;
@@ -11,7 +12,7 @@ final class ToolChoiceMapper {
 	private ToolChoiceMapper() {
 	}
 
-	static Object map(Object choice, boolean responses, ObjectMapper mapper) {
+	static @Nullable Object map(@Nullable Object choice, boolean responses, ObjectMapper mapper) {
 		if (choice == null) {
 			return null;
 		}

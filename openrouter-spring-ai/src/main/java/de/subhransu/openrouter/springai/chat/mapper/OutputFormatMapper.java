@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
+import org.jspecify.annotations.Nullable;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
@@ -15,7 +16,7 @@ final class OutputFormatMapper {
 		this.objectMapper = objectMapper;
 	}
 
-	ObjectNode map(OpenRouterChatOptions options) {
+	@Nullable ObjectNode map(OpenRouterChatOptions options) {
 		if (options.getResponseFormat() != null) {
 			return mapResponseFormat(options.getResponseFormat());
 		}
@@ -34,7 +35,7 @@ final class OutputFormatMapper {
 		};
 	}
 
-	private ObjectNode jsonSchemaFormat(String name, Boolean strict, String schema) {
+	private ObjectNode jsonSchemaFormat(String name, @Nullable Boolean strict, @Nullable String schema) {
 		ObjectNode jsonSchema = this.objectMapper.createObjectNode().put("name", name);
 		if (strict != null) {
 			jsonSchema.put("strict", strict);

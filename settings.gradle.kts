@@ -12,6 +12,7 @@ pluginManagement {
 		mavenCentral()
 	}
 	plugins {
+		id("net.ltgt.errorprone") version pomProperty("error-prone-gradle-plugin.version")
 		id("org.springframework.boot") version pomProperty("spring-boot.version")
 		id("org.graalvm.buildtools.native") version pomProperty("graalvm-buildtools.version")
 	}

@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
+import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.ObjectMapper;
 import de.subhransu.openrouter.springai.api.dto.AudioConfig;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionRequest;
@@ -62,7 +63,8 @@ public final class OpenRouterChatRequestMapper {
 		for (Message message : messages) {
 			if (message instanceof ToolResponseMessage toolResponseMessage) {
 				for (ToolResponseMessage.ToolResponse response : toolResponseMessage.getResponses()) {
-					mapped.add(new ChatMessage("tool", response.responseData(), response.name(), response.id(), null));
+					mapped.add(new ChatMessage("tool", response.responseData(), response.name(),
+							StringUtils.hasLength(response.id()) ? response.id() : null, null));
 				}
 				continue;
 			}
@@ -79,7 +81,7 @@ public final class OpenRouterChatRequestMapper {
 
 	// Unmarked text-only messages keep the plain-string content shape. Cache
 	// boundaries and media require the content parts array.
-	private Object mapContent(Message message) {
+	private @Nullable Object mapContent(Message message) {
 		if (!CacheBreakpointMapper.breakpoints(message).isEmpty()) {
 			List<ContentPart> parts = CacheBreakpointMapper.textParts(message);
 			if (message instanceof UserMessage userMessage) {
@@ -102,23 +104,27 @@ public final class OpenRouterChatRequestMapper {
 		return parts;
 	}
 
-	private List<ToolCall> mapAssistantToolCalls(Message message) {
+	private @Nullable List<@Nullable ToolCall> mapAssistantToolCalls(Message message) {
 		if (!(message instanceof AssistantMessage assistantMessage)
 				|| CollectionUtils.isEmpty(assistantMessage.getToolCalls())) {
 			return null;
 		}
 		return assistantMessage.getToolCalls()
 			.stream()
-			.map(toolCall -> new ToolCall(toolCall.id(), toolCall.type(),
-					new FunctionCall(toolCall.name(), toolCall.arguments())))
+			.<@Nullable ToolCall>map(
+					toolCall -> new ToolCall(StringUtils.hasLength(toolCall.id()) ? toolCall.id() : null,
+							toolCall.type(), new FunctionCall(toolCall.name(), toolCall.arguments())))
 			.toList();
 	}
 
-	private List<ContentPart> mapAssistantImages(Message message) {
+	private @Nullable List<@Nullable ContentPart> mapAssistantImages(Message message) {
 		if (!(message instanceof AssistantMessage assistant) || CollectionUtils.isEmpty(assistant.getMedia())) {
 			return null;
 		}
-		return assistant.getMedia().stream().map(media -> ContentPart.image(MediaUrlMapper.imageUrl(media))).toList();
+		return assistant.getMedia()
+			.stream()
+			.<@Nullable ContentPart>map(media -> ContentPart.image(MediaUrlMapper.imageUrl(media)))
+			.toList();
 	}
 
 	private String mapRole(MessageType messageType) {
@@ -130,7 +136,7 @@ public final class OpenRouterChatRequestMapper {
 		};
 	}
 
-	private List<Tool> mapTools(List<ToolDefinition> toolDefinitions, Boolean strict) {
+	private @Nullable List<Tool> mapTools(List<ToolDefinition> toolDefinitions, @Nullable Boolean strict) {
 		if (CollectionUtils.isEmpty(toolDefinitions)) {
 			return null;
 		}
@@ -141,7 +147,8 @@ public final class OpenRouterChatRequestMapper {
 			.toList();
 	}
 
-	private ProviderPreferences mapProvider(OpenRouterProviderPreferences provider, Map<String, Object> extraBody) {
+	private @Nullable ProviderPreferences mapProvider(@Nullable OpenRouterProviderPreferences provider,
+			@Nullable Map<String, @Nullable Object> extraBody) {
 		if (provider == null) {
 			return extraBody == null || extraBody.isEmpty() ? null
 					: new ProviderPreferences(null, null, null, null, null, null, null, extraBody);
@@ -151,7 +158,7 @@ public final class OpenRouterChatRequestMapper {
 				provider.sort(), extraBody);
 	}
 
-	private ReasoningOptions mapReasoning(OpenRouterReasoningOptions reasoning) {
+	private @Nullable ReasoningOptions mapReasoning(@Nullable OpenRouterReasoningOptions reasoning) {
 		if (reasoning == null) {
 			return null;
 		}

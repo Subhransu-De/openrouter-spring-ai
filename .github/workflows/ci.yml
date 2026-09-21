@@ -65,6 +65,34 @@ jobs:
           zizmor --offline --no-config --no-ignores --strict-collection --format=json --no-exit-codes . > "$RUNNER_TEMP/action-audit.json"
           jq -e '[.[] | select(.ident == "unpinned-uses")] | if length == 0 then true else ., false end' "$RUNNER_TEMP/action-audit.json"
 
+  nullaway:
+    name: NullAway · ${{ matrix.build }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        build: [Maven, Gradle]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        if: matrix.build == 'Gradle'
+        with:
+          gradle-version: 9.7.1
+      - name: Check production null contracts with Maven
+        if: matrix.build == 'Maven'
+        run: mvn -B -Pnullaway -DskipTests compile
+      - name: Check production null contracts with Gradle
+        if: matrix.build == 'Gradle'
+        run: gradle --no-daemon -Pnullaway compileJava
+
   security:
     name: FindSecBugs security
     runs-on: ubuntu-latest

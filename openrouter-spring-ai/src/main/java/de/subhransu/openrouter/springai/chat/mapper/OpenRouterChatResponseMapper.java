@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.jspecify.annotations.Nullable;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.metadata.ChatGenerationMetadata;
 import org.springframework.ai.chat.metadata.ChatResponseMetadata;
@@ -34,7 +35,7 @@ public final class OpenRouterChatResponseMapper {
 			throw new OpenRouterProtocolException("OpenRouter chat completion requires non-null choices");
 		}
 		throwIfChoiceFailed(response);
-		List<Generation> generations = response.choices()
+		List<Generation> generations = ResponseValues.items(response.choices(), "choice")
 			.stream()
 			.map(choice -> mapGeneration(choice, response.model()))
 			.toList();
@@ -52,7 +53,7 @@ public final class OpenRouterChatResponseMapper {
 		}
 	}
 
-	private Generation mapGeneration(Choice choice, String model) {
+	private Generation mapGeneration(Choice choice, @Nullable String model) {
 		if (choice.message() == null) {
 			throw new OpenRouterProtocolException("OpenRouter chat completion choice requires a message");
 		}
@@ -77,33 +78,38 @@ public final class OpenRouterChatResponseMapper {
 			.media(media)
 			.build();
 
-		ChatGenerationMetadata metadata = ChatGenerationMetadata.builder()
-			.finishReason(FinishReasonMapper.map(choice.finishReason()))
-			.metadata("openrouter.model", model)
-			.metadata("openrouter.reasoning", choice.message().reasoning())
-			.metadata("openrouter.native_finish_reason", choice.nativeFinishReason())
-			.metadata(RefusalMetadata.REFUSAL, properties.get(RefusalMetadata.REFUSAL))
-			.build();
+		ChatGenerationMetadata.Builder metadataBuilder = ChatGenerationMetadata.builder();
+		metadataBuilder.finishReason(FinishReasonMapper.map(choice.finishReason()));
+		ResponseValues.ifPresent(model, value -> metadataBuilder.metadata("openrouter.model", value));
+		ResponseValues.ifPresent(choice.message().reasoning(),
+				value -> metadataBuilder.metadata("openrouter.reasoning", value));
+		ResponseValues.ifPresent(choice.nativeFinishReason(),
+				value -> metadataBuilder.metadata("openrouter.native_finish_reason", value));
+		ResponseValues.ifPresent(properties.get(RefusalMetadata.REFUSAL),
+				value -> metadataBuilder.metadata(RefusalMetadata.REFUSAL, value));
+		ChatGenerationMetadata metadata = metadataBuilder.build();
 		return new Generation(assistantMessage, metadata);
 	}
 
-	private List<AssistantMessage.ToolCall> mapToolCalls(List<ToolCall> toolCalls) {
+	private List<AssistantMessage.ToolCall> mapToolCalls(@Nullable List<? extends @Nullable ToolCall> toolCalls) {
 		if (toolCalls == null || toolCalls.isEmpty()) {
 			return List.of();
 		}
-		return toolCalls.stream()
-			.filter(toolCall -> toolCall != null)
-			.map(toolCall -> new AssistantMessage.ToolCall(toolCall.id(), toolCall.type(),
-					toolCall.function() != null ? toolCall.function().name() : null,
-					toolCall.function() != null ? toolCall.function().arguments() : null))
+		return ResponseValues.items(toolCalls, "tool call")
+			.stream()
+			.map(toolCall -> new AssistantMessage.ToolCall(toolCall.id() != null ? toolCall.id() : "",
+					ResponseValues.required(toolCall.type(), "tool call type"),
+					ResponseValues.required(ResponseValues.required(toolCall.function(), "tool call function").name(),
+							"tool call name"),
+					ResponseValues.required(toolCall.function().arguments(), "tool call arguments")))
 			.toList();
 	}
 
 	private ChatResponseMetadata mapMetadata(ChatCompletionResponse response) {
-		ChatResponseMetadata.Builder builder = ChatResponseMetadata.builder()
-			.id(response.id())
-			.model(response.model())
-			.usage(UsageMapper.map(response.usage()));
+		ChatResponseMetadata.Builder builder = ChatResponseMetadata.builder();
+		ResponseValues.ifPresent(response.id(), builder::id);
+		ResponseValues.ifPresent(response.model(), builder::model);
+		ResponseValues.ifPresent(UsageMapper.map(response.usage()), builder::usage);
 		builder.keyValue(ExtensionMetadata.RESPONSE, response.extensions());
 		builder.keyValue("openrouter.provider", response.provider());
 		builder.keyValue("openrouter.object", response.object());

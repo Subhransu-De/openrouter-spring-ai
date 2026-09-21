@@ -5,6 +5,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.jspecify.annotations.Nullable;
 
 /** Result retained even when a scene fails, so later scenes and reporting still run. */
 public record SceneResult(
@@ -15,7 +16,7 @@ public record SceneResult(
     Duration duration,
     Path outputDirectory,
     Map<String, Object> details,
-    String error) {
+    @Nullable String error) {
 
   public static SceneResult passed(
       String sceneId,

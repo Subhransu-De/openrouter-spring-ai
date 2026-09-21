@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.jspecify.annotations.Nullable;
 import org.springframework.ai.chat.client.advisor.api.CallAdvisor;
 import org.springframework.ai.chat.client.advisor.api.CallAdvisorChain;
 import org.springframework.ai.chat.client.advisor.api.StreamAdvisor;
@@ -27,7 +28,7 @@ public final class GarageToolLoop implements CallAdvisor, StreamAdvisor {
   private final Map<String, ToolCall> pending = new LinkedHashMap<>();
   private final Set<String> callIds = new HashSet<>();
   private final Set<String> completedTools = new HashSet<>();
-  private ChatResponse lastResponse;
+  private @Nullable ChatResponse lastResponse;
   private boolean reasoningObserved;
 
   @Override
@@ -91,7 +92,7 @@ public final class GarageToolLoop implements CallAdvisor, StreamAdvisor {
     }
   }
 
-  public ChatResponse lastResponse() {
+  public @Nullable ChatResponse lastResponse() {
     return this.lastResponse;
   }
 

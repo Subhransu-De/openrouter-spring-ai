@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import org.jspecify.annotations.Nullable;
 import org.reactivestreams.Subscription;
 import org.springframework.util.Assert;
 import org.springframework.util.CollectionUtils;
@@ -85,7 +86,7 @@ public final class OpenRouterStreamingToolCallAggregator {
 	private void subscribe(Flux<ChatCompletionChunk> chunks, FluxSink<ChatCompletionChunk> sink) {
 		AtomicBoolean cancelled = new AtomicBoolean();
 		AtomicLong pendingRequests = new AtomicLong();
-		AtomicReference<Subscription> upstream = new AtomicReference<>();
+		AtomicReference<@Nullable Subscription> upstream = new AtomicReference<>();
 		Runnable drainRequests = () -> {
 			Subscription subscription = upstream.get();
 			if (subscription != null) {
@@ -223,7 +224,7 @@ public final class OpenRouterStreamingToolCallAggregator {
 			if (chunk.choices() == null) {
 				continue;
 			}
-			for (Choice choice : chunk.choices()) {
+			for (Choice choice : ResponseValues.items(chunk.choices(), "choice")) {
 				Integer index = choice.index() != null ? choice.index() : 0;
 				choices.merge(index, choice, this::mergeChoices);
 			}
@@ -241,7 +242,7 @@ public final class OpenRouterStreamingToolCallAggregator {
 				ExtensionMetadata.mergeChoice(earlier.extensions(), later.extensions()));
 	}
 
-	private Delta mergeDeltas(Delta earlier, Delta later) {
+	private @Nullable Delta mergeDeltas(@Nullable Delta earlier, @Nullable Delta later) {
 		if (earlier == null) {
 			return later;
 		}
@@ -256,7 +257,8 @@ public final class OpenRouterStreamingToolCallAggregator {
 				ExtensionMetadata.mergeMessage(earlier.extensions(), later.extensions()));
 	}
 
-	private List<ToolCall> mergeToolCalls(List<ToolCall> earlier, List<ToolCall> later) {
+	private @Nullable List<@Nullable ToolCall> mergeToolCalls(@Nullable List<@Nullable ToolCall> earlier,
+			@Nullable List<@Nullable ToolCall> later) {
 		if (CollectionUtils.isEmpty(later)) {
 			return earlier;
 		}
@@ -264,14 +266,14 @@ public final class OpenRouterStreamingToolCallAggregator {
 		int nextSyntheticKey = 0;
 		Integer lastKey = null;
 		if (earlier != null) {
-			for (ToolCall toolCall : earlier) {
+			for (ToolCall toolCall : ResponseValues.items(earlier, "tool call")) {
 				int key = toolCall.index() != null ? toolCall.index() : nextSyntheticKey;
 				nextSyntheticKey = Math.max(nextSyntheticKey, key + 1);
 				merged.merge(key, toolCall, this::mergeToolCallFragments);
 				lastKey = key;
 			}
 		}
-		for (ToolCall fragment : later) {
+		for (ToolCall fragment : ResponseValues.items(later, "tool call fragment")) {
 			// Fragments are correlated by the wire index. Without one, a fragment
 			// carrying an id starts a new call; otherwise it continues the last call.
 			Integer key = fragment.index();
@@ -304,7 +306,7 @@ public final class OpenRouterStreamingToolCallAggregator {
 				ExtensionMetadata.merge(earlier.extensions(), later.extensions()));
 	}
 
-	private String mergeFunctionNames(String earlier, String later) {
+	private @Nullable String mergeFunctionNames(@Nullable String earlier, @Nullable String later) {
 		if (!StringUtils.hasText(earlier)) {
 			return later;
 		}
@@ -314,11 +316,11 @@ public final class OpenRouterStreamingToolCallAggregator {
 		return earlier;
 	}
 
-	private static <T> T value(T preferred, T fallback) {
+	private static <T extends @Nullable Object> T value(T preferred, T fallback) {
 		return preferred != null ? preferred : fallback;
 	}
 
-	private static String concat(String earlier, String later) {
+	private static @Nullable String concat(@Nullable String earlier, @Nullable String later) {
 		if (earlier == null) {
 			return later;
 		}
@@ -361,45 +363,52 @@ public final class OpenRouterStreamingToolCallAggregator {
 			}
 
 			List<ChatCompletionChunk> ready = new ArrayList<>();
-			chunk.choices().stream().sorted(Comparator.comparingInt(this::choiceIndex)).forEach(choice -> {
-				int index = choiceIndex(choice);
-				ToolCallBuffer buffered = this.bufferedByChoice.get(index);
-				if (buffered == null && hasToolCallDelta(choice)) {
-					buffered = new ToolCallBuffer(index);
-					this.bufferedByChoice.put(index, buffered);
-				}
-
-				ChatCompletionChunk choiceChunk = withChoice(chunk, choice);
-				if (buffered == null) {
-					ready.add(choiceChunk);
-				}
-				else {
-					Assert.state(choice.delta() == null || choice.delta().audio() == null,
-							"Audio and tool calls in the same choice are unsupported");
-					long chunkBytes = serializedBytes(choiceChunk);
-					buffered.add(choiceChunk, chunkBytes);
-					retain(chunkBytes);
-					if (choice.finishReason() != null || OpenRouterChoiceErrorExceptionFactory.isFailure(choice)) {
-						if (!OpenRouterChoiceErrorExceptionFactory.isFailure(choice)
-								&& !FinishReasonMapper.isToolCallCompletion(choice.finishReason())) {
-							throw new OpenRouterTruncatedResponseException(
-									"Tool call choice ended without a tool-call completion reason");
-						}
-						this.bufferedByChoice.remove(index);
-						buffered.close();
-						ChatCompletionChunk merged = merge(buffered.chunks);
-						if (!OpenRouterChoiceErrorExceptionFactory.isFailure(choice)) {
-							for (ToolCall toolCall : merged.choices().get(0).delta().toolCalls()) {
-								Assert.state(
-										toolCall.function() != null && StringUtils.hasText(toolCall.function().name()),
-										"Completed streamed tool call has no function name");
-							}
-						}
-						ready.add(merged);
-						release(buffered.chunks.size(), buffered.retainedBytes);
+			ResponseValues.items(chunk.choices(), "choice")
+				.stream()
+				.sorted(Comparator.comparingInt(this::choiceIndex))
+				.forEach(choice -> {
+					int index = choiceIndex(choice);
+					ToolCallBuffer buffered = this.bufferedByChoice.get(index);
+					if (buffered == null && hasToolCallDelta(choice)) {
+						buffered = new ToolCallBuffer(index);
+						this.bufferedByChoice.put(index, buffered);
 					}
-				}
-			});
+
+					ChatCompletionChunk choiceChunk = withChoice(chunk, choice);
+					if (buffered == null) {
+						ready.add(choiceChunk);
+					}
+					else {
+						Assert.state(choice.delta() == null || choice.delta().audio() == null,
+								"Audio and tool calls in the same choice are unsupported");
+						long chunkBytes = serializedBytes(choiceChunk);
+						buffered.add(choiceChunk, chunkBytes);
+						retain(chunkBytes);
+						if (choice.finishReason() != null || OpenRouterChoiceErrorExceptionFactory.isFailure(choice)) {
+							if (!OpenRouterChoiceErrorExceptionFactory.isFailure(choice)
+									&& !FinishReasonMapper.isToolCallCompletion(choice.finishReason())) {
+								throw new OpenRouterTruncatedResponseException(
+										"Tool call choice ended without a tool-call completion reason");
+							}
+							this.bufferedByChoice.remove(index);
+							buffered.close();
+							ChatCompletionChunk merged = merge(buffered.chunks);
+							if (!OpenRouterChoiceErrorExceptionFactory.isFailure(choice)) {
+								Choice completed = ResponseValues.items(merged.choices(), "completed choice").get(0);
+								Delta delta = ResponseValues.required(completed.delta(), "completed tool-call delta");
+								for (ToolCall toolCall : ResponseValues.items(delta.toolCalls(),
+										"completed tool call")) {
+									Assert.state(
+											toolCall.function() != null
+													&& StringUtils.hasText(toolCall.function().name()),
+											"Completed streamed tool call has no function name");
+								}
+							}
+							ready.add(merged);
+							release(buffered.chunks.size(), buffered.retainedBytes);
+						}
+					}
+				});
 			if (this.bufferedByChoice.isEmpty()) {
 				ready.addAll(this.bufferedChoiceLessChunks);
 				release(this.bufferedChoiceLessChunks.size(), this.bufferedChoiceLessBytes);

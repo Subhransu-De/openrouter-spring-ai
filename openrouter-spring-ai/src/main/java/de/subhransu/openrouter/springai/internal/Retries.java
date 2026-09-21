@@ -5,6 +5,7 @@ import de.subhransu.openrouter.springai.errors.OpenRouterRetryAfter;
 import java.lang.reflect.UndeclaredThrowableException;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicReference;
+import org.jspecify.annotations.Nullable;
 import org.springframework.core.retry.RetryException;
 import org.springframework.core.retry.RetryPolicy;
 import org.springframework.core.retry.RetryTemplate;
@@ -39,7 +40,7 @@ public final class Retries {
 	 * 7.0.3+ method.
 	 */
 	public static <T> T invoke(RetryTemplate retryTemplate, Retryable<T> retryable) {
-		AtomicReference<Duration> retryAfter = new AtomicReference<>();
+		AtomicReference<@Nullable Duration> retryAfter = new AtomicReference<>();
 		long startedAtNanos = System.nanoTime();
 		RetryTemplate effectiveTemplate = retryAfterAware(retryTemplate, retryAfter, startedAtNanos);
 		try {
@@ -66,15 +67,15 @@ public final class Retries {
 		}
 	}
 
-	private static RetryTemplate retryAfterAware(RetryTemplate retryTemplate, AtomicReference<Duration> retryAfter,
-			long startedAtNanos) {
+	private static RetryTemplate retryAfterAware(RetryTemplate retryTemplate,
+			AtomicReference<@Nullable Duration> retryAfter, long startedAtNanos) {
 		RetryTemplate effectiveTemplate = new RetryTemplate(
 				new RetryAfterAwarePolicy(retryTemplate.getRetryPolicy(), retryAfter, startedAtNanos));
 		effectiveTemplate.setRetryListener(retryTemplate.getRetryListener());
 		return effectiveTemplate;
 	}
 
-	private static Duration retryAfter(Throwable throwable) {
+	private static @Nullable Duration retryAfter(Throwable throwable) {
 		if (throwable instanceof OpenRouterHttpException httpException) {
 			OpenRouterRetryAfter retryAfter = httpException.getRetryAfter();
 			return retryAfter != null ? retryAfter.delay() : null;
@@ -90,7 +91,8 @@ public final class Retries {
 	 * as milliseconds fall back to the configured delay instead of creating an extreme
 	 * worker sleep.
 	 */
-	static long effectiveBackOffMillis(long configuredDelay, Duration providerDelay, Duration remainingTimeout) {
+	static long effectiveBackOffMillis(long configuredDelay, @Nullable Duration providerDelay,
+			@Nullable Duration remainingTimeout) {
 		if (providerDelay == null || providerDelay.isNegative() || providerDelay.compareTo(MAX_PROVIDER_BACKOFF) > 0) {
 			return configuredDelay;
 		}
@@ -109,7 +111,7 @@ public final class Retries {
 		}
 	}
 
-	private record RetryAfterAwarePolicy(RetryPolicy delegate, AtomicReference<Duration> retryAfter,
+	private record RetryAfterAwarePolicy(RetryPolicy delegate, AtomicReference<@Nullable Duration> retryAfter,
 			long startedAtNanos) implements RetryPolicy {
 
 		@Override
@@ -137,7 +139,7 @@ public final class Retries {
 			};
 		}
 
-		private Duration remainingTimeout() {
+		private @Nullable Duration remainingTimeout() {
 			Duration timeout = this.delegate.getTimeout();
 			if (timeout == null || timeout.isZero() || timeout.isNegative()) {
 				return null;

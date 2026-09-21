@@ -231,8 +231,14 @@ A nullable list or map does not imply nullable elements. Request lists and Sprin
 tool callback/context entries retain their non-null element contracts. JSON metadata
 maps allow null values, and response arrays can contain null entries. Handle missing
 response fields before dereferencing them, including usage, cost, and media metadata.
-Implementation helpers with unaudited contracts remain explicitly `@NullUnmarked`
-or outside marked packages. These annotations do not add runtime validation.
+All maintained production packages, including implementation helpers and samples,
+declare `@NullMarked`. Wire DTOs retain nullable fields and elements; model mappers
+reject null choices, Responses output/message-content entries, and missing required
+tool-call fields with a protocol exception before exposing them to Spring AI. Chat Completions tool
+calls without IDs still execute: the Spring AI ID is empty and the follow-up wire ID
+remains absent. Missing response IDs/models and usage retain Spring AI metadata
+defaults (`EmptyUsage` when usage is absent); absent optional generation metadata
+keys are omitted. The annotations themselves do not perform runtime validation.
 
 Java method descriptors and the Java 17 baseline are unchanged. Existing Java callers
 continue to compile. Kotlin with strict JSpecify checking and null-aware Java analyzers
@@ -1214,6 +1220,15 @@ matching Maven's maintained-source scope. Three sample classes suppress only
 duplicate literals to keep registry rows and test inputs explicit. Sample CPD remains deferred because scenario and
 fixture duplication is intentional; Gradle has no CPD task. Sample formatter and
 Enforcer exclusions are unchanged.
+
+On JDK 25+, run `mvn -B -Pnullaway clean compile` or
+`gradle --no-daemon -Pnullaway clean compileJava` to enforce production null contracts.
+CI checks both build systems with NullAway errors and JSpecify generic
+checking enabled. Tests remain outside this checker so invalid-input fixtures can
+exercise runtime validation. Normal builds still support JDK 17 and 21; analysis
+and normal compilation both produce Java 17 bytecode. Error Prone and NullAway
+are compiler-only dependencies and are absent from published runtime dependency
+graphs; JSpecify remains the existing public annotation dependency.
 
 On JDK 25, `mvn -B -Pmodernizer-java25 verify` also runs Modernizer with an
 explicit Java 25 analysis target on every module's production and test bytecode.

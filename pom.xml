@@ -62,6 +62,9 @@
     <spotless-maven-plugin.version>3.10.2</spotless-maven-plugin.version>
     <jacoco-maven-plugin.version>0.8.15</jacoco-maven-plugin.version>
     <archunit.version>1.5.0</archunit.version>
+    <error-prone.version>2.50.0</error-prone.version>
+    <error-prone-gradle-plugin.version>5.1.1</error-prone-gradle-plugin.version>
+    <nullaway.version>0.14.1</nullaway.version>
     <spring-javaformat.version>0.0.48</spring-javaformat.version>
     <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
     <checkstyle.version>14.1.0</checkstyle.version>
@@ -373,6 +376,89 @@
   </build>
 
   <profiles>
+    <profile>
+      <id>nullaway</id>
+      <properties>
+        <nullaway.severity>ERROR</nullaway.severity>
+        <nullaway.scope>-XepOpt:NullAway:OnlyNullMarked=true</nullaway.scope>
+        <nullaway.jspecify-mode>true</nullaway.jspecify-mode>
+      </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-enforcer-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>nullaway-build-jdk</id>
+                <goals>
+                  <goal>enforce</goal>
+                </goals>
+                <configuration>
+                  <rules>
+                    <requireJavaVersion>
+                      <version>[25,)</version>
+                      <message>The nullaway profile requires JDK 25 or newer; library output remains Java 17.</message>
+                    </requireJavaVersion>
+                  </rules>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-compiler-plugin</artifactId>
+            <configuration>
+              <fork>true</fork>
+              <showWarnings>true</showWarnings>
+              <!-- Recompile the module together so record type-use annotations are read from source. -->
+              <useIncrementalCompilation>true</useIncrementalCompilation>
+              <!-- Preserve module-specific processors alongside the build-only checkers. -->
+              <annotationProcessorPaths combine.children="append">
+                <path>
+                  <groupId>com.google.errorprone</groupId>
+                  <artifactId>error_prone_core</artifactId>
+                  <version>${error-prone.version}</version>
+                </path>
+                <path>
+                  <groupId>com.uber.nullaway</groupId>
+                  <artifactId>nullaway</artifactId>
+                  <version>${nullaway.version}</version>
+                </path>
+              </annotationProcessorPaths>
+            </configuration>
+            <executions>
+              <execution>
+                <id>default-compile</id>
+                <configuration>
+                  <!-- Check production sources only; test compilation retains the normal flags. -->
+                  <compilerArgs combine.self="override">
+                    <arg>-Xpkginfo:always</arg>
+                    <arg>-XDcompilePolicy=simple</arg>
+                    <arg>--should-stop=ifError=FLOW</arg>
+                    <arg>-Xplugin:ErrorProne -XepDisableWarningsInGeneratedCode -XepDisableAllChecks -Xep:NullAway:${nullaway.severity} ${nullaway.scope} -XepOpt:NullAway:JSpecifyMode=${nullaway.jspecify-mode} -XepOpt:NullAway:AcknowledgeRestrictiveAnnotations=true -XepOpt:NullAway:CustomContractAnnotations=org.springframework.lang.Contract</arg>
+                    <arg>-Xmaxerrs</arg>
+                    <arg>10000</arg>
+                    <arg>-Xmaxwarns</arg>
+                    <arg>10000</arg>
+                    <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED</arg>
+                    <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED</arg>
+                    <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED</arg>
+                    <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED</arg>
+                    <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED</arg>
+                    <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED</arg>
+                    <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED</arg>
+                    <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED</arg>
+                    <arg>-J--add-opens=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED</arg>
+                    <arg>-J--add-opens=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED</arg>
+                  </compilerArgs>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
     <profile>
       <id>security</id>
       <build>

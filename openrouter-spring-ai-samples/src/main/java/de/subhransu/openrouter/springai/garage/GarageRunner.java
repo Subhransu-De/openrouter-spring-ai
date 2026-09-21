@@ -6,6 +6,8 @@ import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.PASSED;
 import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.STATUS;
 import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.USAGE;
 
+import java.util.Objects;
+import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.ObjectMapper;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
@@ -249,7 +251,7 @@ final class GarageRunner implements CommandLineRunner {
       this.evidence.featureSnapshot().stream()
           .filter(item -> operationId.equals(item.get("operationId")))
           .filter(item -> requestMode.name().equals(item.get("requestMode")))
-          .forEach(item -> this.evidence.error(GarageFeature.fromId(item.get("featureId").toString()),
+          .forEach(item -> this.evidence.error(GarageFeature.fromId(Objects.requireNonNull(item.get("featureId"), "featureId").toString()),
               operationId, requestMode.name(), failure));
       return SceneResult.failed(
           scene.id(),
@@ -442,7 +444,7 @@ final class GarageRunner implements CommandLineRunner {
     return this.evidence.featureSnapshot().stream()
         .filter(item -> sceneId.equals(item.get("sceneId")))
         .filter(item -> requestMode.name().equals(item.get("requestMode")))
-        .map(item -> item.get("operationId").toString())
+        .map(item -> Objects.requireNonNull(item.get("operationId"), "operationId").toString())
         .reduce((first, second) -> second)
         .orElse(sceneId + "-failed-" + UUID.randomUUID());
   }
@@ -561,7 +563,7 @@ final class GarageRunner implements CommandLineRunner {
   }
 
   /** A sweep entry's model id, optionally pinned to one provider as {@code model@providerTag}. */
-  private record ModelPin(String modelId, String providerTag) {
+  private record ModelPin(String modelId, @Nullable String providerTag) {
 
     static ModelPin parse(String entry) {
       int at = entry.lastIndexOf('@');

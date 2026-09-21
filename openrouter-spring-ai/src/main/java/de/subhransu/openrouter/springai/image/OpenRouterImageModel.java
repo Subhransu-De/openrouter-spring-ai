@@ -1,6 +1,5 @@
 package de.subhransu.openrouter.springai.image;
 
-import org.jspecify.annotations.Nullable;
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.dto.ImagesRequest;
 import de.subhransu.openrouter.springai.api.dto.ImagesResponse;
@@ -10,6 +9,7 @@ import de.subhransu.openrouter.springai.internal.Retries;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationRegistry;
 import io.micrometer.observation.contextpropagation.ObservationThreadLocalAccessor;
+import org.jspecify.annotations.Nullable;
 import org.springframework.ai.image.ImageModel;
 import org.springframework.ai.image.ImageOptions;
 import org.springframework.ai.image.ImagePrompt;
@@ -127,7 +127,7 @@ public class OpenRouterImageModel implements ImageModel {
 		this.observationConvention = observationConvention;
 	}
 
-	private OpenRouterImageOptions buildRequestOptions(ImageOptions runtimeOptions) {
+	private OpenRouterImageOptions buildRequestOptions(@Nullable ImageOptions runtimeOptions) {
 		return runtimeOptions == null ? this.defaultOptions.copy()
 				: this.defaultOptions.merge(OpenRouterImageOptions.fromOptions(runtimeOptions));
 	}

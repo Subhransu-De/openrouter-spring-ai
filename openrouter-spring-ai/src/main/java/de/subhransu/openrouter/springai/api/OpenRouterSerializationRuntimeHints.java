@@ -16,6 +16,7 @@ import de.subhransu.openrouter.springai.api.dto.ImagesResponse;
 import de.subhransu.openrouter.springai.api.dto.ImagesStreamEvent;
 import de.subhransu.openrouter.springai.api.dto.ContentPart;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorResponse;
+import org.jspecify.annotations.Nullable;
 import org.springframework.aot.hint.BindingReflectionHintsRegistrar;
 import org.springframework.aot.hint.RuntimeHints;
 import org.springframework.aot.hint.RuntimeHintsRegistrar;
@@ -25,11 +26,10 @@ import org.springframework.aot.hint.RuntimeHintsRegistrar;
  *
  * @author Subhransu De
  */
-@org.jspecify.annotations.NullUnmarked
 public final class OpenRouterSerializationRuntimeHints implements RuntimeHintsRegistrar {
 
 	@Override
-	public void registerHints(RuntimeHints hints, ClassLoader classLoader) {
+	public void registerHints(RuntimeHints hints, @Nullable ClassLoader classLoader) {
 		// Binding follows typed record components. Object-valued input/content also
 		// carries these explicitly listed provider DTOs at runtime.
 		new BindingReflectionHintsRegistrar().registerReflectionHints(hints.reflection(), ChatCompletionRequest.class,

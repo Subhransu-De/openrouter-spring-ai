@@ -4,6 +4,7 @@ import de.subhransu.openrouter.springai.api.dto.ContentPart;
 import de.subhransu.openrouter.springai.api.dto.ResponsesContent;
 import java.net.URI;
 import java.util.Base64;
+import java.util.Objects;
 import java.util.Set;
 import org.springframework.ai.content.Media;
 
@@ -44,18 +45,20 @@ final class MediaContentMapper {
 
 	static ResponsesContent responses(Media media) {
 		ContentPart part = chat(media);
-		return switch (part.type()) {
-			case "image_url" -> new ResponsesContent("input_image", null, part.imageUrl().url());
+		return switch (Objects.requireNonNull(part.type())) {
+			case "image_url" ->
+				new ResponsesContent("input_image", null, Objects.requireNonNull(part.imageUrl()).url());
 			case "file" -> {
-				String data = part.file().fileData();
+				ContentPart.FileInput file = Objects.requireNonNull(part.file());
+				String data = Objects.requireNonNull(file.fileData());
 				boolean inline = data.startsWith("data:");
-				yield new ResponsesContent("input_file", null, null, null, part.file().filename(), inline ? data : null,
+				yield new ResponsesContent("input_file", null, null, null, file.filename(), inline ? data : null,
 						inline ? null : data, null, null);
 			}
 			case "input_audio" ->
 				new ResponsesContent("input_audio", null, null, null, null, null, null, part.inputAudio(), null);
-			case "video_url" ->
-				new ResponsesContent("input_video", null, null, null, null, null, null, null, part.videoUrl().url());
+			case "video_url" -> new ResponsesContent("input_video", null, null, null, null, null, null, null,
+					Objects.requireNonNull(part.videoUrl()).url());
 			default -> throw new IllegalArgumentException("Unsupported input media content type");
 		};
 	}

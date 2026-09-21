@@ -1,5 +1,7 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
+import java.util.Objects;
+import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.ObjectMapper;
 import de.subhransu.openrouter.springai.api.dto.ProviderPreferences;
 import de.subhransu.openrouter.springai.api.dto.ReasoningOptions;
@@ -18,7 +20,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import tools.jackson.databind.node.ObjectNode;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
@@ -68,14 +69,14 @@ public final class OpenRouterResponsesRequestMapper {
 				mapText(options), options.getExtraBody());
 	}
 
-	private static void rejectUnsupported(String name, Object value) {
+	private static void rejectUnsupported(String name, @Nullable Object value) {
 		if (value != null) {
 			throw new IllegalArgumentException(
 					"OPENAI_RESPONSES does not support " + name + "; unset it or use OPENAI_CHAT_COMPLETIONS");
 		}
 	}
 
-	private Map<String, Object> mapText(OpenRouterChatOptions options) {
+	private @Nullable Map<String, @Nullable Object> mapText(OpenRouterChatOptions options) {
 		ObjectNode format = new OutputFormatMapper(this.objectMapper).map(options);
 		if (format == null) {
 			return null;
@@ -88,7 +89,7 @@ public final class OpenRouterResponsesRequestMapper {
 		return Map.of("format", format);
 	}
 
-	private List<ResponsesTool> mapTools(List<ToolDefinition> toolDefinitions, Boolean strict) {
+	private @Nullable List<ResponsesTool> mapTools(List<ToolDefinition> toolDefinitions, @Nullable Boolean strict) {
 		if (CollectionUtils.isEmpty(toolDefinitions)) {
 			return null;
 		}
@@ -98,7 +99,7 @@ public final class OpenRouterResponsesRequestMapper {
 			.toList();
 	}
 
-	private String mapInstructions(List<Message> messages) {
+	private @Nullable String mapInstructions(List<Message> messages) {
 		List<String> systemMessages = messages.stream()
 			.filter(message -> message.getMessageType() == MessageType.SYSTEM)
 			.map(Message::getText)
@@ -156,7 +157,8 @@ public final class OpenRouterResponsesRequestMapper {
 				content.add(new ResponsesContent("refusal", null, null, refusal));
 			}
 			if (!content.isEmpty()) {
-				items.add(new ResponsesOutputItem(null, MESSAGE_TYPE, "completed", "assistant", content));
+				items.add(new ResponsesOutputItem(null, MESSAGE_TYPE, "completed", "assistant",
+						new ArrayList<>(content)));
 			}
 			if (message instanceof AssistantMessage assistantMessage) {
 				for (AssistantMessage.ToolCall toolCall : assistantMessage.getToolCalls()) {
@@ -213,7 +215,8 @@ public final class OpenRouterResponsesRequestMapper {
 		};
 	}
 
-	private ProviderPreferences mapProvider(OpenRouterProviderPreferences provider, Map<String, Object> extraBody) {
+	private @Nullable ProviderPreferences mapProvider(@Nullable OpenRouterProviderPreferences provider,
+			@Nullable Map<String, @Nullable Object> extraBody) {
 		if (provider == null) {
 			return extraBody == null || extraBody.isEmpty() ? null
 					: new ProviderPreferences(null, null, null, null, null, null, null, extraBody);
@@ -223,7 +226,7 @@ public final class OpenRouterResponsesRequestMapper {
 				provider.sort(), extraBody);
 	}
 
-	private ReasoningOptions mapReasoning(OpenRouterReasoningOptions reasoning) {
+	private @Nullable ReasoningOptions mapReasoning(@Nullable OpenRouterReasoningOptions reasoning) {
 		if (reasoning == null) {
 			return null;
 		}

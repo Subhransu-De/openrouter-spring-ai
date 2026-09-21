@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.garage;
 
+import org.jspecify.annotations.Nullable;
 import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.ERROR;
 import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.FAILED;
 import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.PASSED;
@@ -42,6 +43,7 @@ import org.springframework.ai.image.ImageModel;
 import org.springframework.ai.image.ImagePrompt;
 import org.springframework.ai.image.ImageResponse;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.util.Assert;
 import org.springframework.util.MimeTypeUtils;
 import org.springframework.util.StringUtils;
 
@@ -70,8 +72,8 @@ public final class GarageModalityBays {
   private final String embeddingModelId;
   private final String visionModelId;
   private final String imageModelId;
-  private final String imageQuality;
-  private final OpenRouterProviderPreferences provider;
+  private final @Nullable String imageQuality;
+  private final @Nullable OpenRouterProviderPreferences provider;
 
   public GarageModalityBays(
       ChatModel chatModel,
@@ -81,8 +83,8 @@ public final class GarageModalityBays {
       String embeddingModelId,
       String visionModelId,
       String imageModelId,
-      String imageQuality,
-      OpenRouterProviderPreferences provider) {
+      @Nullable String imageQuality,
+      @Nullable OpenRouterProviderPreferences provider) {
     this.chatModel = chatModel;
     this.embeddingModel = embeddingModel;
     this.imageModel = imageModel;
@@ -277,6 +279,7 @@ public final class GarageModalityBays {
           this.chatModel.call(new Prompt(List.of(new UserMessage(paintPrompt(topic))), options));
       probe.put(USAGE, GarageResponses.usage(response.getMetadata().getUsage()));
 
+      Assert.state(response.getResult() != null, "Image response requires a generation");
       List<Media> media = response.getResult().getOutput().getMedia();
       probe.put("mediaCount", media.size());
       probe.put("replyText", GarageResponses.text(response));
@@ -311,7 +314,7 @@ public final class GarageModalityBays {
    * provider, saved under the given file stem.
    */
   public Map<String, Object> runImageModelCheck(
-      String modelId, String providerTag, Map<String, String> config, String fileStem) {
+      String modelId, @Nullable String providerTag, Map<String, String> config, String fileStem) {
     Map<String, Object> probe = probe("image_sweep", modelId);
     probe.put("providerPin", providerTag != null ? providerTag : "default-routing");
     probe.put("config", config.isEmpty() ? "defaults" : config.toString());
@@ -327,7 +330,7 @@ public final class GarageModalityBays {
               throw new IllegalArgumentException("unknown image sweep option: " + option.getKey());
         }
       }
-      Map<String, Object> providerOptions =
+      Map<String, @Nullable Object> providerOptions =
           GarageOptionsFactory.imageProviderOptions(this.provider, providerTag);
       if (providerOptions != null) {
         options.providerOptions(providerOptions);
@@ -390,7 +393,7 @@ public final class GarageModalityBays {
     if (StringUtils.hasText(this.imageQuality)) {
       options.quality(this.imageQuality);
     }
-    Map<String, Object> providerOptions =
+    Map<String, @Nullable Object> providerOptions =
         GarageOptionsFactory.imageProviderOptions(this.provider, null);
     if (providerOptions != null) {
       options.providerOptions(providerOptions);

@@ -6,6 +6,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.List;
 import java.util.Set;
+import org.jspecify.annotations.Nullable;
+import org.springframework.lang.Contract;
 
 /**
  * Validated, bounded extension fields; standard request fields cannot be overridden.
@@ -28,16 +30,18 @@ public final class RequestExtensions {
 	private RequestExtensions() {
 	}
 
-	public static Map<String, Object> chatRequest(Map<String, ?> fields) {
-		Map<String, Object> result = chat(fields, false);
+	@Contract("!null -> !null")
+	public static @Nullable Map<String, @Nullable Object> chatRequest(@Nullable Map<String, ?> fields) {
+		Map<String, @Nullable Object> result = chat(fields, false);
 		if (result != null && result.get("top_logprobs") != null && !Boolean.TRUE.equals(result.get("logprobs"))) {
 			throw new IllegalArgumentException("top_logprobs requires logprobs=true in Chat Completions");
 		}
 		return result;
 	}
 
-	public static Map<String, Object> chat(Map<String, ?> fields, boolean responses) {
-		Map<String, Object> result = validate(fields, responses ? RESPONSES : CHAT);
+	@Contract("!null, _ -> !null")
+	public static @Nullable Map<String, @Nullable Object> chat(@Nullable Map<String, ?> fields, boolean responses) {
+		Map<String, @Nullable Object> result = validate(fields, responses ? RESPONSES : CHAT);
 		if (result == null) {
 			return null;
 		}
@@ -58,8 +62,10 @@ public final class RequestExtensions {
 		return result;
 	}
 
-	public static Map<String, Object> provider(Map<String, ?> fields, String sort) {
-		Map<String, Object> result = validate(fields, PROVIDER);
+	@Contract("!null, _ -> !null")
+	public static @Nullable Map<String, @Nullable Object> provider(@Nullable Map<String, ?> fields,
+			@Nullable String sort) {
+		Map<String, @Nullable Object> result = validate(fields, PROVIDER);
 		if (sort != null && result != null && result.containsKey("sort")) {
 			throw new IllegalArgumentException("providerExtraBody sort conflicts with provider.sort");
 		}
@@ -85,18 +91,20 @@ public final class RequestExtensions {
 		return result;
 	}
 
-	private static void requireType(Map<String, Object> fields, String key, Class<?> type) {
+	private static void requireType(Map<String, @Nullable Object> fields, String key, Class<?> type) {
 		Object value = fields.get(key);
 		if (value != null && !type.isInstance(value)) {
 			throw new IllegalArgumentException(key + " must be a " + type.getSimpleName());
 		}
 	}
 
-	private static Map<String, Object> validate(Map<String, ?> fields, Set<String> supported) {
+	@Contract("!null, _ -> !null")
+	private static @Nullable Map<String, @Nullable Object> validate(@Nullable Map<String, ?> fields,
+			Set<String> supported) {
 		if (fields == null) {
 			return null;
 		}
-		Map<String, Object> result = new LinkedHashMap<>();
+		Map<String, @Nullable Object> result = new LinkedHashMap<>();
 		fields.forEach((key, value) -> {
 			if (key == null || !supported.contains(key)) {
 				throw new IllegalArgumentException("Unsupported or reserved extraBody key: " + key);
@@ -105,7 +113,7 @@ public final class RequestExtensions {
 			// boolean/numeric fields; opaque strings such as cache keys stay strings.
 			Object normalized = value;
 			if ("only".equals(key) && value instanceof Map<?, ?> indexed) {
-				List<Object> values = new ArrayList<>();
+				List<@Nullable Object> values = new ArrayList<>();
 				for (int index = 0; index < indexed.size(); index++) {
 					String position = String.valueOf(index);
 					if (!indexed.containsKey(position)) {
@@ -125,7 +133,7 @@ public final class RequestExtensions {
 			}
 			if (Set.of("logit_bias", "max_price", MIN_THROUGHPUT, MAX_LATENCY).contains(key)
 					&& value instanceof Map<?, ?> map) {
-				Map<String, Object> numbers = new LinkedHashMap<>();
+				Map<String, @Nullable Object> numbers = new LinkedHashMap<>();
 				map.forEach((name, number) -> {
 					if (!(name instanceof String)) {
 						throw new IllegalArgumentException("Extension object keys must be strings");
@@ -146,7 +154,7 @@ public final class RequestExtensions {
 		return OptionSnapshots.map(result);
 	}
 
-	private static void validateJson(Object value) {
+	private static void validateJson(@Nullable Object value) {
 		if (value instanceof Number number && !Double.isFinite(number.doubleValue())) {
 			throw new IllegalArgumentException("Extension numbers must be finite");
 		}
