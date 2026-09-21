@@ -16,6 +16,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import org.jspecify.annotations.Nullable;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.ToolCallback;
@@ -84,7 +86,7 @@ public final class DynoTuningScene extends GarageSceneSupport {
     }
 
     String contextResult =
-        contextTool.call("{}", new ToolContext(options.getToolContext()));
+        contextTool.call("{}", new ToolContext(Objects.requireNonNull(options.getToolContext(), "Configured tool context")));
     OpenRouterChatOptions defaults =
         OpenRouterChatOptions.builder()
             .model("garage/default-model")
@@ -154,9 +156,9 @@ public final class DynoTuningScene extends GarageSceneSupport {
     if (!contextResult.contains("sample-shop") || !contextResult.contains("garage.jobId")) {
       failures.add("tool context did not reach the callback");
     }
-    if (merged.getToolCallbacks().size() != 1
+    if (merged.getToolCallbacks() == null || merged.getToolCallbacks().size() != 1
         || !"garage_context".equals(merged.getToolCallbacks().get(0).getToolDefinition().name())
-        || !merged.getToolContext().containsKey("defaultOnly")
+        || merged.getToolContext() == null || !merged.getToolContext().containsKey("defaultOnly")
         || !merged.getToolContext().containsKey("garage.jobId")) {
       failures.add("runtime callback replacement or tool-context merge semantics changed");
     }
@@ -215,8 +217,8 @@ public final class DynoTuningScene extends GarageSceneSupport {
       }
 
       @Override
-      public String call(String input, ToolContext toolContext) {
-        return toolContext.getContext().toString();
+      public String call(String input, @Nullable ToolContext toolContext) {
+        return toolContext != null ? toolContext.getContext().toString() : call(input);
       }
     };
   }

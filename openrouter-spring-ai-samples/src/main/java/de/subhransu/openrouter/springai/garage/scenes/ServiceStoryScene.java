@@ -27,6 +27,7 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.support.ToolCallbacks;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Component;
+import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
 /** Model-directed inspection, delegation, scoring, and service-record tool loop. */
@@ -114,6 +115,7 @@ public final class ServiceStoryScene extends GarageSceneSupport {
     toolLoop.assertCompleted(requiredTools);
     // The advisor aggregates standard usage; probe provider-specific fields on the final model round.
     response = toolLoop.lastResponse();
+    Assert.state(response != null, "Tool loop returned no final model response");
     String finalText = GarageResponses.text(response);
     appendFinalRecord(context.outputDirectory(), finalText);
 

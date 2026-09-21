@@ -15,6 +15,8 @@ import de.subhransu.openrouter.springai.api.dto.ToolCall;
 import de.subhransu.openrouter.springai.api.dto.Usage;
 import de.subhransu.openrouter.springai.chat.errors.OpenRouterTransientChoiceException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
+import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
+import tools.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -37,6 +39,21 @@ class OpenRouterStreamingToolCallAggregatorTests {
 	private static final String MODEL = "openai/gpt-5.4-mini";
 
 	private final OpenRouterStreamingToolCallAggregator aggregator = new OpenRouterStreamingToolCallAggregator();
+
+	@ParameterizedTest
+	@ValueSource(strings = { "{\"choices\":[null]}",
+			"{\"choices\":[{\"delta\":{\"tool_calls\":[null]},\"finish_reason\":\"tool_calls\"}]}",
+			"{\"choices\":[{\"delta\":{\"tool_calls\":[{\"id\":\"call-1\",\"function\":{\"name\":\"lookup\",\"arguments\":\"{}\"}}]},\"finish_reason\":\"tool_calls\"}]}" })
+	void malformedChoicesFailWithProtocolErrorAndCancelUpstream(String json) {
+		ChatCompletionChunk malformed = new ObjectMapper().readValue(json, ChatCompletionChunk.class);
+		AtomicBoolean cancelled = new AtomicBoolean();
+		Flux<ChatCompletionChunk> source = Flux.concat(Flux.just(malformed), Flux.never())
+			.doOnCancel(() -> cancelled.set(true));
+		StepVerifier.create(new OpenRouterStreamingResponseMapper().map(this.aggregator.aggregate(source)))
+			.expectError(OpenRouterProtocolException.class)
+			.verify(Duration.ofSeconds(5));
+		assertThat(cancelled).isTrue();
+	}
 
 	@ParameterizedTest
 	@NullAndEmptySource
@@ -76,6 +93,19 @@ class OpenRouterStreamingToolCallAggregatorTests {
 				.expectErrorMessage("Completed streamed tool call has no function name")
 				.verify();
 		}
+	}
+
+	@Test
+	void missingToolCallIdUsesEmptySpringAiId() {
+		ChatCompletionChunk response = new ObjectMapper().readValue(
+				"""
+						{"choices":[{"delta":{"tool_calls":[{"type":"function","function":{"name":"lookup","arguments":"{}"}}]},"finish_reason":"tool_calls"}]}
+						""",
+				ChatCompletionChunk.class);
+		StepVerifier.create(new OpenRouterStreamingResponseMapper().map(this.aggregator.aggregate(Flux.just(response))))
+			.assertNext(mapped -> assertThat(mapped.getResult().getOutput().getToolCalls()).singleElement()
+				.satisfies(call -> assertThat(call.id()).isEmpty()))
+			.verifyComplete();
 	}
 
 	@Test

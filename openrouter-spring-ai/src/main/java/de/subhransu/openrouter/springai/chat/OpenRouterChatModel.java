@@ -1,6 +1,7 @@
 package de.subhransu.openrouter.springai.chat;
 
 import org.jspecify.annotations.Nullable;
+import org.springframework.util.Assert;
 import tools.jackson.databind.ObjectMapper;
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
@@ -34,7 +35,6 @@ import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.retry.RetryUtils;
 import org.springframework.ai.tool.definition.ToolDefinition;
 import org.springframework.core.retry.RetryTemplate;
-import org.springframework.util.Assert;
 import org.springframework.util.CollectionUtils;
 import reactor.core.publisher.Flux;
 
@@ -201,7 +201,7 @@ public class OpenRouterChatModel implements ChatModel {
 				: OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS;
 	}
 
-	private OpenRouterChatOptions buildRequestOptions(ChatOptions runtimeOptions) {
+	private OpenRouterChatOptions buildRequestOptions(@Nullable ChatOptions runtimeOptions) {
 		return runtimeOptions == null ? this.defaultOptions.copy() : OpenRouterChatOptions.fromOptions(runtimeOptions);
 	}
 

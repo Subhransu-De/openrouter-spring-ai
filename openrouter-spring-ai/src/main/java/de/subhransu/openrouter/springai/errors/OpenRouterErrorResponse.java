@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.errors;
 
+import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -21,9 +22,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonInclude(Include.NON_NULL)
-@org.jspecify.annotations.NullUnmarked
-public record OpenRouterErrorResponse(Error error,
-		@JsonDeserialize(using = TolerantJsonStringDeserializer.class) @JsonProperty("error_type") String errorType) {
+public record OpenRouterErrorResponse(@Nullable Error error, @JsonDeserialize(
+		using = TolerantJsonStringDeserializer.class) @JsonProperty("error_type") @Nullable String errorType) {
 
 	/**
 	 * Tolerant OpenRouter/provider error object.
@@ -35,8 +35,9 @@ public record OpenRouterErrorResponse(Error error,
 	 */
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(Include.NON_NULL)
-	public record Error(JsonNode code, JsonNode message, JsonNode metadata, @JsonDeserialize(
-			using = TolerantJsonStringDeserializer.class) @JsonProperty("error_type") String errorType) {
+	public record Error(@Nullable JsonNode code, @Nullable JsonNode message, @Nullable JsonNode metadata,
+			@JsonDeserialize(
+					using = TolerantJsonStringDeserializer.class) @JsonProperty("error_type") @Nullable String errorType) {
 	}
 
 }

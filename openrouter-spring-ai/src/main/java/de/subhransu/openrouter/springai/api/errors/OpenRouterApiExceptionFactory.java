@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.api.errors;
 
+import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
 import de.subhransu.openrouter.springai.api.dto.StreamError;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
@@ -13,14 +14,13 @@ import org.springframework.util.StringUtils;
  *
  * @author Subhransu De
  */
-@org.jspecify.annotations.NullUnmarked
 public final class OpenRouterApiExceptionFactory {
 
 	private OpenRouterApiExceptionFactory() {
 	}
 
-	public static OpenRouterApiException create(String fallbackMessage, String responseBody, StreamError error,
-			String rootErrorType) {
+	public static OpenRouterApiException create(String fallbackMessage, @Nullable String responseBody,
+			@Nullable StreamError error, @Nullable String rootErrorType) {
 		String parsedMessage = error != null ? error.message() : null;
 		String diagnosticMessage = StringUtils.hasText(parsedMessage) ? parsedMessage : fallbackMessage;
 		String errorType = rootErrorType;
@@ -44,7 +44,7 @@ public final class OpenRouterApiExceptionFactory {
 		return new OpenRouterApiException(fallbackMessage, HttpStatusCode.valueOf(statusCode), responseBody, details);
 	}
 
-	private static int numericCode(String code) {
+	private static int numericCode(@Nullable String code) {
 		try {
 			return Integer.parseInt(code);
 		}
@@ -65,7 +65,7 @@ public final class OpenRouterApiExceptionFactory {
 		};
 	}
 
-	private static String text(JsonNode value) {
+	private static @Nullable String text(@Nullable JsonNode value) {
 		if (value == null || value.isNull()) {
 			return null;
 		}

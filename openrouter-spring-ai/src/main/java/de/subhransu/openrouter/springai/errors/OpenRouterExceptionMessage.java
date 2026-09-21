@@ -1,5 +1,7 @@
 package de.subhransu.openrouter.springai.errors;
 
+import org.jspecify.annotations.Nullable;
+import org.springframework.lang.Contract;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.JsonNodeFactory;
@@ -16,7 +18,6 @@ import org.springframework.util.StringUtils;
  *
  * @author Subhransu De
  */
-@org.jspecify.annotations.NullUnmarked
 public final class OpenRouterExceptionMessage {
 
 	/** Maximum length of any retained provider-controlled diagnostic string. */
@@ -44,11 +45,13 @@ public final class OpenRouterExceptionMessage {
 	 * @param value diagnostic text
 	 * @return sanitized text, or {@code null} when the input is {@code null}
 	 */
-	public static String sanitize(String value) {
+	@Contract("!null -> !null")
+	public static @Nullable String sanitize(@Nullable String value) {
 		return sanitize(value, null);
 	}
 
-	static String sanitize(String value, String apiKey) {
+	@Contract("!null, _ -> !null")
+	static @Nullable String sanitize(@Nullable String value, @Nullable String apiKey) {
 		if (value == null) {
 			return null;
 		}
@@ -71,7 +74,7 @@ public final class OpenRouterExceptionMessage {
 	 * exception message
 	 * @return the host-controlled message
 	 */
-	public static String build(String message, String responseBody) {
+	public static String build(String message, @Nullable String responseBody) {
 		if (responseBody == null) {
 			return message;
 		}
@@ -85,11 +88,11 @@ public final class OpenRouterExceptionMessage {
 	 * @param metadata provider-controlled metadata
 	 * @return a detached, sanitized metadata map
 	 */
-	public static Map<String, Object> sanitizeMetadata(Map<String, Object> metadata) {
+	public static Map<String, @Nullable Object> sanitizeMetadata(@Nullable Map<String, ?> metadata) {
 		if (metadata == null || metadata.isEmpty()) {
 			return Map.of();
 		}
-		Map<String, Object> sanitized = new LinkedHashMap<>();
+		Map<String, @Nullable Object> sanitized = new LinkedHashMap<>();
 		metadata.forEach((key, value) -> sanitized.put(sanitize(key),
 				isCredentialField(key) ? "[REDACTED]" : sanitizeMetadataValue(value)));
 		return sanitized;
@@ -100,14 +103,16 @@ public final class OpenRouterExceptionMessage {
 	 * @param value provider-controlled scalar, JSON tree, map, or iterable
 	 * @return a detached, bounded, credential-safe value
 	 */
-	public static Object sanitizeDiagnosticValue(Object value) {
+	@Contract("!null -> !null")
+	public static @Nullable Object sanitizeDiagnosticValue(@Nullable Object value) {
 		if (value instanceof JsonNode node) {
 			return sanitizeMetadata(node, null);
 		}
 		return sanitizeMetadataValue(value);
 	}
 
-	static JsonNode sanitizeMetadata(JsonNode metadata, String apiKey) {
+	@Contract("!null, _ -> !null")
+	static @Nullable JsonNode sanitizeMetadata(@Nullable JsonNode metadata, @Nullable String apiKey) {
 		if (metadata == null) {
 			return null;
 		}
@@ -132,12 +137,13 @@ public final class OpenRouterExceptionMessage {
 		return metadata.deepCopy();
 	}
 
-	private static Object sanitizeMetadataValue(Object value) {
+	@Contract("!null -> !null")
+	private static @Nullable Object sanitizeMetadataValue(@Nullable Object value) {
 		if (value instanceof String text) {
 			return sanitize(text);
 		}
 		if (value instanceof Map<?, ?> map) {
-			Map<String, Object> sanitized = new LinkedHashMap<>();
+			Map<String, @Nullable Object> sanitized = new LinkedHashMap<>();
 			map.forEach((key, nestedValue) -> {
 				String name = String.valueOf(key);
 				sanitized.put(sanitize(name),
@@ -146,14 +152,14 @@ public final class OpenRouterExceptionMessage {
 			return sanitized;
 		}
 		if (value instanceof Iterable<?> iterable) {
-			List<Object> sanitized = new ArrayList<>();
+			List<@Nullable Object> sanitized = new ArrayList<>();
 			iterable.forEach(item -> sanitized.add(sanitizeMetadataValue(item)));
 			return sanitized;
 		}
 		return value;
 	}
 
-	private static boolean isCredentialField(String name) {
+	private static boolean isCredentialField(@Nullable String name) {
 		return name != null && CREDENTIAL_FIELD_NAME.matcher(name).matches();
 	}
 

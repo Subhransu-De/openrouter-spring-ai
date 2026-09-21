@@ -5,6 +5,7 @@ import de.subhransu.openrouter.springai.api.dto.ProviderPreferences;
 import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
 import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingOptions;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 import org.springframework.util.StringUtils;
 
 public final class OpenRouterEmbeddingRequestMapper {
@@ -21,7 +22,7 @@ public final class OpenRouterEmbeddingRequestMapper {
 				options.getUser(), mapProvider(options.getProvider()));
 	}
 
-	private ProviderPreferences mapProvider(OpenRouterProviderPreferences provider) {
+	private @Nullable ProviderPreferences mapProvider(@Nullable OpenRouterProviderPreferences provider) {
 		if (provider == null) {
 			return null;
 		}

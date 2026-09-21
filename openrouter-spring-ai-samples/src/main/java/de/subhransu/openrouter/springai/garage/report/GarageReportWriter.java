@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.garage.report;
 
+import java.util.Objects;
 import tools.jackson.databind.ObjectMapper;
 import de.subhransu.openrouter.springai.garage.cli.GarageCommand;
 import de.subhransu.openrouter.springai.garage.evidence.GarageEvidence;
@@ -144,15 +145,15 @@ public final class GarageReportWriter {
   private String markdown(Map<String, Object> diagnostic) {
     StringBuilder report = new StringBuilder();
     report.append("# Garage capability report\n\n");
-    Map<String, Object> command = (Map<String, Object>) diagnostic.get("command");
+    Map<String, Object> command = (Map<String, Object>) Objects.requireNonNull(diagnostic.get("command"), "command");
     report.append("- Capabilities: `").append(command.get("capabilities")).append("`\n");
     report.append("- Request modes: `").append(command.get("requestModes")).append("`\n");
     report.append("- Selected scenes: `").append(command.get("sceneIds")).append("`\n");
     report.append("- Image surface: `").append(command.get("imageSurface")).append("`\n");
     report.append("- Recorded inference cost: `$ ").append(diagnostic.get("recordedCostUsd")).append("`\n");
     report.append("- Free-form diagnostic text and raw payloads retained: `no`\n\n");
-    List<Map<String, Object>> results = (List<Map<String, Object>>) diagnostic.get("scenes");
-    List<Map<String, Object>> registry = (List<Map<String, Object>>) diagnostic.get("featureRegistry");
+    List<Map<String, Object>> results = (List<Map<String, Object>>) Objects.requireNonNull(diagnostic.get("scenes"), "scenes");
+    List<Map<String, Object>> registry = (List<Map<String, Object>>) Objects.requireNonNull(diagnostic.get("featureRegistry"), "featureRegistry");
     report.append("## Scene results\n\n");
     report.append("| Scene | Mode | Status | Duration (ms) | Error |\n");
     report.append("| --- | --- | --- | ---: | --- |\n");
@@ -169,7 +170,7 @@ public final class GarageReportWriter {
     report.append("| Feature | Scene | Kind | Status | Modes | Evidence operations |\n");
     report.append("| --- | --- | --- | --- | --- | ---: |\n");
     for (Map<String, Object> feature : registry) {
-      List<Map<String, Object>> modes = (List<Map<String, Object>>) feature.get("modeStatuses");
+      List<Map<String, Object>> modes = (List<Map<String, Object>>) Objects.requireNonNull(feature.get("modeStatuses"), "modeStatuses");
       report.append("| ").append(feature.get("title")).append(" | `")
           .append(feature.get("sceneId")).append("` | ")
           .append(feature.get("kind")).append(" | **")

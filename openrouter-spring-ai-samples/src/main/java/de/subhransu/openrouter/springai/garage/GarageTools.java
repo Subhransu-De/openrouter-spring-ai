@@ -13,6 +13,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.jspecify.annotations.Nullable;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
@@ -29,7 +30,7 @@ public final class GarageTools {
   private final String specialistModel;
   private final Path outputDirectory;
   private final OpenRouterRequestMode requestMode;
-  private final String operationId;
+  private final @Nullable String operationId;
   private final String sceneId;
   private final List<Map<String, Object>> invocations =
       Collections.synchronizedList(new ArrayList<>());
@@ -54,7 +55,7 @@ public final class GarageTools {
       GarageProperties properties,
       Path outputDirectory,
       OpenRouterRequestMode requestMode,
-      String operationId,
+      @Nullable String operationId,
       String sceneId) {
     this(
         chatModel,
@@ -71,7 +72,7 @@ public final class GarageTools {
       GarageProperties properties,
       Path outputDirectory,
       OpenRouterRequestMode requestMode,
-      String operationId,
+      @Nullable String operationId,
       String sceneId,
       String specialistModel) {
     this.chatModel = chatModel;

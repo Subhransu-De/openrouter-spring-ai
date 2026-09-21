@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
+import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
 import de.subhransu.openrouter.springai.api.dto.ResponsesOutputItem;
 import java.util.ArrayList;
@@ -19,34 +20,37 @@ final class ReasoningMetadata {
 	private ReasoningMetadata() {
 	}
 
-	static Map<String, Object> chat(String reasoning, List<JsonNode> details) {
+	static Map<String, Object> chat(@Nullable String reasoning, @Nullable List<? extends @Nullable JsonNode> details) {
 		Map<String, Object> metadata = new LinkedHashMap<>();
 		if (reasoning != null) {
 			metadata.put(REASONING, reasoning);
 		}
 		if (details != null) {
-			metadata.put(DETAILS, List.copyOf(details));
+			metadata.put(DETAILS, ResponseValues.items(details, "reasoning detail"));
 		}
 		return metadata;
 	}
 
 	@SuppressWarnings("unchecked")
-	static List<JsonNode> details(Map<String, Object> metadata) {
-		return (List<JsonNode>) metadata.get(DETAILS);
+	static @Nullable List<@Nullable JsonNode> details(Map<String, Object> metadata) {
+		return (List<@Nullable JsonNode>) metadata.get(DETAILS);
 	}
 
-	static Map<String, Object> responses(List<ResponsesOutputItem> output) {
+	static Map<String, Object> responses(@Nullable List<? extends @Nullable ResponsesOutputItem> output) {
 		Map<String, Object> metadata = new LinkedHashMap<>();
 		if (output != null) {
-			metadata.put(RESPONSES_OUTPUT_ITEMS, List.copyOf(output));
-			List<ResponsesOutputItem> items = output.stream().filter(item -> "reasoning".equals(item.type())).toList();
+			metadata.put(RESPONSES_OUTPUT_ITEMS, ResponseValues.items(output, "output item"));
+			List<ResponsesOutputItem> items = ResponseValues.<ResponsesOutputItem>items(output, "output item")
+				.stream()
+				.filter(item -> "reasoning".equals(item.type()))
+				.toList();
 			if (!items.isEmpty()) {
 				metadata.put(RESPONSES_ITEMS, items);
 			}
 			StringBuilder text = new StringBuilder();
 			for (ResponsesOutputItem item : items) {
 				if (item.content() != null) {
-					item.content()
+					ResponseValues.items(item.content(), "reasoning content")
 						.stream()
 						.filter(content -> "reasoning_text".equals(content.type()) && content.text() != null)
 						.forEach(content -> text.append(content.text()));
@@ -70,7 +74,7 @@ final class ReasoningMetadata {
 		return metadata;
 	}
 
-	static <T> List<T> concat(List<T> earlier, List<T> later) {
+	static <T extends @Nullable Object> @Nullable List<T> concat(@Nullable List<T> earlier, @Nullable List<T> later) {
 		if (earlier == null) {
 			return later;
 		}
@@ -109,21 +113,21 @@ final class ReasoningMetadata {
 							|| ExtensionMetadata.TOOLS.equals(key)) && earlier instanceof Map<?, ?> first
 							&& later instanceof Map<?, ?> second) {
 						return switch (key) {
-							case ExtensionMetadata.MESSAGE -> ExtensionMetadata
-								.mergeMessage((Map<String, Object>) first, (Map<String, Object>) second);
-							case ExtensionMetadata.CHOICE -> ExtensionMetadata.mergeChoice((Map<String, Object>) first,
-									(Map<String, Object>) second);
-							default ->
-								ExtensionMetadata.merge((Map<String, Object>) first, (Map<String, Object>) second);
+							case ExtensionMetadata.MESSAGE -> ExtensionMetadata.mergeMessage(
+									(Map<String, @Nullable Object>) first, (Map<String, @Nullable Object>) second);
+							case ExtensionMetadata.CHOICE -> ExtensionMetadata.mergeChoice(
+									(Map<String, @Nullable Object>) first, (Map<String, @Nullable Object>) second);
+							default -> ExtensionMetadata.merge((Map<String, @Nullable Object>) first,
+									(Map<String, @Nullable Object>) second);
 						};
 					}
 					if (earlier instanceof String first && later instanceof String second) {
 						return first + second;
 					}
 					if (earlier instanceof List<?> first && later instanceof List<?> second) {
-						List<Object> items = new ArrayList<>(first);
+						List<@Nullable Object> items = new ArrayList<>(first);
 						items.addAll(second);
-						return List.copyOf(items);
+						return java.util.Collections.unmodifiableList(items);
 					}
 					return later;
 				});

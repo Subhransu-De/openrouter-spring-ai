@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
+import org.jspecify.annotations.Nullable;
 import org.springframework.util.StringUtils;
 import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
 
@@ -8,17 +9,17 @@ final class FinishReasonMapper {
 	private FinishReasonMapper() {
 	}
 
-	static boolean isToolCallCompletion(String finishReason) {
+	static boolean isToolCallCompletion(@Nullable String finishReason) {
 		return "tool_calls".equals(finishReason) || "function_call".equals(finishReason);
 	}
 
-	static String responses(ResponsesResult response, String fallbackStatus) {
+	static @Nullable String responses(@Nullable ResponsesResult response, @Nullable String fallbackStatus) {
 		String status = response != null && response.status() != null ? response.status() : fallbackStatus;
 		return "incomplete".equals(status) && response != null && response.incompleteDetails() != null
 				&& response.incompleteDetails().reason() != null ? response.incompleteDetails().reason() : status;
 	}
 
-	static String map(String finishReason) {
+	static @Nullable String map(@Nullable String finishReason) {
 		if (!StringUtils.hasText(finishReason)) {
 			return finishReason;
 		}

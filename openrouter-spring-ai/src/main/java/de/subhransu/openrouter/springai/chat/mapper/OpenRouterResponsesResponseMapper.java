@@ -14,6 +14,7 @@ import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseExcept
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.jspecify.annotations.Nullable;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.metadata.ChatGenerationMetadata;
 import org.springframework.ai.chat.metadata.ChatResponseMetadata;
@@ -23,7 +24,8 @@ import org.springframework.util.CollectionUtils;
 
 public final class OpenRouterResponsesResponseMapper {
 
-	public ChatResponse map(ResponsesResult response) {
+	public ChatResponse map(@Nullable ResponsesResult response) {
+		response = ResponseValues.required(response, "Responses result");
 		if ("failed".equals(response.status())) {
 			// Failed generations arrive with HTTP 200; mapping them to an empty message
 			// would make a provider failure look like a valid empty answer.
@@ -43,25 +45,31 @@ public final class OpenRouterResponsesResponseMapper {
 			.build();
 		String nativeReason = FinishReasonMapper.responses(response, response.status());
 		String finishReason = toolCalls.isEmpty() ? FinishReasonMapper.map(nativeReason) : "TOOL_CALLS";
-		ChatGenerationMetadata generationMetadata = ChatGenerationMetadata.builder()
-			.finishReason(finishReason)
-			.metadata("openrouter.native_finish_reason", nativeReason)
-			.metadata("openrouter.responses.status", response.status())
-			.metadata("openrouter.responses.incomplete_details", response.incompleteDetails())
-			.metadata(RefusalMetadata.REFUSAL, properties.get(RefusalMetadata.REFUSAL))
-			.metadata(ReasoningMetadata.REASONING, assistantMessage.getMetadata().get(ReasoningMetadata.REASONING))
-			.build();
-		ChatResponseMetadata responseMetadata = ChatResponseMetadata.builder()
-			.id(response.id())
-			.model(response.model())
-			.usage(UsageMapper.map(response.usage()))
-			.keyValue("openrouter.object", response.object())
-			.keyValue("openrouter.created", response.createdAt())
-			.build();
+		ChatGenerationMetadata.Builder generationMetadataBuilder = ChatGenerationMetadata.builder();
+		generationMetadataBuilder.finishReason(finishReason);
+		ResponseValues.ifPresent(nativeReason,
+				value -> generationMetadataBuilder.metadata("openrouter.native_finish_reason", value));
+		ResponseValues.ifPresent(response.status(),
+				value -> generationMetadataBuilder.metadata("openrouter.responses.status", value));
+		ResponseValues.ifPresent(response.incompleteDetails(),
+				value -> generationMetadataBuilder.metadata("openrouter.responses.incomplete_details", value));
+		ResponseValues.ifPresent(properties.get(RefusalMetadata.REFUSAL),
+				value -> generationMetadataBuilder.metadata(RefusalMetadata.REFUSAL, value));
+		ResponseValues.ifPresent(assistantMessage.getMetadata().get(ReasoningMetadata.REASONING),
+				value -> generationMetadataBuilder.metadata(ReasoningMetadata.REASONING, value));
+		ChatGenerationMetadata generationMetadata = generationMetadataBuilder.build();
+		ChatResponseMetadata.Builder responseMetadataBuilder = ChatResponseMetadata.builder();
+		ResponseValues.ifPresent(response.id(), responseMetadataBuilder::id);
+		ResponseValues.ifPresent(response.model(), responseMetadataBuilder::model);
+		ResponseValues.ifPresent(UsageMapper.map(response.usage()), responseMetadataBuilder::usage);
+		responseMetadataBuilder.keyValue("openrouter.object", response.object());
+		responseMetadataBuilder.keyValue("openrouter.created", response.createdAt());
+		ChatResponseMetadata responseMetadata = responseMetadataBuilder.build();
 		return new ChatResponse(List.of(new Generation(assistantMessage, generationMetadata)), responseMetadata);
 	}
 
-	static RuntimeException failure(String message, String responseBody, StreamError error, String errorType) {
+	static RuntimeException failure(String message, @Nullable String responseBody, @Nullable StreamError error,
+			@Nullable String errorType) {
 		OpenRouterApiException failure = OpenRouterApiExceptionFactory.create(message, responseBody, error, errorType);
 		if (OpenRouterErrorClassifier.isTransient(failure.getCategory())) {
 			return new OpenRouterTransientApiException(message, failure.getStatusCode(), failure.getResponseBody(),
@@ -72,11 +80,15 @@ public final class OpenRouterResponsesResponseMapper {
 	}
 
 	// Accept absent status for compatibility; reject every explicit non-final status.
-	static List<AssistantMessage.ToolCall> toolCalls(String status, String reason, List<ResponsesOutputItem> output) {
+	static List<AssistantMessage.ToolCall> toolCalls(@Nullable String status, @Nullable String reason,
+			@Nullable List<? extends @Nullable ResponsesOutputItem> output) {
 		if (CollectionUtils.isEmpty(output)) {
 			return List.of();
 		}
-		List<ResponsesOutputItem> calls = output.stream().filter(item -> "function_call".equals(item.type())).toList();
+		List<ResponsesOutputItem> calls = ResponseValues.<ResponsesOutputItem>items(output, "output item")
+			.stream()
+			.filter(item -> "function_call".equals(item.type()))
+			.toList();
 		for (ResponsesOutputItem item : calls) {
 			if (status != null && !"completed".equals(status)
 					|| item.status() != null && !"completed".equals(item.status())) {
@@ -87,15 +99,18 @@ public final class OpenRouterResponsesResponseMapper {
 			}
 		}
 		return calls.stream()
-			.map(item -> new AssistantMessage.ToolCall(item.callId(), "function", item.name(), item.arguments()))
+			.map(item -> new AssistantMessage.ToolCall(ResponseValues.required(item.callId(), "tool call id"),
+					"function", ResponseValues.required(item.name(), "tool call name"),
+					ResponseValues.required(item.arguments(), "tool call arguments")))
 			.toList();
 	}
 
-	static String text(List<ResponsesOutputItem> output) {
+	static String text(@Nullable List<? extends @Nullable ResponsesOutputItem> output) {
 		if (CollectionUtils.isEmpty(output)) {
 			return "";
 		}
-		return output.stream()
+		return ResponseValues.<ResponsesOutputItem>items(output, "output item")
+			.stream()
 			.filter(item -> "message".equals(item.type()))
 			.map(OpenRouterResponsesResponseMapper::text)
 			.filter(Objects::nonNull)
@@ -106,7 +121,7 @@ public final class OpenRouterResponsesResponseMapper {
 		if (CollectionUtils.isEmpty(item.content())) {
 			return "";
 		}
-		return item.content()
+		return ResponseValues.items(item.content(), "message content")
 			.stream()
 			.filter(content -> "output_text".equals(content.type()) || "text".equals(content.type()))
 			.map(ResponsesContent::text)

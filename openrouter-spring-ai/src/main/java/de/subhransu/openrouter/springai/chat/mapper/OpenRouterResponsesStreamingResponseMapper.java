@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
+import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
@@ -151,24 +152,30 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 			.toolCalls(toolCalls)
 			.media(media)
 			.build();
-		ChatGenerationMetadata generationMetadata = ChatGenerationMetadata.builder()
-			.finishReason(FinishReasonMapper.map(finishReason))
-			.metadata("openrouter.native_finish_reason", nativeFinishReason)
-			.metadata("openrouter.responses.status", status)
-			.metadata("openrouter.responses.incomplete_details", result != null ? result.incompleteDetails() : null)
-			.metadata(RefusalMetadata.REFUSAL, snapshot.get(RefusalMetadata.REFUSAL))
-			.metadata("openrouter.reasoning", reasoning)
-			.build();
-		ChatResponseMetadata.Builder responseMetadata = ChatResponseMetadata.builder()
-			.keyValue("openrouter.object", type);
+		ChatGenerationMetadata.Builder generationMetadataBuilder = ChatGenerationMetadata.builder();
+		generationMetadataBuilder.finishReason(FinishReasonMapper.map(finishReason));
+		ResponseValues.ifPresent(nativeFinishReason,
+				value -> generationMetadataBuilder.metadata("openrouter.native_finish_reason", value));
+		ResponseValues.ifPresent(status,
+				value -> generationMetadataBuilder.metadata("openrouter.responses.status", value));
+		ResponseValues.ifPresent(result != null ? result.incompleteDetails() : null,
+				value -> generationMetadataBuilder.metadata("openrouter.responses.incomplete_details", value));
+		ResponseValues.ifPresent(snapshot.get(RefusalMetadata.REFUSAL),
+				value -> generationMetadataBuilder.metadata(RefusalMetadata.REFUSAL, value));
+		ResponseValues.ifPresent(reasoning, value -> generationMetadataBuilder.metadata("openrouter.reasoning", value));
+		ChatGenerationMetadata generationMetadata = generationMetadataBuilder.build();
+		ChatResponseMetadata.Builder responseMetadata = ChatResponseMetadata.builder();
+		responseMetadata.keyValue("openrouter.object", type);
 		if (result != null) {
-			responseMetadata.id(result.id()).model(result.model()).usage(UsageMapper.map(result.usage()));
+			ResponseValues.ifPresent(result.id(), responseMetadata::id);
+			ResponseValues.ifPresent(result.model(), responseMetadata::model);
+			ResponseValues.ifPresent(UsageMapper.map(result.usage()), responseMetadata::usage);
 		}
 		return new ChatResponse(List.of(new Generation(assistantMessage, generationMetadata)),
 				responseMetadata.build());
 	}
 
-	private StreamError eventError(ResponsesStreamEvent event) {
+	private @Nullable StreamError eventError(ResponsesStreamEvent event) {
 		StreamError nested = event.error();
 		String code = nested != null && nested.code() != null ? nested.code() : event.code();
 		String message = nested != null && nested.message() != null ? nested.message() : event.message();
@@ -178,7 +185,7 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 				? new StreamError(code, message, metadata, errorType) : null;
 	}
 
-	private JsonNode mergeMetadata(JsonNode root, JsonNode nested) {
+	private @Nullable JsonNode mergeMetadata(@Nullable JsonNode root, @Nullable JsonNode nested) {
 		if (root == null) {
 			return nested;
 		}

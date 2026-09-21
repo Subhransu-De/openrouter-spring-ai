@@ -1,14 +1,17 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
+import org.jspecify.annotations.Nullable;
 import de.subhransu.openrouter.springai.api.dto.Usage;
 import de.subhransu.openrouter.springai.chat.OpenRouterUsage;
+import org.springframework.lang.Contract;
 
 public final class UsageMapper {
 
 	private UsageMapper() {
 	}
 
-	public static OpenRouterUsage map(Usage usage) {
+	@Contract("!null -> !null")
+	public static @Nullable OpenRouterUsage map(@Nullable Usage usage) {
 		if (usage == null) {
 			return null;
 		}
@@ -17,14 +20,14 @@ public final class UsageMapper {
 	}
 
 	// Preserve explicit top-level counts (including zero) before nested details.
-	private static Integer cachedTokens(Usage usage) {
+	private static @Nullable Integer cachedTokens(Usage usage) {
 		if (usage.cachedTokens() != null) {
 			return usage.cachedTokens();
 		}
 		return usage.promptTokensDetails() != null ? usage.promptTokensDetails().cachedTokens() : null;
 	}
 
-	private static Integer reasoningTokens(Usage usage) {
+	private static @Nullable Integer reasoningTokens(Usage usage) {
 		if (usage.reasoningTokens() != null) {
 			return usage.reasoningTokens();
 		}

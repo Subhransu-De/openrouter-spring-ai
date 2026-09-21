@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.errors;
 
+import org.jspecify.annotations.Nullable;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.JsonParser;
 import tools.jackson.core.JsonToken;
@@ -25,7 +26,6 @@ import org.springframework.util.StringUtils;
  *
  * @author Subhransu De
  */
-@org.jspecify.annotations.NullUnmarked
 public final class OpenRouterHttpExceptionFactory {
 
 	private static final DateTimeFormatter ASCTIME_FORMATTER = DateTimeFormatter.ofPattern("MMM d HH:mm:ss uuuu",
@@ -33,22 +33,22 @@ public final class OpenRouterHttpExceptionFactory {
 
 	private final ObjectMapper objectMapper;
 
-	private final String apiKey;
+	private final @Nullable String apiKey;
 
 	private final Clock clock;
 
-	public OpenRouterHttpExceptionFactory(ObjectMapper objectMapper, String apiKey) {
+	public OpenRouterHttpExceptionFactory(ObjectMapper objectMapper, @Nullable String apiKey) {
 		this(objectMapper, apiKey, Clock.systemUTC());
 	}
 
-	OpenRouterHttpExceptionFactory(ObjectMapper objectMapper, String apiKey, Clock clock) {
+	OpenRouterHttpExceptionFactory(ObjectMapper objectMapper, @Nullable String apiKey, Clock clock) {
 		this.objectMapper = objectMapper;
 		this.apiKey = apiKey;
 		this.clock = clock;
 	}
 
 	public RuntimeException create(String endpoint, HttpStatusCode statusCode, HttpHeaders headers,
-			String responseBody) {
+			@Nullable String responseBody) {
 		String safeBody = OpenRouterExceptionMessage.sanitize(responseBody, this.apiKey);
 		OpenRouterErrorDetails details = parseDetails(responseBody, statusCode.value());
 		if (details == null) {
@@ -63,13 +63,13 @@ public final class OpenRouterHttpExceptionFactory {
 	}
 
 	public OpenRouterLimitExceededException createErrorBodyLimit(String endpoint, HttpStatusCode statusCode,
-			String responseBodyExcerpt, long configuredLimit, long observedValue) {
+			@Nullable String responseBodyExcerpt, long configuredLimit, long observedValue) {
 		return createErrorBodyLimit(endpoint, statusCode, responseBodyExcerpt, configuredLimit, observedValue,
 				OpenRouterLimitExceededException.Limit.BLOCKING_ERROR_BODY_BYTES);
 	}
 
 	public OpenRouterLimitExceededException createErrorBodyLimit(String endpoint, HttpStatusCode statusCode,
-			String responseBodyExcerpt, long configuredLimit, long observedValue,
+			@Nullable String responseBodyExcerpt, long configuredLimit, long observedValue,
 			OpenRouterLimitExceededException.Limit limit) {
 		String safeBody = OpenRouterExceptionMessage.sanitize(responseBodyExcerpt, this.apiKey);
 		OpenRouterErrorDetails details = parseDetails(responseBodyExcerpt, statusCode.value());
@@ -88,7 +88,7 @@ public final class OpenRouterHttpExceptionFactory {
 				OpenRouterErrorClassifier.category(statusCode, null, null, null));
 	}
 
-	private OpenRouterErrorDetails parseDetails(String responseBody, int statusCode) {
+	private @Nullable OpenRouterErrorDetails parseDetails(@Nullable String responseBody, int statusCode) {
 		if (!StringUtils.hasText(responseBody)) {
 			return null;
 		}
@@ -101,7 +101,7 @@ public final class OpenRouterHttpExceptionFactory {
 		}
 	}
 
-	private OpenRouterErrorDetails parseDetailsFromPrefix(String responseBody, int statusCode) {
+	private @Nullable OpenRouterErrorDetails parseDetailsFromPrefix(@Nullable String responseBody, int statusCode) {
 		if (!StringUtils.hasText(responseBody)) {
 			return null;
 		}
@@ -134,7 +134,8 @@ public final class OpenRouterHttpExceptionFactory {
 		return details(error, errorType, statusCode);
 	}
 
-	private OpenRouterErrorDetails details(OpenRouterErrorResponse.Error error, String rootErrorType, int statusCode) {
+	private @Nullable OpenRouterErrorDetails details(OpenRouterErrorResponse.@Nullable Error error,
+			@Nullable String rootErrorType, int statusCode) {
 		if (error == null) {
 			return rootTypeDetails(rootErrorType, statusCode);
 		}
@@ -154,7 +155,8 @@ public final class OpenRouterHttpExceptionFactory {
 				OpenRouterExceptionMessage.sanitizeMetadata(metadata, this.apiKey), category);
 	}
 
-	private OpenRouterErrorDetails details(JsonNode error, String rootErrorType, int statusCode) {
+	private @Nullable OpenRouterErrorDetails details(@Nullable JsonNode error, @Nullable String rootErrorType,
+			int statusCode) {
 		if (error == null || !error.isObject()) {
 			return rootTypeDetails(rootErrorType, statusCode);
 		}
@@ -174,7 +176,7 @@ public final class OpenRouterHttpExceptionFactory {
 				OpenRouterExceptionMessage.sanitizeMetadata(metadata, this.apiKey), category);
 	}
 
-	private OpenRouterErrorDetails rootTypeDetails(String errorType, int statusCode) {
+	private @Nullable OpenRouterErrorDetails rootTypeDetails(@Nullable String errorType, int statusCode) {
 		if (!StringUtils.hasText(errorType)) {
 			return null;
 		}
@@ -182,18 +184,18 @@ public final class OpenRouterHttpExceptionFactory {
 		return new OpenRouterErrorDetails(null, null, sanitize(errorType), null, null, category);
 	}
 
-	private String sanitize(String value) {
+	private @Nullable String sanitize(@Nullable String value) {
 		return OpenRouterExceptionMessage.sanitize(value, this.apiKey);
 	}
 
-	private String text(JsonNode node) {
+	private @Nullable String text(@Nullable JsonNode node) {
 		if (node == null || node.isNull()) {
 			return null;
 		}
 		return node.isString() ? node.stringValue() : node.toString();
 	}
 
-	private OpenRouterRetryAfter parseRetryAfter(String value) {
+	private @Nullable OpenRouterRetryAfter parseRetryAfter(@Nullable String value) {
 		if (!StringUtils.hasText(value)) {
 			return null;
 		}
@@ -219,7 +221,7 @@ public final class OpenRouterHttpExceptionFactory {
 		return new OpenRouterRetryAfter(value, delay.isNegative() ? Duration.ZERO : delay, retryAt);
 	}
 
-	private Instant parseHttpDate(String candidate) {
+	private @Nullable Instant parseHttpDate(String candidate) {
 		Instant imfFixdate = parseImfFixdate(candidate);
 		if (imfFixdate != null) {
 			return imfFixdate;
@@ -228,7 +230,7 @@ public final class OpenRouterHttpExceptionFactory {
 		return rfc850 != null ? rfc850 : parseAsctimeDate(candidate);
 	}
 
-	private Instant parseImfFixdate(String candidate) {
+	private @Nullable Instant parseImfFixdate(String candidate) {
 		try {
 			return ZonedDateTime.parse(candidate, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant();
 		}
@@ -237,7 +239,7 @@ public final class OpenRouterHttpExceptionFactory {
 		}
 	}
 
-	private Instant parseRfc850Date(String candidate) {
+	private @Nullable Instant parseRfc850Date(String candidate) {
 		int comma = candidate.indexOf(',');
 		if (comma < 0 || comma == candidate.length() - 1) {
 			return null;
@@ -261,7 +263,7 @@ public final class OpenRouterHttpExceptionFactory {
 		}
 	}
 
-	private Instant parseAsctimeDate(String candidate) {
+	private @Nullable Instant parseAsctimeDate(String candidate) {
 		if (candidate.length() < 5) {
 			return null;
 		}

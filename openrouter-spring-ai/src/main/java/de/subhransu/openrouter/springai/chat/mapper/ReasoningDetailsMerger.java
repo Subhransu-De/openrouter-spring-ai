@@ -1,11 +1,12 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
+import java.util.Objects;
+import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.ObjectNode;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 // OpenRouter streams consecutive text/summary fragments; encrypted blobs are discrete.
 // Index alone is not an identity: different reasoning types may reuse the same index.
@@ -14,9 +15,10 @@ final class ReasoningDetailsMerger {
 	private ReasoningDetailsMerger() {
 	}
 
-	static List<JsonNode> merge(List<JsonNode> earlier, List<JsonNode> fragments) {
-		List<JsonNode> result = earlier != null ? new ArrayList<>(earlier) : new ArrayList<>();
-		for (JsonNode fragment : fragments) {
+	static List<JsonNode> merge(@Nullable List<? extends @Nullable JsonNode> earlier,
+			@Nullable List<? extends @Nullable JsonNode> fragments) {
+		List<JsonNode> result = new ArrayList<>(ResponseValues.items(earlier, "reasoning detail"));
+		for (JsonNode fragment : ResponseValues.items(fragments, "reasoning detail")) {
 			JsonNode previous = result.isEmpty() ? null : result.get(result.size() - 1);
 			String field = payloadField(fragment);
 			if (previous != null && field != null && compatible(previous, fragment, field)) {
@@ -40,7 +42,7 @@ final class ReasoningDetailsMerger {
 		return List.copyOf(result);
 	}
 
-	private static String payloadField(JsonNode item) {
+	private static @Nullable String payloadField(JsonNode item) {
 		return switch (item.path("type").asString("")) {
 			case "reasoning.text" -> "text";
 			case "reasoning.summary" -> "summary";

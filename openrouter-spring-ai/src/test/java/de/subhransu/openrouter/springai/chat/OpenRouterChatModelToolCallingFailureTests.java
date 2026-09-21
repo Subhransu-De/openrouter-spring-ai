@@ -307,8 +307,8 @@ class OpenRouterChatModelToolCallingFailureTests {
 	@Test
 	void toolCallWithoutIdExecutesToolAndCompletesTheLoop() {
 		// Some providers emit a tool call with a null id. The DTO allows it; the loop
-		// executes the tool anyway and threads the null id through to the follow-up
-		// tool message, completing normally.
+		// uses an empty Spring AI id and restores the missing id on the follow-up
+		// wire message, completing normally.
 		OpenRouterApi api = mock(OpenRouterApi.class);
 		ChatCompletionResponse noId = new ChatCompletionResponse("gen-1", "chat.completion", 123L, MODEL, "openai",
 				List.of(new Choice(0,
@@ -326,6 +326,7 @@ class OpenRouterChatModelToolCallingFailureTests {
 		assertThat(captor.getAllValues().get(1).messages()).anySatisfy(message -> {
 			assertThat(message.role()).isEqualTo("tool");
 			assertThat(String.valueOf(message.content())).contains("sunny in Berlin");
+			assertThat(message.toolCallId()).isNull();
 		});
 	}
 

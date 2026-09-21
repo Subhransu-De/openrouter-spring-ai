@@ -1,3 +1,4 @@
+import net.ltgt.gradle.errorprone.errorprone
 import org.gradle.api.plugins.quality.Checkstyle
 import org.gradle.api.plugins.quality.CheckstyleExtension
 import org.gradle.api.plugins.quality.Pmd
@@ -18,6 +19,7 @@ import org.gradle.testing.jacoco.plugins.JacocoPluginExtension
 
 plugins {
 	base
+	id("net.ltgt.errorprone") apply false
 	id("org.springframework.boot") apply false
 	id("org.graalvm.buildtools.native") apply false
 }
@@ -29,6 +31,11 @@ fun pomProperty(name: String): String =
 		?.groupValues
 		?.get(1)
 		?: error("Missing <$name> in the authoritative Maven POM")
+
+val nullawayEnabled = providers.gradleProperty("nullaway").isPresent
+if (nullawayEnabled) {
+	require(JavaVersion.current() >= JavaVersion.VERSION_25) { "NullAway requires build JDK 25 or newer; output remains Java 17" }
+}
 
 val javaVersion = pomProperty("java.version").toInt()
 val revision = pomProperty("revision")
@@ -60,6 +67,28 @@ subprojects {
 	apply(plugin = "pmd")
 	if (name in libraryProjects) {
 		apply(plugin = "maven-publish")
+	}
+
+	if (nullawayEnabled) {
+		apply(plugin = "net.ltgt.errorprone")
+		dependencies {
+			"errorprone"("com.google.errorprone:error_prone_core:${pomProperty("error-prone.version")}")
+			"errorprone"("com.uber.nullaway:nullaway:${pomProperty("nullaway.version")}")
+		}
+		tasks.withType<JavaCompile>().configureEach {
+			// Analyze records and their callers together, including type-use annotations.
+			options.isIncremental = false
+			options.errorprone {
+				enabled.set(name == "compileJava")
+				disableAllChecks.set(true)
+				disableWarningsInGeneratedCode.set(true)
+				error("NullAway")
+				option("NullAway:OnlyNullMarked", "true")
+				option("NullAway:JSpecifyMode", "true")
+				option("NullAway:AcknowledgeRestrictiveAnnotations", "true")
+				option("NullAway:CustomContractAnnotations", "org.springframework.lang.Contract")
+			}
+		}
 	}
 
 	tasks.withType<JavaCompile>().configureEach {

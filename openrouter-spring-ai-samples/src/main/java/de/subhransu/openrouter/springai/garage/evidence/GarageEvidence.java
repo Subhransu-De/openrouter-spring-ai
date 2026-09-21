@@ -9,10 +9,12 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 
 /** Runtime evidence store shared by scenes, tool wrappers, transport capture, and reports. */
@@ -121,8 +123,8 @@ public final class GarageEvidence {
         .sorted(
             Comparator.comparing(
                     (FeatureEvidence item) ->
-                        item.asMap().get("featureId").toString())
-                .thenComparing(item -> item.asMap().get("operationId").toString()))
+                        Objects.requireNonNull(item.asMap().get("featureId"), "featureId").toString())
+                .thenComparing(item -> Objects.requireNonNull(item.asMap().get("operationId"), "operationId").toString()))
         .map(FeatureEvidence::asMap)
         .toList();
   }
@@ -136,7 +138,7 @@ public final class GarageEvidence {
         .filter(item -> feature.id().equals(item.get("featureId")))
         .filter(item -> mode.name().equals(item.get("requestMode")))
         .toList();
-    if (matching.stream().anyMatch(item -> !((List<?>) item.get("errors")).isEmpty())) {
+    if (matching.stream().anyMatch(item -> !((List<?>) Objects.requireNonNull(item.get("errors"), "errors")).isEmpty())) {
       return "failed";
     }
     if (!feature.supports(mode)) {
@@ -158,7 +160,7 @@ public final class GarageEvidence {
     return !matching.isEmpty() && matching.stream().allMatch(FeatureEvidence::complete);
   }
 
-  public void recordCost(String operationId, double costUsd) {
+  public void recordCost(@Nullable String operationId, double costUsd) {
     if (operationId != null && Double.isFinite(costUsd) && costUsd > 0.0) {
       this.operationCosts.merge(operationId, costUsd, Double::sum);
     }

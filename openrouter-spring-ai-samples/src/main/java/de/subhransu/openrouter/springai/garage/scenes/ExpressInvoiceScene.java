@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.garage.scenes;
 
+import org.jspecify.annotations.Nullable;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.garage.GarageCosts;
 import de.subhransu.openrouter.springai.garage.GarageResponses;
@@ -21,6 +22,7 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.support.ToolCallbacks;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Component;
+import org.springframework.util.Assert;
 
 /** Demonstrates returnDirect by returning an invoice without a follow-up model call. */
 @Component
@@ -92,6 +94,7 @@ public final class ExpressInvoiceScene extends GarageSceneSupport {
         context.transportEvidence().activate(operationId, id())) {
       response = context.chatClient().prompt(prompt).call().chatResponse();
     }
+    Assert.state(response != null, "Invoice call returned no response");
     String finalOutput = GarageResponses.text(response);
     String decodedFinalOutput = decodeToolOutput(context, finalOutput);
     String invoiceOutput = invoiceOutput(tools.invocations());
@@ -144,7 +147,7 @@ public final class ExpressInvoiceScene extends GarageSceneSupport {
   }
 
   @SuppressWarnings("unchecked")
-  private String invoiceOutput(List<Map<String, Object>> invocations) {
+  private @Nullable String invoiceOutput(List<Map<String, Object>> invocations) {
     return invocations.stream()
         .filter(item -> "generate_express_invoice".equals(item.get("tool")))
         .map(item -> (Map<String, Object>) item.get("result"))

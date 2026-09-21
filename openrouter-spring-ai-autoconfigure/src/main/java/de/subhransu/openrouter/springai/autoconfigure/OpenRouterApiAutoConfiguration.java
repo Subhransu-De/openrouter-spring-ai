@@ -1,10 +1,11 @@
 package de.subhransu.openrouter.springai.autoconfigure;
 
+import org.jspecify.annotations.Nullable;
+import org.springframework.util.Assert;
 import tools.jackson.databind.ObjectMapper;
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.OpenRouterSerializationRuntimeHints;
 import java.time.Duration;
-import org.jspecify.annotations.Nullable;
 import java.util.List;
 import java.util.StringJoiner;
 import org.springframework.beans.factory.ObjectProvider;
@@ -37,6 +38,8 @@ public class OpenRouterApiAutoConfiguration {
 			ObjectProvider<RestClient.Builder> restClientBuilderProvider,
 			ObjectProvider<WebClient.Builder> webClientBuilderProvider,
 			ObjectProvider<ObjectMapper> objectMapperProvider) {
+		String apiKey = commonProperties.getApiKey();
+		Assert.hasText(apiKey, "OpenRouter API key must not be empty");
 		OpenRouterCommonProperties.App app = commonProperties.getApp();
 		RestClient.Builder restClientBuilder = restClientBuilderProvider.getIfAvailable(RestClient::builder).clone();
 		ClientHttpRequestFactoryBuilder<?> requestFactoryBuilder = requestFactoryBuilderProvider
@@ -45,7 +48,7 @@ public class OpenRouterApiAutoConfiguration {
 		applyTimeout(restClientBuilder, requestFactoryBuilder, httpClientSettings, connectionProperties.getTimeout());
 		return OpenRouterApi.builder()
 			.baseUrl(commonProperties.getBaseUrl())
-			.apiKey(commonProperties.getApiKey())
+			.apiKey(apiKey)
 			.httpReferer(app != null ? app.getHttpReferer() : null)
 			.applicationTitle(app != null ? app.getTitle() : null)
 			.applicationCategories(app != null ? categories(app.getCategories()) : null)

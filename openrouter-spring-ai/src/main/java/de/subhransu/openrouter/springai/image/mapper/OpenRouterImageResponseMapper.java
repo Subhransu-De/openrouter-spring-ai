@@ -9,6 +9,8 @@ import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import de.subhransu.openrouter.springai.chat.mapper.UsageMapper;
 import de.subhransu.openrouter.springai.image.OpenRouterImageGenerationMetadata;
 import java.util.List;
+import java.util.Objects;
+import org.jspecify.annotations.Nullable;
 import org.springframework.ai.image.Image;
 import org.springframework.ai.image.ImageGeneration;
 import org.springframework.ai.image.ImageResponse;
@@ -23,6 +25,7 @@ public final class OpenRouterImageResponseMapper {
 		List<ImageGeneration> generations = CollectionUtils.isEmpty(response.data()) ? List.of()
 				: response.data()
 					.stream()
+					.map(Objects::requireNonNull)
 					.map(data -> new ImageGeneration(new Image(data.url(), data.b64Json()),
 							new OpenRouterImageGenerationMetadata(data.mediaType(), null)))
 					.toList();
@@ -41,11 +44,13 @@ public final class OpenRouterImageResponseMapper {
 		ImageGeneration generation = new ImageGeneration(new Image(event.url(), event.b64Json()),
 				new OpenRouterImageGenerationMetadata(event.mediaType(), event.partialImageIndex()));
 		ImageResponseMetadata metadata = metadata(event.created(), event.usage());
-		metadata.put("openrouter.event_type", event.type());
+		if (event.type() != null) {
+			metadata.put("openrouter.event_type", event.type());
+		}
 		return new ImageResponse(List.of(generation), metadata);
 	}
 
-	private ImageResponseMetadata metadata(Long created, Usage usage) {
+	private ImageResponseMetadata metadata(@Nullable Long created, @Nullable Usage usage) {
 		ImageResponseMetadata metadata = created != null ? new ImageResponseMetadata(created)
 				: new ImageResponseMetadata();
 		if (usage != null) {

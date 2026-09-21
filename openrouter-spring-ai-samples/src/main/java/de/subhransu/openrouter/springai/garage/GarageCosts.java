@@ -4,6 +4,7 @@ import de.subhransu.openrouter.springai.chat.OpenRouterUsage;
 import de.subhransu.openrouter.springai.garage.scenes.SceneResult;
 import java.util.List;
 import java.util.Map;
+import org.jspecify.annotations.Nullable;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatResponse;
 
@@ -12,14 +13,14 @@ public final class GarageCosts {
 
   private GarageCosts() {}
 
-  public static double usage(Usage usage) {
+  public static double usage(@Nullable Usage usage) {
     if (usage instanceof OpenRouterUsage openRouterUsage && openRouterUsage.getCost() != null) {
       return openRouterUsage.getCost();
     }
     return 0.0;
   }
 
-  public static double usageMaps(Object value) {
+  public static double usageMaps(@Nullable Object value) {
     if (value instanceof Map<?, ?> map) {
       Object usage = map.get(GarageEvidenceKeys.USAGE);
       if (usage instanceof Map<?, ?> usageMap) {

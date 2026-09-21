@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.jspecify.annotations.Nullable;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.definition.ToolDefinition;
@@ -78,11 +79,11 @@ public final class GarageToolCallback implements ToolCallback {
   }
 
   @Override
-  public String call(String toolInput, ToolContext toolContext) {
+  public String call(String toolInput, @Nullable ToolContext toolContext) {
     return invoke(toolInput, toolContext);
   }
 
-  private String invoke(String toolInput, ToolContext toolContext) {
+  private String invoke(String toolInput, @Nullable ToolContext toolContext) {
     String tool = getToolDefinition().name();
     Map<String, Object> attempt = new LinkedHashMap<>();
     attempt.put("tool", tool);

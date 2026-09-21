@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
+import org.jspecify.annotations.Nullable;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.stereotype.Component;
@@ -20,7 +21,7 @@ public final class GarageTransportEvidence {
 
   private final GarageEvidence evidence;
   private final List<Map<String, Object>> requests = new CopyOnWriteArrayList<>();
-  private final AtomicReference<Operation> activeOperation = new AtomicReference<>();
+  private final AtomicReference<@Nullable Operation> activeOperation = new AtomicReference<>();
 
   public GarageTransportEvidence(GarageEvidence evidence) {
     this.evidence = evidence;

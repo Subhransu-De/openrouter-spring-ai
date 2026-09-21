@@ -18,6 +18,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.Supplier;
+import org.jspecify.annotations.Nullable;
 import org.springframework.ai.chat.observation.ChatModelObservationContext;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.embedding.observation.EmbeddingModelObservationContext;
@@ -48,7 +49,7 @@ public final class GarageTelemetry implements ObservationHandler<Observation.Con
   public void onStart(Observation.Context context) {
     context.put(START_NANOS, System.nanoTime());
     context.put(START_INSTANT, Instant.now().toString());
-    Map<String, Object> correlation = this.currentOperation.get();
+    Map<String, ?> correlation = this.currentOperation.get();
     if (context instanceof ChatModelObservationContext chatContext
         && chatContext.getRequest().getOptions() instanceof OpenRouterChatOptions options
         && value(options.getMetadata(), "operationId") != null) {
@@ -239,7 +240,7 @@ public final class GarageTelemetry implements ObservationHandler<Observation.Con
     return result;
   }
 
-  private Map<String, Object> error(Throwable failure) {
+  private Map<String, Object> error(@Nullable Throwable failure) {
     if (failure == null) {
       return Map.of();
     }
@@ -262,7 +263,7 @@ public final class GarageTelemetry implements ObservationHandler<Observation.Con
     return values;
   }
 
-  private String value(Map<String, Object> values, String key) {
+  private @Nullable String value(@Nullable Map<String, ?> values, String key) {
     Object value = values != null ? values.get(key) : null;
     return value != null ? value.toString() : null;
   }

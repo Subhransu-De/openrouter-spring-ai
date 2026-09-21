@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import org.jspecify.annotations.Nullable;
 import org.springframework.ai.content.Media;
 
 /**
@@ -18,7 +19,7 @@ final class AssistantContentMapper {
 	private AssistantContentMapper() {
 	}
 
-	static MappedContent map(Object content) {
+	static MappedContent map(@Nullable Object content) {
 		if (content == null) {
 			return new MappedContent("", List.of());
 		}
@@ -37,7 +38,7 @@ final class AssistantContentMapper {
 		return new MappedContent(text, GeneratedImageMapper.media(parts));
 	}
 
-	private static ContentPart contentPart(Object value) {
+	private static @Nullable ContentPart contentPart(@Nullable Object value) {
 		if (value instanceof ContentPart part) {
 			return part;
 		}
@@ -51,7 +52,7 @@ final class AssistantContentMapper {
 				imageUrl(attributes.get("image_url")));
 	}
 
-	private static ContentPart.ImageUrl imageUrl(Object value) {
+	private static ContentPart.@Nullable ImageUrl imageUrl(@Nullable Object value) {
 		if (value instanceof ContentPart.ImageUrl imageUrl) {
 			return imageUrl;
 		}
@@ -65,7 +66,7 @@ final class AssistantContentMapper {
 		return null;
 	}
 
-	private static String stringValue(Object value) {
+	private static @Nullable String stringValue(@Nullable Object value) {
 		return value instanceof String text ? text : null;
 	}
 

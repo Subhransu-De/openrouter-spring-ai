@@ -5,6 +5,7 @@ import de.subhransu.openrouter.springai.chat.OpenRouterServiceTier;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "garage", ignoreUnknownFields = false)
@@ -40,7 +41,7 @@ public class GarageProperties {
   private String route = "fallback";
   private boolean reasoningEnabled = true;
   private String reasoningEffort = "medium";
-  private Integer reasoningMaxTokens;
+  private @Nullable Integer reasoningMaxTokens;
   private boolean reasoningExclude;
   private boolean providerPreferencesEnabled = true;
   private Boolean providerAllowFallbacks = true;
@@ -285,11 +286,11 @@ public class GarageProperties {
     this.reasoningEffort = reasoningEffort;
   }
 
-  public Integer getReasoningMaxTokens() {
+  public @Nullable Integer getReasoningMaxTokens() {
     return this.reasoningMaxTokens;
   }
 
-  public void setReasoningMaxTokens(Integer reasoningMaxTokens) {
+  public void setReasoningMaxTokens(@Nullable Integer reasoningMaxTokens) {
     this.reasoningMaxTokens = reasoningMaxTokens;
   }
 

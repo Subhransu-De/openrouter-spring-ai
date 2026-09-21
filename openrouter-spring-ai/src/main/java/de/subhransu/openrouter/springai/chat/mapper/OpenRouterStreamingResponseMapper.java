@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.jspecify.annotations.Nullable;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.metadata.ChatGenerationMetadata;
 import org.springframework.ai.chat.metadata.ChatResponseMetadata;
@@ -18,7 +19,6 @@ import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.content.Media;
 import org.springframework.util.CollectionUtils;
-import org.jspecify.annotations.Nullable;
 import reactor.core.publisher.Flux;
 
 public final class OpenRouterStreamingResponseMapper {
@@ -45,7 +45,7 @@ public final class OpenRouterStreamingResponseMapper {
 		return Flux.defer(() -> {
 			Map<Integer, PartialOutputAccumulator> partialOutputs = new LinkedHashMap<>();
 			Map<Integer, ReasoningMetadata.Accumulator> reasoning = new LinkedHashMap<>();
-			Map<String, Object> extensions = new LinkedHashMap<>();
+			Map<String, @Nullable Object> extensions = new LinkedHashMap<>();
 			AudioOutputMapper audio = new AudioOutputMapper(audioOptions);
 			return chunks.map(chunk -> map(chunk, partialOutputs, reasoning, extensions, audio))
 				.doOnComplete(audio::complete)
@@ -54,7 +54,7 @@ public final class OpenRouterStreamingResponseMapper {
 	}
 
 	private ChatResponse map(ChatCompletionChunk chunk, Map<Integer, PartialOutputAccumulator> partialOutputs,
-			Map<Integer, ReasoningMetadata.Accumulator> reasoning, Map<String, Object> extensions,
+			Map<Integer, ReasoningMetadata.Accumulator> reasoning, Map<String, @Nullable Object> extensions,
 			AudioOutputMapper audio) {
 		if (chunk.error() != null) {
 			// Mid-stream failures arrive as a normal chunk with a top-level error object
@@ -66,7 +66,7 @@ public final class OpenRouterStreamingResponseMapper {
 		accumulatePartialOutput(chunk, partialOutputs);
 		throwIfChoiceFailed(chunk, partialOutputs);
 		List<Generation> generations = CollectionUtils.isEmpty(chunk.choices()) ? List.of()
-				: chunk.choices()
+				: ResponseValues.items(chunk.choices(), "choice")
 					.stream()
 					.filter(choice -> !audio.finished(choice))
 					.map(choice -> mapGeneration(choice, chunk.model(), audio,
@@ -74,7 +74,7 @@ public final class OpenRouterStreamingResponseMapper {
 					.toList();
 		clearFinishedChoices(chunk, partialOutputs);
 		if (chunk.choices() != null) {
-			chunk.choices()
+			ResponseValues.items(chunk.choices(), "choice")
 				.stream()
 				.filter(choice -> choice.finishReason() != null)
 				.forEach(choice -> reasoning.remove(choiceIndex(choice)));
@@ -126,7 +126,7 @@ public final class OpenRouterStreamingResponseMapper {
 		return choice.index() != null ? choice.index() : 0;
 	}
 
-	private Generation mapGeneration(Choice choice, String model, AudioOutputMapper audio,
+	private Generation mapGeneration(Choice choice, @Nullable String model, AudioOutputMapper audio,
 			ReasoningMetadata.Accumulator reasoning) {
 		if (choice.delta() != null && !CollectionUtils.isEmpty(choice.delta().toolCalls())
 				&& !FinishReasonMapper.isToolCallCompletion(choice.finishReason())) {
@@ -150,39 +150,44 @@ public final class OpenRouterStreamingResponseMapper {
 			.toolCalls(mapToolCalls(choice.delta() != null ? choice.delta().toolCalls() : null))
 			.media(media)
 			.build();
-		ChatGenerationMetadata metadata = ChatGenerationMetadata.builder()
-			.finishReason(FinishReasonMapper.map(choice.finishReason()))
-			.metadata("openrouter.model", model)
-			.metadata("openrouter.choice_index", choice.index())
-			.metadata("openrouter.native_finish_reason", choice.nativeFinishReason())
-			.metadata(RefusalMetadata.REFUSAL, snapshot.get(RefusalMetadata.REFUSAL))
-			.metadata("openrouter.reasoning", choice.delta() != null ? choice.delta().reasoning() : null)
-			.build();
+		ChatGenerationMetadata.Builder metadataBuilder = ChatGenerationMetadata.builder();
+		metadataBuilder.finishReason(FinishReasonMapper.map(choice.finishReason()));
+		ResponseValues.ifPresent(model, value -> metadataBuilder.metadata("openrouter.model", value));
+		ResponseValues.ifPresent(choice.index(), value -> metadataBuilder.metadata("openrouter.choice_index", value));
+		ResponseValues.ifPresent(choice.nativeFinishReason(),
+				value -> metadataBuilder.metadata("openrouter.native_finish_reason", value));
+		ResponseValues.ifPresent(snapshot.get(RefusalMetadata.REFUSAL),
+				value -> metadataBuilder.metadata(RefusalMetadata.REFUSAL, value));
+		ResponseValues.ifPresent(choice.delta() != null ? choice.delta().reasoning() : null,
+				value -> metadataBuilder.metadata("openrouter.reasoning", value));
+		ChatGenerationMetadata metadata = metadataBuilder.build();
 		return new Generation(assistantMessage, metadata);
 	}
 
-	private List<AssistantMessage.ToolCall> mapToolCalls(List<ToolCall> toolCalls) {
+	private List<AssistantMessage.ToolCall> mapToolCalls(@Nullable List<? extends @Nullable ToolCall> toolCalls) {
 		if (toolCalls == null || toolCalls.isEmpty()) {
 			return List.of();
 		}
-		return toolCalls.stream()
-			.filter(toolCall -> toolCall != null)
-			.map(toolCall -> new AssistantMessage.ToolCall(toolCall.id(), toolCall.type(),
-					toolCall.function() != null ? toolCall.function().name() : null,
-					toolCall.function() != null ? toolCall.function().arguments() : null))
+		return ResponseValues.items(toolCalls, "tool call")
+			.stream()
+			.map(toolCall -> new AssistantMessage.ToolCall(toolCall.id() != null ? toolCall.id() : "",
+					ResponseValues.required(toolCall.type(), "tool call type"),
+					ResponseValues.required(ResponseValues.required(toolCall.function(), "tool call function").name(),
+							"tool call name"),
+					ResponseValues.required(toolCall.function().arguments(), "tool call arguments")))
 			.toList();
 	}
 
-	private ChatResponseMetadata mapMetadata(ChatCompletionChunk chunk, Map<String, Object> extensions) {
-		return ChatResponseMetadata.builder()
-			.id(chunk.id())
-			.model(chunk.model())
-			.usage(UsageMapper.map(chunk.usage()))
-			.keyValue(ExtensionMetadata.RESPONSE, OptionSnapshots.map(extensions))
-			.keyValue("openrouter.provider", chunk.provider())
-			.keyValue("openrouter.object", chunk.object())
-			.keyValue("openrouter.created", chunk.created())
-			.build();
+	private ChatResponseMetadata mapMetadata(ChatCompletionChunk chunk, Map<String, @Nullable Object> extensions) {
+		ChatResponseMetadata.Builder metadataBuilder = ChatResponseMetadata.builder();
+		ResponseValues.ifPresent(chunk.id(), metadataBuilder::id);
+		ResponseValues.ifPresent(chunk.model(), metadataBuilder::model);
+		ResponseValues.ifPresent(UsageMapper.map(chunk.usage()), metadataBuilder::usage);
+		metadataBuilder.keyValue(ExtensionMetadata.RESPONSE, OptionSnapshots.map(extensions));
+		metadataBuilder.keyValue("openrouter.provider", chunk.provider());
+		metadataBuilder.keyValue("openrouter.object", chunk.object());
+		metadataBuilder.keyValue("openrouter.created", chunk.created());
+		return metadataBuilder.build();
 	}
 
 	private static final class PartialOutputAccumulator {
@@ -208,7 +213,7 @@ public final class OpenRouterStreamingResponseMapper {
 			}
 		}
 
-		String diagnosticValue() {
+		@Nullable String diagnosticValue() {
 			if (this.value.length() == 0) {
 				return null;
 			}

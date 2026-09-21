@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.jspecify.annotations.Nullable;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Component;
 
@@ -210,7 +211,7 @@ public final class GarageOptionsFactory {
             .reasoning(reasoningOptions())
             .provider(serviceProviderPreferences())
             .serviceTier(this.properties.getServiceTier())
-            .metadata(metadata)
+            .metadata(new LinkedHashMap<>(metadata))
             .user(this.properties.getUser());
     if (fallbackModels != null && !fallbackModels.isEmpty()) {
       builder.models(fallbackModels);
@@ -231,7 +232,7 @@ public final class GarageOptionsFactory {
         provider != null ? provider.sort() : null);
   }
 
-  private OpenRouterProviderPreferences serviceProviderPreferences() {
+  private @Nullable OpenRouterProviderPreferences serviceProviderPreferences() {
     return serviceProviderPreferences(this.properties);
   }
 
@@ -241,7 +242,7 @@ public final class GarageOptionsFactory {
    * these too, otherwise {@code --provider-sort} and {@code --provider-require-parameters}
    * would silently cover only part of a run.
    */
-  public static OpenRouterProviderPreferences serviceProviderPreferences(
+  public static @Nullable OpenRouterProviderPreferences serviceProviderPreferences(
       GarageProperties properties) {
     if (!properties.isProviderPreferencesEnabled()) {
       return null;
@@ -261,8 +262,8 @@ public final class GarageOptionsFactory {
    * the provider list and forbids fallbacks; strictness and sorting still come from the
    * run so a sweep entry cannot quietly opt out of {@code --provider-require-parameters}.
    */
-  public static OpenRouterProviderPreferences pinnedProviderPreferences(
-      OpenRouterProviderPreferences shared, String providerPin) {
+  public static @Nullable OpenRouterProviderPreferences pinnedProviderPreferences(
+      @Nullable OpenRouterProviderPreferences shared, @Nullable String providerPin) {
     if (providerPin == null) {
       return shared;
     }
@@ -281,8 +282,8 @@ public final class GarageOptionsFactory {
    * {@code OpenRouterImageOptions} exposes passthrough options rather than typed routing
    * preferences. Returns {@code null} when there is nothing to send.
    */
-  public static Map<String, Object> imageProviderOptions(
-      OpenRouterProviderPreferences shared, String providerPin) {
+  public static @Nullable Map<String, @Nullable Object> imageProviderOptions(
+      @Nullable OpenRouterProviderPreferences shared, @Nullable String providerPin) {
     OpenRouterProviderPreferences provider = pinnedProviderPreferences(shared, providerPin);
     if (provider == null) {
       return null;
@@ -300,7 +301,7 @@ public final class GarageOptionsFactory {
     if (provider.order() != null && !provider.order().isEmpty()) {
       values.put("order", provider.order());
     }
-    return values.isEmpty() ? null : values;
+    return values.isEmpty() ? null : new LinkedHashMap<>(values);
   }
 
   private OpenRouterProviderPreferences fullProviderPreferences() {
@@ -314,7 +315,7 @@ public final class GarageOptionsFactory {
         this.properties.getProviderSort());
   }
 
-  private OpenRouterReasoningOptions reasoningOptions() {
+  private @Nullable OpenRouterReasoningOptions reasoningOptions() {
     return serviceReasoningOptions(this.properties);
   }
 
@@ -324,7 +325,7 @@ public final class GarageOptionsFactory {
    * them a reasoning model falls back to its own default effort and can spend the whole
    * specialist completion budget thinking, returning truncated or empty text.
    */
-  public static OpenRouterReasoningOptions serviceReasoningOptions(GarageProperties properties) {
+  public static @Nullable OpenRouterReasoningOptions serviceReasoningOptions(GarageProperties properties) {
     if (!properties.isReasoningEnabled()) {
       return null;
     }
@@ -336,7 +337,7 @@ public final class GarageOptionsFactory {
         true);
   }
 
-  private Map<String, Object> providerSnapshot(OpenRouterProviderPreferences provider) {
+  private Map<String, Object> providerSnapshot(@Nullable OpenRouterProviderPreferences provider) {
     if (provider == null) {
       return Map.of();
     }
@@ -351,7 +352,7 @@ public final class GarageOptionsFactory {
     return values;
   }
 
-  private Map<String, Object> reasoningSnapshot(OpenRouterReasoningOptions reasoning) {
+  private Map<String, Object> reasoningSnapshot(@Nullable OpenRouterReasoningOptions reasoning) {
     if (reasoning == null) {
       return Map.of();
     }
@@ -363,7 +364,7 @@ public final class GarageOptionsFactory {
     return values;
   }
 
-  private void addIfPresent(List<String> unsupported, String option, Object value) {
+  private void addIfPresent(List<String> unsupported, String option, @Nullable Object value) {
     if (value != null && (!(value instanceof List<?> list) || !list.isEmpty())) {
       unsupported.add(option);
     }

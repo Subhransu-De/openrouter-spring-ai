@@ -478,17 +478,16 @@ class OpenRouterChatResponseFixtureMapperTests {
 	}
 
 	@Test
-	void usageNullMapsToNullUsageWithoutFailing() {
+	void missingUsageKeepsSpringAiEmptyUsageDefault() {
 		ChatCompletionResponse response = new ChatCompletionResponse("gen-1", "chat.completion", 1L, "m", "p",
 				List.of(new Choice(0, new ChatMessage("assistant", "hi", null, null, null), null, "stop", "stop")),
 				null);
 
 		ChatResponse mapped = this.responseMapper.map(response);
 
-		// A response with no usage block maps cleanly and leaves usage null; the mapper
-		// does not synthesize a zeroed counter, so callers can distinguish "no usage
-		// reported" from "zero tokens".
-		assertThat(mapped.getMetadata().getUsage()).isNull();
+		// EmptyUsage preserves Spring AI's non-null contract without inventing a
+		// provider usage record.
+		assertThat(mapped.getMetadata().getUsage()).isInstanceOf(org.springframework.ai.chat.metadata.EmptyUsage.class);
 		assertThat(mapped.getResult().getOutput().getText()).isEqualTo("hi");
 	}
 

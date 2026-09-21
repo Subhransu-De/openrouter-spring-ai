@@ -2,6 +2,7 @@ package de.subhransu.openrouter.springai.errors;
 
 import java.util.Locale;
 import java.util.Set;
+import org.jspecify.annotations.Nullable;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.util.StringUtils;
 
@@ -10,7 +11,6 @@ import org.springframework.util.StringUtils;
  *
  * @author Subhransu De
  */
-@org.jspecify.annotations.NullUnmarked
 public final class OpenRouterErrorClassifier {
 
 	private static final Set<String> TRANSIENT_ERROR_TYPES = Set.of("api_error", "insufficient_system_resources",
@@ -50,7 +50,7 @@ public final class OpenRouterErrorClassifier {
 	 * {@code error_type} takes precedence over the status. Unknown combinations default
 	 * to non-transient so a potentially chargeable request is not repeated.
 	 */
-	public static boolean isTransient(HttpStatusCode statusCode, String errorType) {
+	public static boolean isTransient(HttpStatusCode statusCode, @Nullable String errorType) {
 		return isTransient(statusCode.value(), errorType);
 	}
 
@@ -58,7 +58,7 @@ public final class OpenRouterErrorClassifier {
 	 * Variant for in-band errors whose numeric code has not been converted into an HTTP
 	 * status object.
 	 */
-	public static boolean isTransient(int statusCode, String errorType) {
+	public static boolean isTransient(int statusCode, @Nullable String errorType) {
 		if (StringUtils.hasText(errorType)) {
 			if (TRANSIENT_ERROR_TYPES.contains(errorType)) {
 				return true;
@@ -84,7 +84,8 @@ public final class OpenRouterErrorClassifier {
 	 * canonical {@code error_type} takes precedence, followed by symbolic/native codes,
 	 * narrowly-scoped message hints, and finally the HTTP-compatible status.
 	 */
-	public static OpenRouterErrorCategory category(int statusCode, String errorType, String code, String message) {
+	public static OpenRouterErrorCategory category(int statusCode, @Nullable String errorType, @Nullable String code,
+			@Nullable String message) {
 		String canonical = normalize(errorType);
 		OpenRouterErrorCategory category = category(canonical);
 		if (category != null) {
@@ -131,11 +132,12 @@ public final class OpenRouterErrorClassifier {
 	/**
 	 * Classify an in-band error whose code may contain an HTTP-compatible status.
 	 */
-	public static OpenRouterErrorCategory category(String errorType, String code, String message) {
+	public static OpenRouterErrorCategory category(@Nullable String errorType, @Nullable String code,
+			@Nullable String message) {
 		return category(numericStatus(code), errorType, code, message);
 	}
 
-	private static int numericStatus(String code) {
+	private static int numericStatus(@Nullable String code) {
 		try {
 			int statusCode = Integer.parseInt(code);
 			return statusCode >= 400 && statusCode <= 599 ? statusCode : -1;
@@ -145,7 +147,7 @@ public final class OpenRouterErrorClassifier {
 		}
 	}
 
-	private static OpenRouterErrorCategory category(String value) {
+	private static @Nullable OpenRouterErrorCategory category(@Nullable String value) {
 		if (!StringUtils.hasText(value) || "unmapped".equals(value) || "error".equals(value)) {
 			return null;
 		}
@@ -179,12 +181,12 @@ public final class OpenRouterErrorClassifier {
 		return null;
 	}
 
-	private static boolean containsUnsupportedParameter(String value) {
+	private static boolean containsUnsupportedParameter(@Nullable String value) {
 		return containsAny(value, "unsupported parameter", "unsupported_parameter", "parameter is not supported",
 				"does not support parameter");
 	}
 
-	private static boolean containsAny(String value, String... candidates) {
+	private static boolean containsAny(@Nullable String value, String... candidates) {
 		if (!StringUtils.hasText(value)) {
 			return false;
 		}
@@ -196,7 +198,7 @@ public final class OpenRouterErrorClassifier {
 		return false;
 	}
 
-	private static String normalize(String value) {
+	private static @Nullable String normalize(@Nullable String value) {
 		return StringUtils.hasText(value) ? value.trim().toLowerCase(Locale.ROOT) : null;
 	}
 

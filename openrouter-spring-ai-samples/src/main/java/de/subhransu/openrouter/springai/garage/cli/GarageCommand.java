@@ -9,6 +9,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import org.jspecify.annotations.Nullable;
 import org.springframework.util.StringUtils;
 
 /** Typed Garage CLI command. */
@@ -23,7 +24,7 @@ public record GarageCommand(
     boolean embedding,
     boolean vision,
     ImageSurface imageSurface,
-    String imageQuality,
+    @Nullable String imageQuality,
     String foremanModel,
     String specialistModel,
     String embeddingModel,

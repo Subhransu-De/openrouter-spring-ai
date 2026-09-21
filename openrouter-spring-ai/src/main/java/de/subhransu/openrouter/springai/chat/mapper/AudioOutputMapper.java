@@ -83,7 +83,7 @@ final class AudioOutputMapper {
 				assembly = new Assembly();
 				this.pending.put(index, assembly);
 			}
-			append(assembly, audio);
+			append(assembly, audio, this.options);
 		}
 		if (assembly == null) {
 			return;
@@ -92,6 +92,7 @@ final class AudioOutputMapper {
 				choice.delta() == null || choice.delta().toolCalls() == null || choice.delta().toolCalls().isEmpty(),
 				"Audio and tool calls in the same choice are unsupported");
 		if (choice.finishReason() != null) {
+			Assert.state(this.options != null, "Received audio without configured output audio options");
 			byte[] completedAudio = assembly.bytes.toByteArray();
 			if (!"stop".equals(choice.finishReason()) || completedAudio.length == 0) {
 				throw new OpenRouterTruncatedResponseException(
@@ -117,8 +118,8 @@ final class AudioOutputMapper {
 		}
 	}
 
-	private void append(Assembly assembly, AudioOutput audio) {
-		Assert.state(audio.format() == null || this.options.format().equals(audio.format()),
+	private void append(Assembly assembly, AudioOutput audio, OpenRouterAudioOptions options) {
+		Assert.state(audio.format() == null || options.format().equals(audio.format()),
 				"Conflicting audio output format");
 		Assert.state(audio.id() == null || assembly.id == null || assembly.id.equals(audio.id()),
 				"Conflicting audio identifiers in one choice");

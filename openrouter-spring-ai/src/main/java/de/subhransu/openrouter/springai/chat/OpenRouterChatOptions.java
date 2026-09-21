@@ -1,6 +1,5 @@
 package de.subhransu.openrouter.springai.chat;
 
-import org.jspecify.annotations.Nullable;
 import de.subhransu.openrouter.springai.support.RequestExtensions;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.support.OptionSnapshots;
@@ -9,10 +8,12 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.jspecify.annotations.Nullable;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.model.tool.StructuredOutputChatOptions;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.ai.tool.ToolCallback;
+import org.springframework.lang.Contract;
 import org.springframework.util.Assert;
 
 public class OpenRouterChatOptions implements ToolCallingChatOptions, StructuredOutputChatOptions {
@@ -94,6 +95,7 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 		return new Builder(this);
 	}
 
+	@Contract("!null -> !null")
 	public static @Nullable OpenRouterChatOptions fromOptions(@Nullable ChatOptions options) {
 		if (options == null) {
 			return null;
@@ -332,7 +334,7 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 	}
 
 	public void setToolContext(@Nullable Map<String, Object> toolContext) {
-		this.toolContext = copyMap(toolContext);
+		this.toolContext = copyToolContext(toolContext);
 	}
 
 	private static <T> @Nullable List<T> copyList(@Nullable List<T> values) {
@@ -343,7 +345,7 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 		if (defaults == null) {
 			return copyList(additions);
 		}
-		List<T> combined = copyList(defaults);
+		List<T> combined = new ArrayList<>(defaults);
 		if (additions != null) {
 			combined.addAll(additions);
 		}
@@ -354,27 +356,34 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 		return values == null ? null : Collections.unmodifiableList(new ArrayList<>(values));
 	}
 
-	@org.jspecify.annotations.NullUnmarked
-	private static @Nullable Map<String, Object> copyMap(@Nullable Map<String, Object> values) {
+	@Contract("!null -> !null")
+	private static @Nullable Map<String, @Nullable Object> copyMap(@Nullable Map<String, @Nullable Object> values) {
 		return values == null ? null : new LinkedHashMap<>(OptionSnapshots.map(values));
 	}
 
-	@org.jspecify.annotations.NullUnmarked
-	private static @Nullable Map<String, Object> readOnlyMap(@Nullable Map<String, Object> values) {
+	private static <V extends @Nullable Object> @Nullable Map<String, V> readOnlyMap(@Nullable Map<String, V> values) {
 		return values == null ? null : Collections.unmodifiableMap(new LinkedHashMap<>(values));
 	}
 
-	@org.jspecify.annotations.NullUnmarked
-	private static @Nullable Map<String, Object> mergeMaps(@Nullable Map<String, Object> defaults,
-			@Nullable Map<String, Object> runtime) {
+	private static @Nullable Map<String, @Nullable Object> mergeMaps(@Nullable Map<String, @Nullable Object> defaults,
+			@Nullable Map<String, @Nullable Object> runtime) {
 		if (defaults == null) {
 			return copyMap(runtime);
 		}
-		Map<String, Object> merged = copyMap(defaults);
+		Map<String, @Nullable Object> merged = copyMap(defaults);
 		if (runtime != null) {
 			merged.putAll(runtime);
 		}
 		return merged;
+	}
+
+	private static @Nullable Map<String, Object> copyToolContext(@Nullable Map<String, Object> values) {
+		if (values == null) {
+			return null;
+		}
+		Map<String, Object> copy = new LinkedHashMap<>();
+		values.forEach((key, value) -> copy.put(key, OptionSnapshots.value(value)));
+		return copy;
 	}
 
 	public static final class Builder
@@ -421,7 +430,7 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 			this.options.providerExtraBody = copyMap(source.providerExtraBody);
 			this.options.outputSchema = source.outputSchema;
 			this.options.toolCallbacks = copyList(source.toolCallbacks);
-			this.options.toolContext = copyMap(source.toolContext);
+			this.options.toolContext = copyToolContext(source.toolContext);
 		}
 
 		@Override
@@ -653,7 +662,8 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 
 		@Override
 		public Builder toolContext(@Nullable Map<String, Object> toolContext) {
-			this.options.toolContext = toolContext == null ? null : mergeMaps(this.options.toolContext, toolContext);
+			this.options.toolContext = toolContext == null ? null
+					: copyToolContext(ToolCallingChatOptions.mergeToolContext(toolContext, this.options.toolContext));
 			return this;
 		}
 

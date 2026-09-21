@@ -1,12 +1,13 @@
 package de.subhransu.openrouter.springai.chat.errors;
 
-import org.jspecify.annotations.Nullable;
 import de.subhransu.openrouter.springai.errors.OpenRouterExceptionMessage;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorClassifier;
+import java.util.Objects;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Structured diagnostics for an error embedded in a blocking or streamed chat-completion
@@ -66,11 +67,11 @@ public record OpenRouterChoiceErrorDetails(@Nullable String responseId, @Nullabl
 	}
 
 	public OpenRouterErrorCategory category() {
-		return this.category;
+		return Objects.requireNonNull(this.category);
 	}
 
 	public Map<String, @Nullable Object> metadata() {
-		return this.metadata;
+		return Objects.requireNonNull(this.metadata);
 	}
 
 }

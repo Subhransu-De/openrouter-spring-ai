@@ -4,6 +4,7 @@ import de.subhransu.openrouter.springai.api.dto.EmbeddingsResponse;
 import de.subhransu.openrouter.springai.api.dto.Usage;
 import de.subhransu.openrouter.springai.chat.mapper.UsageMapper;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 import org.springframework.ai.chat.metadata.EmptyUsage;
 import org.springframework.ai.embedding.Embedding;
 import org.springframework.ai.embedding.EmbeddingResponse;
@@ -16,7 +17,7 @@ public final class OpenRouterEmbeddingResponseMapper {
 		return map(response, response.data() == null ? 0 : response.data().size(), null);
 	}
 
-	public EmbeddingResponse map(EmbeddingsResponse response, int inputCount, Integer dimensions) {
+	public EmbeddingResponse map(EmbeddingsResponse response, int inputCount, @Nullable Integer dimensions) {
 		Assert.state(response != null && response.data() != null && response.data().size() == inputCount,
 				"Embedding response count must match input count");
 		Embedding[] embeddings = new Embedding[inputCount];
@@ -42,9 +43,9 @@ public final class OpenRouterEmbeddingResponseMapper {
 	private EmbeddingResponseMetadata mapMetadata(EmbeddingsResponse response) {
 		Usage usage = response.usage();
 		if (usage == null) {
-			return new EmbeddingResponseMetadata(response.model(), new EmptyUsage());
+			return new EmbeddingResponseMetadata(response.model() != null ? response.model() : "", new EmptyUsage());
 		}
-		return new EmbeddingResponseMetadata(response.model(), UsageMapper.map(usage));
+		return new EmbeddingResponseMetadata(response.model() != null ? response.model() : "", UsageMapper.map(usage));
 	}
 
 }

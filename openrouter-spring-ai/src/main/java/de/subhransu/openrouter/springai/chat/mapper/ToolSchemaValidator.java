@@ -5,6 +5,7 @@ import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Set;
+import org.jspecify.annotations.Nullable;
 import org.springframework.ai.tool.definition.ToolDefinition;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
@@ -16,7 +17,7 @@ final class ToolSchemaValidator {
 	private ToolSchemaValidator() {
 	}
 
-	static JsonNode read(ObjectMapper mapper, ToolDefinition tool, Boolean strict) {
+	static JsonNode read(ObjectMapper mapper, ToolDefinition tool, @Nullable Boolean strict) {
 		JsonNode schema;
 		try {
 			schema = mapper.readTree(tool.inputSchema());

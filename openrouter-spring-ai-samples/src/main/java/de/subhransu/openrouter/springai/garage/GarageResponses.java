@@ -2,6 +2,7 @@ package de.subhransu.openrouter.springai.garage;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.jspecify.annotations.Nullable;
 import org.springframework.ai.chat.metadata.ChatResponseMetadata;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -11,7 +12,7 @@ public final class GarageResponses {
 
   private GarageResponses() {}
 
-  public static String text(ChatResponse response) {
+  public static String text(@Nullable ChatResponse response) {
     if (response == null || response.getResult() == null) {
       return "";
     }
@@ -19,7 +20,7 @@ public final class GarageResponses {
     return text != null ? text : "";
   }
 
-  public static String finishReason(ChatResponse response) {
+  public static String finishReason(@Nullable ChatResponse response) {
     Generation result = response != null ? response.getResult() : null;
     if (result == null || result.getMetadata() == null) {
       return "";
@@ -28,7 +29,7 @@ public final class GarageResponses {
     return finishReason != null ? finishReason : "";
   }
 
-  public static String reasoning(ChatResponse response) {
+  public static String reasoning(@Nullable ChatResponse response) {
     Generation result = response != null ? response.getResult() : null;
     if (result == null || result.getMetadata() == null) {
       return "";
@@ -37,7 +38,7 @@ public final class GarageResponses {
     return reasoning != null ? reasoning.toString() : "";
   }
 
-  public static Map<String, Object> metadata(ChatResponse response) {
+  public static Map<String, Object> metadata(@Nullable ChatResponse response) {
     Map<String, Object> metadata = new LinkedHashMap<>();
     if (response == null) {
       return metadata;
@@ -52,7 +53,7 @@ public final class GarageResponses {
     return metadata;
   }
 
-  public static Map<String, Object> generationMetadata(ChatResponse response) {
+  public static Map<String, Object> generationMetadata(@Nullable ChatResponse response) {
     Map<String, Object> metadata = new LinkedHashMap<>();
     Generation result = response != null ? response.getResult() : null;
     if (result == null || result.getMetadata() == null) {
@@ -70,7 +71,7 @@ public final class GarageResponses {
     return metadata;
   }
 
-  public static Map<String, Object> usage(Usage usage) {
+  public static Map<String, Object> usage(@Nullable Usage usage) {
     Map<String, Object> values = new LinkedHashMap<>();
     if (usage == null) {
       return values;
