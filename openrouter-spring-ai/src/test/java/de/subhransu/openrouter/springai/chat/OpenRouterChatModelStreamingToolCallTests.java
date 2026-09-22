@@ -147,8 +147,11 @@ class OpenRouterChatModelStreamingToolCallTests {
 	void responsesStreamingSurfacesToolCallWithoutExecutingIt() {
 		OpenRouterApi api = mock(OpenRouterApi.class);
 		when(api.responsesStream(any()))
-			.thenReturn(Flux.just(responsesToolCallEvent(), new ResponsesStreamEvent("response.completed", null, null,
-					new ResponsesResult(null, null, null, null, "completed", null, null, null), null)));
+			.thenReturn(
+					Flux.just(responsesToolCallEvent(),
+							new ResponsesStreamEvent("response.completed", null, null, new ResponsesResult(null, null,
+									null, null, "completed", List.of(responsesToolCallEvent().item()), null, null),
+									null)));
 		OpenRouterChatModel model = OpenRouterChatModel.builder().openRouterApi(api).build();
 
 		List<ChatResponse> responses = model
