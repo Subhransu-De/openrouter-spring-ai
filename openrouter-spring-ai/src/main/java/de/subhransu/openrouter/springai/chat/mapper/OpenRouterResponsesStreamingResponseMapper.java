@@ -53,7 +53,7 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 		String type = event.type();
 		boolean incomplete = "response.incomplete".equals(type);
 		boolean completed = "response.completed".equals(type);
-		if ("error".equals(type) || type != null && type.endsWith(".error")) {
+		if (event.error() != null || "error".equals(type) || type != null && type.endsWith(".error")) {
 			StreamError error = eventError(event);
 			throw OpenRouterResponsesResponseMapper.failure("OpenRouter responses stream failed", String.valueOf(event),
 					error, event.errorType());
@@ -87,17 +87,15 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 			// output.
 			media = GeneratedImageMapper.responsesMedia(List.of(event.item()));
 		}
-		else if (completed) {
+		else if (completed || incomplete) {
 			result = event.response();
-			if (result == null && !pending.isEmpty()) {
+			if (result == null) {
 				throw new OpenRouterTruncatedResponseException(
-						"Responses tool round completed without a response snapshot");
+						"Responses stream terminated without a response snapshot");
 			}
-			finishReason = FinishReasonMapper.responses(result, "completed");
-		}
-		else if (incomplete) {
-			result = event.response();
-			finishReason = FinishReasonMapper.responses(result, "incomplete");
+			String terminalStatus = completed ? "completed" : "incomplete";
+			OpenRouterResponsesResponseMapper.validateTerminal(result, terminalStatus);
+			finishReason = FinishReasonMapper.responses(result, terminalStatus);
 		}
 		else if ("response.failed".equals(type)) {
 			// A failed generation ends the stream over HTTP 200; converting it into an

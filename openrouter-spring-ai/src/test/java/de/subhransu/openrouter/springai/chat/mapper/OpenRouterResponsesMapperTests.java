@@ -225,7 +225,7 @@ class OpenRouterResponsesMapperTests {
 		ChatResponse mapped = new OpenRouterResponsesStreamingResponseMapper().map(streamEvent("""
 				{
 				  "type": "response.completed",
-				  "response": {"status": "completed"}
+				  "response": {"status": "completed", "output": []}
 				}
 				"""));
 
@@ -261,6 +261,7 @@ class OpenRouterResponsesMapperTests {
 				    "id": "resp-1",
 				    "model": "openai/gpt-5.4",
 				    "status": "completed",
+				    "output": [],
 				    "usage": {
 				      "input_tokens": 4,
 				      "output_tokens": 2,

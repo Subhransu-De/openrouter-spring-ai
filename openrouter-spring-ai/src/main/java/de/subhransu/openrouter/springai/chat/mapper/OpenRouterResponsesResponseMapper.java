@@ -8,6 +8,7 @@ import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
 import de.subhransu.openrouter.springai.api.errors.OpenRouterApiExceptionFactory;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorClassifier;
 import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
+import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
 import de.subhransu.openrouter.springai.errors.OpenRouterExceptionMessage;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
@@ -26,13 +27,7 @@ public final class OpenRouterResponsesResponseMapper {
 
 	public ChatResponse map(@Nullable ResponsesResult response) {
 		response = ResponseValues.required(response, "Responses result");
-		if ("failed".equals(response.status())) {
-			// Failed generations arrive with HTTP 200; mapping them to an empty message
-			// would make a provider failure look like a valid empty answer.
-			throw failure("OpenRouter responses request failed",
-					response.error() != null ? response.error().toString() : response.status(), response.error(),
-					response.errorType());
-		}
+		validateTerminal(response, null);
 		List<AssistantMessage.ToolCall> toolCalls = toolCalls(response.status(),
 				response.incompleteDetails() != null ? response.incompleteDetails().reason() : null, response.output());
 		Map<String, Object> properties = ReasoningMetadata.responses(response.output());
@@ -66,6 +61,25 @@ public final class OpenRouterResponsesResponseMapper {
 		responseMetadataBuilder.keyValue("openrouter.created", response.createdAt());
 		ChatResponseMetadata responseMetadata = responseMetadataBuilder.build();
 		return new ChatResponse(List.of(new Generation(assistantMessage, generationMetadata)), responseMetadata);
+	}
+
+	static void validateTerminal(ResponsesResult response, @Nullable String expectedStatus) {
+		// HTTP success and a completion event cannot override a provider error.
+		if (response.error() != null || "failed".equals(response.status())) {
+			throw failure("OpenRouter responses request failed",
+					response.error() != null ? response.error().toString() : response.status(), response.error(),
+					response.errorType());
+		}
+		String status = ResponseValues.required(response.status(), "Responses status");
+		if (!"completed".equals(status) && !"incomplete".equals(status)) {
+			throw new OpenRouterTruncatedResponseException("Responses result is not final: status="
+					+ OpenRouterExceptionMessage.sanitize(status) + ", incomplete reason=" + OpenRouterExceptionMessage
+						.sanitize(response.incompleteDetails() != null ? response.incompleteDetails().reason() : null));
+		}
+		if (expectedStatus != null && !expectedStatus.equals(status)) {
+			throw new OpenRouterProtocolException("Responses terminal event disagrees with response status");
+		}
+		ResponseValues.required(response.output(), "Responses output");
 	}
 
 	static RuntimeException failure(String message, @Nullable String responseBody, @Nullable StreamError error,

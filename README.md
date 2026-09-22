@@ -780,10 +780,14 @@ even for an empty or text-only stream. The legacy `response.done` shape shown in
 is explicitly unsupported and raises `OpenRouterProtocolException`; it does not map final
 metadata. Chat Completions and image streams continue to accept `[DONE]`.
 
-Responses streaming requires a response snapshot before releasing buffered tool calls
-and rejects malformed response payloads. Optional fields may be absent and unknown fields
-are ignored, but invalid typed fields fail decoding rather than discarding response
-status or output.
+Responses calls require a final `completed` or `incomplete` status and an `output` array,
+which may be empty. Streaming terminal events also require a response snapshot whose
+status matches the event. Missing or contradictory terminal structure fails before
+buffered tool calls can execute. Non-null error envelopes raise typed provider exceptions
+even over HTTP 200 and without `status: failed`. Optional fields may be absent and unknown
+fields are ignored, but invalid typed fields fail decoding rather than discarding response
+status or output. Valid empty text, refusals, tool calls, media, and incomplete text remain
+supported.
 
 ### Embeddings
 
