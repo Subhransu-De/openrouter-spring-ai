@@ -163,10 +163,9 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 	}
 
 	@Test
-	void nullOutputArrayMapsToEmptyText() {
-		ChatResponse mapped = this.responseMapper.map(result("completed", null, null, null));
-
-		assertThat(mapped.getResult().getOutput().getText()).isEmpty();
+	void nullOutputArrayFailsValidation() {
+		assertThatThrownBy(() -> this.responseMapper.map(result("completed", null, null, null)))
+			.isInstanceOf(OpenRouterProtocolException.class);
 	}
 
 	@Test
@@ -192,12 +191,13 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 
 	@Test
 	void mapsIncompleteStreamEventToReasonFromDetails() throws Exception {
-		ChatResponse mapped = this.streamingMapper.map(streamEvent("""
-				{
-				  "type": "response.incomplete",
-				  "response": {"incomplete_details": {"reason": "max_output_tokens"}}
-				}
-				"""));
+		ChatResponse mapped = this.streamingMapper.map(streamEvent(
+				"""
+						{
+						  "type": "response.incomplete",
+						  "response": {"status": "incomplete", "output": [], "incomplete_details": {"reason": "max_output_tokens"}}
+						}
+						"""));
 
 		// max_output_tokens normalizes to LENGTH.
 		assertThat(mapped.getResult().getMetadata().getFinishReason()).isEqualTo("LENGTH");
@@ -223,6 +223,7 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 				    "id": "resp-9",
 				    "model": "openai/gpt-5.4",
 				    "status": "completed",
+				    "output": [],
 				    "usage": {"input_tokens": 3, "output_tokens": 4, "total_tokens": 7}
 				  }
 				}

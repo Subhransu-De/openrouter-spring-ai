@@ -172,17 +172,13 @@ class ReasoningRoundTripTests {
 			events = events
 				.startWith(new ResponsesStreamEvent("response.output_text.delta", "checking", null, null, null));
 		}
-		for (boolean terminal : List.of(false, true)) {
-			Flux<ResponsesStreamEvent> stream = terminal
-					? events.concatWithValues(new ResponsesStreamEvent("response.completed", null, null, wire, null))
-					: events.concatWithValues(new ResponsesStreamEvent("response.completed", null, null,
-							new ResponsesResult(null, null, null, null, "completed", null, null, null), null));
-			AtomicReference<ChatResponse> result = new AtomicReference<>();
-			new MessageAggregator().aggregate(new OpenRouterResponsesStreamingResponseMapper().map(stream), result::set)
-				.blockLast();
-			assertThat(result.get().getResult().getOutput().getText()).isEqualTo("checking");
-			assertOrderedReplay(result.get().getResult().getOutput(), output);
-		}
+		Flux<ResponsesStreamEvent> stream = events
+			.concatWithValues(new ResponsesStreamEvent("response.completed", null, null, wire, null));
+		AtomicReference<ChatResponse> result = new AtomicReference<>();
+		new MessageAggregator().aggregate(new OpenRouterResponsesStreamingResponseMapper().map(stream), result::set)
+			.blockLast();
+		assertThat(result.get().getResult().getOutput().getText()).isEqualTo("checking");
+		assertOrderedReplay(result.get().getResult().getOutput(), output);
 	}
 
 	@Test
