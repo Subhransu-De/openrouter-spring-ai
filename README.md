@@ -744,7 +744,7 @@ properties under `spring.ai.openrouter.chat.tool-call-aggregation`:
 | `max-chunks`   | `1024`                  | Events in that interval, and separately the number of retained output items or items in a response snapshot   |
 | `max-duration` | `2m`                    | Absolute elapsed time from the first state-bearing event; activity and keepalives do not reset it             |
 
-State-bearing events include output items, function-argument fragments, reasoning, refusals,
+State-bearing events include output items, text and function-argument fragments, reasoning, refusals,
 and nonempty response output snapshots. Once started, the budget counts every event,
 including text, keepalives, and repeated item/terminal snapshots. Byte accounting is therefore
 conservative: it bounds admitted state, not exact JVM heap usage. Equality is allowed for
@@ -776,8 +776,17 @@ pass through unchanged; absent reasons fall back to the response status. Generat
 metadata retains the unnormalized reason as `openrouter.native_finish_reason`, the
 status as `openrouter.responses.status`, and the typed incomplete details as
 `openrouter.responses.incomplete_details`. Responses text preserves whitespace-only
-parts and messages; streaming text remains incremental without repeating terminal text.
-If a completed stream delivers no text deltas, its saved output snapshot supplies the text.
+parts and messages. Streams reconcile text-done, item-done, and terminal snapshots per
+output item and content part, emitting only missing suffixes. Later text waits for earlier
+parts to finish so recovered suffixes retain output order. A snapshot that contradicts a
+received prefix or extends earlier text after later text was emitted raises
+`OpenRouterProtocolException`. Missing text indexes default to zero.
+
+Terminal snapshots also supply generated images that were not emitted by item-done events.
+Image IDs identify repeated items; absent IDs fall back to output indexes. An image event
+with neither an ID nor an index is rejected because identical bytes may belong to distinct
+images. Repeated identities must retain the same image result and format. Newly recovered
+images follow terminal output order after any images already emitted.
 
 Responses streams require `response.completed`, `response.incomplete`, `response.failed`,
 or a terminal error event. `[DONE]` or EOF alone raises `OpenRouterTruncatedResponseException`,

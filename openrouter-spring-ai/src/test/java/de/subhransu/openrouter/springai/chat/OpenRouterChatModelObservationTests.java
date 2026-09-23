@@ -140,12 +140,18 @@ class OpenRouterChatModelObservationTests {
 				{"input_tokens":0,"output_tokens":0,"total_tokens":0,"cost":0,
 				 "input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":0}}
 				""", "null" };
-		when(api.responsesStream(any())).thenReturn(Flux.defer(() -> Flux.just(mapper.readValue("""
-				{"type":"response.output_text.delta","delta":"Hello"}
-				""", ResponsesStreamEvent.class), mapper.readValue("""
-				{"type":"response.completed","response":{"id":"synthetic","model":"test-model",
-				 "status":"completed","output":[],"usage":%s}}
-				""".formatted(usages[subscription.getAndIncrement()]), ResponsesStreamEvent.class))));
+		when(api.responsesStream(any()))
+			.thenReturn(
+					Flux.defer(() -> Flux.just(mapper.readValue("""
+							{"type":"response.output_text.delta","delta":"Hello"}
+							""", ResponsesStreamEvent.class),
+							mapper.readValue(
+									"""
+											{"type":"response.completed","response":{"id":"synthetic","model":"test-model",
+											 "status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"Hello"}]}],"usage":%s}}
+											"""
+										.formatted(usages[subscription.getAndIncrement()]),
+									ResponsesStreamEvent.class))));
 		when(api.chatCompletionStream(any())).thenReturn(Flux.defer(() -> Flux.just(mapper.readValue("""
 				{"id":"synthetic","model":"test-model","choices":[{"index":0,"delta":{"content":"Hello"}}]}
 				""", ChatCompletionChunk.class), mapper.readValue("""

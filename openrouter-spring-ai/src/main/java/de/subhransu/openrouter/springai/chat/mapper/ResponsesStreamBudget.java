@@ -64,7 +64,8 @@ final class ResponsesStreamBudget {
 		return event.item() != null
 				|| event.response() != null && event.response().output() != null && !event.response().output().isEmpty()
 				|| type != null && (type.startsWith("response.function_call_arguments.")
-						|| type.startsWith("response.reasoning") || type.startsWith("response.refusal."));
+						|| type.startsWith("response.output_text.") || type.startsWith("response.reasoning")
+						|| type.startsWith("response.refusal."));
 	}
 
 	private static boolean terminal(ResponsesStreamEvent event) {

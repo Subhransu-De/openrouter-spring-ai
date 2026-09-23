@@ -61,11 +61,12 @@ class OpenRouterResponsePreservationTests {
 		String expected = "hello world\n\tend";
 		assertThat(new OpenRouterResponsesResponseMapper().map(result).getResult().getOutput().getText())
 			.isEqualTo(expected);
-		Flux<ResponsesStreamEvent> events = Flux.concat(
-				Flux.just("hello", " ", "world", "\n\t", "end")
-					.map(text -> new ResponsesStreamEvent("response.output_text.delta", text, null, null, null)),
-				Flux.just(new ResponsesStreamEvent("response.output_text.done", null, null, null, null),
-						new ResponsesStreamEvent("response.completed", null, null, result, null)));
+		Flux<ResponsesStreamEvent> events = Flux.range(0, result.output().size())
+			.concatMap(output -> Flux.range(0, result.output().get(output).content().size())
+				.map(content -> new ResponsesStreamEvent("response.output_text.delta",
+						result.output().get(output).content().get(content).text(), null, null, null, null, null, null,
+						null, null, output, content)))
+			.concatWithValues(new ResponsesStreamEvent("response.completed", null, null, result, null));
 		StepVerifier
 			.create(new OpenRouterResponsesStreamingResponseMapper().map(events)
 				.map(response -> response.getResult().getOutput().getText())
