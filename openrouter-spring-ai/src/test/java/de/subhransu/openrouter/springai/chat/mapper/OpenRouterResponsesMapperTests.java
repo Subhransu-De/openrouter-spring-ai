@@ -216,8 +216,13 @@ class OpenRouterResponsesMapperTests {
 				""";
 		OpenRouterResponsesStreamingResponseMapper mapper = new OpenRouterResponsesStreamingResponseMapper();
 
-		assertThat(mapper.map(streamEvent(outputTextDone)).getResult().getOutput().getText()).isEmpty();
-		assertThat(mapper.map(streamEvent(outputItemDone)).getResult().getOutput().getText()).isEmpty();
+		var responses = mapper.map(reactor.core.publisher.Flux.just(
+				new ResponsesStreamEvent("response.output_text.delta", "already streamed", null, null, null),
+				streamEvent(outputTextDone), streamEvent(outputItemDone)))
+			.collectList()
+			.block();
+		assertThat(responses).extracting(response -> response.getResult().getOutput().getText())
+			.containsExactly("already streamed", "", "");
 	}
 
 	@Test

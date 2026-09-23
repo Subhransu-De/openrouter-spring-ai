@@ -45,22 +45,21 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 
 	public ChatResponse map(ResponsesStreamEvent event) {
 		return map(event, new ReasoningMetadata.Accumulator(), new ArrayList<>(), new RefusalMetadata.Accumulator(),
-				new TextState());
+				new ResponsesOutputState());
 	}
 
 	private ChatResponse map(ResponsesStreamEvent event, ReasoningMetadata.Accumulator accumulator,
-			List<ResponsesOutputItem> pending, RefusalMetadata.Accumulator refusal, TextState textState) {
+			List<ResponsesOutputItem> pending, RefusalMetadata.Accumulator refusal, ResponsesOutputState outputState) {
 		String type = event.type();
 		boolean incomplete = "response.incomplete".equals(type);
 		boolean completed = "response.completed".equals(type);
+		boolean itemDone = "response.output_item.done".equals(type);
 		if (event.error() != null || "error".equals(type) || type != null && type.endsWith(".error")) {
 			StreamError error = eventError(event);
 			throw OpenRouterResponsesResponseMapper.failure("OpenRouter responses stream failed", String.valueOf(event),
 					error, event.errorType());
 		}
 
-		// Prefer deltas; recover terminal-only text at completion without repeating
-		// content already emitted by the stream.
 		String text = "";
 		String reasoning = null;
 		String finishReason = null;
@@ -68,24 +67,21 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 		List<AssistantMessage.ToolCall> toolCalls = List.of();
 		List<Media> media = List.of();
 		if ("response.output_text.delta".equals(type)) {
-			text = event.delta() != null ? event.delta() : "";
-			textState.hasText |= !text.isEmpty();
+			text = outputState.delta(event);
+		}
+		else if ("response.output_text.done".equals(type)) {
+			text = outputState.done(event);
 		}
 		else if ("response.reasoning_text.delta".equals(type) || "response.reasoning_summary_text.delta".equals(type)) {
 			reasoning = event.delta();
 		}
-		else if ("response.output_item.done".equals(type) && event.item() != null
-				&& "function_call".equals(event.item().type())) {
+		else if (itemDone && event.item() != null && "function_call".equals(event.item().type())) {
 			// Wait for the whole round: a later incomplete item or response must prevent
 			// every callback, including calls whose own item already completed.
 			pending.add(event.item());
 		}
-		else if ("response.output_item.done".equals(type) && event.item() != null
-				&& "image_generation_call".equals(event.item().type())) {
-			// Image bytes are not streamed as text deltas, so the completed item is the
-			// single source for the generated image; emitting it here does not duplicate
-			// output.
-			media = GeneratedImageMapper.responsesMedia(List.of(event.item()));
+		else if (itemDone && event.item() != null && "image_generation_call".equals(event.item().type())) {
+			media = outputState.image(event.item(), event.outputIndex());
 		}
 		else if (completed || incomplete) {
 			result = event.response();
@@ -129,7 +125,7 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 		}
 
 		Map<String, Object> reasoningMetadata = ReasoningMetadata.chat(reasoning, null);
-		if ("response.output_item.done".equals(type) && event.item() != null) {
+		if (itemDone && event.item() != null) {
 			reasoningMetadata.putAll(ReasoningMetadata.responses(List.of(event.item())));
 			reasoningMetadata.remove(ReasoningMetadata.REASONING);
 		}
@@ -138,11 +134,16 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 			snapshot = accumulator.replace(ReasoningMetadata.responses(result.output()));
 		}
 		RefusalMetadata.put(snapshot, refusal.update(event));
-		if ((completed || incomplete) && !textState.hasText
-				&& snapshot.get(ReasoningMetadata.RESPONSES_OUTPUT_ITEMS) instanceof List<?> output) {
-			text = OpenRouterResponsesResponseMapper
-				.text(output.stream().map(ResponsesOutputItem.class::cast).toList());
-			textState.hasText = !text.isEmpty();
+		if (itemDone && event.item() != null) {
+			text = outputState.item(event.item(), event.outputIndex());
+		}
+		if (result != null && result.output() != null) {
+			text = outputState.terminal(result.output());
+			List<Media> images = new ArrayList<>();
+			for (int index = 0; index < result.output().size(); index++) {
+				images.addAll(outputState.image(result.output().get(index), index));
+			}
+			media = images;
 		}
 		AssistantMessage assistantMessage = AssistantMessage.builder()
 			.properties(snapshot)
@@ -206,11 +207,11 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 
 		private final RefusalMetadata.Accumulator refusal = new RefusalMetadata.Accumulator();
 
-		private final TextState text = new TextState();
+		private final ResponsesOutputState output = new ResponsesOutputState();
 
 		private synchronized ChatResponse map(ResponsesStreamEvent event) {
 			return OpenRouterResponsesStreamingResponseMapper.this.map(event, this.reasoning, this.pending,
-					this.refusal, this.text);
+					this.refusal, this.output);
 		}
 
 		private synchronized Mono<ChatResponse> complete() {
@@ -222,13 +223,8 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 			this.pending.clear();
 			this.reasoning.clear();
 			this.refusal.clear();
+			this.output.clear();
 		}
-
-	}
-
-	private static final class TextState {
-
-		private boolean hasText;
 
 	}
 

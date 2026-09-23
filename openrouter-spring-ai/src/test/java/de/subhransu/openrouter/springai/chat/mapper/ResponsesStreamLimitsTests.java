@@ -36,11 +36,12 @@ class ResponsesStreamLimitsTests {
 
 	@ParameterizedTest
 	@ValueSource(strings = { REASONING_DELTA, "response.reasoning_summary_text.delta",
-			"response.function_call_arguments.delta", "response.refusal.delta" })
+			"response.function_call_arguments.delta", "response.refusal.delta", "response.output_text.delta" })
 	void manySmallFragmentsRespectExactByteBoundary(String type) {
 		ResponsesStreamEvent fragment = new ResponsesStreamEvent(type, "é", null, null, null);
-		long bytes = 10L * this.json.writeValueAsBytes(fragment).length + this.json.writeValueAsBytes(this.done).length;
-		Flux<ResponsesStreamEvent> events = Flux.range(0, 10).map(i -> fragment).concatWithValues(this.done);
+		var terminal = "response.output_text.delta".equals(type) ? textDone(fragment.delta().repeat(10)) : this.done;
+		long bytes = 10L * this.json.writeValueAsBytes(fragment).length + this.json.writeValueAsBytes(terminal).length;
+		Flux<ResponsesStreamEvent> events = Flux.range(0, 10).map(i -> fragment).concatWithValues(terminal);
 		StepVerifier.create(mapper(bytes, 11).map(events)).expectNextCount(11).verifyComplete();
 		StepVerifier.create(mapper(bytes - 1, 11).map(events))
 			.expectNextCount(10)
@@ -49,16 +50,16 @@ class ResponsesStreamLimitsTests {
 	}
 
 	@Test
-	void chunksIncludeKeepalivesButNotEarlierText() {
+	void chunksIncludeTextAndKeepalives() {
 		var fragment = new ResponsesStreamEvent(REASONING_DELTA, "a", null, null, null);
 		var ping = new ResponsesStreamEvent("ping", null, null, null, null);
 		Flux<ResponsesStreamEvent> events = Flux.just(
 				new ResponsesStreamEvent("response.output_text.delta", "a", null, null, null), fragment, ping,
-				this.done);
-		StepVerifier.create(mapper(10000, 3).map(events)).expectNextCount(4).verifyComplete();
-		StepVerifier.create(mapper(10000, 2).map(events))
+				textDone("a"));
+		StepVerifier.create(mapper(10000, 4).map(events)).expectNextCount(4).verifyComplete();
+		StepVerifier.create(mapper(10000, 3).map(events))
 			.expectNextCount(3)
-			.expectErrorSatisfies(error -> assertLimit(error, Limit.RESPONSES_STATE_CHUNKS, 2))
+			.expectErrorSatisfies(error -> assertLimit(error, Limit.RESPONSES_STATE_CHUNKS, 3))
 			.verify();
 	}
 
@@ -135,13 +136,13 @@ class ResponsesStreamLimitsTests {
 		StepVerifier
 			.withVirtualTime(() -> mapper(10000, 10)
 				.map(Flux.just(new ResponsesStreamEvent("response.output_text.delta", "synthetic", null, null, null))
-					.concatWith(Mono.delay(Duration.ofSeconds(10))
+					.concatWith(Mono.delay(Duration.ofSeconds(1))
 						.map(ignored -> new ResponsesStreamEvent(REASONING_DELTA, "reasoning", null, null, null)))
-					.concatWithValues(this.done)
+					.concatWithValues(textDone("synthetic"))
 					.concatWith(Flux.never())
 					.doOnCancel(() -> cancelled.set(true))))
 			.expectNextCount(1)
-			.thenAwait(Duration.ofSeconds(10))
+			.thenAwait(Duration.ofSeconds(1))
 			.expectNextCount(2)
 			.verifyComplete();
 		assertThat(cancelled).isTrue();
@@ -187,6 +188,13 @@ class ResponsesStreamLimitsTests {
 
 	private OpenRouterResponsesStreamingResponseMapper mapper(long bytes, int chunks) {
 		return new OpenRouterResponsesStreamingResponseMapper(this.json, bytes, chunks, Duration.ofSeconds(5));
+	}
+
+	private ResponsesStreamEvent textDone(String text) {
+		return event("""
+				{"type":"response.completed","response":{"status":"completed","output":[
+				{"type":"message","content":[{"type":"output_text","text":%s}]}]}}
+				""".formatted(this.json.writeValueAsString(text)));
 	}
 
 	private ResponsesStreamEvent event(String json) {

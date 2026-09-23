@@ -174,7 +174,7 @@ class OpenRouterResponsesEnvelopeTests {
 		for (boolean streaming : new boolean[] { false, true }) {
 			String body = streaming ? wire("completed", json) : json;
 			if (streaming && output.contains("image_generation_call")) {
-				body = "data: {\"type\":\"response.output_item.done\",\"item\":"
+				body = "data: {\"type\":\"response.output_item.done\",\"output_index\":0,\"item\":"
 						+ output.substring(1, output.length() - 1) + "}\n\n" + body;
 			}
 			var model = model(streaming, body);

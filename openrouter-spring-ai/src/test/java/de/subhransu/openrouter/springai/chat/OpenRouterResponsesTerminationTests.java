@@ -52,7 +52,8 @@ class OpenRouterResponsesTerminationTests {
 	@ValueSource(strings = { "completed", "incomplete" })
 	void terminalPreservesUsageAndFinishMetadataWithoutDone(String status) {
 		String terminal = "data: {\"type\":\"response." + status + "\",\"response\":{"
-				+ "\"id\":\"synthetic\",\"status\":\"" + status + "\",\"output\":[],"
+				+ "\"id\":\"synthetic\",\"status\":\"" + status
+				+ "\",\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"hello\"}]}],"
 				+ "\"usage\":{\"input_tokens\":2,\"output_tokens\":3,\"total_tokens\":5}}}\n\n";
 		StepVerifier.create(model(TEXT + terminal + "data: {invalid}\n\n").stream(new Prompt("synthetic")))
 			.assertNext(response -> assertThat(response.getResult().getOutput().getText()).isEqualTo("hello"))

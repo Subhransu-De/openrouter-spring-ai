@@ -152,8 +152,6 @@ class ResponsesSnapshotHistoryTests {
 			Flux<ResponsesStreamEvent> events = Flux.range(0, wire.output().size())
 				.map(index -> new ResponsesStreamEvent("response.output_item.done", null, wire.output().get(index),
 						null, null, null, null, null, null, null, index, null))
-				.startWith(new ResponsesStreamEvent("response.output_text.delta",
-						OpenRouterResponsesResponseMapper.text(wire.output()), null, null, null))
 				.concatWithValues(new ResponsesStreamEvent("response.completed", null, null, wire, null));
 			new MessageAggregator()
 				.aggregate(new OpenRouterResponsesStreamingResponseMapper().map(events), aggregated::set)

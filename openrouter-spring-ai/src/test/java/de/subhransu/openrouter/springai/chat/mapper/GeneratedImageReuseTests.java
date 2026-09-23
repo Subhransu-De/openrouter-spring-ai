@@ -84,9 +84,9 @@ class GeneratedImageReuseTests {
 					""".formatted(result, format), ResponsesOutputItem.class);
 			var sync = new OpenRouterResponsesResponseMapper().map(new ResponsesResult("response-1", "response", 0L,
 					"synthetic/model", "completed", List.of(item), null, null));
-			var streamed = new OpenRouterResponsesStreamingResponseMapper().map(this.json.readValue(
-					"{\"type\":\"response.output_item.done\",\"item\":" + this.json.writeValueAsString(item) + "}",
-					ResponsesStreamEvent.class));
+			var streamed = new OpenRouterResponsesStreamingResponseMapper()
+				.map(this.json.readValue("{\"type\":\"response.output_item.done\",\"output_index\":0,\"item\":"
+						+ this.json.writeValueAsString(item) + "}", ResponsesStreamEvent.class));
 			Media media = sync.getResult().getOutput().getMedia().get(0);
 			assertThat(streamed.getResult().getOutput().getMedia().get(0).getData()).isEqualTo(media.getData());
 			assertThat(streamed.getResult().getOutput().getMedia().get(0).getMimeType()).isEqualTo(media.getMimeType());

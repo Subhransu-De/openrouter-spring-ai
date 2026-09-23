@@ -19,7 +19,15 @@ public record ResponsesStreamEvent(@Nullable String type, @Nullable String delta
 		@JsonDeserialize(
 				using = TolerantJsonStringDeserializer.class) @JsonProperty("error_type") @Nullable String errorType,
 		@Nullable String refusal, @JsonProperty("output_index") @Nullable Integer outputIndex,
-		@JsonProperty("content_index") @Nullable Integer contentIndex) {
+		@JsonProperty("content_index") @Nullable Integer contentIndex, @Nullable String text) {
+
+	public ResponsesStreamEvent(@Nullable String type, @Nullable String delta, @Nullable ResponsesOutputItem item,
+			@Nullable ResponsesResult response, @Nullable StreamError error, @Nullable String code,
+			@Nullable String message, @Nullable JsonNode metadata, @Nullable String errorType, @Nullable String refusal,
+			@Nullable Integer outputIndex, @Nullable Integer contentIndex) {
+		this(type, delta, item, response, error, code, message, metadata, errorType, refusal, outputIndex, contentIndex,
+				null);
+	}
 
 	public ResponsesStreamEvent(@Nullable String type, @Nullable String delta, @Nullable ResponsesOutputItem item,
 			@Nullable ResponsesResult response, @Nullable StreamError error, @Nullable String code,
