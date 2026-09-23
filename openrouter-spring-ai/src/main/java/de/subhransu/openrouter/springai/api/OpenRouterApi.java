@@ -337,8 +337,8 @@ public class OpenRouterApi {
 			AtomicBoolean protocolTerminated = new AtomicBoolean();
 			return eventData(events).concatMapIterable(this::streamPayloads)
 				.map(String::trim)
-				.filter(line -> line.startsWith("data:") || line.startsWith("{") || "[DONE]".equals(line))
 				.map(line -> line.startsWith("data:") ? line.substring(5).trim() : line)
+				.filter(StringUtils::hasText)
 				// Termination belongs to the whole subscription, not an individual
 				// payload.
 				.takeWhile(line -> {
@@ -381,7 +381,11 @@ public class OpenRouterApi {
 
 	private <T> T readEvent(String line, Class<T> eventType) {
 		try {
-			T event = this.objectMapper.readValue(line, eventType);
+			var tree = this.objectMapper.reader().with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS).readTree(line);
+			if (tree == null || !tree.isObject()) {
+				throw new OpenRouterProtocolException("OpenRouter stream chunk must be a JSON object");
+			}
+			T event = this.objectMapper.treeToValue(tree, eventType);
 			if (event instanceof ResponsesStreamEvent response && "response.done".equals(response.type())) {
 				throw new OpenRouterProtocolException(
 						"Legacy response.done is unsupported; expected response.completed, "
