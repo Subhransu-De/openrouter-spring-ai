@@ -43,13 +43,19 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 				State::clear);
 	}
 
+	/**
+	 * Map one event without stream history. Text-done and message-item snapshots do not
+	 * emit text. Generated images are emitted only by item-done events. Use
+	 * {@link #map(Flux)} for subscription-local snapshot reconciliation.
+	 */
 	public ChatResponse map(ResponsesStreamEvent event) {
 		return map(event, new ReasoningMetadata.Accumulator(), new ArrayList<>(), new RefusalMetadata.Accumulator(),
-				new ResponsesOutputState());
+				null);
 	}
 
 	private ChatResponse map(ResponsesStreamEvent event, ReasoningMetadata.Accumulator accumulator,
-			List<ResponsesOutputItem> pending, RefusalMetadata.Accumulator refusal, ResponsesOutputState outputState) {
+			List<ResponsesOutputItem> pending, RefusalMetadata.Accumulator refusal,
+			@Nullable ResponsesOutputState outputState) {
 		String type = event.type();
 		boolean incomplete = "response.incomplete".equals(type);
 		boolean completed = "response.completed".equals(type);
@@ -67,9 +73,12 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 		List<AssistantMessage.ToolCall> toolCalls = List.of();
 		List<Media> media = List.of();
 		if ("response.output_text.delta".equals(type)) {
-			text = outputState.delta(event);
+			text = event.delta() != null ? event.delta() : "";
+			if (outputState != null) {
+				text = outputState.delta(event);
+			}
 		}
-		else if ("response.output_text.done".equals(type)) {
+		else if ("response.output_text.done".equals(type) && outputState != null) {
 			text = outputState.done(event);
 		}
 		else if ("response.reasoning_text.delta".equals(type) || "response.reasoning_summary_text.delta".equals(type)) {
@@ -81,7 +90,8 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 			pending.add(event.item());
 		}
 		else if (itemDone && event.item() != null && "image_generation_call".equals(event.item().type())) {
-			media = outputState.image(event.item(), event.outputIndex());
+			media = outputState != null ? outputState.image(event.item(), event.outputIndex())
+					: GeneratedImageMapper.responsesMedia(List.of(event.item()));
 		}
 		else if (completed || incomplete) {
 			result = event.response();
@@ -134,16 +144,19 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 			snapshot = accumulator.replace(ReasoningMetadata.responses(result.output()));
 		}
 		RefusalMetadata.put(snapshot, refusal.update(event));
-		if (itemDone && event.item() != null) {
+		if (itemDone && event.item() != null && outputState != null) {
 			text = outputState.item(event.item(), event.outputIndex());
 		}
 		if (result != null && result.output() != null) {
-			text = outputState.terminal(result.output());
-			List<Media> images = new ArrayList<>();
-			for (int index = 0; index < result.output().size(); index++) {
-				images.addAll(outputState.image(result.output().get(index), index));
+			text = outputState != null ? outputState.terminal(result.output())
+					: OpenRouterResponsesResponseMapper.text(result.output());
+			if (outputState != null) {
+				List<Media> images = new ArrayList<>();
+				for (int index = 0; index < result.output().size(); index++) {
+					images.addAll(outputState.image(result.output().get(index), index));
+				}
+				media = images;
 			}
-			media = images;
 		}
 		AssistantMessage assistantMessage = AssistantMessage.builder()
 			.properties(snapshot)

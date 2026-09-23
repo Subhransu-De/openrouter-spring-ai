@@ -192,6 +192,18 @@ class ResponsesOutputReconciliationTests {
 	}
 
 	@Test
+	void singleEventMappingPreservesStatelessImageDelivery() {
+		var terminal = terminal("completed", """
+				{"type":"image_generation_call","result":"AQID"}
+				""");
+		var item = new ResponsesStreamEvent("response.output_item.done", null, terminal.response().output().get(0),
+				null, null);
+		assertThat(this.mapper.map(item).getResult().getOutput().getMedia()).hasSize(1);
+		assertThat(this.mapper.map(terminal).getResult().getOutput().getMedia()).isEmpty();
+		assertThat(media(Flux.just(terminal))).hasSize(1);
+	}
+
+	@Test
 	void imageIdentityUsesIdsOrIndexesAndNeverCollapsesDistinctEqualBytes() {
 		var terminal = terminal("completed", """
 				{"type":"image_generation_call","result":"AQID"},
