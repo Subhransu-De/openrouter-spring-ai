@@ -23,11 +23,32 @@ import reactor.core.publisher.Flux;
 
 public final class OpenRouterStreamingResponseMapper {
 
+	public static final long DEFAULT_MAX_STATE_BYTES = 1024 * 1024;
+
+	public static final int DEFAULT_MAX_STATE_CHOICES = 128;
+
+	private final long maxStateBytes;
+
+	private final int maxStateChoices;
+
+	public OpenRouterStreamingResponseMapper() {
+		this(DEFAULT_MAX_STATE_BYTES, DEFAULT_MAX_STATE_CHOICES);
+	}
+
+	public OpenRouterStreamingResponseMapper(long maxStateBytes, int maxStateChoices) {
+		org.springframework.util.Assert.isTrue(maxStateBytes > 0,
+				"Maximum Chat Completions state size must be greater than zero");
+		org.springframework.util.Assert.isTrue(maxStateChoices > 0,
+				"Maximum Chat Completions active choices must be greater than zero");
+		this.maxStateBytes = maxStateBytes;
+		this.maxStateChoices = maxStateChoices;
+	}
+
 	private final OpenRouterChoiceErrorExceptionFactory choiceErrorExceptionFactory = new OpenRouterChoiceErrorExceptionFactory();
 
 	public ChatResponse map(ChatCompletionChunk chunk) {
 		return map(chunk, new LinkedHashMap<>(), new LinkedHashMap<>(), new LinkedHashMap<>(),
-				new AudioOutputMapper(null));
+				new AudioOutputMapper(null), new ChatStreamBudget(this.maxStateBytes, this.maxStateChoices));
 	}
 
 	/**
@@ -47,7 +68,8 @@ public final class OpenRouterStreamingResponseMapper {
 			Map<Integer, ReasoningMetadata.Accumulator> reasoning = new LinkedHashMap<>();
 			Map<String, @Nullable Object> extensions = new LinkedHashMap<>();
 			AudioOutputMapper audio = new AudioOutputMapper(audioOptions);
-			return chunks.map(chunk -> map(chunk, partialOutputs, reasoning, extensions, audio))
+			ChatStreamBudget budget = new ChatStreamBudget(this.maxStateBytes, this.maxStateChoices);
+			return chunks.map(chunk -> map(chunk, partialOutputs, reasoning, extensions, audio, budget))
 				.doOnComplete(audio::complete)
 				.doFinally(signal -> audio.clear());
 		});
@@ -55,7 +77,7 @@ public final class OpenRouterStreamingResponseMapper {
 
 	private ChatResponse map(ChatCompletionChunk chunk, Map<Integer, PartialOutputAccumulator> partialOutputs,
 			Map<Integer, ReasoningMetadata.Accumulator> reasoning, Map<String, @Nullable Object> extensions,
-			AudioOutputMapper audio) {
+			AudioOutputMapper audio, ChatStreamBudget budget) {
 		if (chunk.error() != null) {
 			// Mid-stream failures arrive as a normal chunk with a top-level error object
 			// over HTTP 200; without this the truncated stream would look like a clean
@@ -63,13 +85,19 @@ public final class OpenRouterStreamingResponseMapper {
 			throw OpenRouterApiExceptionFactory.create("OpenRouter chat completion stream failed",
 					chunk.error().toString(), chunk.error(), null);
 		}
-		accumulatePartialOutput(chunk, partialOutputs);
+		for (Choice choice : ResponseValues.items(chunk.choices(), "choice")) {
+			if (!audio.finished(choice)) {
+				budget.open(choiceIndex(choice));
+			}
+		}
+		budget.appendResponse(chunk.extensions());
+		accumulatePartialOutput(chunk, partialOutputs, audio);
 		throwIfChoiceFailed(chunk, partialOutputs);
 		List<Generation> generations = CollectionUtils.isEmpty(chunk.choices()) ? List.of()
 				: ResponseValues.items(chunk.choices(), "choice")
 					.stream()
 					.filter(choice -> !audio.finished(choice))
-					.map(choice -> mapGeneration(choice, chunk.model(), audio,
+					.map(choice -> mapGeneration(choice, chunk.model(), audio, budget,
 							reasoning.computeIfAbsent(choiceIndex(choice), key -> new ReasoningMetadata.Accumulator())))
 					.toList();
 		clearFinishedChoices(chunk, partialOutputs);
@@ -77,19 +105,23 @@ public final class OpenRouterStreamingResponseMapper {
 			ResponseValues.items(chunk.choices(), "choice")
 				.stream()
 				.filter(choice -> choice.finishReason() != null)
-				.forEach(choice -> reasoning.remove(choiceIndex(choice)));
+				.forEach(choice -> {
+					reasoning.remove(choiceIndex(choice));
+					budget.finish(choiceIndex(choice));
+				});
 		}
 		extensions.putAll(chunk.extensions());
 		return new ChatResponse(generations, mapMetadata(chunk, extensions));
 	}
 
 	private void accumulatePartialOutput(ChatCompletionChunk chunk,
-			Map<Integer, PartialOutputAccumulator> partialOutputs) {
+			Map<Integer, PartialOutputAccumulator> partialOutputs, AudioOutputMapper audio) {
 		if (CollectionUtils.isEmpty(chunk.choices())) {
 			return;
 		}
 		for (Choice choice : chunk.choices()) {
-			if (choice != null && choice.delta() != null && choice.delta().content() != null) {
+			if (choice != null && !audio.finished(choice) && choice.delta() != null
+					&& choice.delta().content() != null) {
 				partialOutputs.computeIfAbsent(choiceIndex(choice), key -> new PartialOutputAccumulator())
 					.append(choice.delta().content());
 			}
@@ -127,7 +159,7 @@ public final class OpenRouterStreamingResponseMapper {
 	}
 
 	private Generation mapGeneration(Choice choice, @Nullable String model, AudioOutputMapper audio,
-			ReasoningMetadata.Accumulator reasoning) {
+			ChatStreamBudget budget, ReasoningMetadata.Accumulator reasoning) {
 		if (choice.delta() != null && !CollectionUtils.isEmpty(choice.delta().toolCalls())
 				&& !FinishReasonMapper.isToolCallCompletion(choice.finishReason())) {
 			throw new OpenRouterTruncatedResponseException(
@@ -140,6 +172,7 @@ public final class OpenRouterStreamingResponseMapper {
 		RefusalMetadata.put(properties, choice.delta() != null ? choice.delta().refusal() : null);
 		ExtensionMetadata.put(properties, choice.delta() != null ? choice.delta().extensions() : null,
 				choice.extensions(), choice.delta() != null ? choice.delta().toolCalls() : null);
+		budget.append(choiceIndex(choice), properties);
 		List<Media> media = new ArrayList<>(
 				GeneratedImageMapper.media(choice.delta() != null ? choice.delta().images() : null));
 		audio.append(choice, properties, media);

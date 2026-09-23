@@ -43,6 +43,8 @@ public class OpenRouterChatAutoConfiguration {
 			.retryTemplate(retryTemplateProvider.getIfAvailable())
 			.objectMapper(objectMapperProvider.getIfAvailable(ObjectMapper::new))
 			.observationRegistry(observationRegistryProvider.getIfAvailable())
+			.streamingStateMaxBytes(chatProperties.getStreamingState().getMaxSize().toBytes())
+			.streamingStateMaxChoices(chatProperties.getStreamingState().getMaxChoices())
 			.toolCallAggregationMaxBytes(chatProperties.getToolCallAggregation().getMaxSize().toBytes())
 			.toolCallAggregationMaxChunks(chatProperties.getToolCallAggregation().getMaxChunks())
 			.toolCallAggregationMaxDuration(chatProperties.getToolCallAggregation().getMaxDuration())

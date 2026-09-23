@@ -50,6 +50,11 @@ final class ExtensionMetadata {
 
 	static Map<String, @Nullable Object> merge(@Nullable Map<String, @Nullable Object> earlier,
 			@Nullable Map<String, @Nullable Object> later) {
+		return OptionSnapshots.map(combine(earlier, later));
+	}
+
+	private static Map<String, @Nullable Object> combine(@Nullable Map<String, @Nullable Object> earlier,
+			@Nullable Map<String, @Nullable Object> later) {
 		Map<String, @Nullable Object> result = new LinkedHashMap<>();
 		if (earlier != null) {
 			result.putAll(earlier);
@@ -57,12 +62,12 @@ final class ExtensionMetadata {
 		if (later != null) {
 			result.putAll(later);
 		}
-		return OptionSnapshots.map(result);
+		return result;
 	}
 
 	static Map<String, @Nullable Object> mergeMessage(@Nullable Map<String, @Nullable Object> earlier,
 			@Nullable Map<String, @Nullable Object> later) {
-		Map<String, @Nullable Object> result = new LinkedHashMap<>(merge(earlier, later));
+		Map<String, @Nullable Object> result = combine(earlier, later);
 		// Only message annotations have incremental semantics. Identically named
 		// fields at other wire locations remain opaque, with latest-value precedence.
 		if (earlier != null && later != null && earlier.get("annotations") instanceof List<?> first
@@ -77,15 +82,15 @@ final class ExtensionMetadata {
 	@SuppressWarnings("unchecked")
 	static Map<String, @Nullable Object> mergeChoice(@Nullable Map<String, @Nullable Object> earlier,
 			@Nullable Map<String, @Nullable Object> later) {
-		Map<String, @Nullable Object> result = new LinkedHashMap<>(merge(earlier, later));
+		Map<String, @Nullable Object> result = combine(earlier, later);
 		if (earlier != null && earlier.get("logprobs") instanceof Map<?, ?> first) {
 			Object next = later != null ? later.get("logprobs") : null;
 			if (next == null) {
 				result.put("logprobs", first);
 			}
 			else if (next instanceof Map<?, ?> second) {
-				Map<String, @Nullable Object> logprobs = new LinkedHashMap<>(
-						merge((Map<String, @Nullable Object>) first, (Map<String, @Nullable Object>) second));
+				Map<String, @Nullable Object> logprobs = combine((Map<String, @Nullable Object>) first,
+						(Map<String, @Nullable Object>) second);
 				for (String key : List.of("content", "refusal")) {
 					if (first.get(key) instanceof List<?> previous) {
 						List<@Nullable Object> entries = new ArrayList<>(previous);
