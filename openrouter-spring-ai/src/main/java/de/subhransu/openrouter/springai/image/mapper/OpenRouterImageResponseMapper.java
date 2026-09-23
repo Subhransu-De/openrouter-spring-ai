@@ -32,10 +32,23 @@ public final class OpenRouterImageResponseMapper {
 		return new ImageResponse(generations, metadata(response.created(), response.usage()));
 	}
 
-	public ImageResponse map(ImagesStreamEvent event) {
+	/**
+	 * Map a supported image event, returning {@code null} for unknown additive types.
+	 * @param event the decoded image stream event
+	 * @return the image response, or {@code null} for an ignored event
+	 */
+	public @Nullable ImageResponse map(ImagesStreamEvent event) {
 		if (event.error() != null || ImagesStreamEvent.ERROR_EVENT.equals(event.type())) {
 			throw OpenRouterApiExceptionFactory.create("OpenRouter image generation stream failed",
 					event.error() != null ? event.error().toString() : null, event.error(), null);
+		}
+		if (!StringUtils.hasText(event.type())) {
+			throw new OpenRouterProtocolException("OpenRouter image event requires a type");
+		}
+		// Ignore additive lifecycle/metadata events without manufacturing an image.
+		if (!ImagesStreamEvent.PARTIAL_IMAGE.equals(event.type())
+				&& !ImagesStreamEvent.COMPLETED.equals(event.type())) {
+			return null;
 		}
 		if (ImagesStreamEvent.COMPLETED.equals(event.type()) && !StringUtils.hasText(event.b64Json())
 				&& !StringUtils.hasText(event.url())) {

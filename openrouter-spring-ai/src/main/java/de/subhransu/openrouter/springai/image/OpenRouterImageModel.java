@@ -3,9 +3,12 @@ package de.subhransu.openrouter.springai.image;
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.dto.ImagesRequest;
 import de.subhransu.openrouter.springai.api.dto.ImagesResponse;
+import de.subhransu.openrouter.springai.api.dto.ImagesStreamEvent;
+import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import de.subhransu.openrouter.springai.image.mapper.OpenRouterImageRequestMapper;
 import de.subhransu.openrouter.springai.image.mapper.OpenRouterImageResponseMapper;
 import de.subhransu.openrouter.springai.internal.Retries;
+import java.util.concurrent.atomic.AtomicBoolean;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationRegistry;
 import io.micrometer.observation.contextpropagation.ObservationThreadLocalAccessor;
@@ -90,7 +93,9 @@ public class OpenRouterImageModel implements ImageModel {
 	 * Stream a generation over SSE. With providers that stream natively, partial previews
 	 * precede completed images. With providers that do not, OpenRouter answers with the
 	 * complete generation in one JSON document, emitted as one completed element per
-	 * image.
+	 * image. Unknown event types are ignored. Normal completion requires at least one
+	 * completed image, including for the JSON fallback; cancellation does not require
+	 * completion.
 	 */
 	public Flux<ImageResponse> stream(ImagePrompt prompt) {
 		OpenRouterImageOptions options = buildRequestOptions(prompt.getOptions());
@@ -110,11 +115,20 @@ public class OpenRouterImageModel implements ImageModel {
 					: Observation.Scope.NOOP) {
 				observation.start();
 			}
+			AtomicBoolean completed = new AtomicBoolean();
 			return Flux.defer(() -> {
 				ImagesRequest request = this.requestMapper.map(prompt, options, true);
 				return this.openRouterApi.imagesStream(request);
+			}).mapNotNull(event -> {
+				ImageResponse response = this.responseMapper.map(event);
+				if (ImagesStreamEvent.COMPLETED.equals(event.type())) {
+					completed.set(true);
+				}
+				return response;
 			})
-				.map(this.responseMapper::map)
+				.concatWith(Flux.defer(() -> completed.get() ? Flux.empty()
+						: Flux.error(new OpenRouterTruncatedResponseException(
+								"OpenRouter image stream ended without a completed image"))))
 				.doOnNext(observationContext::setResponse)
 				.doOnError(observation::error)
 				.doFinally(signal -> observation.stop())

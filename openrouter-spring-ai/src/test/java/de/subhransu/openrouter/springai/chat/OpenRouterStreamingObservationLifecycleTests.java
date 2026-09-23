@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
+import de.subhransu.openrouter.springai.api.dto.ImagesStreamEvent;
 import de.subhransu.openrouter.springai.image.OpenRouterImageModel;
 import de.subhransu.openrouter.springai.image.OpenRouterImageOptions;
 import io.micrometer.observation.Observation;
@@ -124,11 +125,13 @@ class OpenRouterStreamingObservationLifecycleTests {
 	void completionPreservesReactiveParentAndStopsOnce(Path path) {
 		when(this.api.chatCompletionStream(any())).thenReturn(Flux.empty());
 		when(this.api.responsesStream(any())).thenReturn(Flux.empty());
-		when(this.api.imagesStream(any())).thenReturn(Flux.empty());
+		when(this.api.imagesStream(any())).thenReturn(
+				Flux.just(new ImagesStreamEvent(ImagesStreamEvent.COMPLETED, null, "AQID", null, null, null, null)));
 		Observation parent = Observation.start("parent", this.registry);
 		try {
 			StepVerifier
 				.create(stream(path, false).contextWrite(Context.of(ObservationThreadLocalAccessor.KEY, parent)))
+				.expectNextCount(path == Path.IMAGE ? 1 : 0)
 				.verifyComplete();
 			assertThat(this.starts).hasSize(1);
 			assertThat(this.starts.get(0).getParentObservation()).isSameAs(parent);

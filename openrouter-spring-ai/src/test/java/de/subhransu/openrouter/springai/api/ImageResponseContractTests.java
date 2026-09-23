@@ -8,6 +8,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
+import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import de.subhransu.openrouter.springai.image.OpenRouterImageModel;
 import de.subhransu.openrouter.springai.image.OpenRouterImageOptions;
 import io.micrometer.observation.tck.TestObservationRegistry;
@@ -83,10 +84,12 @@ class ImageResponseContractTests {
 	}
 
 	@Test
-	void emptyImageArraysRemainValid() {
+	void emptyImageArraysRemainValidForBlockingCallsButDoNotCompleteAStream() {
 		OpenRouterImageModel model = model("{\"data\":[]}", MediaType.APPLICATION_JSON);
 		assertThat(model.call(PROMPT).getResults()).isEmpty();
-		StepVerifier.create(model.stream(PROMPT)).verifyComplete();
+		this.registry.clear();
+		StepVerifier.create(model.stream(PROMPT)).expectError(OpenRouterTruncatedResponseException.class).verify();
+		assertStoppedWithError(OpenRouterTruncatedResponseException.class);
 	}
 
 	@Test
