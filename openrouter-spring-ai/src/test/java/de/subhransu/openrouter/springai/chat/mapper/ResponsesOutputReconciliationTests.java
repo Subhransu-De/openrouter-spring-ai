@@ -30,6 +30,8 @@ import tools.jackson.databind.ObjectMapper;
 
 class ResponsesOutputReconciliationTests {
 
+	private static final String OUTPUT_ITEM_DONE = "response.output_item.done";
+
 	private final ObjectMapper json = new ObjectMapper();
 
 	private final OpenRouterResponsesStreamingResponseMapper mapper = new OpenRouterResponsesStreamingResponseMapper();
@@ -79,7 +81,7 @@ class ResponsesOutputReconciliationTests {
 			case "response.output_text.done" -> event("""
 					{"type":"response.output_text.done","text":"different-private-text"}
 					""");
-			case "response.output_item.done" -> event("""
+			case OUTPUT_ITEM_DONE -> event("""
 					{"type":"response.output_item.done","item":{"type":"message","content":[
 					{"type":"output_text","text":"different-private-text"}]}}
 					""");
@@ -165,8 +167,8 @@ class ResponsesOutputReconciliationTests {
 						{"type":"image_generation_call","id":"i2","result":"https://example.invalid/synthetic","output_format":"%s"}
 						"""
 					.formatted(format, format, format));
-		var item = new ResponsesStreamEvent("response.output_item.done", null, terminal.response().output().get(0),
-				null, null, null, null, null, null, null, 0, null);
+		var item = new ResponsesStreamEvent(OUTPUT_ITEM_DONE, null, terminal.response().output().get(0), null, null,
+				null, null, null, null, null, 0, null);
 		var expected = new OpenRouterResponsesResponseMapper().map(terminal.response())
 			.getResult()
 			.getOutput()
@@ -196,8 +198,7 @@ class ResponsesOutputReconciliationTests {
 		var terminal = terminal("completed", """
 				{"type":"image_generation_call","result":"AQID"}
 				""");
-		var item = new ResponsesStreamEvent("response.output_item.done", null, terminal.response().output().get(0),
-				null, null);
+		var item = new ResponsesStreamEvent(OUTPUT_ITEM_DONE, null, terminal.response().output().get(0), null, null);
 		assertThat(this.mapper.map(item).getResult().getOutput().getMedia()).hasSize(1);
 		assertThat(this.mapper.map(terminal).getResult().getOutput().getMedia()).isEmpty();
 		assertThat(media(Flux.just(terminal))).hasSize(1);
@@ -249,8 +250,8 @@ class ResponsesOutputReconciliationTests {
 				{"type":"message","content":[{"type":"output_text","text":"hello world"}]},
 				{"type":"image_generation_call","id":"i1","result":"AQID"}
 				""");
-		var image = new ResponsesStreamEvent("response.output_item.done", null, terminal.response().output().get(1),
-				null, null, null, null, null, null, null, 1, null);
+		var image = new ResponsesStreamEvent(OUTPUT_ITEM_DONE, null, terminal.response().output().get(1), null, null,
+				null, null, null, null, null, 1, null);
 		AtomicBoolean cancelled = new AtomicBoolean();
 		var stream = this.mapper
 			.map(Flux.just(delta(0, 0, "hello"), image, terminal).doOnCancel(() -> cancelled.set(true)));
