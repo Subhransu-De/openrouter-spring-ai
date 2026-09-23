@@ -484,6 +484,12 @@ its body or log credentials. HTTP errors separately expose parsed `Retry-After` 
 `OpenRouterHttpException.getRetryAfter()`. Successful response headers are not copied
 into model metadata, and inspecting them does not alter retry behavior.
 
+Chat, Responses, and image SSE streams reject malformed JSON and non-object data
+payloads with a decoding or protocol error and cancel the HTTP body. This also
+applies after partial output. SSE comments and empty heartbeat events are ignored.
+Chat and image streams terminate at `[DONE]`; Responses requires its own protocol
+terminal event.
+
 ### Response buffering limits
 
 `spring.ai.openrouter.connection.max-response-body-size` (default `64MB`) limits each

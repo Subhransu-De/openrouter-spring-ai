@@ -2,6 +2,10 @@ package de.subhransu.openrouter.springai.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
+import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
+import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
+import org.springframework.ai.chat.prompt.Prompt;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionRequest;
 import de.subhransu.openrouter.springai.api.dto.ChatMessage;
 import de.subhransu.openrouter.springai.api.dto.ImagesRequest;
@@ -295,8 +299,8 @@ class OpenRouterApiStreamingContractTests {
 			default -> throw new IllegalArgumentException(endpoint);
 		};
 		for (String newline : List.of("\n", "\r\n")) {
-			String sse = ": keepalive\n\ndata: " + json.replace("\n", "\n: comment\ndata: ") + "\n\n"
-					+ (endpoint.equals("responses") ? RESPONSES_COMPLETED_SSE : "")
+			String sse = ": keepalive\n\ndata:\n\ndata:   \n\ndata: " + json.replace("\n", "\n: comment\ndata: ")
+					+ "\n\n" + (endpoint.equals("responses") ? RESPONSES_COMPLETED_SSE : "")
 					+ "data: [DONE]\n\ndata: {invalid}\n\n";
 			byte[] bytes = sse.replace("\n", newline).getBytes(StandardCharsets.UTF_8);
 			Flux<DataBuffer> body = Flux.range(0, (bytes.length + bufferSize - 1) / bufferSize)
@@ -374,6 +378,62 @@ class OpenRouterApiStreamingContractTests {
 			.expectErrorSatisfies(error -> assertThat(error).isInstanceOf(IllegalStateException.class)
 				.isNotInstanceOf(OpenRouterApiException.class))
 			.verify();
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "synthetic-invalid", "{invalid}", "[]", "[{}]", "null", "42", "true", "\"text\"",
+			"{} trailing" })
+	void invalidPayloadFailsAtCorruptionAndCancelsUpstream(String invalid) {
+		for (String endpoint : List.of("chat", "responses", "images", "chat-model", "responses-model")) {
+			for (int position = 0; position < 3; position++) {
+				for (String separator : List.of("\n\n", "\n")) {
+					String valid = endpoint.startsWith("chat")
+							? "{\"choices\":[{\"index\":0,\"delta\":{\"content\":\"OK\"}}]}"
+							: endpoint.startsWith("responses")
+									? "{\"type\":\"response.output_text.delta\",\"delta\":\"OK\"}"
+									: "{\"type\":\"image_generation.completed\",\"b64_json\":\"aW1hZ2U=\"}";
+					String terminal = endpoint.startsWith("responses") ? RESPONSES_COMPLETED_SSE : DONE_ONLY_SSE;
+					String sse = ("data: " + valid + separator).repeat(position) + "data: " + invalid + separator
+							+ ("data: " + valid + separator).repeat(2 - position) + terminal;
+					AtomicBoolean cancelled = new AtomicBoolean();
+					AtomicBoolean subscribed = new AtomicBoolean();
+					Flux<DataBuffer> body = Flux
+						.<DataBuffer>just(new DefaultDataBufferFactory().wrap(sse.getBytes(StandardCharsets.UTF_8)))
+						.concatWith(Flux.never())
+						.doOnCancel(() -> cancelled.set(true));
+					OpenRouterApi api = OpenRouterApi.builder()
+						.apiKey("test-key")
+						.webClientBuilder(WebClient.builder()
+							.exchangeFunction(request -> Mono.just(ClientResponse.create(HttpStatus.OK)
+								.header(HttpHeaders.CONTENT_TYPE, MediaType.TEXT_EVENT_STREAM_VALUE)
+								.body(Flux.defer(() -> subscribed.compareAndSet(false, true) ? body : Flux.empty()))
+								.build())))
+						.build();
+					Flux<?> stream = switch (endpoint) {
+						case "chat" -> api.chatCompletionStream(chatRequest());
+						case "responses" -> api.responsesStream(responsesRequest());
+						case "images" -> api.imagesStream(imagesRequest());
+						default -> OpenRouterChatModel.builder()
+							.openRouterApi(api)
+							.build()
+							.stream(new Prompt("hello",
+									OpenRouterChatOptions.builder()
+										.model("synthetic-model")
+										.requestMode(endpoint.equals("chat-model")
+												? OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS
+												: OpenRouterRequestMode.OPENAI_RESPONSES)
+										.build()));
+					};
+					// A coalesced payload starting with invalid JSON fails as a whole.
+					StepVerifier.create(stream).expectNextCount(position).expectErrorSatisfies(error -> {
+						assertThat(error)
+							.isInstanceOfAny(IllegalStateException.class, OpenRouterProtocolException.class)
+							.isNotInstanceOf(OpenRouterTruncatedResponseException.class);
+					}).verify(Duration.ofSeconds(3));
+					assertThat(cancelled).as("%s, position %s", endpoint, position).isTrue();
+				}
+			}
+		}
 	}
 
 	@ParameterizedTest
