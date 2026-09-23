@@ -8,6 +8,12 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
+import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
+import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
+import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
+import io.micrometer.observation.tck.TestObservationRegistry;
+import org.junit.jupiter.params.provider.ValueSource;
+import reactor.core.publisher.Flux;
 import de.subhransu.openrouter.springai.chat.OpenRouterUsage;
 import java.time.Duration;
 import java.util.Map;
@@ -321,6 +327,93 @@ class OpenRouterImageModelTests {
 			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessageContaining(field);
 		org.mockito.Mockito.verifyNoInteractions(api);
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "", "data: {\"type\":\"image_generation.partial_image\",\"b64_json\":\"AQID\"}\n\n",
+			"data: {\"type\":\"synthetic.metadata\",\"usage\":{\"total_tokens\":3}}\n\n",
+			"data: {\"type\":\"image_generation.partial_image\",\"partial_image_index\":0}\n\n" })
+	void rejectsDoneWithoutCompletedImageAndRecordsObservationError(String prefix) {
+		TestObservationRegistry registry = TestObservationRegistry.create();
+		OpenRouterImageModel model = streamingModel(new AtomicReference<>(prefix + "data: [DONE]\n\n"), registry);
+		StepVerifier.create(model.stream(new ImagePrompt("synthetic image")))
+			.expectNextCount(prefix.contains("partial_image") ? 1 : 0)
+			.expectErrorSatisfies(error -> assertThat(error).isInstanceOf(OpenRouterTruncatedResponseException.class)
+				.hasMessageContaining("without a completed image"))
+			.verify();
+		io.micrometer.observation.tck.TestObservationRegistryAssert.assertThat(registry)
+			.hasNumberOfObservationsEqualTo(1)
+			.hasObservationWithNameEqualTo("gen_ai.client.operation")
+			.that()
+			.hasBeenStopped()
+			.thenError()
+			.isInstanceOf(OpenRouterTruncatedResponseException.class);
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "{}", "{\"type\":null}", "{\"type\":\"\"}" })
+	void rejectsMissingImageEventType(String event) {
+		OpenRouterImageModel model = streamingModel(new AtomicReference<>("data: " + event + "\n\ndata: [DONE]\n\n"),
+				TestObservationRegistry.create());
+		StepVerifier.create(model.stream(new ImagePrompt("synthetic image")))
+			.expectErrorSatisfies(error -> assertThat(error).isInstanceOf(OpenRouterProtocolException.class)
+				.hasMessageContaining("requires a type"))
+			.verify();
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "{\"type\":\"synthetic.future.event\"}",
+			"{\"type\":\"synthetic.metadata\",\"usage\":{\"total_tokens\":3}}",
+			"{\"type\":\"synthetic.future.event\",\"b64_json\":\"AQID\"}" })
+	void ignoresUnknownEventsBeforeRealImage(String event) {
+		String body = "data: " + event + "\n\n"
+				+ "data: {\"type\":\"image_generation.completed\",\"b64_json\":\"AQID\",\"usage\":{\"total_tokens\":7}}\n\n"
+				+ "data: [DONE]\n\n";
+		OpenRouterImageModel model = streamingModel(new AtomicReference<>(body), TestObservationRegistry.create());
+		StepVerifier.create(model.stream(new ImagePrompt("synthetic image"))).assertNext(response -> {
+			assertThat(response.getResults()).hasSize(1);
+			assertThat(response.getResult().getOutput().getB64Json()).isEqualTo("AQID");
+		}).verifyComplete();
+	}
+
+	@Test
+	void completionStateIsIndependentForRepeatedSubscriptions() {
+		AtomicReference<String> body = new AtomicReference<>(
+				"data: {\"type\":\"image_generation.completed\",\"b64_json\":\"AQID\"}\n\ndata: [DONE]\n\n");
+		Flux<ImageResponse> stream = streamingModel(body, TestObservationRegistry.create())
+			.stream(new ImagePrompt("synthetic image"));
+		StepVerifier.create(stream).expectNextCount(1).verifyComplete();
+		body.set("data: [DONE]\n\n");
+		StepVerifier.create(stream).expectError(OpenRouterTruncatedResponseException.class).verify();
+	}
+
+	@ParameterizedTest
+	@ValueSource(booleans = { false, true })
+	void completedImageDoesNotHideLaterFailure(boolean providerError) {
+		String body = "data: {\"type\":\"image_generation.completed\",\"b64_json\":\"AQID\"}\n\n" + (providerError
+				? "data: {\"type\":\"error\",\"error\":{\"code\":500,\"message\":\"synthetic failure\"}}\n\n" : "");
+		StepVerifier
+			.create(streamingModel(new AtomicReference<>(body), TestObservationRegistry.create())
+				.stream(new ImagePrompt("synthetic image")))
+			.expectNextCount(1)
+			.expectError(providerError ? OpenRouterApiException.class : OpenRouterTruncatedResponseException.class)
+			.verify();
+	}
+
+	private OpenRouterImageModel streamingModel(AtomicReference<String> body, TestObservationRegistry registry) {
+		OpenRouterApi api = OpenRouterApi.builder()
+			.apiKey("test-key")
+			.webClientBuilder(WebClient.builder()
+				.exchangeFunction(request -> Mono.just(ClientResponse.create(HttpStatus.OK)
+					.header(HttpHeaders.CONTENT_TYPE, MediaType.TEXT_EVENT_STREAM_VALUE)
+					.body(body.get())
+					.build())))
+			.build();
+		return OpenRouterImageModel.builder()
+			.openRouterApi(api)
+			.observationRegistry(registry)
+			.defaultOptions(OpenRouterImageOptions.builder().model(MODEL).n(3).build())
+			.build();
 	}
 
 	private record Fixture(OpenRouterImageModel model, MockRestServiceServer server) {

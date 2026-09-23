@@ -937,17 +937,24 @@ selects image encoding (for example, `webp`), not URL versus base64 delivery.
 `OpenRouterImageModel.stream(ImagePrompt)` exposes OpenRouter's SSE image streaming:
 partial previews arrive first (see `OpenRouterImageGenerationMetadata.partialImageIndex()`),
 then completed images with usage and cost. The stream ends at `[DONE]`, not at the
-first completed image. An SSE connection that closes without `[DONE]` fails as a
-truncated response, even if it delivered a completed image. `n` is an upper bound;
+first completed image. A stream must deliver at least one completed image; previews
+followed by `[DONE]`, or `[DONE]` alone, fail with `OpenRouterTruncatedResponseException`.
+Unknown event types are ignored for forward compatibility, while missing, null, or blank
+types fail with `OpenRouterProtocolException`. Unknown events never produce images or
+satisfy completion. Cancellation stops the stream without recording a protocol failure.
+An SSE connection that closes without `[DONE]` fails as a truncated response, even if
+it delivered a completed image. `n` is an upper bound;
 providers may return fewer images, and support for multiple images and native streaming
 depends on the endpoint. Check the [OpenRouter image API capabilities](https://openrouter.ai/docs/guides/overview/multimodal/image-generation)
 before combining them.
 
-Image JSON responses must contain a `data` array; an empty array remains a valid
-empty result. Each entry and each completed SSE event must contain nonblank
-`b64_json` or `url`. The JSON streaming fallback preserves both forms. Missing
-required content raises `OpenRouterProtocolException`; HTTP 200 error envelopes
-raise structured `OpenRouterApiException` errors before success conversion.
+Image JSON responses must contain a `data` array. An empty array remains a valid
+empty result for blocking calls. The streaming JSON fallback requires at least one
+image and raises `OpenRouterTruncatedResponseException` for an empty array. Each
+entry and each completed SSE event must contain nonblank `b64_json` or `url`. The
+JSON streaming fallback preserves both forms. Missing required content raises
+`OpenRouterProtocolException`; HTTP 200 error envelopes raise structured
+`OpenRouterApiException` errors before success conversion.
 Synchronous Chat Completions choices require a `message` object, but its text may be
 empty (including tool, refusal, and media messages). Usage-only chat stream chunks
 and image partial previews remain supported.
