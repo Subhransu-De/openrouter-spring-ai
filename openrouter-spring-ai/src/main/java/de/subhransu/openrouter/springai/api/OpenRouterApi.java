@@ -391,15 +391,20 @@ public class OpenRouterApi {
 						"Legacy response.done is unsupported; expected response.completed, "
 								+ "response.incomplete, or response.failed");
 			}
-			if (event instanceof ChatCompletionChunk chunk && chunk.error() == null
-					&& ((CollectionUtils.isEmpty(chunk.choices()) && chunk.usage() == null)
-							|| (chunk.choices() != null && chunk.choices().stream().anyMatch(Objects::isNull)))) {
-				throw new OpenRouterProtocolException("OpenRouter chat chunk requires non-null choices or usage");
+			if (event instanceof ChatCompletionChunk chunk) {
+				validateChunk(chunk);
 			}
 			return event;
 		}
 		catch (JacksonException ex) {
 			throw new IllegalStateException("Failed to decode OpenRouter stream chunk", ex);
+		}
+	}
+
+	private void validateChunk(ChatCompletionChunk chunk) {
+		if (chunk.error() == null && ((CollectionUtils.isEmpty(chunk.choices()) && chunk.usage() == null)
+				|| (chunk.choices() != null && chunk.choices().stream().anyMatch(Objects::isNull)))) {
+			throw new OpenRouterProtocolException("OpenRouter chat chunk requires non-null choices or usage");
 		}
 	}
 

@@ -24,6 +24,8 @@ import reactor.core.publisher.Mono;
 
 public final class OpenRouterResponsesStreamingResponseMapper {
 
+	private static final String OUTPUT_ITEM_DONE = "response.output_item.done";
+
 	private final ResponsesStreamBudget budget;
 
 	public OpenRouterResponsesStreamingResponseMapper() {
@@ -56,108 +58,26 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 	private ChatResponse map(ResponsesStreamEvent event, ReasoningMetadata.Accumulator accumulator,
 			List<ResponsesOutputItem> pending, RefusalMetadata.Accumulator refusal,
 			@Nullable ResponsesOutputState outputState) {
+		validateEvent(event);
 		String type = event.type();
 		boolean incomplete = "response.incomplete".equals(type);
-		boolean completed = "response.completed".equals(type);
-		boolean itemDone = "response.output_item.done".equals(type);
-		if (event.error() != null || "error".equals(type) || type != null && type.endsWith(".error")) {
-			StreamError error = eventError(event);
-			throw OpenRouterResponsesResponseMapper.failure("OpenRouter responses stream failed", String.valueOf(event),
-					error, event.errorType());
-		}
-
-		String text = "";
-		String reasoning = null;
-		String finishReason = null;
-		ResponsesResult result = null;
-		List<AssistantMessage.ToolCall> toolCalls = List.of();
-		List<Media> media = List.of();
-		if ("response.output_text.delta".equals(type)) {
-			text = event.delta() != null ? event.delta() : "";
-			if (outputState != null) {
-				text = outputState.delta(event);
-			}
-		}
-		else if ("response.output_text.done".equals(type) && outputState != null) {
-			text = outputState.done(event);
-		}
-		else if ("response.reasoning_text.delta".equals(type) || "response.reasoning_summary_text.delta".equals(type)) {
-			reasoning = event.delta();
-		}
-		else if (itemDone && event.item() != null && "function_call".equals(event.item().type())) {
-			// Wait for the whole round: a later incomplete item or response must prevent
-			// every callback, including calls whose own item already completed.
-			pending.add(event.item());
-		}
-		else if (itemDone && event.item() != null && "image_generation_call".equals(event.item().type())) {
-			media = outputState != null ? outputState.image(event.item(), event.outputIndex())
-					: GeneratedImageMapper.responsesMedia(List.of(event.item()));
-		}
-		else if (completed || incomplete) {
-			result = event.response();
-			if (result == null) {
-				throw new OpenRouterTruncatedResponseException(
-						"Responses stream terminated without a response snapshot");
-			}
-			String terminalStatus = completed ? "completed" : "incomplete";
-			OpenRouterResponsesResponseMapper.validateTerminal(result, terminalStatus);
-			finishReason = FinishReasonMapper.responses(result, terminalStatus);
-		}
-		else if ("response.failed".equals(type)) {
-			// A failed generation ends the stream over HTTP 200; converting it into an
-			// empty finish chunk would hide the provider error from consumers.
-			ResponsesResult failed = event.response();
-			throw OpenRouterResponsesResponseMapper.failure("OpenRouter responses stream failed", String.valueOf(event),
-					failed != null ? failed.error() : null, failed != null ? failed.errorType() : null);
-		}
-
-		String nativeFinishReason = finishReason;
-		String status = result != null && result.status() != null ? result.status()
-				: incomplete ? "incomplete" : completed ? "completed" : null;
-		if (completed || incomplete) {
-			String toolStatus = incomplete ? "incomplete" : status;
-			String reason = result != null && result.incompleteDetails() != null ? result.incompleteDetails().reason()
-					: null;
-			toolCalls = OpenRouterResponsesResponseMapper.toolCalls(toolStatus, reason, pending);
-			if (result != null && result.output() != null) {
-				// Validate both representations so a terminal snapshot cannot erase an
-				// explicitly non-final output_item.done status.
-				List<AssistantMessage.ToolCall> terminalCalls = OpenRouterResponsesResponseMapper.toolCalls(toolStatus,
-						reason, result.output());
-				if (!terminalCalls.isEmpty()) {
-					toolCalls = terminalCalls;
-				}
-			}
-			pending.clear();
-			if (!toolCalls.isEmpty()) {
-				finishReason = "tool_calls";
-			}
-		}
-
-		Map<String, Object> reasoningMetadata = ReasoningMetadata.chat(reasoning, null);
-		if (itemDone && event.item() != null) {
-			reasoningMetadata.putAll(ReasoningMetadata.responses(List.of(event.item())));
-			reasoningMetadata.remove(ReasoningMetadata.REASONING);
-		}
-		Map<String, Object> snapshot = accumulator.append(reasoningMetadata);
-		if (result != null && result.output() != null) {
-			snapshot = accumulator.replace(ReasoningMetadata.responses(result.output()));
-		}
+		ResponsesResult result = terminalResult(event);
+		String nativeFinishReason = result != null ? FinishReasonMapper.responses(result, result.status()) : null;
+		String status = result != null ? result.status() : null;
+		List<AssistantMessage.ToolCall> toolCalls = toolCalls(event, result, pending,
+				incomplete ? "incomplete" : status);
+		String finishReason = toolCalls.isEmpty() ? nativeFinishReason : "tool_calls";
+		String reasoning = "response.reasoning_text.delta".equals(type)
+				|| "response.reasoning_summary_text.delta".equals(type) ? event.delta() : null;
+		Map<String, Object> snapshot = reasoning(event, result, reasoning, accumulator);
 		RefusalMetadata.put(snapshot, refusal.update(event));
-		if (itemDone && event.item() != null && outputState != null) {
-			text = outputState.item(event.item(), event.outputIndex());
+		// Process item images before text reconciliation, as in the wire event order.
+		List<Media> media = itemMedia(event, outputState);
+		String text = text(event, result, outputState);
+		if (result != null && result.output() != null && outputState != null) {
+			media = terminalMedia(result.output(), outputState);
 		}
-		if (result != null && result.output() != null) {
-			text = outputState != null ? outputState.terminal(result.output())
-					: OpenRouterResponsesResponseMapper.text(result.output());
-			if (outputState != null) {
-				List<Media> images = new ArrayList<>();
-				for (int index = 0; index < result.output().size(); index++) {
-					images.addAll(outputState.image(result.output().get(index), index));
-				}
-				media = images;
-			}
-		}
+
 		AssistantMessage assistantMessage = AssistantMessage.builder()
 			.properties(snapshot)
 			.content(text)
@@ -185,6 +105,107 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 		}
 		return new ChatResponse(List.of(new Generation(assistantMessage, generationMetadata)),
 				responseMetadata.build());
+	}
+
+	private void validateEvent(ResponsesStreamEvent event) {
+		String type = event.type();
+		if (event.error() != null || "error".equals(type) || type != null && type.endsWith(".error")) {
+			throw OpenRouterResponsesResponseMapper.failure("OpenRouter responses stream failed", String.valueOf(event),
+					eventError(event), event.errorType());
+		}
+		if ("response.failed".equals(type)) {
+			// HTTP 200 can carry a failed generation; never emit an empty finish chunk.
+			ResponsesResult failed = event.response();
+			throw OpenRouterResponsesResponseMapper.failure("OpenRouter responses stream failed", String.valueOf(event),
+					failed != null ? failed.error() : null, failed != null ? failed.errorType() : null);
+		}
+	}
+
+	private @Nullable ResponsesResult terminalResult(ResponsesStreamEvent event) {
+		boolean completed = "response.completed".equals(event.type());
+		if (!completed && !"response.incomplete".equals(event.type())) {
+			return null;
+		}
+		ResponsesResult result = event.response();
+		if (result == null) {
+			throw new OpenRouterTruncatedResponseException("Responses stream terminated without a response snapshot");
+		}
+		OpenRouterResponsesResponseMapper.validateTerminal(result, completed ? "completed" : "incomplete");
+		return result;
+	}
+
+	private List<AssistantMessage.ToolCall> toolCalls(ResponsesStreamEvent event, @Nullable ResponsesResult result,
+			List<ResponsesOutputItem> pending, @Nullable String status) {
+		if (OUTPUT_ITEM_DONE.equals(event.type()) && event.item() != null
+				&& "function_call".equals(event.item().type())) {
+			// A later incomplete item or response must prevent every callback in the
+			// round.
+			pending.add(event.item());
+		}
+		if (result == null) {
+			return List.of();
+		}
+		String reason = result.incompleteDetails() != null ? result.incompleteDetails().reason() : null;
+		List<AssistantMessage.ToolCall> calls = OpenRouterResponsesResponseMapper.toolCalls(status, reason, pending);
+		if (result.output() != null) {
+			// Validate both representations: a snapshot cannot erase a non-final item
+			// status.
+			List<AssistantMessage.ToolCall> terminal = OpenRouterResponsesResponseMapper.toolCalls(status, reason,
+					result.output());
+			if (!terminal.isEmpty()) {
+				calls = terminal;
+			}
+		}
+		pending.clear();
+		return calls;
+	}
+
+	private Map<String, Object> reasoning(ResponsesStreamEvent event, @Nullable ResponsesResult result,
+			@Nullable String reasoning, ReasoningMetadata.Accumulator accumulator) {
+		Map<String, Object> metadata = ReasoningMetadata.chat(reasoning, null);
+		if (OUTPUT_ITEM_DONE.equals(event.type()) && event.item() != null) {
+			metadata.putAll(ReasoningMetadata.responses(List.of(event.item())));
+			metadata.remove(ReasoningMetadata.REASONING);
+		}
+		Map<String, Object> snapshot = accumulator.append(metadata);
+		return result != null && result.output() != null
+				? accumulator.replace(ReasoningMetadata.responses(result.output())) : snapshot;
+	}
+
+	private String text(ResponsesStreamEvent event, @Nullable ResponsesResult result,
+			@Nullable ResponsesOutputState state) {
+		if (result != null && result.output() != null) {
+			return state != null ? state.terminal(result.output())
+					: OpenRouterResponsesResponseMapper.text(result.output());
+		}
+		if ("response.output_text.delta".equals(event.type())) {
+			return state != null ? state.delta(event) : event.delta() != null ? event.delta() : "";
+		}
+		if (state == null) {
+			return "";
+		}
+		if ("response.output_text.done".equals(event.type())) {
+			return state.done(event);
+		}
+		return OUTPUT_ITEM_DONE.equals(event.type()) && event.item() != null
+				? state.item(event.item(), event.outputIndex()) : "";
+	}
+
+	private List<Media> itemMedia(ResponsesStreamEvent event, @Nullable ResponsesOutputState state) {
+		if (!OUTPUT_ITEM_DONE.equals(event.type()) || event.item() == null
+				|| !"image_generation_call".equals(event.item().type())) {
+			return List.of();
+		}
+		return state != null ? state.image(event.item(), event.outputIndex())
+				: GeneratedImageMapper.responsesMedia(List.of(event.item()));
+	}
+
+	private List<Media> terminalMedia(List<ResponsesOutputItem> output, ResponsesOutputState state) {
+		List<Media> images = new ArrayList<>();
+		for (int index = 0; index < output.size(); index++) {
+			images.addAll(state.image(output.get(index), index));
+		}
+		return images;
 	}
 
 	private @Nullable StreamError eventError(ResponsesStreamEvent event) {

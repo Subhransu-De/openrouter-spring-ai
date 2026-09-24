@@ -22,15 +22,17 @@ final class RefusalMetadata {
 	}
 
 	static @Nullable String responses(@Nullable List<? extends @Nullable ResponsesOutputItem> output) {
+		if (output == null) {
+			return null;
+		}
 		String refusal = null;
-		if (output != null) {
-			for (ResponsesOutputItem item : ResponseValues.items(output, "output item")) {
-				if ("message".equals(item.type()) && item.content() != null) {
-					for (ResponsesContent part : ResponseValues.items(item.content(), "message content")) {
-						if ("refusal".equals(part.type())) {
-							refusal = (refusal != null ? refusal : "") + (part.refusal() != null ? part.refusal() : "");
-						}
-					}
+		for (ResponsesOutputItem item : ResponseValues.items(output, "output item")) {
+			if (!"message".equals(item.type()) || item.content() == null) {
+				continue;
+			}
+			for (ResponsesContent part : ResponseValues.items(item.content(), "message content")) {
+				if ("refusal".equals(part.type())) {
+					refusal = (refusal != null ? refusal : "") + (part.refusal() != null ? part.refusal() : "");
 				}
 			}
 		}
@@ -58,6 +60,12 @@ final class RefusalMetadata {
 			else if ("response.output_item.done".equals(event.type()) && event.item() != null) {
 				snapshot(outputIndex, event.item());
 			}
+			terminal(event);
+			return this.parts.isEmpty() ? null
+					: this.parts.values().stream().flatMap(part -> part.values().stream()).reduce("", String::concat);
+		}
+
+		private void terminal(ResponsesStreamEvent event) {
 			if (("response.completed".equals(event.type()) || "response.incomplete".equals(event.type()))
 					&& event.response() != null && event.response().output() != null) {
 				List<ResponsesOutputItem> output = ResponseValues.items(event.response().output(), "output item");
@@ -65,8 +73,6 @@ final class RefusalMetadata {
 					snapshot(index, output.get(index));
 				}
 			}
-			return this.parts.isEmpty() ? null
-					: this.parts.values().stream().flatMap(part -> part.values().stream()).reduce("", String::concat);
 		}
 
 		private void snapshot(int outputIndex, ResponsesOutputItem item) {

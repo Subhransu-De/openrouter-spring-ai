@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="OpenRouter Spring AI public API review"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.github.io/schema/ruleset_2_0_0.xsd">
+  <description>Advisory public surface report. Never narrows published APIs automatically.</description>
+  <exclude-pattern>.*/src/test/.*</exclude-pattern>
+  <exclude-pattern>.*/openrouter-spring-ai-samples/.*</exclude-pattern>
+  <rule ref="category/java/design.xml/ExcessivePublicCount">
+    <properties>
+      <property name="minimum" value="45"/>
+    </properties>
+  </rule>
+</ruleset>

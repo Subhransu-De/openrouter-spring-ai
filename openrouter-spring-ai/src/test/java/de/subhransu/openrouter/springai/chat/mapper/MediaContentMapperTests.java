@@ -66,6 +66,18 @@ class MediaContentMapperTests {
 	}
 
 	@ParameterizedTest
+	@ValueSource(strings = { "application/pdf", "audio/wav", "video/mp4" })
+	void preservesBase64DecodingCauseInBothRequestModes(String mime) {
+		Media invalid = media(mime, "data:" + mime + ";base64,!!!");
+		assertThatThrownBy(() -> MediaContentMapper.chat(invalid)).isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("Invalid base64 media content")
+			.hasCauseInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> MediaContentMapper.responses(invalid)).isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("Invalid base64 media content")
+			.hasCauseInstanceOf(IllegalArgumentException.class);
+	}
+
+	@ParameterizedTest
 	@CsvSource({ "audio/wav,https://example.test/clip.wav", "audio/mpeg,https://example.test/clip.mp3",
 			"application/pdf,file:///report.pdf", "video/mp4,relative.mp4", "application/pdf,https:/missing-host",
 			"audio/ogg,data:audio/ogg;base64,AQID", "audio/mp3,data:audio/mp3;base64,AQID",

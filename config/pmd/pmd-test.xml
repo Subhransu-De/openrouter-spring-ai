@@ -7,6 +7,12 @@
     Test-source rules that keep unit tests deterministic and offline.
   </description>
 
+  <exclude-pattern>.*/src/main/.*</exclude-pattern>
+
+  <rule ref="category/java/bestpractices.xml/JUnitJupiterTestShouldBePackagePrivate"/>
+  <rule ref="category/java/bestpractices.xml/PreserveStackTrace"/>
+  <rule ref="category/java/codestyle.xml/UnnecessaryModifier"/>
+
   <rule name="NoSystemOutInTests"
       language="java"
       message="Tests should assert behavior instead of writing to stdout/stderr."

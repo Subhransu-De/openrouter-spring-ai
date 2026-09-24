@@ -92,30 +92,34 @@ final class AudioOutputMapper {
 				choice.delta() == null || choice.delta().toolCalls() == null || choice.delta().toolCalls().isEmpty(),
 				"Audio and tool calls in the same choice are unsupported");
 		if (choice.finishReason() != null) {
-			Assert.state(this.options != null, "Received audio without configured output audio options");
-			byte[] completedAudio = assembly.bytes.toByteArray();
-			if (!"stop".equals(choice.finishReason()) || completedAudio.length == 0) {
-				throw new OpenRouterTruncatedResponseException(
-						"Audio choice ended without complete audio and a stop finish reason");
-			}
-			Map<String, Object> snapshot = new HashMap<>();
-			snapshot.put("format", this.options.format());
-			snapshot.put("transcript", assembly.transcript.toString());
-			if (assembly.id != null) {
-				snapshot.put("id", assembly.id);
-			}
-			if (assembly.expiresAt != null) {
-				snapshot.put("expires_at", assembly.expiresAt);
-			}
-			metadata.put(METADATA, Map.copyOf(snapshot));
-			media.add(Media.builder()
-				.mimeType(MimeTypeUtils.parseMimeType(mimeType(this.options.format())))
-				.data(completedAudio)
-				.build());
-			this.retainedBytes -= assembly.retainedBytes;
-			this.pending.remove(index);
-			this.finished.add(index);
+			finish(choice, assembly, index, metadata, media);
 		}
+	}
+
+	private void finish(Choice choice, Assembly assembly, int index, Map<String, Object> metadata, List<Media> media) {
+		Assert.state(this.options != null, "Received audio without configured output audio options");
+		byte[] completedAudio = assembly.bytes.toByteArray();
+		if (!"stop".equals(choice.finishReason()) || completedAudio.length == 0) {
+			throw new OpenRouterTruncatedResponseException(
+					"Audio choice ended without complete audio and a stop finish reason");
+		}
+		Map<String, Object> snapshot = new HashMap<>();
+		snapshot.put("format", this.options.format());
+		snapshot.put("transcript", assembly.transcript.toString());
+		if (assembly.id != null) {
+			snapshot.put("id", assembly.id);
+		}
+		if (assembly.expiresAt != null) {
+			snapshot.put("expires_at", assembly.expiresAt);
+		}
+		metadata.put(METADATA, Map.copyOf(snapshot));
+		media.add(Media.builder()
+			.mimeType(MimeTypeUtils.parseMimeType(mimeType(this.options.format())))
+			.data(completedAudio)
+			.build());
+		this.retainedBytes -= assembly.retainedBytes;
+		this.pending.remove(index);
+		this.finished.add(index);
 	}
 
 	private void append(Assembly assembly, AudioOutput audio, OpenRouterAudioOptions options) {

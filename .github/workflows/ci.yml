@@ -309,6 +309,10 @@ jobs:
         if: matrix.java-version == '25'
         run: python3 config/coverage/verify.py maven --command mvn --work-dir "$RUNNER_TEMP/coverage-fixtures"
 
+      - name: Exercise Maven PMD gates with synthetic fixtures
+        if: matrix.java-version == '25'
+        run: python3 config/pmd/verify.py maven --command mvn --work-dir "$RUNNER_TEMP/pmd-fixtures"
+
       - name: Publish synthetic test and coverage reports
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -321,6 +325,8 @@ jobs:
             ${{ runner.temp }}/coverage-fixtures/*.log
             ${{ runner.temp }}/coverage-fixtures/**/target/site/jacoco/
             ${{ runner.temp }}/coverage-fixtures/**/target/surefire-reports/
+            ${{ runner.temp }}/pmd-fixtures/*.log
+            ${{ runner.temp }}/pmd-fixtures/**/target/pmd*.xml
 
   gradle-test:
     name: Verify with Gradle · Java ${{ matrix.java-version }}
@@ -354,6 +360,10 @@ jobs:
         if: matrix.java-version == '25'
         run: python3 config/coverage/verify.py gradle --command gradle --work-dir "$RUNNER_TEMP/coverage-fixtures"
 
+      - name: Exercise Gradle PMD gates with synthetic fixtures
+        if: matrix.java-version == '25'
+        run: python3 config/pmd/verify.py gradle --command gradle --work-dir "$RUNNER_TEMP/pmd-fixtures"
+
       - name: Publish synthetic test and coverage reports
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -368,6 +378,8 @@ jobs:
             ${{ runner.temp }}/coverage-fixtures/**/build/reports/jacoco/test/
             ${{ runner.temp }}/coverage-fixtures/**/build/reports/tests/
             ${{ runner.temp }}/coverage-fixtures/**/build/test-results/
+            ${{ runner.temp }}/pmd-fixtures/*.log
+            ${{ runner.temp }}/pmd-fixtures/**/build/reports/pmd/
 
   garage-pr:
     name: Run pull request compatibility tests

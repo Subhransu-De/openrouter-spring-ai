@@ -23,18 +23,26 @@ final class ToolChoiceMapper {
 		if (node.isString() && Set.of("auto", "none", "required").contains(node.stringValue())) {
 			return node.stringValue();
 		}
+		String name = functionName(node);
+		if (name != null) {
+			return responses ? Map.of("type", "function", "name", name)
+					: Map.of("type", "function", "function", Map.of("name", name));
+		}
+		throw new IllegalArgumentException("toolChoice must be auto, none, required, or a named function "
+				+ "({type:function,name:...} or {type:function,function:{name:...}})");
+	}
+
+	private static @Nullable String functionName(JsonNode node) {
 		if (node.isObject() && node.path("type").isString() && "function".equals(node.path("type").stringValue())
 				&& node.size() == 2) {
 			JsonNode function = node.path("function");
 			JsonNode name = node.has("name") ? node.path("name") : function.path("name");
 			if (name.isString() && StringUtils.hasText(name.stringValue())
 					&& (node.has("name") || (function.isObject() && function.size() == 1))) {
-				return responses ? Map.of("type", "function", "name", name.stringValue())
-						: Map.of("type", "function", "function", Map.of("name", name.stringValue()));
+				return name.stringValue();
 			}
 		}
-		throw new IllegalArgumentException("toolChoice must be auto, none, required, or a named function "
-				+ "({type:function,name:...} or {type:function,function:{name:...}})");
+		return null;
 	}
 
 }
