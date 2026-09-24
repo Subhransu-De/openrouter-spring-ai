@@ -1,6 +1,8 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionChunk;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionResponse;
@@ -22,15 +24,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.reactivestreams.Subscriber;
+import org.reactivestreams.Subscription;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.content.Media;
 import org.springframework.util.MimeTypeUtils;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
+import reactor.test.publisher.TestPublisher;
 
 class OpenRouterStreamingToolCallAggregatorTests {
 
@@ -39,6 +45,68 @@ class OpenRouterStreamingToolCallAggregatorTests {
 	private static final String MODEL = "openai/gpt-5.4-mini";
 
 	private final OpenRouterStreamingToolCallAggregator aggregator = new OpenRouterStreamingToolCallAggregator();
+
+	@Test
+	void boundedDemandAfterSubscriptionStillCollectsEveryToolFragment() {
+		Flux<ChatCompletionChunk> source = Flux.just(chunk(textChoice(0, "Checking")),
+				chunk(toolFragment(0, 0, "call-0", "lookup", "{")), chunk(toolFragment(0, 0, null, null, "}")),
+				chunk(finishChoice(0)));
+		StepVerifier.create(this.aggregator.aggregate(source), 1)
+			.assertNext(value -> assertThat(value.choices().get(0).delta().content()).isEqualTo("Checking"))
+			.thenRequest(1)
+			.assertNext(value -> assertThat(value.choices().get(0).delta().toolCalls().get(0).function().arguments())
+				.isEqualTo("{}"))
+			.expectComplete()
+			.verify(Duration.ofSeconds(2));
+	}
+
+	@Test
+	void cancellationBeforeDemandCancelsTheSource() {
+		TestPublisher<ChatCompletionChunk> source = TestPublisher.create();
+		StepVerifier.create(this.aggregator.aggregate(source.flux()), 0).thenCancel().verify();
+		source.assertCancelled();
+	}
+
+	@Test
+	void demandSaturatesWhileWaitingForTheUpstreamSubscription() {
+		AtomicReference<Subscriber<? super ChatCompletionChunk>> upstream = new AtomicReference<>();
+		Subscription subscription = mock(Subscription.class);
+		StepVerifier.create(this.aggregator.aggregate(Flux.<ChatCompletionChunk>from(upstream::set)), 0)
+			.thenRequest(Long.MAX_VALUE - 1)
+			.thenRequest(10)
+			.then(() -> {
+				upstream.get().onSubscribe(subscription);
+				upstream.get().onComplete();
+			})
+			.verifyComplete();
+		verify(subscription).request(Long.MAX_VALUE);
+	}
+
+	@Test
+	void missingFunctionsAndMixedIndexesPreserveSeparateCalls() {
+		ObjectMapper mapper = new ObjectMapper();
+		ChatCompletionChunk first = mapper.readValue("""
+				{"choices":[{"delta":{"tool_calls":[{"index":7,"id":"first"},
+				{"id":"second","function":{"name":"lookup","arguments":"{"}}]}}]}
+				""", ChatCompletionChunk.class);
+		ChatCompletionChunk next = mapper.readValue("""
+				{"choices":[{"delta":{"tool_calls":[{"function":{"name":"lookup","arguments":"}"}},
+				{"index":7,"function":{"name":"lookup","arguments":"{}"}},{"index":7},
+				{"index":7,"function":{"name":"lookup"}},
+				{"id":"third","function":{"name":"lookup"}},{"function":{"arguments":"{}"}},
+				{"id":"fourth","function":{"name":"lookup","arguments":"{}"}}]}}]}
+				""", ChatCompletionChunk.class);
+		ChatCompletionChunk last = mapper.readValue("""
+				{"choices":[{"finish_reason":"tool_calls"}]}
+				""", ChatCompletionChunk.class);
+		StepVerifier.create(this.aggregator.aggregate(Flux.just(first, next, last))).assertNext(merged -> {
+			assertThat(merged.choices().get(0).delta().toolCalls()).containsExactly(
+					new ToolCall("first", null, new FunctionCall("lookup", "{}"), 7),
+					new ToolCall("second", null, new FunctionCall("lookup", "{}"), null),
+					new ToolCall("third", null, new FunctionCall("lookup", "{}"), null),
+					new ToolCall("fourth", null, new FunctionCall("lookup", "{}"), null));
+		}).verifyComplete();
+	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "{\"choices\":[null]}",

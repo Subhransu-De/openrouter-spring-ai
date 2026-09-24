@@ -37,6 +37,13 @@ class ImageResponseContractTests {
 
 	private final TestObservationRegistry registry = TestObservationRegistry.create();
 
+	@Test
+	void validatorRejectsNullWithAProtocolError() {
+		assertThatThrownBy(() -> OpenRouterImageResponseValidator.validate(null))
+			.isInstanceOf(OpenRouterProtocolException.class)
+			.hasMessage("Null OpenRouter image response");
+	}
+
 	@ParameterizedTest
 	@ValueSource(strings = { "", "null", "{}", "{\"data\":null}", "{\"data\":[null]}", "{\"data\":[{}]}",
 			"{\"data\":[{\"b64_json\":\" \",\"url\":\"\"}]}", "{\"data\":[{\"b64_json\":\"aW1hZ2U=\"},{}]}" })

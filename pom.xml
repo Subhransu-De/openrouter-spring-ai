@@ -55,6 +55,11 @@
     <spring-boot.version>4.1.1</spring-boot.version>
     <jackson3.version>3.2.3</jackson3.version>
     <junit-jupiter.version>6.1.3</junit-jupiter.version>
+    <pitest.version>1.30.0</pitest.version>
+    <pitest-junit5.version>1.2.3</pitest-junit5.version>
+    <mutation.threads>2</mutation.threads>
+    <mutation.skip>true</mutation.skip>
+    <mutation.targets>de.subhransu.openrouter.springai.errors.OpenRouterRetryAfter*,de.subhransu.openrouter.springai.errors.OpenRouterHttpExceptionFactory*,de.subhransu.openrouter.springai.chat.mapper.ReasoningDetailsMerger*,de.subhransu.openrouter.springai.chat.mapper.OpenRouterStreamingToolCallAggregator*,de.subhransu.openrouter.springai.api.OpenRouterImageResponseValidator*</mutation.targets>
     <lombok.version>1.18.48</lombok.version>
     <twelvemonkeys.version>3.15.2</twelvemonkeys.version>
 
@@ -442,6 +447,40 @@
   </build>
 
   <profiles>
+    <profile>
+      <id>mutation</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.pitest</groupId>
+            <artifactId>pitest-maven</artifactId>
+            <version>${pitest.version}</version>
+            <configuration>
+              <targetClasses>${mutation.targets}</targetClasses>
+              <skip>${mutation.skip}</skip>
+              <threads>${mutation.threads}</threads>
+              <mutators>
+                <mutator>DEFAULTS</mutator>
+              </mutators>
+              <mutationThreshold>80</mutationThreshold>
+              <failWhenNoMutations>true</failWhenNoMutations>
+              <outputFormats>
+                <param>HTML</param>
+                <param>XML</param>
+              </outputFormats>
+              <timestampedReports>false</timestampedReports>
+            </configuration>
+            <dependencies>
+              <dependency>
+                <groupId>org.pitest</groupId>
+                <artifactId>pitest-junit5-plugin</artifactId>
+                <version>${pitest-junit5.version}</version>
+              </dependency>
+            </dependencies>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
     <profile>
       <id>nullaway</id>
       <properties>

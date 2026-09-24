@@ -7,9 +7,12 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -22,6 +25,68 @@ class OpenRouterHttpExceptionFactoryTests {
 
 	private final OpenRouterHttpExceptionFactory factory = new OpenRouterHttpExceptionFactory(new ObjectMapper(),
 			"configured-credential", Clock.fixed(NOW, ZoneOffset.UTC));
+
+	@ParameterizedTest
+	@ValueSource(strings = { "-1", "invalid", ",", "abc", "abcd", "abcde", "Sunday," })
+	void invalidRetryAfterRetainsOriginalValueWithoutInventingADelay(String value) {
+		assertThat(retryAfter(value)).isEqualTo(new OpenRouterRetryAfter(value, null, null));
+	}
+
+	@Test
+	void zeroRetryAfterIsAnImmediateNumericDelay() {
+		assertThat(retryAfter(" 0 ")).isEqualTo(new OpenRouterRetryAfter(" 0 ", Duration.ZERO, null));
+	}
+
+	@Test
+	void rfc850ExactlyFiftyYearsAheadRemainsInTheCurrentCentury() {
+		Instant future = Instant.parse("2076-08-02T07:00:30Z");
+		assertThat(retryAfter("Sunday, 02-Aug-76 07:00:30 GMT").retryAt()).isEqualTo(future);
+	}
+
+	@ParameterizedTest
+	@NullAndEmptySource
+	@ValueSource(strings = { " ", "null", "{}", "{\"error\":null}",
+			"{\"error\":{\"code\":null,\"message\":null,\"metadata\":null}}",
+			"{\"unrelated\":{\"error_type\":\"authentication\"},\"padding\":\"truncated",
+			"{\"unrelated\":[{\"error_type\":\"authentication\"}],\"padding\":\"truncated" })
+	void missingErrorDetailsPreserveStatusFallbackForWholeAndTruncatedBodies(String body) {
+		OpenRouterHttpException whole = (OpenRouterHttpException) this.factory.create("/responses",
+				HttpStatus.TOO_MANY_REQUESTS, HttpHeaders.EMPTY, body);
+		OpenRouterHttpException truncated = this.factory.createErrorBodyLimit("/responses",
+				HttpStatus.TOO_MANY_REQUESTS, body, 10, 11);
+		for (OpenRouterHttpException exception : List.of(whole, truncated)) {
+			assertThat(exception.getErrorDetails().category()).isEqualTo(OpenRouterErrorCategory.RATE_LIMIT);
+			assertThat(exception.getErrorDetails())
+				.extracting(OpenRouterErrorDetails::code, OpenRouterErrorDetails::message,
+						OpenRouterErrorDetails::errorType, OpenRouterErrorDetails::providerCode)
+				.containsOnlyNulls();
+		}
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "}", ",\"padding\":\"truncated" })
+	void metadataDetailsSurviveBothWholeAndTruncatedEnvelopes(String ending) {
+		String body = """
+				{"error":{"code":null,"message":null,"metadata":{
+				"error_type":"authentication","provider_code":"synthetic-code"}}
+				""" + ending;
+		OpenRouterErrorDetails details = this.factory
+			.createErrorBodyLimit("/responses", HttpStatus.SERVICE_UNAVAILABLE, body, 10, 11)
+			.getErrorDetails();
+		assertThat(details.code()).isNull();
+		assertThat(details.message()).isNull();
+		assertThat(details.errorType()).isEqualTo("authentication");
+		assertThat(details.providerCode()).isEqualTo("synthetic-code");
+		assertThat(details.category()).isEqualTo(OpenRouterErrorCategory.AUTHENTICATION);
+	}
+
+	private OpenRouterRetryAfter retryAfter(String value) {
+		HttpHeaders headers = new HttpHeaders();
+		headers.set(HttpHeaders.RETRY_AFTER, value);
+		return ((OpenRouterHttpException) this.factory.create("/responses", HttpStatus.SERVICE_UNAVAILABLE, headers,
+				OVERLOADED_ERROR))
+			.getRetryAfter();
+	}
 
 	@Test
 	void parsesProviderDetailsAndDeltaSecondsRetryAfter() {

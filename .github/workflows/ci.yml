@@ -1,6 +1,18 @@
 name: Build, Test, and Compatibility
 
 on:
+  workflow_dispatch:
+    inputs:
+      mutation-workers:
+        description: PIT workers for an isolated mutation run
+        type: choice
+        options: ['2', '4']
+        default: '2'
+      mutation-build:
+        description: Build tool for the isolated mutation run
+        type: choice
+        options: [Maven, Gradle]
+        default: Maven
   push:
     branches:
       - main
@@ -13,7 +25,60 @@ permissions:
   contents: read
 
 jobs:
+  mutation:
+    name: Focused mutation gate
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        if: inputs.mutation-build == 'Gradle'
+        with:
+          gradle-version: 9.7.1
+      - name: Run synthetic core mutation tests
+        env:
+          PIT_THREADS: ${{ inputs.mutation-workers }}
+          PIT_BUILD: ${{ inputs.mutation-build }}
+        run: |
+          options=()
+          if [[ -n "$PIT_THREADS" ]]; then options+=("-Dmutation.threads=$PIT_THREADS"); fi
+          command=(mvn -B -pl openrouter-spring-ai -am -Pmutation "${options[@]}" test-compile org.pitest:pitest-maven:mutationCoverage)
+          if [[ "$PIT_BUILD" == Gradle ]]; then
+            command=(gradle --no-daemon :openrouter-spring-ai:mutation "-Pmutation.threads=$PIT_THREADS")
+          fi
+          /usr/bin/time -v "${command[@]}" &
+          mutation_pid=$!
+          peak=0
+          while kill -0 "$mutation_pid" 2>/dev/null; do
+            rss=$(ps -e -o comm=,rss= | awk '$1 == "java" {sum += $2} END {print sum+0}')
+            if (( rss > peak )); then peak=$rss; fi
+            sleep 1
+          done
+          echo "Peak combined JVM RSS: $peak KiB"
+          wait "$mutation_pid"
+      - name: Upload mutation reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mutation-reports
+          path: |
+            openrouter-spring-ai/target/pit-reports/
+            openrouter-spring-ai/build/reports/pitest/
+          if-no-files-found: warn
+          retention-days: 14
+
   actionlint:
+    if: github.event_name != 'workflow_dispatch'
     name: Workflow validation
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -58,6 +123,7 @@ jobs:
         run: bash .github/actions/tests/garage.sh
 
   action-pins:
+    if: github.event_name != 'workflow_dispatch'
     name: Immutable action references
     runs-on: ubuntu-latest
     steps:
@@ -70,6 +136,7 @@ jobs:
           jq -e '[.[] | select(.ident == "unpinned-uses")] | if length == 0 then true else ., false end' "$RUNNER_TEMP/action-audit.json"
 
   nullaway:
+    if: github.event_name != 'workflow_dispatch'
     name: NullAway · ${{ matrix.build }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -98,6 +165,7 @@ jobs:
         run: gradle --no-daemon -Pnullaway compileJava
 
   security:
+    if: github.event_name != 'workflow_dispatch'
     name: FindSecBugs security
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -114,6 +182,7 @@ jobs:
         run: mvn -B -Psecurity -pl openrouter-spring-ai-autoconfigure -am -DskipTests verify
 
   gitleaks:
+    if: github.event_name != 'workflow_dispatch'
     name: Secret scan
     runs-on: ubuntu-latest
     permissions:
