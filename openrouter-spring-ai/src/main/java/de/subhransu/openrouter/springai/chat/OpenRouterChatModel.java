@@ -95,7 +95,8 @@ public class OpenRouterChatModel implements ChatModel {
 		ObjectMapper objectMapper = builder.objectMapper != null ? builder.objectMapper : new ObjectMapper();
 		this.requestMapper = new OpenRouterChatRequestMapper(objectMapper);
 		this.responseMapper = new OpenRouterChatResponseMapper();
-		this.streamingResponseMapper = new OpenRouterStreamingResponseMapper();
+		this.streamingResponseMapper = new OpenRouterStreamingResponseMapper(builder.streamingStateMaxBytes,
+				builder.streamingStateMaxChoices);
 		this.streamingToolCallAggregator = new OpenRouterStreamingToolCallAggregator(objectMapper,
 				builder.toolCallAggregationMaxBytes, builder.toolCallAggregationMaxChunks,
 				builder.toolCallAggregationMaxDuration);
@@ -246,6 +247,10 @@ public class OpenRouterChatModel implements ChatModel {
 
 		private @Nullable ObjectMapper objectMapper;
 
+		private long streamingStateMaxBytes = OpenRouterStreamingResponseMapper.DEFAULT_MAX_STATE_BYTES;
+
+		private int streamingStateMaxChoices = OpenRouterStreamingResponseMapper.DEFAULT_MAX_STATE_CHOICES;
+
 		private long toolCallAggregationMaxBytes = OpenRouterStreamingToolCallAggregator.DEFAULT_MAX_BYTES;
 
 		private int toolCallAggregationMaxChunks = OpenRouterStreamingToolCallAggregator.DEFAULT_MAX_CHUNKS;
@@ -287,6 +292,20 @@ public class OpenRouterChatModel implements ChatModel {
 
 		public Builder objectMapper(@Nullable ObjectMapper objectMapper) {
 			this.objectMapper = objectMapper;
+			return this;
+		}
+
+		/**
+		 * Set the per-subscription Chat Completions metadata admission budget in bytes.
+		 */
+		public Builder streamingStateMaxBytes(long maxBytes) {
+			this.streamingStateMaxBytes = maxBytes;
+			return this;
+		}
+
+		/** Set the maximum number of simultaneously active Chat Completions choices. */
+		public Builder streamingStateMaxChoices(int maxChoices) {
+			this.streamingStateMaxChoices = maxChoices;
 			return this;
 		}
 

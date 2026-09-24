@@ -732,6 +732,29 @@ so Spring AI message aggregation retains the complete reasoning state. Text cont
 incremental. The existing generation metadata key `openrouter.reasoning` remains available
 for streamed reasoning deltas and synchronous reasoning text.
 
+### Chat Completions stream state limits
+
+Chat Completions streaming has a separate per-subscription retained-metadata admission
+budget, including streams without tools. Configure `OpenRouterChatModel.Builder`
+with `streamingStateMaxBytes` and `streamingStateMaxChoices`, or Boot properties
+`spring.ai.openrouter.chat.streaming-state.max-size` and
+`spring.ai.openrouter.chat.streaming-state.max-choices`. Defaults are 1 MiB and 128
+simultaneously active choices. Both values must be positive. These are model-wide
+settings, not per-request options; they do not affect synchronous calls or Responses.
+
+Before retaining metadata, the mapper charges the UTF-8 JSON size of each nonempty
+incoming metadata map, including reasoning, reasoning details, refusals, annotations,
+logprobs, and opaque extensions. Repeated or replacement metadata is charged again.
+Each active choice also reserves 2,000 bytes for its 500-character diagnostic
+excerpt. A finishing choice releases all its charges after its final snapshot is built;
+response-level extension charges last until the subscription ends. This conservative
+admission budget bounds retained data, not exact JVM heap use. Ordinary text deltas
+consume no additional budget and remain incremental. Audio assembly, individual SSE
+events, and tool-call aggregation retain their separate limits. Exceeding the budget
+cancels upstream with `OpenRouterLimitExceededException`, using `CHAT_STATE_BYTES` or
+`CHAT_STATE_CHOICES`; replay metadata is never silently truncated. Earlier emitted
+snapshots retained by the caller are outside this budget.
+
 ### Responses stream state limits
 
 Responses streaming reuses the model builder's `toolCallAggregationMaxBytes`,

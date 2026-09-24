@@ -97,6 +97,8 @@ public class OpenRouterChatProperties {
 
 	private @Nullable OpenRouterReasoningOptions reasoning;
 
+	private StreamingState streamingState = new StreamingState();
+
 	private ToolCallAggregation toolCallAggregation = new ToolCallAggregation();
 
 	/**
@@ -413,6 +415,38 @@ public class OpenRouterChatProperties {
 
 	public void setToolCallAggregation(ToolCallAggregation toolCallAggregation) {
 		this.toolCallAggregation = toolCallAggregation;
+	}
+
+	public StreamingState getStreamingState() {
+		return this.streamingState;
+	}
+
+	public void setStreamingState(StreamingState streamingState) {
+		this.streamingState = streamingState;
+	}
+
+	public static class StreamingState {
+
+		private DataSize maxSize = DataSize.ofMegabytes(1);
+
+		private int maxChoices = 128;
+
+		public DataSize getMaxSize() {
+			return this.maxSize;
+		}
+
+		public void setMaxSize(DataSize maxSize) {
+			this.maxSize = maxSize;
+		}
+
+		public int getMaxChoices() {
+			return this.maxChoices;
+		}
+
+		public void setMaxChoices(int maxChoices) {
+			this.maxChoices = maxChoices;
+		}
+
 	}
 
 	public static class ToolCallAggregation {

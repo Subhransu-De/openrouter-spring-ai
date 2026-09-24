@@ -32,6 +32,12 @@ public final class OpenRouterLimitExceededException extends NonTransientAiExcept
 		STREAMING_TOOL_CALL_DURATION("streamed tool-call assembly", "milliseconds",
 				"spring.ai.openrouter.chat.tool-call-aggregation.max-duration"),
 
+		CHAT_STATE_BYTES("Chat Completions retained state", "bytes",
+				"spring.ai.openrouter.chat.streaming-state.max-size"),
+
+		CHAT_STATE_CHOICES("Chat Completions active state", "choices",
+				"spring.ai.openrouter.chat.streaming-state.max-choices"),
+
 		RESPONSES_STATE_BYTES("Responses cumulative state", "bytes",
 				"spring.ai.openrouter.chat.tool-call-aggregation.max-size"),
 

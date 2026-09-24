@@ -8,6 +8,9 @@ import static org.mockito.Mockito.when;
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
+import de.subhransu.openrouter.springai.api.dto.ChatCompletionChunk;
+import de.subhransu.openrouter.springai.chat.mapper.OpenRouterStreamingResponseMapper;
+import tools.jackson.databind.ObjectMapper;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterStreamingToolCallAggregator;
@@ -123,6 +126,46 @@ class OpenRouterAutoConfigurationTests {
 						}))
 					.verify();
 			});
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "max-size=1B", "max-choices=1" })
+	void appliesBoundChatStateLimitsWithoutTools(String setting) {
+		OpenRouterApi api = mock(OpenRouterApi.class);
+		var json = new ObjectMapper();
+		when(api.chatCompletionStream(any())).thenReturn(Flux.just(
+				json.readValue("{\"choices\":[{\"index\":0,\"delta\":{\"reasoning\":\"a\"}}]}",
+						ChatCompletionChunk.class),
+				json.readValue("{\"choices\":[{\"index\":1,\"delta\":{\"reasoning\":\"b\"}}]}",
+						ChatCompletionChunk.class)));
+		this.contextRunner.withBean(OpenRouterApi.class, () -> api)
+			.withPropertyValues(API_KEY_PROPERTY, "spring.ai.openrouter.chat.streaming-state." + setting)
+			.run(context -> StepVerifier
+				.create(context.getBean(OpenRouterChatModel.class)
+					.stream(new Prompt("synthetic", OpenRouterChatOptions.builder().model("synthetic").build())))
+				.thenConsumeWhile(response -> true)
+				.expectErrorSatisfies(error -> assertThat(error)
+					.isInstanceOfSatisfying(OpenRouterLimitExceededException.class, failure -> {
+						assertThat(failure.getEndpoint()).isEqualTo("/chat/completions");
+						assertThat(failure.getLimit().getProperty())
+							.isEqualTo("spring.ai.openrouter.chat.streaming-state." + setting.split("=")[0]);
+					}))
+				.verify());
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "max-size=0B", "max-size=-1B", "max-choices=0", "max-choices=-1" })
+	void rejectsInvalidChatStateLimits(String setting) {
+		this.contextRunner.withPropertyValues(API_KEY_PROPERTY, "spring.ai.openrouter.chat.streaming-state." + setting)
+			.run(context -> assertThat(context).hasFailed());
+	}
+
+	@Test
+	void chatStateDefaultsMatchMapperDefaults() {
+		var defaults = new OpenRouterChatProperties().getStreamingState();
+		assertThat(defaults.getMaxSize().toBytes())
+			.isEqualTo(OpenRouterStreamingResponseMapper.DEFAULT_MAX_STATE_BYTES);
+		assertThat(defaults.getMaxChoices()).isEqualTo(OpenRouterStreamingResponseMapper.DEFAULT_MAX_STATE_CHOICES);
 	}
 
 	@Test
