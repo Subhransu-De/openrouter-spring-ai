@@ -250,6 +250,8 @@ jobs:
             **/target/site/jacoco/
             **/target/surefire-reports/
             ${{ runner.temp }}/coverage-fixtures/*.log
+            ${{ runner.temp }}/coverage-fixtures/**/target/site/jacoco/
+            ${{ runner.temp }}/coverage-fixtures/**/target/surefire-reports/
 
   gradle-test:
     name: Verify with Gradle · Java ${{ matrix.java-version }}
@@ -294,6 +296,9 @@ jobs:
             **/build/reports/tests/
             **/build/test-results/
             ${{ runner.temp }}/coverage-fixtures/*.log
+            ${{ runner.temp }}/coverage-fixtures/**/build/reports/jacoco/test/
+            ${{ runner.temp }}/coverage-fixtures/**/build/reports/tests/
+            ${{ runner.temp }}/coverage-fixtures/**/build/test-results/
 
   garage-pr:
     name: Run pull request compatibility tests
