@@ -20,16 +20,18 @@ public final class OpenRouterEmbeddingResponseMapper {
 
 	public EmbeddingResponse map(EmbeddingsResponse response, int inputCount, @Nullable Integer dimensions) {
 		var items = response != null ? response.data() : null;
-		Assert.state(items != null && items.size() == inputCount, "Embedding response count must match input count");
+		if (items == null || items.size() != inputCount) {
+			throw new IllegalStateException("Embedding response count must match input count");
+		}
 		Embedding[] embeddings = new Embedding[inputCount];
 		for (EmbeddingsResponse.EmbeddingData data : items) {
 			var itemIndex = data != null ? data.index() : null;
-			Assert.state(data != null && itemIndex != null && itemIndex >= 0 && itemIndex < inputCount,
-					"Embedding response index must be within input range");
+			if (data == null || itemIndex == null || itemIndex < 0 || itemIndex >= inputCount) {
+				throw new IllegalStateException("Embedding response index must be within input range");
+			}
 			int index = itemIndex;
 			Assert.state(embeddings[index] == null, "Embedding response contains duplicate index");
-			float[] vector = data.embedding();
-			Assert.state(vector != null && vector.length > 0, "Embedding response vector must not be empty");
+			float[] vector = validatedVector(data);
 			if (dimensions == null) {
 				dimensions = vector.length;
 			}
@@ -40,6 +42,14 @@ public final class OpenRouterEmbeddingResponseMapper {
 			embeddings[index] = new Embedding(vector, index);
 		}
 		return new EmbeddingResponse(List.of(embeddings), mapMetadata(response));
+	}
+
+	private float[] validatedVector(EmbeddingsResponse.EmbeddingData data) {
+		float[] vector = data.embedding();
+		if (vector == null || vector.length == 0) {
+			throw new IllegalStateException("Embedding response vector must not be empty");
+		}
+		return vector;
 	}
 
 	private EmbeddingResponseMetadata mapMetadata(EmbeddingsResponse response) {
