@@ -32,10 +32,12 @@ public final class StreamRetries {
 	 */
 	public static Mono<RuntimeException> rejected(RuntimeException error) {
 		return Mono.deferContextual(context -> {
-			if (error instanceof OpenRouterTransientApiException http && http.getStatusCode() != null
-					&& http.getStatusCode().value() == 429 && http.getCategory() == OpenRouterErrorCategory.RATE_LIMIT
-					&& context.hasKey(State.class)) {
-				context.<State>get(State.class).rejection.set(error);
+			if (error instanceof OpenRouterTransientApiException http && context.hasKey(State.class)) {
+				var status = http.getStatusCode();
+				if (status != null && status.value() == 429
+						&& http.getCategory() == OpenRouterErrorCategory.RATE_LIMIT) {
+					context.<State>get(State.class).rejection.set(error);
+				}
 			}
 			return Mono.just(error);
 		});
@@ -71,8 +73,8 @@ public final class StreamRetries {
 		}
 		Duration remaining = remainingTimeout(policy, started);
 		OpenRouterHttpException http = (OpenRouterHttpException) failure;
-		delay = Retries.effectiveBackOffMillis(delay,
-				http.getRetryAfter() != null ? http.getRetryAfter().delay() : null, remaining);
+		var retryAfter = http.getRetryAfter();
+		delay = Retries.effectiveBackOffMillis(delay, retryAfter != null ? retryAfter.delay() : null, remaining);
 		if (delay == BackOffExecution.STOP || remaining != null && remaining.compareTo(Duration.ofMillis(delay)) <= 0) {
 			return Mono.error(failure);
 		}
