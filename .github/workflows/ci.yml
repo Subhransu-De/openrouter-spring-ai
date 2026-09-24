@@ -8,6 +8,11 @@ on:
         type: choice
         options: ['2', '4']
         default: '4'
+      mutation-build:
+        description: Build tool for the isolated mutation run
+        type: choice
+        options: [Maven, Gradle]
+        default: Maven
   push:
     branches:
       - main
@@ -36,13 +41,22 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        if: inputs.mutation-build == 'Gradle'
+        with:
+          gradle-version: 9.7.1
       - name: Run synthetic core mutation tests
         env:
           PIT_THREADS: ${{ inputs.mutation-workers }}
+          PIT_BUILD: ${{ inputs.mutation-build }}
         run: |
           options=()
           if [[ -n "$PIT_THREADS" ]]; then options+=("-Dmutation.threads=$PIT_THREADS"); fi
-          /usr/bin/time -v mvn -B -pl openrouter-spring-ai -am -Pmutation "${options[@]}" test-compile org.pitest:pitest-maven:mutationCoverage &
+          command=(mvn -B -pl openrouter-spring-ai -am -Pmutation "${options[@]}" test-compile org.pitest:pitest-maven:mutationCoverage)
+          if [[ "$PIT_BUILD" == Gradle ]]; then
+            command=(gradle --no-daemon :openrouter-spring-ai:mutation "-Pmutation.threads=$PIT_THREADS")
+          fi
+          /usr/bin/time -v "${command[@]}" &
           mutation_pid=$!
           peak=0
           while kill -0 "$mutation_pid" 2>/dev/null; do
@@ -57,7 +71,9 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: mutation-reports
-          path: openrouter-spring-ai/target/pit-reports/
+          path: |
+            openrouter-spring-ai/target/pit-reports/
+            openrouter-spring-ai/build/reports/pitest/
           if-no-files-found: warn
           retention-days: 14
 

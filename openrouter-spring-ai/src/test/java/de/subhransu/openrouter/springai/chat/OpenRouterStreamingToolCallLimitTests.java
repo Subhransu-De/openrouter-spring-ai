@@ -1,6 +1,11 @@
 package de.subhransu.openrouter.springai.chat;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.spy;
 
 import tools.jackson.databind.ObjectMapper;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionChunk;
@@ -11,7 +16,9 @@ import de.subhransu.openrouter.springai.api.dto.ToolCall;
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterStreamingToolCallAggregator;
 import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
@@ -19,14 +26,104 @@ import org.junit.jupiter.api.Named;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Flux;
+import reactor.core.Disposable;
 import reactor.test.StepVerifier;
+import reactor.test.scheduler.VirtualTimeScheduler;
 
 class OpenRouterStreamingToolCallLimitTests {
 
 	private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
 	private static final Duration TEST_DURATION = Duration.ofSeconds(30);
+
+	@ParameterizedTest
+	@ValueSource(ints = { 0, -1 })
+	void rejectsNonPositiveLimits(int limit) {
+		assertThatIllegalArgumentException().isThrownBy(() -> aggregator(limit, 1, TEST_DURATION));
+		assertThatIllegalArgumentException().isThrownBy(() -> aggregator(1, limit, TEST_DURATION));
+		assertThatIllegalArgumentException().isThrownBy(() -> aggregator(1, 1, Duration.ofMillis(limit)));
+	}
+
+	@Test
+	void requiresMapperAndDurationAtConstruction() {
+		assertThatIllegalArgumentException()
+			.isThrownBy(() -> new OpenRouterStreamingToolCallAggregator(null, 1, 1, TEST_DURATION));
+		assertThatIllegalArgumentException().isThrownBy(() -> aggregator(1, 1, null));
+	}
+
+	@Test
+	void completedCallsReleaseTheirByteAndChunkBudgets() {
+		ChatCompletionChunk first = toolChunk("{}");
+		ChatCompletionChunk last = finishChunk();
+		OpenRouterStreamingToolCallAggregator aggregator = aggregator(serializedBytes(first) + serializedBytes(last), 2,
+				TEST_DURATION);
+		StepVerifier.create(aggregator.aggregate(Flux.just(first, last, first, last)))
+			.expectNextCount(2)
+			.verifyComplete();
+	}
+
+	@Test
+	void choiceLessChunksAreReleasedAndEmittedOnlyOnceBetweenCalls() {
+		ChatCompletionChunk first = toolChunk("{}");
+		ChatCompletionChunk last = finishChunk();
+		ChatCompletionChunk choiceLess = OBJECT_MAPPER.readValue("{\"choices\":[],\"usage\":{\"total_tokens\":3}}",
+				ChatCompletionChunk.class);
+		long bytes = serializedBytes(first) + serializedBytes(choiceLess) + serializedBytes(last);
+		StepVerifier
+			.create(aggregator(bytes, 3, TEST_DURATION).aggregate(Flux.just(first, choiceLess, last, first, last)))
+			.assertNext(merged -> assertThat(merged.usage().totalTokens()).isEqualTo(3))
+			.assertNext(merged -> assertThat(merged.usage()).isNull())
+			.verifyComplete();
+	}
+
+	@Test
+	void choiceLessChunksCountAgainstTheSharedBudget() {
+		ChatCompletionChunk concurrent = chunk(List.of(toolChoice(0, "first", "{"), toolChoice(1, "second", "{")));
+		StepVerifier
+			.create(aggregator(Long.MAX_VALUE, 2, TEST_DURATION).aggregate(Flux.just(concurrent, chunk(List.of()))))
+			.expectErrorSatisfies(error -> {
+				assertThat(error).isInstanceOf(OpenRouterLimitExceededException.class);
+				assertThat(((OpenRouterLimitExceededException) error).getObservedValue()).isEqualTo(3);
+			})
+			.verify();
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "complete", "cancel", "error", "limit", "truncated" })
+	void terminationDisposesPendingAssemblyTimers(String termination) {
+		VirtualTimeScheduler scheduler = spy(VirtualTimeScheduler.create());
+		List<Disposable> timers = new ArrayList<>();
+		doAnswer(invocation -> {
+			Disposable timer = (Disposable) invocation.callRealMethod();
+			timers.add(timer);
+			return timer;
+		}).when(scheduler).schedule(any(Runnable.class), anyLong(), any(TimeUnit.class));
+		VirtualTimeScheduler.set(scheduler);
+		try {
+			Flux<ChatCompletionChunk> tail = switch (termination) {
+				case "complete" -> Flux.just(finishChunk());
+				case "error" -> Flux.error(new IllegalStateException("synthetic failure"));
+				case "limit" -> Flux.just(toolChunk("{}"));
+				case "truncated" -> Flux.empty();
+				default -> Flux.never();
+			};
+			int maxChunks = termination.equals("limit") ? 1 : 2;
+			Disposable subscription = aggregator(Long.MAX_VALUE, maxChunks, TEST_DURATION)
+				.aggregate(Flux.just(toolChunk("{}")).concatWith(tail))
+				.subscribe(ignored -> {
+				}, error -> {
+				});
+			if (termination.equals("cancel")) {
+				subscription.dispose();
+			}
+			assertThat(timers).hasSize(1).allSatisfy(timer -> assertThat(timer.isDisposed()).isTrue());
+		}
+		finally {
+			VirtualTimeScheduler.reset();
+		}
+	}
 
 	static Stream<Arguments> acceptedByteBoundaries() {
 		ChatCompletionChunk tool = toolChunk("{\"city\":\"Berlin\"}");
