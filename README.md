@@ -1318,12 +1318,27 @@ assistant content and terminal-event handling remain deferred until the minimum
 Java version changes. Existing null handling, collection guards, and terminal
 error semantics remain in place.
 
-Protocol coverage is measured by JaCoCo reports in each module's
-`target/site/jacoco` or `build/reports/jacoco/test` directory. A numeric branch gate
-is deliberately deferred. The 2026-09-17 core baseline covers 99/110 branches in
-`OpenRouterApi`, 112/140 across the tool aggregator and its nested classes,
-84/108 in the Responses stream mapper, and 42/55 in reasoning merging.
-A percentage cannot establish correct fragment ordering, cancellation, or terminal
-error handling. Those requirements remain enforced by the synthetic streaming,
-reasoning replay, and tool aggregation contract tests. Reports are evidence of
-coverage, not a coverage gate.
+`mvn -B verify` and `gradle --no-daemon check` enforce JaCoCo coverage independently
+for each library module, with at least 90% line and 80% branch coverage. The root
+POM defines both floors; Gradle reads them from that POM. Reports and gates analyze
+all production classes without configured exclusions, retaining JaCoCo's automatic
+generated-code filtering. The parent aggregator and samples have no percentage gate.
+The starter currently contains only package metadata, so it has no coverage percentage.
+Adding production classes brings it under the same policy, including the check for
+missing execution data. Package descriptors do not require execution data.
+
+HTML and XML reports are in each module's `target/site/jacoco` for Maven or
+`build/reports/jacoco/test` for Gradle. CI uploads these reports and synthetic test
+results on verification failure, retaining artifacts for seven days without rerunning
+tests. `mvn -B -DskipTests package` and `gradle --no-daemon assemble` still package
+without coverage verification. Explicit Maven `-DskipTests` verification, used for
+static security analysis, also skips coverage enforcement.
+
+The JDK 25 verification jobs also exercise the gates with tiny synthetic modules.
+Run `uv run config/coverage/verify.py maven --command mvn --work-dir <empty-directory>`
+or use `gradle --command gradle` in place of `maven --command mvn`. Keep the fixture
+directory outside the checkout. These cases verify the exact boundary, independent
+line and branch failures, module isolation, new starter code, and missing execution data.
+
+Coverage percentages supplement the behavioral tests for fragment ordering,
+cancellation, terminal errors, reasoning replay, and tool aggregation.

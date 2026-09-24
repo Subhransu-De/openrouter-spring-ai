@@ -13,6 +13,10 @@
   <name>OpenRouter Spring AI :: Starter</name>
   <description>Starter that pulls in autoconfigure and core for one-line app integration.</description>
 
+  <properties>
+    <coverage.skip>${skipTests}</coverage.skip>
+  </properties>
+
   <dependencies>
     <dependency>
       <groupId>de.subhransu</groupId>

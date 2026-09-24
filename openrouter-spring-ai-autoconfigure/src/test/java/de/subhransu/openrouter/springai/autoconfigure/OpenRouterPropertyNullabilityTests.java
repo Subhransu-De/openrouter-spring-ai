@@ -8,6 +8,7 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import java.time.Duration;
 import org.springframework.util.unit.DataSize;
+import org.springframework.beans.BeanUtils;
 
 class OpenRouterPropertyNullabilityTests {
 
@@ -34,12 +35,19 @@ class OpenRouterPropertyNullabilityTests {
 		for (Class<?> type : List.of(OpenRouterChatProperties.class, OpenRouterEmbeddingProperties.class,
 				OpenRouterImageProperties.class)) {
 			Object properties = type.getConstructor().newInstance();
-			var getter = type.getMethod("getModel");
-			var setter = type.getMethod("setModel", String.class);
-			assertThat(getter.getAnnotatedReturnType().isAnnotationPresent(Nullable.class)).isTrue();
-			assertThat(setter.getAnnotatedParameterTypes()[0].isAnnotationPresent(Nullable.class)).isTrue();
-			setter.invoke(properties, new Object[] { null });
-			assertThat(getter.invoke(properties)).isNull();
+			for (var field : type.getDeclaredFields()) {
+				if (!field.getAnnotatedType().isAnnotationPresent(Nullable.class)) {
+					continue;
+				}
+				var property = BeanUtils.getPropertyDescriptor(type, field.getName());
+				assertThat(property).as("public property %s.%s", type.getSimpleName(), field.getName()).isNotNull();
+				var getter = property.getReadMethod();
+				var setter = property.getWriteMethod();
+				assertThat(getter.getAnnotatedReturnType().isAnnotationPresent(Nullable.class)).isTrue();
+				assertThat(setter.getAnnotatedParameterTypes()[0].isAnnotationPresent(Nullable.class)).isTrue();
+				setter.invoke(properties, new Object[] { null });
+				assertThat(getter.invoke(properties)).as(field.getName()).isNull();
+			}
 			assertThat(type.getMethod("toOptions").invoke(properties)).isNotNull();
 		}
 	}
