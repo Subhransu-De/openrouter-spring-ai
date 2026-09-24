@@ -31,10 +31,7 @@ public final class OpenRouterEmbeddingResponseMapper {
 			}
 			int index = itemIndex;
 			Assert.state(embeddings[index] == null, "Embedding response contains duplicate index");
-			float[] vector = data.embedding();
-			if (vector == null || vector.length == 0) {
-				throw new IllegalStateException("Embedding response vector must not be empty");
-			}
+			float[] vector = validatedVector(data);
 			if (dimensions == null) {
 				dimensions = vector.length;
 			}
@@ -45,6 +42,14 @@ public final class OpenRouterEmbeddingResponseMapper {
 			embeddings[index] = new Embedding(vector, index);
 		}
 		return new EmbeddingResponse(List.of(embeddings), mapMetadata(response));
+	}
+
+	private float[] validatedVector(EmbeddingsResponse.EmbeddingData data) {
+		float[] vector = data.embedding();
+		if (vector == null || vector.length == 0) {
+			throw new IllegalStateException("Embedding response vector must not be empty");
+		}
+		return vector;
 	}
 
 	private EmbeddingResponseMetadata mapMetadata(EmbeddingsResponse response) {
