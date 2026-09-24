@@ -1279,8 +1279,8 @@ The shared `mutation.targets` list includes nested classes and covers:
   precedence, exercised by synthetic synchronous and streaming-fallback contracts.
 
 All core tests remain available for coverage selection. Samples and live-provider
-calls are outside this gate. Override workers with `-Dmutation.threads=2` in Maven
-or `-Pmutation.threads=2` in Gradle. Use the corresponding `mutation.targets`
+calls are outside this gate. Two workers are the default. Override them with
+`-Dmutation.threads=4` in Maven or `-Pmutation.threads=4` in Gradle. Use the corresponding `mutation.targets`
 property for a focused investigation. Do not combine PIT workers with Maven `-T`
 or parallel JUnit execution.
 
@@ -1296,6 +1296,35 @@ Review `SURVIVED` and `NO_COVERAGE` entries in the XML or HTML report, reproduce
 the affected behavior with a synthetic test, and add an assertion for the observable
 contract. Keep equivalent mutations documented; do not lower the threshold or remove
 targets to make the gate pass. `STRONGER` is reserved for a later scheduled expansion.
+
+The initial validation used PIT 1.30.0, its JUnit adapter 1.2.3, JUnit 6.1.3,
+and Temurin 25 while compiling production classes for Java 17. Maven and Gradle
+both detected the same 235 of 273 mutations at `fd7a3df`, an 86% score after
+strengthening behavioral assertions from the 70% baseline. A separate synthetic
+boundary fixture failed the 80% gate when its assertion was weakened, and both
+project commands failed with an unmatched target.
+
+The worker comparison at that same commit used Ubuntu 24.04, Temurin 25.0.4,
+the same mutation scope, and matching dependency-cache misses:
+
+| Workers                                                                            | Elapsed | Peak combined JVM RSS | Killed | Timed out | Survived / uncovered |
+| ---------------------------------------------------------------------------------- | ------- | --------------------- | ------ | --------- | -------------------- |
+| [2](https://github.com/Subhransu-De/openrouter-spring-ai/actions/runs/35981045314) | 6m 19s  | 2.57 GiB              | 211    | 24        | 34 / 4               |
+| [4](https://github.com/Subhransu-De/openrouter-spring-ai/actions/runs/35981060948) | 5m 59s  | 2.90 GiB              | 212    | 23        | 34 / 4               |
+
+Both detected the same mutations; one changed from timeout to assertion failure.
+Four workers saved only 20 seconds and used 13% more memory, so two are the default.
+Allow roughly seven minutes and 3 GiB of JVM memory for this measured scope, plus
+runner and build-tool overhead. The 20-minute job timeout leaves room for setup,
+downloads, and runner variation. PIT counts mutation timeouts as detections;
+compare their identities when reviewing later runs rather than relying on the score alone.
+
+No mutations are excluded. Remaining survivors include equivalent date guards
+whose parser fallback still rejects the input, a redundant reasoning-object guard,
+and per-choice limits also enforced by the shared budget. Uncovered single-byte
+writes and overflow protection, stale-timer races, and terminal-state cleanup
+remain coverage limitations. Do not treat every survivor as equivalent; inspect
+its observable effect before adding tests or proposing a narrow exclusion.
 
 ### Other quality checks
 

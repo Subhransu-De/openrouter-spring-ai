@@ -57,7 +57,7 @@
     <junit-jupiter.version>6.1.3</junit-jupiter.version>
     <pitest.version>1.30.0</pitest.version>
     <pitest-junit5.version>1.2.3</pitest-junit5.version>
-    <mutation.threads>4</mutation.threads>
+    <mutation.threads>2</mutation.threads>
     <mutation.skip>true</mutation.skip>
     <mutation.targets>de.subhransu.openrouter.springai.errors.OpenRouterRetryAfter*,de.subhransu.openrouter.springai.errors.OpenRouterHttpExceptionFactory*,de.subhransu.openrouter.springai.chat.mapper.ReasoningDetailsMerger*,de.subhransu.openrouter.springai.chat.mapper.OpenRouterStreamingToolCallAggregator*,de.subhransu.openrouter.springai.api.OpenRouterImageResponseValidator*</mutation.targets>
     <lombok.version>1.18.48</lombok.version>

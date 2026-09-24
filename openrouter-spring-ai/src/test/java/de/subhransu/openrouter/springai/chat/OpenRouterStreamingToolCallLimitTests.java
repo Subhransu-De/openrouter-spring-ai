@@ -72,7 +72,9 @@ class OpenRouterStreamingToolCallLimitTests {
 				ChatCompletionChunk.class);
 		long bytes = serializedBytes(first) + serializedBytes(choiceLess) + serializedBytes(last);
 		StepVerifier
-			.create(aggregator(bytes, 3, TEST_DURATION).aggregate(Flux.just(first, choiceLess, last, first, last)))
+			.create(aggregator(bytes, 3, TEST_DURATION)
+				.aggregate(Flux.just(first, choiceLess, last, first, choiceLess, last, first, last)))
+			.assertNext(merged -> assertThat(merged.usage().totalTokens()).isEqualTo(3))
 			.assertNext(merged -> assertThat(merged.usage().totalTokens()).isEqualTo(3))
 			.assertNext(merged -> assertThat(merged.usage()).isNull())
 			.verifyComplete();

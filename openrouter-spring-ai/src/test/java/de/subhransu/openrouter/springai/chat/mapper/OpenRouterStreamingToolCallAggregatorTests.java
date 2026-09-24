@@ -48,9 +48,11 @@ class OpenRouterStreamingToolCallAggregatorTests {
 
 	@Test
 	void boundedDemandAfterSubscriptionStillCollectsEveryToolFragment() {
-		Flux<ChatCompletionChunk> source = Flux.just(chunk(toolFragment(0, 0, "call-0", "lookup", "{")),
-				chunk(toolFragment(0, 0, null, null, "}")), chunk(finishChoice(0)));
-		StepVerifier.create(this.aggregator.aggregate(source), 0)
+		Flux<ChatCompletionChunk> source = Flux.just(chunk(textChoice(0, "Checking")),
+				chunk(toolFragment(0, 0, "call-0", "lookup", "{")), chunk(toolFragment(0, 0, null, null, "}")),
+				chunk(finishChoice(0)));
+		StepVerifier.create(this.aggregator.aggregate(source), 1)
+			.assertNext(value -> assertThat(value.choices().get(0).delta().content()).isEqualTo("Checking"))
 			.thenRequest(1)
 			.assertNext(value -> assertThat(value.choices().get(0).delta().toolCalls().get(0).function().arguments())
 				.isEqualTo("{}"))

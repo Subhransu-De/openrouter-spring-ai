@@ -7,7 +7,7 @@ on:
         description: PIT workers for an isolated mutation run
         type: choice
         options: ['2', '4']
-        default: '4'
+        default: '2'
       mutation-build:
         description: Build tool for the isolated mutation run
         type: choice
