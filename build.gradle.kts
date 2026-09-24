@@ -166,6 +166,10 @@ subprojects {
 			classpath = main.compileClasspath + main.output
 			ruleSetFiles = rootProject.files("config/pmd/pmd-review.xml")
 			ignoreFailures = true
+			reports {
+				xml.outputLocation.set(project.layout.buildDirectory.file("reports/pmd/pmdPublicApiReview.xml"))
+				html.outputLocation.set(project.layout.buildDirectory.file("reports/pmd/pmdPublicApiReview.html"))
+			}
 		}
 	}
 
