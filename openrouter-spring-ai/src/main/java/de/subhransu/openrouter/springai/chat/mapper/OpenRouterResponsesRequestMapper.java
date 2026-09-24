@@ -135,41 +135,41 @@ public final class OpenRouterResponsesRequestMapper {
 			throw new IllegalArgumentException("OPENAI_RESPONSES does not support assistant media history; "
 					+ "attach the media to a UserMessage or use OPENAI_CHAT_COMPLETIONS");
 		}
-		if (message.getMessageType() == MessageType.ASSISTANT) {
-			List<Object> items = new ArrayList<>();
-			Object reasoning = message.getMetadata().get(ReasoningMetadata.RESPONSES_ITEMS);
-			if (reasoning instanceof List<?> reasoningItems && !reasoningItems.isEmpty()) {
-				Object output = message.getMetadata().get(ReasoningMetadata.RESPONSES_OUTPUT_ITEMS);
-				if (output instanceof List<?> outputItems && !outputItems.isEmpty()) {
-					validateSnapshot(message, outputItems);
-					// Reasoning must retain its position relative to messages and calls.
-					// Rebuilding these separately changes the provider's continuation.
-					return new ArrayList<>(outputItems);
-				}
-				throw new IllegalArgumentException(
-						"OPENAI_RESPONSES cannot replay reasoning without an output snapshot; "
-								+ "retain the original assistant message or start a new conversation without its reasoning state");
+		return message.getMessageType() == MessageType.ASSISTANT ? assistant(message)
+				: List.of(inputMessage(mapRole(message.getMessageType()), message));
+	}
+
+	private List<Object> assistant(Message message) {
+		List<Object> items = new ArrayList<>();
+		Object reasoning = message.getMetadata().get(ReasoningMetadata.RESPONSES_ITEMS);
+		if (reasoning instanceof List<?> reasoningItems && !reasoningItems.isEmpty()) {
+			Object output = message.getMetadata().get(ReasoningMetadata.RESPONSES_OUTPUT_ITEMS);
+			if (output instanceof List<?> outputItems && !outputItems.isEmpty()) {
+				validateSnapshot(message, outputItems);
+				// Reasoning must retain its position relative to messages and calls.
+				// Rebuilding these separately changes the provider's continuation.
+				return new ArrayList<>(outputItems);
 			}
-			List<ResponsesContent> content = new ArrayList<>();
-			if (StringUtils.hasLength(message.getText())) {
-				content.add(new ResponsesContent("output_text", message.getText()));
-			}
-			if (message.getMetadata().get(RefusalMetadata.REFUSAL) instanceof String refusal) {
-				content.add(new ResponsesContent("refusal", null, null, refusal));
-			}
-			if (!content.isEmpty()) {
-				items.add(new ResponsesOutputItem(null, MESSAGE_TYPE, "completed", "assistant",
-						new ArrayList<>(content)));
-			}
-			if (message instanceof AssistantMessage assistantMessage) {
-				for (AssistantMessage.ToolCall toolCall : assistantMessage.getToolCalls()) {
-					items.add(new ResponsesFunctionCall("function_call", toolCall.id(), toolCall.name(),
-							toolCall.arguments()));
-				}
-			}
-			return items;
+			throw new IllegalArgumentException("OPENAI_RESPONSES cannot replay reasoning without an output snapshot; "
+					+ "retain the original assistant message or start a new conversation without its reasoning state");
 		}
-		return List.of(inputMessage(mapRole(message.getMessageType()), message));
+		List<ResponsesContent> content = new ArrayList<>();
+		if (StringUtils.hasLength(message.getText())) {
+			content.add(new ResponsesContent("output_text", message.getText()));
+		}
+		if (message.getMetadata().get(RefusalMetadata.REFUSAL) instanceof String refusal) {
+			content.add(new ResponsesContent("refusal", null, null, refusal));
+		}
+		if (!content.isEmpty()) {
+			items.add(new ResponsesOutputItem(null, MESSAGE_TYPE, "completed", "assistant", new ArrayList<>(content)));
+		}
+		if (message instanceof AssistantMessage assistantMessage) {
+			for (AssistantMessage.ToolCall toolCall : assistantMessage.getToolCalls()) {
+				items.add(new ResponsesFunctionCall("function_call", toolCall.id(), toolCall.name(),
+						toolCall.arguments()));
+			}
+		}
+		return items;
 	}
 
 	private void validateSnapshot(Message message, List<?> outputItems) {

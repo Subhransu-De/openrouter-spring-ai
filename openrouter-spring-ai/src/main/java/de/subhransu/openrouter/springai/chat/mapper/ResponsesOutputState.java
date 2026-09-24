@@ -70,6 +70,24 @@ final class ResponsesOutputState {
 		if (item == null || !"image_generation_call".equals(item.type()) || item.result() == null) {
 			return List.of();
 		}
+		validateImageIdentity(item, outputIndex);
+		Image byId = item.id() != null ? this.imageIds.get(item.id()) : null;
+		Image byIndex = outputIndex != null ? this.imageIndexes.get(index(outputIndex)) : null;
+		Image previous = byId != null ? byId : byIndex;
+		Image current = new Image(item.result(), item.outputFormat() != null ? item.outputFormat() : "png");
+		validateImageSnapshot(byId, byIndex, previous, current);
+		retainImage(item, outputIndex, previous != null ? previous : current);
+		return previous != null ? List.of() : GeneratedImageMapper.responsesMedia(List.of(item));
+	}
+
+	private void validateImageSnapshot(@Nullable Image byId, @Nullable Image byIndex, @Nullable Image previous,
+			Image current) {
+		if (byId != null && byIndex != null && byId != byIndex || previous != null && !previous.equals(current)) {
+			throw protocol("Generated image snapshot contradicts an emitted item");
+		}
+	}
+
+	private void validateImageIdentity(ResponsesOutputItem item, @Nullable Integer outputIndex) {
 		if (item.id() == null && outputIndex == null) {
 			throw protocol("Generated image requires an item ID or output index");
 		}
@@ -79,21 +97,15 @@ final class ResponsesOutputState {
 				throw protocol("Generated image ID contradicts its output index");
 			}
 		}
-		Image byId = item.id() != null ? this.imageIds.get(item.id()) : null;
-		Image byIndex = outputIndex != null ? this.imageIndexes.get(index(outputIndex)) : null;
-		Image previous = byId != null ? byId : byIndex;
-		Image current = new Image(item.result(), item.outputFormat() != null ? item.outputFormat() : "png");
-		if (byId != null && byIndex != null && byId != byIndex || previous != null && !previous.equals(current)) {
-			throw protocol("Generated image snapshot contradicts an emitted item");
-		}
-		Image retained = previous != null ? previous : current;
+	}
+
+	private void retainImage(ResponsesOutputItem item, @Nullable Integer outputIndex, Image retained) {
 		if (item.id() != null) {
 			this.imageIds.put(item.id(), retained);
 		}
 		if (outputIndex != null) {
 			this.imageIndexes.put(outputIndex, retained);
 		}
-		return previous != null ? List.of() : GeneratedImageMapper.responsesMedia(List.of(item));
 	}
 
 	void clear() {

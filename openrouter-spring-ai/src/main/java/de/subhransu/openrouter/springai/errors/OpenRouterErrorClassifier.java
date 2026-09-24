@@ -116,6 +116,9 @@ public final class OpenRouterErrorClassifier {
 		return category(statusCode);
 	}
 
+	// This flat protocol lookup deliberately lists every supported status without
+	// branching logic.
+	@SuppressWarnings("PMD.CyclomaticComplexity")
 	private static OpenRouterErrorCategory category(int statusCode) {
 		return switch (statusCode) {
 			case 400, 404, 413, 422 -> OpenRouterErrorCategory.INVALID_REQUEST;

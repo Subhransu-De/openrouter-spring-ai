@@ -181,11 +181,7 @@ public final class OpenRouterStreamingResponseMapper {
 					"Tool call choice ended without a tool-call completion reason");
 		}
 
-		Map<String, Object> properties = ReasoningMetadata.chat(delta != null ? delta.reasoning() : null,
-				delta != null ? delta.reasoningDetails() : null);
-		RefusalMetadata.put(properties, delta != null ? delta.refusal() : null);
-		ExtensionMetadata.put(properties, delta != null ? delta.extensions() : null, choice.extensions(),
-				delta != null ? delta.toolCalls() : null);
+		Map<String, Object> properties = properties(choice);
 		budget.append(choiceIndex(choice), properties);
 		List<Media> media = new ArrayList<>(GeneratedImageMapper.media(delta != null ? delta.images() : null));
 		audio.append(choice, properties, media);
@@ -208,6 +204,16 @@ public final class OpenRouterStreamingResponseMapper {
 				value -> metadataBuilder.metadata("openrouter.reasoning", value));
 		ChatGenerationMetadata metadata = metadataBuilder.build();
 		return new Generation(assistantMessage, metadata);
+	}
+
+	private Map<String, Object> properties(Choice choice) {
+		var delta = choice.delta();
+		Map<String, Object> properties = ReasoningMetadata.chat(delta != null ? delta.reasoning() : null,
+				delta != null ? delta.reasoningDetails() : null);
+		RefusalMetadata.put(properties, delta != null ? delta.refusal() : null);
+		ExtensionMetadata.put(properties, delta != null ? delta.extensions() : null, choice.extensions(),
+				delta != null ? delta.toolCalls() : null);
+		return properties;
 	}
 
 	private List<AssistantMessage.ToolCall> mapToolCalls(@Nullable List<? extends @Nullable ToolCall> toolCalls) {

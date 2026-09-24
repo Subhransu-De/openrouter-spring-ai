@@ -23,15 +23,17 @@ final class RefusalMetadata {
 	}
 
 	static @Nullable String responses(@Nullable List<? extends @Nullable ResponsesOutputItem> output) {
+		if (output == null) {
+			return null;
+		}
 		String refusal = null;
-		if (output != null) {
-			for (ResponsesOutputItem item : ResponseValues.items(output, "output item")) {
-				if ("message".equals(item.type()) && item.content() != null) {
-					for (ResponsesContent part : ResponseValues.items(item.content(), "message content")) {
-						if ("refusal".equals(part.type())) {
-							refusal = (refusal != null ? refusal : "") + (part.refusal() != null ? part.refusal() : "");
-						}
-					}
+		for (ResponsesOutputItem item : ResponseValues.items(output, "output item")) {
+			if (!"message".equals(item.type()) || item.content() == null) {
+				continue;
+			}
+			for (ResponsesContent part : ResponseValues.items(item.content(), "message content")) {
+				if ("refusal".equals(part.type())) {
+					refusal = (refusal != null ? refusal : "") + (part.refusal() != null ? part.refusal() : "");
 				}
 			}
 		}
@@ -47,7 +49,6 @@ final class RefusalMetadata {
 		}
 
 		@Nullable String update(ResponsesStreamEvent event) {
-			var response = event.response();
 			var item = event.item();
 			int outputIndex = Objects.requireNonNullElse(event.outputIndex(), 0);
 			int contentIndex = Objects.requireNonNullElse(event.contentIndex(), 0);
@@ -61,6 +62,13 @@ final class RefusalMetadata {
 			else if ("response.output_item.done".equals(event.type()) && item != null) {
 				snapshot(outputIndex, item);
 			}
+			terminal(event);
+			return this.parts.isEmpty() ? null
+					: this.parts.values().stream().flatMap(part -> part.values().stream()).reduce("", String::concat);
+		}
+
+		private void terminal(ResponsesStreamEvent event) {
+			var response = event.response();
 			if (("response.completed".equals(event.type()) || "response.incomplete".equals(event.type()))
 					&& response != null && response.output() != null) {
 				List<ResponsesOutputItem> output = ResponseValues.items(response.output(), "output item");
@@ -68,8 +76,6 @@ final class RefusalMetadata {
 					snapshot(index, output.get(index));
 				}
 			}
-			return this.parts.isEmpty() ? null
-					: this.parts.values().stream().flatMap(part -> part.values().stream()).reduce("", String::concat);
 		}
 
 		private void snapshot(int outputIndex, ResponsesOutputItem item) {

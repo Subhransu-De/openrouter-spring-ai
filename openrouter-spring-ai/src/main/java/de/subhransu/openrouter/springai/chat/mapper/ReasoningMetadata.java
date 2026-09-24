@@ -48,30 +48,32 @@ final class ReasoningMetadata {
 				metadata.put(RESPONSES_ITEMS, items);
 			}
 			StringBuilder text = new StringBuilder();
-			for (ResponsesOutputItem item : items) {
-				JsonNode raw = item.rawItem();
-				if (item.content() != null) {
-					ResponseValues.items(item.content(), "reasoning content")
-						.stream()
-						.filter(content -> "reasoning_text".equals(content.type()) && content.text() != null)
-						.forEach(content -> text.append(content.text()));
-				}
-				else if (raw != null) {
-					JsonNode parts = raw.hasNonNull("content") ? raw.get("content") : raw.get("summary");
-					if (parts != null && parts.isArray()) {
-						for (JsonNode part : parts) {
-							if (part.hasNonNull("text")) {
-								text.append(part.get("text").asString());
-							}
-						}
-					}
-				}
-			}
+			items.forEach(item -> appendText(item, text));
 			if (!text.isEmpty()) {
 				metadata.put(REASONING, text.toString());
 			}
 		}
 		return metadata;
+	}
+
+	private static void appendText(ResponsesOutputItem item, StringBuilder text) {
+		JsonNode raw = item.rawItem();
+		if (item.content() != null) {
+			ResponseValues.items(item.content(), "reasoning content")
+				.stream()
+				.filter(content -> "reasoning_text".equals(content.type()) && content.text() != null)
+				.forEach(content -> text.append(content.text()));
+		}
+		else if (raw != null) {
+			JsonNode parts = raw.hasNonNull("content") ? raw.get("content") : raw.get("summary");
+			if (parts != null && parts.isArray()) {
+				for (JsonNode part : parts) {
+					if (part.hasNonNull("text")) {
+						text.append(part.get("text").asString());
+					}
+				}
+			}
+		}
 	}
 
 	static <T extends @Nullable Object> @Nullable List<T> concat(@Nullable List<T> earlier, @Nullable List<T> later) {

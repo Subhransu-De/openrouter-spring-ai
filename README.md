@@ -1339,12 +1339,50 @@ The library and samples compile with `--release 17`. Run `mvn -B verify` and
 only. Library sources use Spring formatting; samples retain their existing layout
 and enforce `EqualsHashCode`, `FallThrough`, `EmptyStatement`, and
 `StringLiteralEquality` through `config/checkstyle/checkstyle-samples.xml`.
-Both builds apply the shared PMD rules to production and test sources, including
-samples. Gradle excludes generated Spring AOT source sets from these checks,
-matching Maven's maintained-source scope. Three sample classes suppress only
+Both builds use the POM's `pmd.version` and apply `config/pmd/pmd-common.xml` to
+maintained production and test sources, including samples. This retains the existing
+resource, empty-catch, fall-through, crypto-key, unused-member, and `ImmutableField`
+checks. Maven analyzes only the main and test source directories; Gradle excludes
+generated Spring AOT source sets. Three sample classes suppress only
 duplicate literals to keep registry rows and test inputs explicit. Sample CPD remains deferred because scenario and
 fixture duplication is intentional; Gradle has no CPD task. Sample formatter and
 Enforcer exclusions are unchanged.
+
+The additional blocking PMD rules are scoped by source path in the shared rulesets,
+so Maven's combined analysis and Gradle's separate main/test tasks enforce the same policy:
+
+| Ruleset                        | Canonical rule reference                                                 | Policy                                                                                  |
+| ------------------------------ | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| `pmd-main.xml`                 | `category/java/design.xml/CognitiveComplexity`                           | Library production methods and constructors fail at 25 or more, using `reportLevel=25`. |
+| `pmd-main.xml`                 | `category/java/design.xml/CyclomaticComplexity`                          | Library production methods fail at 15 or more; class totals fail at 80 or more.         |
+| `pmd-main.xml`, `pmd-test.xml` | `category/java/bestpractices.xml/PreserveStackTrace`                     | Library production and all test sources retain exception causes.                        |
+| `pmd-main.xml`, `pmd-test.xml` | `category/java/codestyle.xml/UnnecessaryModifier`                        | Library production and all test sources omit redundant modifiers.                       |
+| `pmd-test.xml`                 | `category/java/bestpractices.xml/JUnitJupiterTestShouldBePackagePrivate` | Test classes and methods use package access where JUnit permits it.                     |
+| `pmd-review.xml`               | `category/java/design.xml/ExcessivePublicCount`                          | Advisory library production report with `minimum=45`; never blocks `verify` or `check`. |
+
+PMD 7.27.0 calls the cognitive property `reportLevel`, not `methodReportLevel`.
+The proposed thresholds were checked against the baseline and synthetic boundary
+fixtures. Production complexity does not apply to test or sample sources.
+Two method-specific exceptions retain existing behavior: `Retries.invoke` unwraps
+Spring's retry wrapper and rethrows its original cause, and
+`OpenRouterErrorClassifier.category(int)` keeps the flat HTTP status lookup together.
+The exceptions name only `PreserveStackTrace` and `CyclomaticComplexity`, respectively.
+ArchUnit's selected visibility contracts remain authoritative; PMD does not infer
+safe API access changes or narrow framework entry points.
+
+Run the separate advisory report with `mvn -B test-compile pmd:pmd@pmd-review` or
+`gradle --no-daemon pmdPublicApiReview`. Maven writes each module's report under
+`target/pmd-review/`; Gradle writes `build/reports/pmd/pmdPublicApiReview.xml`.
+The baseline has no findings at 45, which is retained as a review threshold for
+future public API growth. Published methods are retained. Advisory findings neither replace the
+blocking report nor change its failure policy.
+
+CI's Java 25 legs also run `config/pmd/verify.py` against each build's actual PMD
+wiring. To repeat locally, use `uv run config/pmd/verify.py maven --command mvn
+--work-dir <empty-scratch-directory>` or replace `maven --command mvn` with
+`gradle --command gradle`. Fixtures verify both sides of each threshold, exact
+rule diagnostics, source scope, the three added rules, and advisory isolation.
+Keep the scratch directory outside the repository.
 
 On JDK 25+, run `mvn -B -Pnullaway clean compile` or
 `gradle --no-daemon -Pnullaway clean compileJava` to enforce production null contracts.

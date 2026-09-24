@@ -176,8 +176,9 @@ subprojects {
 	configure<PmdExtension> {
 		toolVersion = pmdVersion
 		isConsoleOutput = true
+		isIgnoreFailures = false
 		ruleSets = emptyList()
-		ruleSetFiles = rootProject.files("config/pmd/pmd-main.xml", "config/pmd/pmd-test.xml")
+		ruleSetFiles = rootProject.files("config/pmd/pmd-common.xml", "config/pmd/pmd-main.xml", "config/pmd/pmd-test.xml")
 	}
 
 	configure<JacocoPluginExtension> {
@@ -203,6 +204,22 @@ subprojects {
 		reports {
 			xml.required.set(true)
 			html.required.set(true)
+		}
+	}
+
+	if (name in libraryProjects) {
+		tasks.register<Pmd>("pmdPublicApiReview") {
+			description = "Reports large public APIs without failing the correctness gate."
+			group = "verification"
+			val main = project.extensions.getByType<SourceSetContainer>()["main"]
+			setSource(main.allJava)
+			classpath = main.compileClasspath + main.output
+			ruleSetFiles = rootProject.files("config/pmd/pmd-review.xml")
+			ignoreFailures = true
+			reports {
+				xml.outputLocation.set(project.layout.buildDirectory.file("reports/pmd/pmdPublicApiReview.xml"))
+				html.outputLocation.set(project.layout.buildDirectory.file("reports/pmd/pmdPublicApiReview.html"))
+			}
 		}
 	}
 
