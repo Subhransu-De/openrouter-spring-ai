@@ -3,10 +3,12 @@ package de.subhransu.openrouter.springai.chat.mapper;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
+import de.subhransu.openrouter.springai.api.dto.ContentPart;
 import de.subhransu.openrouter.springai.api.dto.ResponsesOutputItem;
 import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
 import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -23,6 +25,18 @@ class GeneratedImageReuseTests {
 	private final ObjectMapper json = new ObjectMapper();
 
 	private final OpenRouterChatOptions options = OpenRouterChatOptions.builder().model("synthetic/model").build();
+
+	@Test
+	void chatImagesSkipMissingPartsAndUrlsWhilePreservingOrder() {
+		var images = Arrays.asList(null, ContentPart.text("synthetic text"),
+				new ContentPart("image_url", null, new ContentPart.ImageUrl(null)),
+				ContentPart.image("data:image/jpeg;base64,AQID"), ContentPart.image("https://example.com/image.png"));
+		var media = GeneratedImageMapper.media(images);
+		assertThat(media).extracting(Media::getData)
+			.containsExactly("data:image/jpeg;base64,AQID", "https://example.com/image.png");
+		assertThat(media).extracting(Media::getMimeType)
+			.containsExactly(MimeTypeUtils.IMAGE_JPEG, MimeTypeUtils.IMAGE_PNG);
+	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "png", "jpeg", "webp" })
