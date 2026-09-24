@@ -1,6 +1,13 @@
 name: Build, Test, and Compatibility
 
 on:
+  workflow_dispatch:
+    inputs:
+      mutation-workers:
+        description: PIT workers for an isolated mutation run
+        type: choice
+        options: ['2', '4']
+        default: '4'
   push:
     branches:
       - main
@@ -15,7 +22,7 @@ permissions:
 jobs:
   mutation:
     name: Focused mutation gate
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -30,7 +37,21 @@ jobs:
           java-version: '25'
           cache: maven
       - name: Run synthetic core mutation tests
-        run: mvn -B -pl openrouter-spring-ai -am -Pmutation test-compile org.pitest:pitest-maven:mutationCoverage
+        env:
+          PIT_THREADS: ${{ inputs.mutation-workers }}
+        run: |
+          options=()
+          if [[ -n "$PIT_THREADS" ]]; then options+=("-Dmutation.threads=$PIT_THREADS"); fi
+          /usr/bin/time -v mvn -B -pl openrouter-spring-ai -am -Pmutation "${options[@]}" test-compile org.pitest:pitest-maven:mutationCoverage &
+          mutation_pid=$!
+          peak=0
+          while kill -0 "$mutation_pid" 2>/dev/null; do
+            rss=$(ps -e -o comm=,rss= | awk '$1 == "java" {sum += $2} END {print sum+0}')
+            if (( rss > peak )); then peak=$rss; fi
+            sleep 1
+          done
+          echo "Peak combined JVM RSS: $peak KiB"
+          wait "$mutation_pid"
       - name: Upload mutation reports
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -41,6 +62,7 @@ jobs:
           retention-days: 14
 
   actionlint:
+    if: github.event_name != 'workflow_dispatch'
     name: Workflow validation
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -85,6 +107,7 @@ jobs:
         run: bash .github/actions/tests/garage.sh
 
   action-pins:
+    if: github.event_name != 'workflow_dispatch'
     name: Immutable action references
     runs-on: ubuntu-latest
     steps:
@@ -97,6 +120,7 @@ jobs:
           jq -e '[.[] | select(.ident == "unpinned-uses")] | if length == 0 then true else ., false end' "$RUNNER_TEMP/action-audit.json"
 
   nullaway:
+    if: github.event_name != 'workflow_dispatch'
     name: NullAway · ${{ matrix.build }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -125,6 +149,7 @@ jobs:
         run: gradle --no-daemon -Pnullaway compileJava
 
   security:
+    if: github.event_name != 'workflow_dispatch'
     name: FindSecBugs security
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -141,6 +166,7 @@ jobs:
         run: mvn -B -Psecurity -pl openrouter-spring-ai-autoconfigure -am -DskipTests verify
 
   gitleaks:
+    if: github.event_name != 'workflow_dispatch'
     name: Secret scan
     runs-on: ubuntu-latest
     permissions:

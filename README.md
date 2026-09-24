@@ -1286,6 +1286,11 @@ or parallel JUnit execution.
 
 CI runs mutation analysis once per pull request on Temurin 25 with a 20-minute
 timeout and retains generated reports for 14 days, including failed runs.
+The workflow's manual trigger runs only this job and accepts two or four workers.
+For a worker comparison, dispatch it twice against the same commit with warm
+dependency caches. Job logs include elapsed time and peak combined JVM resident
+memory sampled once per second; compare mutation outcomes and timeouts as well
+as runtime before changing the default worker count.
 Review `SURVIVED` and `NO_COVERAGE` entries in the XML or HTML report, reproduce
 the affected behavior with a synthetic test, and add an assertion for the observable
 contract. Keep equivalent mutations documented; do not lower the threshold or remove
