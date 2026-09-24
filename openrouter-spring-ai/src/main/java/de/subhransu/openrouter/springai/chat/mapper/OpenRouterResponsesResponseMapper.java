@@ -28,8 +28,9 @@ public final class OpenRouterResponsesResponseMapper {
 	public ChatResponse map(@Nullable ResponsesResult response) {
 		response = ResponseValues.required(response, "Responses result");
 		validateTerminal(response, null);
+		var details = response.incompleteDetails();
 		List<AssistantMessage.ToolCall> toolCalls = toolCalls(response.status(),
-				response.incompleteDetails() != null ? response.incompleteDetails().reason() : null, response.output());
+				details != null ? details.reason() : null, response.output());
 		Map<String, Object> properties = ReasoningMetadata.responses(response.output());
 		RefusalMetadata.put(properties, RefusalMetadata.responses(response.output()));
 		AssistantMessage assistantMessage = AssistantMessage.builder()
@@ -64,17 +65,18 @@ public final class OpenRouterResponsesResponseMapper {
 	}
 
 	static void validateTerminal(ResponsesResult response, @Nullable String expectedStatus) {
+		var details = response.incompleteDetails();
+		var error = response.error();
 		// HTTP success and a completion event cannot override a provider error.
 		if (response.error() != null || "failed".equals(response.status())) {
-			throw failure("OpenRouter responses request failed",
-					response.error() != null ? response.error().toString() : response.status(), response.error(),
-					response.errorType());
+			throw failure("OpenRouter responses request failed", error != null ? error.toString() : response.status(),
+					response.error(), response.errorType());
 		}
 		String status = ResponseValues.required(response.status(), "Responses status");
 		if (!"completed".equals(status) && !"incomplete".equals(status)) {
 			throw new OpenRouterTruncatedResponseException("Responses result is not final: status="
-					+ OpenRouterExceptionMessage.sanitize(status) + ", incomplete reason=" + OpenRouterExceptionMessage
-						.sanitize(response.incompleteDetails() != null ? response.incompleteDetails().reason() : null));
+					+ OpenRouterExceptionMessage.sanitize(status) + ", incomplete reason="
+					+ OpenRouterExceptionMessage.sanitize(details != null ? details.reason() : null));
 		}
 		if (expectedStatus != null && !expectedStatus.equals(status)) {
 			throw new OpenRouterProtocolException("Responses terminal event disagrees with response status");

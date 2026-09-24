@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
+import java.util.Objects;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionResponse;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionChunk;
 import de.subhransu.openrouter.springai.api.dto.Choice;
@@ -80,7 +81,7 @@ final class OpenRouterChoiceErrorExceptionFactory {
 	}
 
 	private static @Nullable String failureReason(Choice choice) {
-		String nativeReason = choice.nativeFinishReason() != null ? choice.nativeFinishReason().toString() : null;
+		String nativeReason = Objects.toString(choice.nativeFinishReason(), null);
 		if (nativeReason != null && NATIVE_FAILURE_REASONS.contains(nativeReason)) {
 			return nativeReason;
 		}
@@ -107,8 +108,9 @@ final class OpenRouterChoiceErrorExceptionFactory {
 	}
 
 	private Diagnostic partialOutput(Choice choice) {
-		Object content = choice.message() != null ? choice.message().content()
-				: choice.delta() != null ? choice.delta().content() : null;
+		var delta = choice.delta();
+		var message = choice.message();
+		Object content = message != null ? message.content() : delta != null ? delta.content() : null;
 		return bounded(AssistantContentMapper.map(content).text());
 	}
 

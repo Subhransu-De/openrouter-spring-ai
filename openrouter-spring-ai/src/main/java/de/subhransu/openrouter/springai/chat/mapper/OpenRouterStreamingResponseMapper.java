@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
+import java.util.Objects;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionChunk;
 import de.subhransu.openrouter.springai.api.dto.Choice;
 import de.subhransu.openrouter.springai.api.dto.ToolCall;
@@ -78,12 +79,13 @@ public final class OpenRouterStreamingResponseMapper {
 	private ChatResponse map(ChatCompletionChunk chunk, Map<Integer, PartialOutputAccumulator> partialOutputs,
 			Map<Integer, ReasoningMetadata.Accumulator> reasoning, Map<String, @Nullable Object> extensions,
 			AudioOutputMapper audio, ChatStreamBudget budget) {
-		if (chunk.error() != null) {
+		var error = chunk.error();
+		if (error != null) {
 			// Mid-stream failures arrive as a normal chunk with a top-level error object
 			// over HTTP 200; without this the truncated stream would look like a clean
 			// completion.
-			throw OpenRouterApiExceptionFactory.create("OpenRouter chat completion stream failed",
-					chunk.error().toString(), chunk.error(), null);
+			throw OpenRouterApiExceptionFactory.create("OpenRouter chat completion stream failed", error.toString(),
+					error, null);
 		}
 		throwIfChoiceFailed(chunk, partialOutputs);
 		for (Choice choice : ResponseValues.items(chunk.choices(), "choice")) {
@@ -116,30 +118,35 @@ public final class OpenRouterStreamingResponseMapper {
 
 	private void accumulatePartialOutput(ChatCompletionChunk chunk,
 			Map<Integer, PartialOutputAccumulator> partialOutputs, AudioOutputMapper audio) {
-		if (CollectionUtils.isEmpty(chunk.choices())) {
+		var choices = chunk.choices();
+		if (CollectionUtils.isEmpty(choices)) {
 			return;
 		}
-		for (Choice choice : chunk.choices()) {
-			if (choice != null && !audio.finished(choice) && choice.delta() != null
-					&& choice.delta().content() != null) {
+		for (Choice choice : choices) {
+			var delta = choice != null ? choice.delta() : null;
+			var content = delta != null ? delta.content() : null;
+			if (choice != null && !audio.finished(choice) && content != null) {
 				partialOutputs.computeIfAbsent(choiceIndex(choice), key -> new PartialOutputAccumulator())
-					.append(choice.delta().content());
+					.append(content);
 			}
 		}
 	}
 
 	private void throwIfChoiceFailed(ChatCompletionChunk chunk, Map<Integer, PartialOutputAccumulator> partialOutputs) {
-		if (CollectionUtils.isEmpty(chunk.choices())) {
+		var choices = chunk.choices();
+		if (CollectionUtils.isEmpty(choices)) {
 			return;
 		}
-		for (Choice choice : chunk.choices()) {
+		for (Choice choice : choices) {
 			if (choice != null && OpenRouterChoiceErrorExceptionFactory.isFailure(choice)) {
 				PartialOutputAccumulator partialOutput = partialOutputs.get(choiceIndex(choice));
-				if (choice.delta() != null && choice.delta().content() != null) {
+				var delta = choice.delta();
+				var content = delta != null ? delta.content() : null;
+				if (content != null) {
 					if (partialOutput == null) {
 						partialOutput = new PartialOutputAccumulator();
 					}
-					partialOutput.append(choice.delta().content());
+					partialOutput.append(content);
 				}
 				String diagnostic = partialOutput != null ? partialOutput.diagnosticValue() : null;
 				throw diagnostic != null ? this.choiceErrorExceptionFactory.create(chunk, choice, diagnostic)
@@ -150,10 +157,11 @@ public final class OpenRouterStreamingResponseMapper {
 
 	private void clearFinishedChoices(ChatCompletionChunk chunk,
 			Map<Integer, PartialOutputAccumulator> partialOutputs) {
-		if (CollectionUtils.isEmpty(chunk.choices())) {
+		var choices = chunk.choices();
+		if (CollectionUtils.isEmpty(choices)) {
 			return;
 		}
-		for (Choice choice : chunk.choices()) {
+		for (Choice choice : choices) {
 			if (choice != null && choice.finishReason() != null) {
 				partialOutputs.remove(choiceIndex(choice));
 			}
@@ -161,12 +169,13 @@ public final class OpenRouterStreamingResponseMapper {
 	}
 
 	private int choiceIndex(Choice choice) {
-		return choice.index() != null ? choice.index() : 0;
+		return Objects.requireNonNullElse(choice.index(), 0);
 	}
 
 	private Generation mapGeneration(Choice choice, @Nullable String model, AudioOutputMapper audio,
 			ChatStreamBudget budget, ReasoningMetadata.Accumulator reasoning) {
-		if (choice.delta() != null && !CollectionUtils.isEmpty(choice.delta().toolCalls())
+		var delta = choice.delta();
+		if (delta != null && !CollectionUtils.isEmpty(delta.toolCalls())
 				&& !FinishReasonMapper.isToolCallCompletion(choice.finishReason())) {
 			throw new OpenRouterTruncatedResponseException(
 					"Tool call choice ended without a tool-call completion reason");
@@ -174,14 +183,13 @@ public final class OpenRouterStreamingResponseMapper {
 
 		Map<String, Object> properties = properties(choice);
 		budget.append(choiceIndex(choice), properties);
-		List<Media> media = new ArrayList<>(
-				GeneratedImageMapper.media(choice.delta() != null ? choice.delta().images() : null));
+		List<Media> media = new ArrayList<>(GeneratedImageMapper.media(delta != null ? delta.images() : null));
 		audio.append(choice, properties, media);
 		Map<String, Object> snapshot = reasoning.append(properties);
 		AssistantMessage assistantMessage = AssistantMessage.builder()
-			.content(choice.delta() != null && choice.delta().content() != null ? choice.delta().content() : "")
+			.content(delta != null && delta.content() != null ? delta.content() : "")
 			.properties(snapshot)
-			.toolCalls(mapToolCalls(choice.delta() != null ? choice.delta().toolCalls() : null))
+			.toolCalls(mapToolCalls(delta != null ? delta.toolCalls() : null))
 			.media(media)
 			.build();
 		ChatGenerationMetadata.Builder metadataBuilder = ChatGenerationMetadata.builder();
@@ -192,19 +200,19 @@ public final class OpenRouterStreamingResponseMapper {
 				value -> metadataBuilder.metadata("openrouter.native_finish_reason", value));
 		ResponseValues.ifPresent(snapshot.get(RefusalMetadata.REFUSAL),
 				value -> metadataBuilder.metadata(RefusalMetadata.REFUSAL, value));
-		ResponseValues.ifPresent(choice.delta() != null ? choice.delta().reasoning() : null,
+		ResponseValues.ifPresent(delta != null ? delta.reasoning() : null,
 				value -> metadataBuilder.metadata("openrouter.reasoning", value));
 		ChatGenerationMetadata metadata = metadataBuilder.build();
 		return new Generation(assistantMessage, metadata);
 	}
 
 	private Map<String, Object> properties(Choice choice) {
-		Map<String, Object> properties = ReasoningMetadata.chat(
-				choice.delta() != null ? choice.delta().reasoning() : null,
-				choice.delta() != null ? choice.delta().reasoningDetails() : null);
-		RefusalMetadata.put(properties, choice.delta() != null ? choice.delta().refusal() : null);
-		ExtensionMetadata.put(properties, choice.delta() != null ? choice.delta().extensions() : null,
-				choice.extensions(), choice.delta() != null ? choice.delta().toolCalls() : null);
+		var delta = choice.delta();
+		Map<String, Object> properties = ReasoningMetadata.chat(delta != null ? delta.reasoning() : null,
+				delta != null ? delta.reasoningDetails() : null);
+		RefusalMetadata.put(properties, delta != null ? delta.refusal() : null);
+		ExtensionMetadata.put(properties, delta != null ? delta.extensions() : null, choice.extensions(),
+				delta != null ? delta.toolCalls() : null);
 		return properties;
 	}
 
@@ -218,7 +226,9 @@ public final class OpenRouterStreamingResponseMapper {
 					ResponseValues.required(toolCall.type(), "tool call type"),
 					ResponseValues.required(ResponseValues.required(toolCall.function(), "tool call function").name(),
 							"tool call name"),
-					ResponseValues.required(toolCall.function().arguments(), "tool call arguments")))
+					ResponseValues.required(
+							ResponseValues.required(toolCall.function(), "tool call function").arguments(),
+							"tool call arguments")))
 			.toList();
 	}
 

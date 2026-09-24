@@ -42,6 +42,8 @@ public final class OpenRouterChatRequestMapper {
 		AudioOutputMapper.validateRequest(messages, options, stream, false);
 		List<Tool> tools = mapTools(toolDefinitions, options.getToolStrict());
 		CacheBreakpointMapper.validate(messages);
+		var serviceTier = options.getServiceTier();
+		var audio = options.getAudio();
 		return new ChatCompletionRequest(options.getModel(), options.getModels(), mapMessages(messages),
 				options.getTemperature(), options.getTopP(), options.getTopK(), options.getFrequencyPenalty(),
 				options.getPresencePenalty(), options.getRepetitionPenalty(), options.getMinP(), options.getTopA(),
@@ -49,13 +51,11 @@ public final class OpenRouterChatRequestMapper {
 				options.getUser(), stream, new OutputFormatMapper(this.objectMapper).map(options), tools,
 				ToolChoiceMapper.map(options.getToolChoice(), false, this.objectMapper), options.getParallelToolCalls(),
 				mapProvider(options.getProvider(), options.getProviderExtraBody()),
-				mapReasoning(options.getReasoning()),
-				options.getServiceTier() != null ? options.getServiceTier().value() : null, options.getMetadata(),
-				options.getRoute(),
+				mapReasoning(options.getReasoning()), serviceTier != null ? serviceTier.value() : null,
+				options.getMetadata(), options.getRoute(),
 				options.getIncludeUsage() != null ? new UsageConfig(options.getIncludeUsage()) : null,
-				options.getModalities(), options.getImageConfig(), options.getAudio() != null
-						? new AudioConfig(options.getAudio().voice(), options.getAudio().format()) : null,
-				options.getExtraBody());
+				options.getModalities(), options.getImageConfig(),
+				audio != null ? new AudioConfig(audio.voice(), audio.format()) : null, options.getExtraBody());
 	}
 
 	private List<ChatMessage> mapMessages(List<Message> messages) {

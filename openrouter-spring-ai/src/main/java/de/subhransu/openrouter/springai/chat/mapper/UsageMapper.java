@@ -21,17 +21,19 @@ public final class UsageMapper {
 
 	// Preserve explicit top-level counts (including zero) before nested details.
 	private static @Nullable Integer cachedTokens(Usage usage) {
+		var details = usage.promptTokensDetails();
 		if (usage.cachedTokens() != null) {
 			return usage.cachedTokens();
 		}
-		return usage.promptTokensDetails() != null ? usage.promptTokensDetails().cachedTokens() : null;
+		return details != null ? details.cachedTokens() : null;
 	}
 
 	private static @Nullable Integer reasoningTokens(Usage usage) {
+		var details = usage.completionTokensDetails();
 		if (usage.reasoningTokens() != null) {
 			return usage.reasoningTokens();
 		}
-		return usage.completionTokensDetails() != null ? usage.completionTokensDetails().reasoningTokens() : null;
+		return details != null ? details.reasoningTokens() : null;
 	}
 
 }

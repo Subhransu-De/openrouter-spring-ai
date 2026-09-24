@@ -1405,8 +1405,9 @@ for FindSecBugs analysis of compiled core and autoconfiguration production class
 Tests, samples, and the dependency-only starter are excluded from security analysis.
 The opt-in profile uses maximum effort, reports all confidence levels (`Low` threshold),
 and fails on any selected SECURITY finding or analysis failure. Reports are written to
-each analyzed module's `target/findsecbugs.xml`. The security filter and detector plugin
-exist only inside this profile; ordinary SpotBugs analysis without `-Psecurity` remains
+each analyzed module's `target/findsecbugs.xml` and `target/spotbugs/security/spotbugs.html`.
+The security filter and detector plugin exist only inside this profile's execution;
+ordinary SpotBugs analysis without `-Psecurity` remains
 unfiltered and writes its separate `target/spotbugsXml.xml` report.
 The method-specific exclusions in `config/spotbugs/security-exclude.xml` cover ASCII-validated
 URI scheme comparison and tool log sanitization that the detector does not recognize.
@@ -1425,6 +1426,59 @@ CodeQL retains its broader source/data-flow analysis and independent workflow.
 The security job fails builds immediately; making its status a required branch check
 is deferred until its CI stability is established. This change does not alter branch
 protection or replace CodeQL.
+
+The required SpotBugs correctness gate runs once per build tool on CI's JDK 25,
+with Java 17 bytecode. Run it locally with either command:
+
+```sh
+mvn -B -Pcorrectness -pl openrouter-spring-ai-autoconfigure -am -DskipTests verify
+gradle --no-daemon spotbugsCorrectness
+```
+
+It selects `NP_NULL_ON_SOME_PATH` and `NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE`
+for nullable dereferences, `OBL_UNSATISFIED_OBLIGATION` for resource cleanup,
+and `DC_DOUBLECHECK` for unsafe double-checked publication. Any selected finding,
+analysis error, missing dependency class, or empty required scope fails the gate.
+Both tools analyze core and autoconfiguration production classes with their compile
+dependency classpaths. Tests, samples, and the dependency-only starter are outside
+the initial scope. Add the starter to both configurations if it gains executable code.
+
+Visibility and mutable-state review is explicitly opt-in:
+
+```sh
+mvn -B -Pvisibility -pl openrouter-spring-ai-autoconfigure -am -DskipTests verify
+gradle --no-daemon spotbugsVisibility
+```
+
+This report selects sb-contrib's `OPM_OVERLY_PERMISSIVE_METHOD`, SpotBugs'
+`EI_EXPOSE_REP` and `EI_EXPOSE_REP2`, and `URF_UNREAD_PUBLIC_OR_PROTECTED_FIELD`.
+Findings do not fail the review task; analysis errors still do. Visibility suggestions
+only describe analyzed callers. Check other modules, public consumers, subclasses,
+reflection, and Spring wiring before reducing access. Mutable Boot property beans
+and nullable provider metadata retain their contracts. A finding alone does not justify
+an immutable collection or defensive copy.
+
+Maven writes `target/spotbugs-correctness.xml` or `target/spotbugs-visibility.xml`,
+plus `target/spotbugs/<policy>/spotbugs.html`. Gradle writes
+`build/reports/spotbugs/<policy>/spotbugs.xml` and `spotbugs.html` in each analyzed module.
+The root POM pins the engine and sb-contrib versions; neither is a library runtime dependency.
+Maven profiles can be combined as `-Psecurity,correctness,visibility`. Their filters,
+extensions, reports, and skip properties are separate. Analysis runs during `package`;
+the non-forking SpotBugs `verify` goal enforces findings during Maven `verify`, avoiding
+the `check` goal's fork losing execution-specific configuration. Ordinary Gradle `check`
+does not run these scans; the dedicated CI jobs enforce correctness and security.
+
+Exceptions belong in the policy's `config/spotbugs/*-exclude.xml`, scoped to a detector
+and specific method with a contract explanation. No package exclusions or generated
+baseline are accepted. Correctness currently excludes two helper contracts SpotBugs
+cannot infer; existing tests and NullAway cover those contracts. Repeated nullable
+record accessors use local values so their guards remain visible to the analyzer.
+NullAway checks source null contracts independently and does not inherit these exclusions.
+
+`config/spotbugs/verify.py` exercises bad and corrected fixtures for all eight detectors,
+FindSecBugs SQL injection, and Maven profile combinations. Run it with `maven --command mvn`
+or `gradle --command gradle`, plus `--work-dir` pointing outside the repository.
+The fixtures and reports use synthetic data and never call OpenRouter.
 
 The Java 17-compatible recursive list snapshot and content joining simplifications
 are applied. `Math.clamp`, `List.getFirst`/`getLast`, and pattern switches in

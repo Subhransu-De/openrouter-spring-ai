@@ -17,8 +17,9 @@ final class OutputFormatMapper {
 	}
 
 	@Nullable ObjectNode map(OpenRouterChatOptions options) {
-		if (options.getResponseFormat() != null) {
-			return mapResponseFormat(options.getResponseFormat());
+		var format = options.getResponseFormat();
+		if (format != null) {
+			return mapResponseFormat(format);
 		}
 		if (StringUtils.hasText(options.getOutputSchema())) {
 			return jsonSchemaFormat("response", null, options.getOutputSchema());

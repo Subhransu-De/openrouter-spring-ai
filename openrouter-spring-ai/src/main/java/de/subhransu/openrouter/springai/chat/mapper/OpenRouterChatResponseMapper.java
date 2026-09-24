@@ -27,11 +27,13 @@ public final class OpenRouterChatResponseMapper {
 		if (response == null) {
 			throw new OpenRouterProtocolException("Null OpenRouter chat completion response");
 		}
-		if (response.error() != null) {
-			throw OpenRouterApiExceptionFactory.create("OpenRouter chat completion failed", response.error().toString(),
+		var error = response.error();
+		if (error != null) {
+			throw OpenRouterApiExceptionFactory.create("OpenRouter chat completion failed", error.toString(),
 					response.error(), null);
 		}
-		if (CollectionUtils.isEmpty(response.choices()) || response.choices().stream().anyMatch(Objects::isNull)) {
+		var choices = response.choices();
+		if (CollectionUtils.isEmpty(choices) || choices.stream().anyMatch(Objects::isNull)) {
 			throw new OpenRouterProtocolException("OpenRouter chat completion requires non-null choices");
 		}
 		throwIfChoiceFailed(response);
@@ -43,10 +45,11 @@ public final class OpenRouterChatResponseMapper {
 	}
 
 	private void throwIfChoiceFailed(ChatCompletionResponse response) {
-		if (CollectionUtils.isEmpty(response.choices())) {
+		var choices = response.choices();
+		if (CollectionUtils.isEmpty(choices)) {
 			return;
 		}
-		for (Choice choice : response.choices()) {
+		for (Choice choice : choices) {
 			if (choice != null && OpenRouterChoiceErrorExceptionFactory.isFailure(choice)) {
 				throw this.choiceErrorExceptionFactory.create(response, choice);
 			}
@@ -54,35 +57,33 @@ public final class OpenRouterChatResponseMapper {
 	}
 
 	private Generation mapGeneration(Choice choice, @Nullable String model) {
-		if (choice.message() == null) {
+		var message = choice.message();
+		if (message == null) {
 			throw new OpenRouterProtocolException("OpenRouter chat completion choice requires a message");
 		}
-		if (!CollectionUtils.isEmpty(choice.message().toolCalls())
+		if (!CollectionUtils.isEmpty(message.toolCalls())
 				&& !FinishReasonMapper.isToolCallCompletion(choice.finishReason())) {
 			throw new OpenRouterTruncatedResponseException(
 					"Tool call choice ended without a tool-call completion reason");
 		}
 
-		AssistantContentMapper.MappedContent content = AssistantContentMapper.map(choice.message().content());
+		AssistantContentMapper.MappedContent content = AssistantContentMapper.map(message.content());
 		List<Media> media = new ArrayList<>(content.media());
-		media.addAll(GeneratedImageMapper.media(choice.message().images()));
-		Map<String, Object> properties = ReasoningMetadata.chat(choice.message().reasoning(),
-				choice.message().reasoningDetails());
-		RefusalMetadata.put(properties, choice.message().refusal());
-		ExtensionMetadata.put(properties, choice.message().extensions(), choice.extensions(),
-				choice.message().toolCalls());
+		media.addAll(GeneratedImageMapper.media(message.images()));
+		Map<String, Object> properties = ReasoningMetadata.chat(message.reasoning(), message.reasoningDetails());
+		RefusalMetadata.put(properties, message.refusal());
+		ExtensionMetadata.put(properties, message.extensions(), choice.extensions(), message.toolCalls());
 		AssistantMessage assistantMessage = AssistantMessage.builder()
 			.content(content.text())
 			.properties(properties)
-			.toolCalls(mapToolCalls(choice.message().toolCalls()))
+			.toolCalls(mapToolCalls(message.toolCalls()))
 			.media(media)
 			.build();
 
 		ChatGenerationMetadata.Builder metadataBuilder = ChatGenerationMetadata.builder();
 		metadataBuilder.finishReason(FinishReasonMapper.map(choice.finishReason()));
 		ResponseValues.ifPresent(model, value -> metadataBuilder.metadata("openrouter.model", value));
-		ResponseValues.ifPresent(choice.message().reasoning(),
-				value -> metadataBuilder.metadata("openrouter.reasoning", value));
+		ResponseValues.ifPresent(message.reasoning(), value -> metadataBuilder.metadata("openrouter.reasoning", value));
 		ResponseValues.ifPresent(choice.nativeFinishReason(),
 				value -> metadataBuilder.metadata("openrouter.native_finish_reason", value));
 		ResponseValues.ifPresent(properties.get(RefusalMetadata.REFUSAL),
@@ -101,7 +102,9 @@ public final class OpenRouterChatResponseMapper {
 					ResponseValues.required(toolCall.type(), "tool call type"),
 					ResponseValues.required(ResponseValues.required(toolCall.function(), "tool call function").name(),
 							"tool call name"),
-					ResponseValues.required(toolCall.function().arguments(), "tool call arguments")))
+					ResponseValues.required(
+							ResponseValues.required(toolCall.function(), "tool call function").arguments(),
+							"tool call arguments")))
 			.toList();
 	}
 

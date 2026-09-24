@@ -74,8 +74,9 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 		// Process item images before text reconciliation, as in the wire event order.
 		List<Media> media = itemMedia(event, outputState);
 		String text = text(event, result, outputState);
-		if (result != null && result.output() != null && outputState != null) {
-			media = terminalMedia(result.output(), outputState);
+		var output = result != null ? result.output() : null;
+		if (output != null && outputState != null) {
+			media = terminalMedia(output, outputState);
 		}
 
 		AssistantMessage assistantMessage = AssistantMessage.builder()
@@ -136,22 +137,24 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 
 	private List<AssistantMessage.ToolCall> toolCalls(ResponsesStreamEvent event, @Nullable ResponsesResult result,
 			List<ResponsesOutputItem> pending, @Nullable String status) {
-		if (OUTPUT_ITEM_DONE.equals(event.type()) && event.item() != null
-				&& "function_call".equals(event.item().type())) {
+		var item = event.item();
+		if (OUTPUT_ITEM_DONE.equals(event.type()) && item != null && "function_call".equals(item.type())) {
 			// A later incomplete item or response must prevent every callback in the
 			// round.
-			pending.add(event.item());
+			pending.add(item);
 		}
 		if (result == null) {
 			return List.of();
 		}
-		String reason = result.incompleteDetails() != null ? result.incompleteDetails().reason() : null;
+		var details = result.incompleteDetails();
+		String reason = details != null ? details.reason() : null;
 		List<AssistantMessage.ToolCall> calls = OpenRouterResponsesResponseMapper.toolCalls(status, reason, pending);
-		if (result.output() != null) {
+		var output = result.output();
+		if (output != null) {
 			// Validate both representations: a snapshot cannot erase a non-final item
 			// status.
 			List<AssistantMessage.ToolCall> terminal = OpenRouterResponsesResponseMapper.toolCalls(status, reason,
-					result.output());
+					output);
 			if (!terminal.isEmpty()) {
 				calls = terminal;
 			}
@@ -163,20 +166,21 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 	private Map<String, Object> reasoning(ResponsesStreamEvent event, @Nullable ResponsesResult result,
 			@Nullable String reasoning, ReasoningMetadata.Accumulator accumulator) {
 		Map<String, Object> metadata = ReasoningMetadata.chat(reasoning, null);
-		if (OUTPUT_ITEM_DONE.equals(event.type()) && event.item() != null) {
-			metadata.putAll(ReasoningMetadata.responses(List.of(event.item())));
+		var item = event.item();
+		if (OUTPUT_ITEM_DONE.equals(event.type()) && item != null) {
+			metadata.putAll(ReasoningMetadata.responses(List.of(item)));
 			metadata.remove(ReasoningMetadata.REASONING);
 		}
 		Map<String, Object> snapshot = accumulator.append(metadata);
-		return result != null && result.output() != null
-				? accumulator.replace(ReasoningMetadata.responses(result.output())) : snapshot;
+		var output = result != null ? result.output() : null;
+		return output != null ? accumulator.replace(ReasoningMetadata.responses(output)) : snapshot;
 	}
 
 	private String text(ResponsesStreamEvent event, @Nullable ResponsesResult result,
 			@Nullable ResponsesOutputState state) {
-		if (result != null && result.output() != null) {
-			return state != null ? state.terminal(result.output())
-					: OpenRouterResponsesResponseMapper.text(result.output());
+		var output = result != null ? result.output() : null;
+		if (output != null) {
+			return state != null ? state.terminal(output) : OpenRouterResponsesResponseMapper.text(output);
 		}
 		if ("response.output_text.delta".equals(event.type())) {
 			return state != null ? state.delta(event) : event.delta() != null ? event.delta() : "";
@@ -187,17 +191,17 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 		if ("response.output_text.done".equals(event.type())) {
 			return state.done(event);
 		}
-		return OUTPUT_ITEM_DONE.equals(event.type()) && event.item() != null
-				? state.item(event.item(), event.outputIndex()) : "";
+		var item = event.item();
+		return OUTPUT_ITEM_DONE.equals(event.type()) && item != null ? state.item(item, event.outputIndex()) : "";
 	}
 
 	private List<Media> itemMedia(ResponsesStreamEvent event, @Nullable ResponsesOutputState state) {
-		if (!OUTPUT_ITEM_DONE.equals(event.type()) || event.item() == null
-				|| !"image_generation_call".equals(event.item().type())) {
+		var item = event.item();
+		if (!OUTPUT_ITEM_DONE.equals(event.type()) || item == null || !"image_generation_call".equals(item.type())) {
 			return List.of();
 		}
-		return state != null ? state.image(event.item(), event.outputIndex())
-				: GeneratedImageMapper.responsesMedia(List.of(event.item()));
+		return state != null ? state.image(item, event.outputIndex())
+				: GeneratedImageMapper.responsesMedia(List.of(item));
 	}
 
 	private List<Media> terminalMedia(List<? extends @Nullable ResponsesOutputItem> output,

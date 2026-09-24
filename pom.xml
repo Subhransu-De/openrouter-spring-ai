@@ -81,6 +81,10 @@
     <maven-pmd-plugin.version>3.28.0</maven-pmd-plugin.version>
     <modernizer-maven-plugin.version>3.5.0</modernizer-maven-plugin.version>
     <spotbugs-maven-plugin.version>4.10.4.1</spotbugs-maven-plugin.version>
+    <spotbugs.version>4.10.4</spotbugs.version>
+    <sb-contrib.version>7.7.4</sb-contrib.version>
+    <spotbugs.correctness.skip>true</spotbugs.correctness.skip>
+    <spotbugs.visibility.skip>true</spotbugs.visibility.skip>
     <findsecbugs.version>1.14.0</findsecbugs.version>
     <findsecbugs.skip>true</findsecbugs.skip>
     <pmd.version>7.27.0</pmd.version>
@@ -160,6 +164,13 @@
           <groupId>com.github.spotbugs</groupId>
           <artifactId>spotbugs-maven-plugin</artifactId>
           <version>${spotbugs-maven-plugin.version}</version>
+          <dependencies>
+            <dependency>
+              <groupId>com.github.spotbugs</groupId>
+              <artifactId>spotbugs</artifactId>
+              <version>${spotbugs.version}</version>
+            </dependency>
+          </dependencies>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -594,32 +605,283 @@
           <plugin>
             <groupId>com.github.spotbugs</groupId>
             <artifactId>spotbugs-maven-plugin</artifactId>
-            <!-- check forks spotbugs: keep settings together in this opt-in profile. -->
-            <configuration>
-              <skip>${findsecbugs.skip}</skip>
-              <effort>Max</effort>
-              <threshold>Low</threshold>
-              <includeTests>false</includeTests>
-              <failOnError>true</failOnError>
-              <maxAllowedViolations>0</maxAllowedViolations>
-              <includeFilterFile>${maven.multiModuleProjectDirectory}/config/spotbugs/security-include.xml</includeFilterFile>
-              <excludeFilterFile>${maven.multiModuleProjectDirectory}/config/spotbugs/security-exclude.xml</excludeFilterFile>
-              <spotbugsXmlOutputFilename>findsecbugs.xml</spotbugsXmlOutputFilename>
-              <plugins>
-                <plugin>
-                  <groupId>com.h3xstream.findsecbugs</groupId>
-                  <artifactId>findsecbugs-plugin</artifactId>
-                  <version>${findsecbugs.version}</version>
-                </plugin>
-              </plugins>
-            </configuration>
             <executions>
+              <!-- verify reads this execution's report without check's configuration-losing fork. -->
               <execution>
-                <id>findsecbugs</id>
+                <id>spotbugs-security</id>
                 <goals>
-                  <goal>check</goal>
+                  <goal>spotbugs</goal>
+                </goals>
+                <phase>package</phase>
+                <configuration>
+                  <skip>${findsecbugs.skip}</skip>
+                  <effort>Max</effort>
+                  <threshold>Low</threshold>
+                  <includeTests>false</includeTests>
+                  <failOnError>true</failOnError>
+                  <maxAllowedViolations>0</maxAllowedViolations>
+                  <includeFilterFile>${maven.multiModuleProjectDirectory}/config/spotbugs/security-include.xml</includeFilterFile>
+                  <excludeFilterFile>${maven.multiModuleProjectDirectory}/config/spotbugs/security-exclude.xml</excludeFilterFile>
+                  <spotbugsXmlOutputFilename>findsecbugs.xml</spotbugsXmlOutputFilename>
+                  <htmlOutput>true</htmlOutput>
+                  <outputDirectory>${project.build.directory}/spotbugs/security</outputDirectory>
+                  <plugins>
+                    <plugin>
+                      <groupId>com.h3xstream.findsecbugs</groupId>
+                      <artifactId>findsecbugs-plugin</artifactId>
+                      <version>${findsecbugs.version}</version>
+                    </plugin>
+                  </plugins>
+                </configuration>
+              </execution>
+              <execution>
+                <id>check-spotbugs-security</id>
+                <goals>
+                  <goal>verify</goal>
                 </goals>
                 <phase>verify</phase>
+                <configuration>
+                  <skip>${findsecbugs.skip}</skip>
+                  <failOnError>true</failOnError>
+                  <maxAllowedViolations>0</maxAllowedViolations>
+                  <spotbugsXmlOutputFilename>findsecbugs.xml</spotbugsXmlOutputFilename>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-antrun-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>prepare-spotbugs-security</id>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <phase>prepare-package</phase>
+                <configuration>
+                  <skip>${findsecbugs.skip}</skip>
+                  <target>
+                    <delete file="${project.build.directory}/findsecbugs.xml"/>
+                    <fail message="Empty required SpotBugs security analysis scope">
+                      <condition>
+                        <resourcecount count="0">
+                          <fileset dir="${project.build.outputDirectory}" erroronmissingdir="false" excludes="**/package-info.class,**/module-info.class" includes="**/*.class"/>
+                        </resourcecount>
+                      </condition>
+                    </fail>
+                  </target>
+                </configuration>
+              </execution>
+              <execution>
+                <id>validate-spotbugs-security-report</id>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <phase>verify</phase>
+                <configuration>
+                  <skip>${findsecbugs.skip}</skip>
+                  <target>
+                    <xmlproperty file="${project.build.directory}/findsecbugs.xml" prefix="security"/>
+                    <fail message="SpotBugs security report is missing or contains analysis errors/missing classes">
+                      <condition>
+                        <not>
+                          <and>
+                            <equals arg1="${security.BugCollection.Errors(errors)}" arg2="0"/>
+                            <equals arg1="${security.BugCollection.Errors(missingClasses)}" arg2="0"/>
+                          </and>
+                        </not>
+                      </condition>
+                    </fail>
+                  </target>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
+      <id>correctness</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>com.github.spotbugs</groupId>
+            <artifactId>spotbugs-maven-plugin</artifactId>
+            <executions>
+              <!-- verify reads this execution's report without check's configuration-losing fork. -->
+              <execution>
+                <id>spotbugs-correctness</id>
+                <goals>
+                  <goal>spotbugs</goal>
+                </goals>
+                <phase>package</phase>
+                <configuration>
+                  <skip>${spotbugs.correctness.skip}</skip>
+                  <effort>Max</effort>
+                  <threshold>Low</threshold>
+                  <includeTests>false</includeTests>
+                  <failOnError>true</failOnError>
+                  <maxAllowedViolations>0</maxAllowedViolations>
+                  <includeFilterFile>${maven.multiModuleProjectDirectory}/config/spotbugs/correctness-include.xml</includeFilterFile>
+                  <excludeFilterFile>${maven.multiModuleProjectDirectory}/config/spotbugs/correctness-exclude.xml</excludeFilterFile>
+                  <spotbugsXmlOutputFilename>spotbugs-correctness.xml</spotbugsXmlOutputFilename>
+                  <htmlOutput>true</htmlOutput>
+                  <outputDirectory>${project.build.directory}/spotbugs/correctness</outputDirectory>
+                </configuration>
+              </execution>
+              <execution>
+                <id>check-spotbugs-correctness</id>
+                <goals>
+                  <goal>verify</goal>
+                </goals>
+                <phase>verify</phase>
+                <configuration>
+                  <skip>${spotbugs.correctness.skip}</skip>
+                  <failOnError>true</failOnError>
+                  <maxAllowedViolations>0</maxAllowedViolations>
+                  <spotbugsXmlOutputFilename>spotbugs-correctness.xml</spotbugsXmlOutputFilename>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-antrun-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>prepare-spotbugs-correctness</id>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <phase>prepare-package</phase>
+                <configuration>
+                  <skip>${spotbugs.correctness.skip}</skip>
+                  <target>
+                    <delete file="${project.build.directory}/spotbugs-correctness.xml"/>
+                    <fail message="Empty required SpotBugs correctness analysis scope">
+                      <condition>
+                        <resourcecount count="0">
+                          <fileset dir="${project.build.outputDirectory}" erroronmissingdir="false" excludes="**/package-info.class,**/module-info.class" includes="**/*.class"/>
+                        </resourcecount>
+                      </condition>
+                    </fail>
+                  </target>
+                </configuration>
+              </execution>
+              <execution>
+                <id>validate-spotbugs-correctness-report</id>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <phase>verify</phase>
+                <configuration>
+                  <skip>${spotbugs.correctness.skip}</skip>
+                  <target>
+                    <xmlproperty file="${project.build.directory}/spotbugs-correctness.xml" prefix="correctness"/>
+                    <fail message="SpotBugs correctness report is missing or contains analysis errors/missing classes">
+                      <condition>
+                        <not>
+                          <and>
+                            <equals arg1="${correctness.BugCollection.Errors(errors)}" arg2="0"/>
+                            <equals arg1="${correctness.BugCollection.Errors(missingClasses)}" arg2="0"/>
+                          </and>
+                        </not>
+                      </condition>
+                    </fail>
+                  </target>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
+      <id>visibility</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>com.github.spotbugs</groupId>
+            <artifactId>spotbugs-maven-plugin</artifactId>
+            <executions>
+              <!-- verify reads this execution's report without check's configuration-losing fork. -->
+              <execution>
+                <id>spotbugs-visibility</id>
+                <goals>
+                  <goal>spotbugs</goal>
+
+                </goals>
+                <phase>package</phase>
+                <configuration>
+                  <skip>${spotbugs.visibility.skip}</skip>
+                  <effort>Max</effort>
+                  <threshold>Low</threshold>
+                  <includeTests>false</includeTests>
+                  <failOnError>true</failOnError>
+                  <maxAllowedViolations>0</maxAllowedViolations>
+                  <includeFilterFile>${maven.multiModuleProjectDirectory}/config/spotbugs/visibility-include.xml</includeFilterFile>
+                  <excludeFilterFile>${maven.multiModuleProjectDirectory}/config/spotbugs/visibility-exclude.xml</excludeFilterFile>
+                  <spotbugsXmlOutputFilename>spotbugs-visibility.xml</spotbugsXmlOutputFilename>
+                  <htmlOutput>true</htmlOutput>
+                  <outputDirectory>${project.build.directory}/spotbugs/visibility</outputDirectory>
+                  <plugins>
+                    <plugin>
+                      <groupId>com.mebigfatguy.sb-contrib</groupId>
+                      <artifactId>sb-contrib</artifactId>
+                      <version>${sb-contrib.version}</version>
+                    </plugin>
+                  </plugins>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-antrun-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>prepare-spotbugs-visibility</id>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <phase>prepare-package</phase>
+                <configuration>
+                  <skip>${spotbugs.visibility.skip}</skip>
+                  <target>
+                    <delete file="${project.build.directory}/spotbugs-visibility.xml"/>
+                    <fail message="Empty required SpotBugs visibility analysis scope">
+                      <condition>
+                        <resourcecount count="0">
+                          <fileset dir="${project.build.outputDirectory}" erroronmissingdir="false" excludes="**/package-info.class,**/module-info.class" includes="**/*.class"/>
+                        </resourcecount>
+                      </condition>
+                    </fail>
+                  </target>
+                </configuration>
+              </execution>
+              <execution>
+                <id>validate-spotbugs-visibility-report</id>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <phase>verify</phase>
+                <configuration>
+                  <skip>${spotbugs.visibility.skip}</skip>
+                  <target>
+                    <xmlproperty file="${project.build.directory}/spotbugs-visibility.xml" prefix="visibility"/>
+                    <fail message="SpotBugs visibility report is missing or contains analysis errors/missing classes">
+                      <condition>
+                        <not>
+                          <and>
+                            <equals arg1="${visibility.BugCollection.Errors(errors)}" arg2="0"/>
+                            <equals arg1="${visibility.BugCollection.Errors(missingClasses)}" arg2="0"/>
+                          </and>
+                        </not>
+                      </condition>
+                    </fail>
+                  </target>
+                </configuration>
               </execution>
             </executions>
           </plugin>

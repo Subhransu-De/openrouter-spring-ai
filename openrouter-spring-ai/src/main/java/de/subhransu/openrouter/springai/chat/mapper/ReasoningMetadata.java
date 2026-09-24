@@ -57,14 +57,14 @@ final class ReasoningMetadata {
 	}
 
 	private static void appendText(ResponsesOutputItem item, StringBuilder text) {
+		JsonNode raw = item.rawItem();
 		if (item.content() != null) {
 			ResponseValues.items(item.content(), "reasoning content")
 				.stream()
 				.filter(content -> "reasoning_text".equals(content.type()) && content.text() != null)
 				.forEach(content -> text.append(content.text()));
 		}
-		else if (item.rawItem() != null) {
-			JsonNode raw = item.rawItem();
+		else if (raw != null) {
 			JsonNode parts = raw.hasNonNull("content") ? raw.get("content") : raw.get("summary");
 			if (parts != null && parts.isArray()) {
 				for (JsonNode part : parts) {
