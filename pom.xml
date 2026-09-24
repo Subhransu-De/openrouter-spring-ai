@@ -61,6 +61,11 @@
     <flatten-maven-plugin.version>1.8.0</flatten-maven-plugin.version>
     <spotless-maven-plugin.version>3.10.2</spotless-maven-plugin.version>
     <jacoco-maven-plugin.version>0.8.15</jacoco-maven-plugin.version>
+    <coverage.line.minimum>0.90</coverage.line.minimum>
+    <coverage.branch.minimum>0.80</coverage.branch.minimum>
+    <coverage.skip>true</coverage.skip>
+    <skipTests>false</skipTests>
+    <maven-antrun-plugin.version>3.1.0</maven-antrun-plugin.version>
     <archunit.version>1.5.0</archunit.version>
     <error-prone.version>2.50.0</error-prone.version>
     <error-prone-gradle-plugin.version>5.1.1</error-prone-gradle-plugin.version>
@@ -317,6 +322,67 @@
               <goal>report</goal>
             </goals>
             <phase>verify</phase>
+          </execution>
+          <execution>
+            <id>jacoco-check</id>
+            <goals>
+              <goal>check</goal>
+            </goals>
+            <phase>verify</phase>
+            <configuration>
+              <skip>${coverage.skip}</skip>
+              <haltOnFailure>true</haltOnFailure>
+              <rules>
+                <rule>
+                  <element>BUNDLE</element>
+                  <limits>
+                    <limit>
+                      <counter>LINE</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>${coverage.line.minimum}</minimum>
+                    </limit>
+                    <limit>
+                      <counter>BRANCH</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>${coverage.branch.minimum}</minimum>
+                    </limit>
+                  </limits>
+                </rule>
+              </rules>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-antrun-plugin</artifactId>
+        <version>${maven-antrun-plugin.version}</version>
+        <executions>
+          <execution>
+            <id>require-coverage-data</id>
+            <goals>
+              <goal>run</goal>
+            </goals>
+            <phase>verify</phase>
+            <configuration>
+              <skip>${coverage.skip}</skip>
+              <target>
+                <!-- Package descriptors contain no executable code. New starter classes must have coverage data. -->
+                <fail message="Missing JaCoCo execution data for ${project.artifactId}; run tests before verification.">
+                  <condition>
+                    <and>
+                      <resourcecount count="0" when="greater">
+                        <fileset dir="${project.build.outputDirectory}" excludes="**/package-info.class,**/module-info.class" includes="**/*.class"/>
+                      </resourcecount>
+                      <not>
+                        <available file="${project.build.directory}/jacoco.exec"/>
+                      </not>
+                    </and>
+                  </condition>
+                </fail>
+              </target>
+            </configuration>
           </execution>
         </executions>
       </plugin>

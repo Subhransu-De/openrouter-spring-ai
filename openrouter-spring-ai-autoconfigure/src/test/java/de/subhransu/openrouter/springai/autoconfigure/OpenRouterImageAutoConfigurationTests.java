@@ -38,7 +38,10 @@ class OpenRouterImageAutoConfigurationTests {
 					"spring.ai.openrouter.image.resolution=2K", "spring.ai.openrouter.image.quality=high",
 					"spring.ai.openrouter.image.output-format=webp",
 					"spring.ai.openrouter.image.background=transparent",
-					"spring.ai.openrouter.image.output-compression=80", "spring.ai.openrouter.image.seed=42")
+					"spring.ai.openrouter.image.output-compression=80", "spring.ai.openrouter.image.seed=42",
+					"spring.ai.openrouter.image.width=1024", "spring.ai.openrouter.image.height=576",
+					"spring.ai.openrouter.image.input-references[0]=https://example.com/input.png",
+					"spring.ai.openrouter.image.provider-options.style=natural")
 			.run(context -> {
 				OpenRouterImageModel imageModel = context.getBean(OpenRouterImageModel.class);
 				OpenRouterImageOptions options = (OpenRouterImageOptions) ReflectionTestUtils.getField(imageModel,
@@ -52,6 +55,23 @@ class OpenRouterImageAutoConfigurationTests {
 				assertThat(options.getBackground()).isEqualTo("transparent");
 				assertThat(options.getOutputCompression()).isEqualTo(80);
 				assertThat(options.getSeed()).isEqualTo(42);
+				assertThat(options.getWidth()).isEqualTo(1024);
+				assertThat(options.getHeight()).isEqualTo(576);
+				assertThat(options.getInputReferences()).containsExactly("https://example.com/input.png");
+				assertThat(options.getProviderOptions()).containsEntry("style", "natural");
+				OpenRouterImageProperties properties = context.getBean(OpenRouterImageProperties.class);
+				assertThat(properties.getN()).isEqualTo(2);
+				assertThat(properties.getWidth()).isEqualTo(1024);
+				assertThat(properties.getHeight()).isEqualTo(576);
+				assertThat(properties.getAspectRatio()).isEqualTo("16:9");
+				assertThat(properties.getResolution()).isEqualTo("2K");
+				assertThat(properties.getQuality()).isEqualTo("high");
+				assertThat(properties.getOutputFormat()).isEqualTo("webp");
+				assertThat(properties.getBackground()).isEqualTo("transparent");
+				assertThat(properties.getOutputCompression()).isEqualTo(80);
+				assertThat(properties.getSeed()).isEqualTo(42);
+				assertThat(properties.getInputReferences()).containsExactly("https://example.com/input.png");
+				assertThat(properties.getProviderOptions()).containsEntry("style", "natural");
 			});
 	}
 

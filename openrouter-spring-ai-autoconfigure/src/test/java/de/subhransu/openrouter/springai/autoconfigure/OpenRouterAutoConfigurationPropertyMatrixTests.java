@@ -102,6 +102,19 @@ class OpenRouterAutoConfigurationPropertyMatrixTests {
 				assertThat(options.getMinP()).isEqualTo(0.05);
 				assertThat(options.getTopA()).isEqualTo(0.8);
 				assertThat(options.getUser()).isEqualTo("user-7");
+				OpenRouterChatProperties properties = context.getBean(OpenRouterChatProperties.class);
+				assertThat(properties.getTemperature()).isEqualTo(0.7);
+				assertThat(properties.getTopP()).isEqualTo(0.9);
+				assertThat(properties.getTopK()).isEqualTo(40);
+				assertThat(properties.getMaxTokens()).isEqualTo(256);
+				assertThat(properties.getMaxCompletionTokens()).isEqualTo(512);
+				assertThat(properties.getSeed()).isEqualTo(42);
+				assertThat(properties.getPresencePenalty()).isEqualTo(0.1);
+				assertThat(properties.getFrequencyPenalty()).isEqualTo(0.2);
+				assertThat(properties.getRepetitionPenalty()).isEqualTo(1.1);
+				assertThat(properties.getMinP()).isEqualTo(0.05);
+				assertThat(properties.getTopA()).isEqualTo(0.8);
+				assertThat(properties.getUser()).isEqualTo("user-7");
 			});
 	}
 

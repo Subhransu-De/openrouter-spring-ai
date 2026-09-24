@@ -14,6 +14,7 @@
   <description>OpenRouterApi client, DTOs, options, mappers, ChatModel, EmbeddingModel.</description>
 
   <properties>
+    <coverage.skip>${skipTests}</coverage.skip>
     <findsecbugs.skip>false</findsecbugs.skip>
   </properties>
 

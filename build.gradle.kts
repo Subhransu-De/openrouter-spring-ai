@@ -15,6 +15,7 @@ import org.gradle.kotlin.dsl.dependencies
 import org.gradle.kotlin.dsl.named
 import org.gradle.kotlin.dsl.register
 import org.gradle.testing.jacoco.tasks.JacocoReport
+import org.gradle.testing.jacoco.tasks.JacocoCoverageVerification
 import org.gradle.testing.jacoco.plugins.JacocoPluginExtension
 
 plugins {
@@ -48,6 +49,8 @@ val checkstyleVersion = pomProperty("checkstyle.version")
 val pmdVersion = pomProperty("pmd.version")
 val springJavaFormatVersion = pomProperty("spring-javaformat.version")
 val jacocoVersion = pomProperty("jacoco-maven-plugin.version")
+val coverageLineMinimum = pomProperty("coverage.line.minimum").toBigDecimal()
+val coverageBranchMinimum = pomProperty("coverage.branch.minimum").toBigDecimal()
 val libraryProjects =
 	setOf("openrouter-spring-ai", "openrouter-spring-ai-autoconfigure", "openrouter-spring-ai-starter")
 
@@ -159,6 +162,45 @@ subprojects {
 		reports {
 			xml.required.set(true)
 			html.required.set(true)
+		}
+	}
+
+	if (name in libraryProjects) {
+		val coverageData = layout.buildDirectory.file("jacoco/test.exec")
+		val mainClasses = extensions.getByType<SourceSetContainer>()["main"].output.classesDirs
+		val requireCoverageData = tasks.register("requireCoverageData") {
+			dependsOn(tasks.named("classes"), tasks.named("test"))
+			doLast {
+				// Package descriptors have no executable code; new starter classes enter the policy.
+				val executableClasses = mainClasses.asFileTree.matching {
+					include("**/*.class")
+					exclude("**/package-info.class", "**/module-info.class")
+				}
+				check(executableClasses.isEmpty || coverageData.get().asFile.isFile) {
+					"Missing JaCoCo execution data for ${project.name}; run tests before verification."
+				}
+			}
+		}
+		val coverageVerification = tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
+			dependsOn(requireCoverageData)
+			violationRules {
+				rule {
+					element = "BUNDLE"
+					limit {
+						counter = "LINE"
+						value = "COVEREDRATIO"
+						minimum = coverageLineMinimum
+					}
+					limit {
+						counter = "BRANCH"
+						value = "COVEREDRATIO"
+						minimum = coverageBranchMinimum
+					}
+				}
+			}
+		}
+		tasks.named("check") {
+			dependsOn(coverageVerification)
 		}
 	}
 
