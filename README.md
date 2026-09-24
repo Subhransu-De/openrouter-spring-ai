@@ -1351,14 +1351,14 @@ Enforcer exclusions are unchanged.
 The additional blocking PMD rules are scoped by source path in the shared rulesets,
 so Maven's combined analysis and Gradle's separate main/test tasks enforce the same policy:
 
-| Ruleset | Canonical rule reference | Policy |
-| --- | --- | --- |
-| `pmd-main.xml` | `category/java/design.xml/CognitiveComplexity` | Library production methods and constructors fail at 25 or more, using `reportLevel=25`. |
-| `pmd-main.xml` | `category/java/design.xml/CyclomaticComplexity` | Library production methods fail at 15 or more; class totals fail at 80 or more. |
-| `pmd-main.xml`, `pmd-test.xml` | `category/java/bestpractices.xml/PreserveStackTrace` | Library production and all test sources retain exception causes. |
-| `pmd-main.xml`, `pmd-test.xml` | `category/java/codestyle.xml/UnnecessaryModifier` | Library production and all test sources omit redundant modifiers. |
-| `pmd-test.xml` | `category/java/bestpractices.xml/JUnitJupiterTestShouldBePackagePrivate` | Test classes and methods use package access where JUnit permits it. |
-| `pmd-review.xml` | `category/java/design.xml/ExcessivePublicCount` | Advisory library production report with `minimum=45`; never blocks `verify` or `check`. |
+| Ruleset                        | Canonical rule reference                                                 | Policy                                                                                  |
+| ------------------------------ | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| `pmd-main.xml`                 | `category/java/design.xml/CognitiveComplexity`                           | Library production methods and constructors fail at 25 or more, using `reportLevel=25`. |
+| `pmd-main.xml`                 | `category/java/design.xml/CyclomaticComplexity`                          | Library production methods fail at 15 or more; class totals fail at 80 or more.         |
+| `pmd-main.xml`, `pmd-test.xml` | `category/java/bestpractices.xml/PreserveStackTrace`                     | Library production and all test sources retain exception causes.                        |
+| `pmd-main.xml`, `pmd-test.xml` | `category/java/codestyle.xml/UnnecessaryModifier`                        | Library production and all test sources omit redundant modifiers.                       |
+| `pmd-test.xml`                 | `category/java/bestpractices.xml/JUnitJupiterTestShouldBePackagePrivate` | Test classes and methods use package access where JUnit permits it.                     |
+| `pmd-review.xml`               | `category/java/design.xml/ExcessivePublicCount`                          | Advisory library production report with `minimum=45`; never blocks `verify` or `check`. |
 
 PMD 7.27.0 calls the cognitive property `reportLevel`, not `methodReportLevel`.
 The proposed thresholds were checked against the baseline and synthetic boundary

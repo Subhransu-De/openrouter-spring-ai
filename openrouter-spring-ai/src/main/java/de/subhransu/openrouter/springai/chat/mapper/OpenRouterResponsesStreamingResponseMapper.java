@@ -200,7 +200,7 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 				: GeneratedImageMapper.responsesMedia(List.of(event.item()));
 	}
 
-	private List<Media> terminalMedia(List<ResponsesOutputItem> output, ResponsesOutputState state) {
+	private List<Media> terminalMedia(List<? extends @Nullable ResponsesOutputItem> output, ResponsesOutputState state) {
 		List<Media> images = new ArrayList<>();
 		for (int index = 0; index < output.size(); index++) {
 			images.addAll(state.image(output.get(index), index));
