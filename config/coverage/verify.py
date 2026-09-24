@@ -145,12 +145,12 @@ def main():
     fixture(work / MODULES[0])
     fixture(work / MODULES[2], lines=4)
     run(args, work, "new-starter-code-enters-policy", command, "lines covered ratio")
-    # Invoke the real guard without rerunning tests, after deleting only fixture data.
+    # Verification must reject missing data even when test execution is suppressed.
     data = "target/jacoco.exec" if maven else "build/jacoco/test.exec"
     (work / MODULES[0] / data).unlink()
     missing = (
-        ["-B", "-pl", MODULES[0], "antrun:run@require-coverage-data"] if maven
-        else ["--no-daemon", f":{MODULES[0]}:jacocoTestCoverageVerification", "-x", "test"]
+        ["-B", "-pl", MODULES[0], "-Dmaven.test.skip=true", "verify"] if maven
+        else ["--no-daemon", f":{MODULES[0]}:check", "-x", "test"]
     )
     run(args, work, "missing-execution-data", missing, "Missing JaCoCo execution data")
 
