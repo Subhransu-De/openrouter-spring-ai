@@ -15,6 +15,7 @@
 
   <properties>
     <findsecbugs.skip>false</findsecbugs.skip>
+    <mutation.skip>false</mutation.skip>
   </properties>
 
   <dependencies>

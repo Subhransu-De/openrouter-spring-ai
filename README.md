@@ -1252,6 +1252,47 @@ supported Java versions. The executable samples application is intentionally sep
 
 ## Build quality checks
 
+### Focused mutation testing
+
+On JDK 25, run either opt-in command from the repository root:
+
+```sh
+mvn -B -pl openrouter-spring-ai -am -Pmutation test-compile org.pitest:pitest-maven:mutationCoverage
+gradle --no-daemon :openrouter-spring-ai:mutation
+```
+
+Both use the root POM's PIT and JUnit adapter versions, `DEFAULTS` mutators,
+an 80% mutation threshold, and failure on an empty mutation set. Ordinary builds
+do not run PIT, and its tooling dependencies are absent from published application
+classpaths. HTML and XML reports are in `openrouter-spring-ai/target/pit-reports`
+for Maven and `openrouter-spring-ai/build/reports/pitest` for Gradle.
+
+The shared `mutation.targets` list includes nested classes and covers:
+
+- `OpenRouterRetryAfter` and `OpenRouterHttpExceptionFactory`, which now owns
+  retry-header parsing and HTTP error classification. PIT filters compiler-generated
+  record methods, so the record alone would not exercise parsing.
+- `ReasoningDetailsMerger`, for ordered fragment merging and opaque metadata retention.
+- `OpenRouterStreamingToolCallAggregator`, for fragmented arguments, limits,
+  cancellation, and per-choice state.
+- `OpenRouterImageResponseValidator`, for malformed image payloads and provider-error
+  precedence, exercised by synthetic synchronous and streaming-fallback contracts.
+
+All core tests remain available for coverage selection. Samples and live-provider
+calls are outside this gate. Override workers with `-Dmutation.threads=2` in Maven
+or `-Pmutation.threads=2` in Gradle. Use the corresponding `mutation.targets`
+property for a focused investigation. Do not combine PIT workers with Maven `-T`
+or parallel JUnit execution.
+
+CI runs mutation analysis once per pull request on Temurin 25 with a 20-minute
+timeout and retains generated reports for 14 days, including failed runs.
+Review `SURVIVED` and `NO_COVERAGE` entries in the XML or HTML report, reproduce
+the affected behavior with a synthetic test, and add an assertion for the observable
+contract. Keep equivalent mutations documented; do not lower the threshold or remove
+targets to make the gate pass. `STRONGER` is reserved for a later scheduled expansion.
+
+### Other quality checks
+
 For GitHub Actions changes, install actionlint 1.7.12 and ShellCheck, then run
 `actionlint -color` from the repository root. CI's `Workflow validation` job checks
 all tracked workflows on every pull request (including forks) and main push,
