@@ -80,6 +80,8 @@ class VisibilityPolicyTests {
 		assertThat(report.toString()).contains(type.getName(), "because").contains(details);
 	}
 
+	// ArchUnit reads these declarations from bytecode; they are never executed.
+	@SuppressWarnings({ "PMD.UnusedPrivateField", "PMD.UnusedPrivateMethod" })
 	static class Compliant {
 
 		private String buffer;

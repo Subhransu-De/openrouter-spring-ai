@@ -82,24 +82,32 @@ class VisibilityPolicyTests {
 		assertThat(report.toString()).contains(type.getName(), "because").contains(details);
 	}
 
+	// ArchUnit reads the field type as a dependency.
+	@SuppressWarnings("PMD.UnusedPrivateField")
 	static class ChatMapping {
 
 		private de.subhransu.openrouter.springai.chat.mapper.OpenRouterChatRequestMapper mapper;
 
 	}
 
+	// ArchUnit reads the field type as a dependency.
+	@SuppressWarnings("PMD.UnusedPrivateField")
 	static class EmbeddingMapping {
 
 		private de.subhransu.openrouter.springai.embedding.mapper.OpenRouterEmbeddingRequestMapper mapper;
 
 	}
 
+	// ArchUnit reads the field type as a dependency.
+	@SuppressWarnings("PMD.UnusedPrivateField")
 	static class ImageMapping {
 
 		private de.subhransu.openrouter.springai.image.mapper.OpenRouterImageRequestMapper mapper;
 
 	}
 
+	// ArchUnit reads these declarations from bytecode; they are never executed.
+	@SuppressWarnings({ "PMD.UnusedPrivateField", "PMD.UnusedPrivateMethod" })
 	static class Compliant {
 
 		private String buffer;
