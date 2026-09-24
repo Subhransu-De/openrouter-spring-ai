@@ -65,6 +65,7 @@ If a mode does not support an option, preserve or add explicit validation rather
 - Prefer synthetic wire fixtures and existing test doubles. Use `StepVerifier` for reactive behavior and `ApplicationContextRunner` for Boot wiring.
 - Include meaningful edge cases: fragmented events, multiple choices, missing optional fields, provider errors, and unknown additive fields when relevant.
 - Wire DTO records must tolerate unknown JSON fields, as required by the architecture tests.
+- Architecture suites pin selected internal classes, fields, helper methods, and utility constructors. Update their target checks when intentionally renaming a selected declaration; preserve public and framework access. Java `assert` statements need a detail expression, and `AssertionError` needs a diagnostic argument. This rule does not require messages on JUnit or AssertJ assertions.
 - Do not copy private prompts, account responses, logs, or credentials into fixtures or committed evidence.
 - Run the Garage live harness only when live API use is authorized. Confirm its output location and keep generated reports and service records outside the repository.
 - Never print an API key or place it in a command argument, documentation, or a commit. Use the existing environment-based configuration.

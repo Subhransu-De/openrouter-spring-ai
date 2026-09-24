@@ -3,10 +3,15 @@ package de.subhransu.openrouter.springai;
 import static com.tngtech.archunit.base.DescribedPredicate.not;
 import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAPackage;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.fields;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.methods;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
+import static com.tngtech.archunit.library.GeneralCodingRules.ASSERTIONS_SHOULD_HAVE_DETAIL_MESSAGE;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.tngtech.archunit.core.domain.JavaClass;
+import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
@@ -20,6 +25,80 @@ import com.tngtech.archunit.library.dependencies.SlicesRuleDefinition;
 class CoreArchitectureTests {
 
 	private CoreArchitectureTests() {
+	}
+
+	private static final String BUDGET = "de.subhransu.openrouter.springai.chat.mapper.ChatStreamBudget";
+
+	private static final String VALUES = "de.subhransu.openrouter.springai.chat.mapper.ResponseValues";
+
+	// These final helpers have only same-package mapper callers, no serialization,
+	// reflective construction or subclass contract. Public mappers remain public for
+	// model callers in other packages. Budget operations remain package-private;
+	// only its accounting helpers and directly declared state must stay private.
+	@ArchTest
+	static final ArchRule budget_is_package_private = packagePrivateImplementation(BUDGET);
+
+	@ArchTest
+	static final ArchRule response_values_is_package_private = packagePrivateImplementation(VALUES);
+
+	@ArchTest
+	static final ArchRule budget_state_is_private = privateFields(BUDGET);
+
+	@ArchTest
+	static final ArchRule budget_helpers_are_private = privateHelpers(BUDGET);
+
+	// ResponseValues is stateless and never constructed. Stateful budgets, DTOs,
+	// model extension points and framework objects are deliberately not utilities.
+	@ArchTest
+	static final ArchRule response_values_is_non_instantiable = utilityConstructors(VALUES);
+
+	@ArchTest
+	static final ArchRule java_assertions_have_messages = ASSERTIONS_SHOULD_HAVE_DETAIL_MESSAGE
+		.because("production Java assertions and AssertionError need diagnostic detail, not JUnit or AssertJ messages");
+
+	@ArchTest
+	static void visibility_policy_targets_exist(JavaClasses imported) {
+		assertThat(imported.get(BUDGET).getFields()).extracting(field -> field.getName())
+			.containsExactlyInAnyOrder("objectMapper", "maxBytes", "maxChoices", "choices", "bytes");
+		assertThat(imported.get(BUDGET).getMethods())
+			.filteredOn(method -> method.getName().matches("size|retain|limit"))
+			.extracting(method -> method.getName())
+			.containsExactlyInAnyOrder("size", "retain", "limit");
+		assertThat(imported.get(VALUES).getConstructors()).hasSize(1);
+	}
+
+	static ArchRule packagePrivateImplementation(String name) {
+		return classes().that()
+			.haveFullyQualifiedName(name)
+			.should()
+			.bePackagePrivate()
+			.because("selected implementation helpers have only same-package callers");
+	}
+
+	static ArchRule privateFields(String name) {
+		return fields().that()
+			.areDeclaredIn(name)
+			.should()
+			.bePrivate()
+			.because("budget accounting state must only be mutated through its operations");
+	}
+
+	static ArchRule privateHelpers(String name) {
+		return methods().that()
+			.areDeclaredIn(name)
+			.and()
+			.haveNameMatching("size|retain|limit")
+			.should()
+			.bePrivate()
+			.because("accounting helpers are internal; mapper callers use the package-private budget operations");
+	}
+
+	static ArchRule utilityConstructors(String name) {
+		return classes().that()
+			.haveFullyQualifiedName(name)
+			.should()
+			.haveOnlyPrivateConstructors()
+			.because("selected stateless utilities must not acquire explicit or implicit accessible constructors");
 	}
 
 	@ArchTest
