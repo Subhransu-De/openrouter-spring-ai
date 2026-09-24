@@ -8,6 +8,7 @@ import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseExcept
 import de.subhransu.openrouter.springai.image.mapper.OpenRouterImageRequestMapper;
 import de.subhransu.openrouter.springai.image.mapper.OpenRouterImageResponseMapper;
 import de.subhransu.openrouter.springai.internal.Retries;
+import de.subhransu.openrouter.springai.internal.StreamRetries;
 import java.util.concurrent.atomic.AtomicBoolean;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationRegistry;
@@ -118,7 +119,7 @@ public class OpenRouterImageModel implements ImageModel {
 			AtomicBoolean completed = new AtomicBoolean();
 			return Flux.defer(() -> {
 				ImagesRequest request = this.requestMapper.map(prompt, options, true);
-				return this.openRouterApi.imagesStream(request);
+				return StreamRetries.stream(this.openRouterApi.imagesStream(request), this.retryTemplate);
 			}).mapNotNull(event -> {
 				ImageResponse response = this.responseMapper.map(event);
 				if (ImagesStreamEvent.COMPLETED.equals(event.type())) {
