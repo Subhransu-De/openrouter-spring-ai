@@ -122,7 +122,9 @@ def main():
     work.mkdir(parents=True, exist_ok=True)
     assert not any(work.iterdir()), "Use an empty directory for synthetic fixtures"
     prepare(work)
-    goals = ["-B", "verify"] if args.build == "maven" else ["--no-daemon", "--max-workers=2", "check"]
+    goals = ["-B", "verify"] if args.build == "maven" else [
+        "--no-daemon", "--max-workers=2", "--continue", "check",
+    ]
     boundaries = (
         ("Cognitive", cognitive, 25, "CognitiveComplexity"),
         ("Cyclomatic", cyclomatic, 15, "CyclomaticComplexity"),
