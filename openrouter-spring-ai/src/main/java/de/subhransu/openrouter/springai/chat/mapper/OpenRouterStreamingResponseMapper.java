@@ -172,12 +172,7 @@ public final class OpenRouterStreamingResponseMapper {
 					"Tool call choice ended without a tool-call completion reason");
 		}
 
-		Map<String, Object> properties = ReasoningMetadata.chat(
-				choice.delta() != null ? choice.delta().reasoning() : null,
-				choice.delta() != null ? choice.delta().reasoningDetails() : null);
-		RefusalMetadata.put(properties, choice.delta() != null ? choice.delta().refusal() : null);
-		ExtensionMetadata.put(properties, choice.delta() != null ? choice.delta().extensions() : null,
-				choice.extensions(), choice.delta() != null ? choice.delta().toolCalls() : null);
+		Map<String, Object> properties = properties(choice);
 		budget.append(choiceIndex(choice), properties);
 		List<Media> media = new ArrayList<>(
 				GeneratedImageMapper.media(choice.delta() != null ? choice.delta().images() : null));
@@ -201,6 +196,16 @@ public final class OpenRouterStreamingResponseMapper {
 				value -> metadataBuilder.metadata("openrouter.reasoning", value));
 		ChatGenerationMetadata metadata = metadataBuilder.build();
 		return new Generation(assistantMessage, metadata);
+	}
+
+	private Map<String, Object> properties(Choice choice) {
+		Map<String, Object> properties = ReasoningMetadata.chat(
+				choice.delta() != null ? choice.delta().reasoning() : null,
+				choice.delta() != null ? choice.delta().reasoningDetails() : null);
+		RefusalMetadata.put(properties, choice.delta() != null ? choice.delta().refusal() : null);
+		ExtensionMetadata.put(properties, choice.delta() != null ? choice.delta().extensions() : null,
+				choice.extensions(), choice.delta() != null ? choice.delta().toolCalls() : null);
+		return properties;
 	}
 
 	private List<AssistantMessage.ToolCall> mapToolCalls(@Nullable List<? extends @Nullable ToolCall> toolCalls) {

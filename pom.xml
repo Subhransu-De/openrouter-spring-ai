@@ -400,9 +400,17 @@
           <printFailingErrors>true</printFailingErrors>
           <linkXRef>false</linkXRef>
           <includeTests>true</includeTests>
+          <failOnViolation>true</failOnViolation>
+          <compileSourceRoots>
+            <compileSourceRoot>${project.build.sourceDirectory}</compileSourceRoot>
+          </compileSourceRoots>
+          <testSourceRoots>
+            <testSourceRoot>${project.build.testSourceDirectory}</testSourceRoot>
+          </testSourceRoots>
           <minimumTokens>200</minimumTokens>
           <targetJdk>${java.version}</targetJdk>
           <rulesets>
+            <ruleset>${maven.multiModuleProjectDirectory}/config/pmd/pmd-common.xml</ruleset>
             <ruleset>${maven.multiModuleProjectDirectory}/config/pmd/pmd-main.xml</ruleset>
             <ruleset>${maven.multiModuleProjectDirectory}/config/pmd/pmd-test.xml</ruleset>
           </rulesets>
@@ -440,6 +448,21 @@
               <goal>cpd-check</goal>
             </goals>
             <phase>verify</phase>
+          </execution>
+          <execution>
+            <id>pmd-review</id>
+            <goals>
+              <goal>pmd</goal>
+            </goals>
+            <phase>none</phase>
+            <configuration>
+              <includeTests>false</includeTests>
+              <rulesets combine.self="override">
+                <ruleset>${maven.multiModuleProjectDirectory}/config/pmd/pmd-review.xml</ruleset>
+              </rulesets>
+              <targetDirectory>${project.build.directory}/pmd-review</targetDirectory>
+              <outputDirectory>${project.build.directory}/site/pmd-review</outputDirectory>
+            </configuration>
           </execution>
         </executions>
       </plugin>

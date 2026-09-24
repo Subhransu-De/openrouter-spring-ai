@@ -72,22 +72,7 @@ final class MediaContentMapper {
 		}
 		String value = data.toString();
 		if (value.startsWith("data:")) {
-			if (!value.startsWith(prefix)) {
-				throw new IllegalArgumentException(
-						"Media data URL must use its declared MIME type and base64 encoding");
-			}
-			int length = value.length() - prefix.length();
-			if (length > 4 * ((MAX_INLINE_BYTES + 2) / 3)) {
-				throw new IllegalArgumentException("Inline media exceeds 20 MiB");
-			}
-			byte[] decoded;
-			try {
-				decoded = Base64.getDecoder().decode(value.substring(prefix.length()));
-			}
-			catch (IllegalArgumentException ex) {
-				throw new IllegalArgumentException("Invalid base64 media content");
-			}
-			checkSize(decoded.length);
+			validateInline(value, prefix);
 			return value;
 		}
 		if (audio) {
@@ -100,6 +85,24 @@ final class MediaContentMapper {
 			throw new IllegalArgumentException("Media URL must be an absolute HTTP(S) URL");
 		}
 		return value;
+	}
+
+	private static void validateInline(String value, String prefix) {
+		if (!value.startsWith(prefix)) {
+			throw new IllegalArgumentException("Media data URL must use its declared MIME type and base64 encoding");
+		}
+		int length = value.length() - prefix.length();
+		if (length > 4 * ((MAX_INLINE_BYTES + 2) / 3)) {
+			throw new IllegalArgumentException("Inline media exceeds 20 MiB");
+		}
+		byte[] decoded;
+		try {
+			decoded = Base64.getDecoder().decode(value.substring(prefix.length()));
+		}
+		catch (IllegalArgumentException ex) {
+			throw new IllegalArgumentException("Invalid base64 media content", ex);
+		}
+		checkSize(decoded.length);
 	}
 
 	private static void checkSize(int size) {

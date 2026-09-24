@@ -87,21 +87,10 @@ public final class OpenRouterStreamingToolCallAggregator {
 		AtomicBoolean cancelled = new AtomicBoolean();
 		AtomicLong pendingRequests = new AtomicLong();
 		AtomicReference<@Nullable Subscription> upstream = new AtomicReference<>();
-		Runnable drainRequests = () -> {
-			Subscription subscription = upstream.get();
-			if (subscription != null) {
-				long requested = pendingRequests.getAndSet(0);
-				if (requested > 0) {
-					subscription.request(requested);
-				}
-			}
-		};
+		Runnable drainRequests = () -> drainRequests(upstream, pendingRequests);
 		Consumer<Throwable> fail = failure -> {
 			if (cancelled.compareAndSet(false, true)) {
-				Subscription subscription = upstream.get();
-				if (subscription != null) {
-					subscription.cancel();
-				}
+				cancel(upstream);
 				sink.error(failure);
 			}
 		};
@@ -112,10 +101,7 @@ public final class OpenRouterStreamingToolCallAggregator {
 		});
 		sink.onCancel(() -> {
 			if (cancelled.compareAndSet(false, true)) {
-				Subscription subscription = upstream.get();
-				if (subscription != null) {
-					subscription.cancel();
-				}
+				cancel(upstream);
 				state.clear();
 			}
 		});
@@ -172,6 +158,23 @@ public final class OpenRouterStreamingToolCallAggregator {
 			}
 
 		});
+	}
+
+	private static void drainRequests(AtomicReference<@Nullable Subscription> upstream, AtomicLong pendingRequests) {
+		Subscription subscription = upstream.get();
+		if (subscription != null) {
+			long requested = pendingRequests.getAndSet(0);
+			if (requested > 0) {
+				subscription.request(requested);
+			}
+		}
+	}
+
+	private static void cancel(AtomicReference<@Nullable Subscription> upstream) {
+		Subscription subscription = upstream.get();
+		if (subscription != null) {
+			subscription.cancel();
+		}
 	}
 
 	private boolean hasToolCallDelta(Choice choice) {
@@ -366,49 +369,7 @@ public final class OpenRouterStreamingToolCallAggregator {
 			ResponseValues.items(chunk.choices(), "choice")
 				.stream()
 				.sorted(Comparator.comparingInt(this::choiceIndex))
-				.forEach(choice -> {
-					int index = choiceIndex(choice);
-					ToolCallBuffer buffered = this.bufferedByChoice.get(index);
-					if (buffered == null && hasToolCallDelta(choice)) {
-						buffered = new ToolCallBuffer(index);
-						this.bufferedByChoice.put(index, buffered);
-					}
-
-					ChatCompletionChunk choiceChunk = withChoice(chunk, choice);
-					if (buffered == null) {
-						ready.add(choiceChunk);
-					}
-					else {
-						Assert.state(choice.delta() == null || choice.delta().audio() == null,
-								"Audio and tool calls in the same choice are unsupported");
-						long chunkBytes = serializedBytes(choiceChunk);
-						buffered.add(choiceChunk, chunkBytes);
-						retain(chunkBytes);
-						if (choice.finishReason() != null || OpenRouterChoiceErrorExceptionFactory.isFailure(choice)) {
-							if (!OpenRouterChoiceErrorExceptionFactory.isFailure(choice)
-									&& !FinishReasonMapper.isToolCallCompletion(choice.finishReason())) {
-								throw new OpenRouterTruncatedResponseException(
-										"Tool call choice ended without a tool-call completion reason");
-							}
-							this.bufferedByChoice.remove(index);
-							buffered.close();
-							ChatCompletionChunk merged = merge(buffered.chunks);
-							if (!OpenRouterChoiceErrorExceptionFactory.isFailure(choice)) {
-								Choice completed = ResponseValues.items(merged.choices(), "completed choice").get(0);
-								Delta delta = ResponseValues.required(completed.delta(), "completed tool-call delta");
-								for (ToolCall toolCall : ResponseValues.items(delta.toolCalls(),
-										"completed tool call")) {
-									Assert.state(
-											toolCall.function() != null
-													&& StringUtils.hasText(toolCall.function().name()),
-											"Completed streamed tool call has no function name");
-								}
-							}
-							ready.add(merged);
-							release(buffered.chunks.size(), buffered.retainedBytes);
-						}
-					}
-				});
+				.forEach(choice -> acceptChoice(chunk, choice, ready));
 			if (this.bufferedByChoice.isEmpty()) {
 				ready.addAll(this.bufferedChoiceLessChunks);
 				release(this.bufferedChoiceLessChunks.size(), this.bufferedChoiceLessBytes);
@@ -416,6 +377,51 @@ public final class OpenRouterStreamingToolCallAggregator {
 				this.bufferedChoiceLessBytes = 0;
 			}
 			return combine(ready);
+		}
+
+		private void acceptChoice(ChatCompletionChunk chunk, Choice choice, List<ChatCompletionChunk> ready) {
+			int index = choiceIndex(choice);
+			ToolCallBuffer buffered = this.bufferedByChoice.get(index);
+			if (buffered == null && hasToolCallDelta(choice)) {
+				buffered = new ToolCallBuffer(index);
+				this.bufferedByChoice.put(index, buffered);
+			}
+
+			ChatCompletionChunk choiceChunk = withChoice(chunk, choice);
+			if (buffered == null) {
+				ready.add(choiceChunk);
+			}
+			else {
+				Assert.state(choice.delta() == null || choice.delta().audio() == null,
+						"Audio and tool calls in the same choice are unsupported");
+				long chunkBytes = serializedBytes(choiceChunk);
+				buffered.add(choiceChunk, chunkBytes);
+				retain(chunkBytes);
+				if (choice.finishReason() != null || OpenRouterChoiceErrorExceptionFactory.isFailure(choice)) {
+					finishChoice(choice, buffered, index, ready);
+				}
+			}
+		}
+
+		private void finishChoice(Choice choice, ToolCallBuffer buffered, int index, List<ChatCompletionChunk> ready) {
+			if (!OpenRouterChoiceErrorExceptionFactory.isFailure(choice)
+					&& !FinishReasonMapper.isToolCallCompletion(choice.finishReason())) {
+				throw new OpenRouterTruncatedResponseException(
+						"Tool call choice ended without a tool-call completion reason");
+			}
+			this.bufferedByChoice.remove(index);
+			buffered.close();
+			ChatCompletionChunk merged = merge(buffered.chunks);
+			if (!OpenRouterChoiceErrorExceptionFactory.isFailure(choice)) {
+				Choice completed = ResponseValues.items(merged.choices(), "completed choice").get(0);
+				Delta delta = ResponseValues.required(completed.delta(), "completed tool-call delta");
+				for (ToolCall toolCall : ResponseValues.items(delta.toolCalls(), "completed tool call")) {
+					Assert.state(toolCall.function() != null && StringUtils.hasText(toolCall.function().name()),
+							"Completed streamed tool call has no function name");
+				}
+			}
+			ready.add(merged);
+			release(buffered.chunks.size(), buffered.retainedBytes);
 		}
 
 		private synchronized void complete() {

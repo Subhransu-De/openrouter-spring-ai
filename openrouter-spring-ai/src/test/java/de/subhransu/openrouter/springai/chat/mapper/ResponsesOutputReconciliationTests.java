@@ -36,6 +36,47 @@ class ResponsesOutputReconciliationTests {
 
 	private final OpenRouterResponsesStreamingResponseMapper mapper = new OpenRouterResponsesStreamingResponseMapper();
 
+	@Test
+	void terminalSnapshotReconcilesTextReasoningRefusalAndPendingToolsTogether() {
+		var call = event("""
+				{"type":"response.output_item.done","output_index":1,"item":{
+				"type":"function_call","status":"completed","call_id":"call-1","name":"lookup","arguments":"{}"}}
+				""");
+		var completed = terminal("completed", """
+				{"type":"message","content":[{"type":"output_text","text":"hello world"},
+				{"type":"refusal","refusal":"unavailable"}]},
+				{"type":"function_call","status":"completed","call_id":"call-1","name":"lookup","arguments":"{}"},
+				{"type":"reasoning","content":[{"type":"reasoning_text","text":"finished"}]}
+				""");
+		Flux<ChatResponse> responses = this.mapper.map(Flux.just(delta(0, 0, "hello"), call, event("""
+				{"type":"response.reasoning_text.delta","delta":"partial"}
+				"""), event("""
+				{"type":"response.refusal.delta","output_index":0,"content_index":1,"delta":"un"}
+				"""), completed));
+		for (int subscription = 0; subscription < 2; subscription++) {
+			StepVerifier.create(responses).assertNext(response -> {
+				assertThat(response.getResult().getOutput().getText()).isEqualTo("hello");
+				assertThat(response.getResult().getOutput().getToolCalls()).isEmpty();
+			})
+				.assertNext(response -> assertThat(response.getResult().getOutput().getToolCalls()).isEmpty())
+				.assertNext(response -> assertThat(response.getResult().getOutput().getMetadata())
+					.containsEntry(ReasoningMetadata.REASONING, "partial"))
+				.assertNext(response -> assertThat(response.getResult().getOutput().getMetadata())
+					.containsEntry(RefusalMetadata.REFUSAL, "un"))
+				.assertNext(response -> {
+					AssistantMessage message = response.getResult().getOutput();
+					assertThat(message.getText()).isEqualTo(" world");
+					assertThat(message.getToolCalls()).extracting(AssistantMessage.ToolCall::id)
+						.containsExactly("call-1");
+					assertThat(message.getMetadata()).containsEntry(ReasoningMetadata.REASONING, "finished")
+						.containsEntry(RefusalMetadata.REFUSAL, "unavailable")
+						.containsEntry(ReasoningMetadata.RESPONSES_OUTPUT_ITEMS, completed.response().output());
+					assertThat(response.getResult().getMetadata().getFinishReason()).isEqualTo("TOOL_CALLS");
+				})
+				.verifyComplete();
+		}
+	}
+
 	@ParameterizedTest
 	@ValueSource(strings = { "completed", "incomplete" })
 	void recoversSuffixesAndTerminalPartsInOutputOrder(String status) {

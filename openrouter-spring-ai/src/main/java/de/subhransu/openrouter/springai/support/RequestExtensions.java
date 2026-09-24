@@ -77,18 +77,22 @@ public final class RequestExtensions {
 			}
 			requireType(result, "zdr", Boolean.class);
 			requireType(result, "max_price", Map.class);
-			for (String key : List.of(MIN_THROUGHPUT, MAX_LATENCY)) {
-				Object value = result.get(key);
-				if (value != null && !(value instanceof Number) && !(value instanceof Map)) {
-					throw new IllegalArgumentException(key + " must be a number or percentile object");
-				}
-			}
+			validateProviderPreferences(result);
 			Object extendedSort = result.get("sort");
 			if (extendedSort != null && !(extendedSort instanceof String) && !(extendedSort instanceof Map)) {
 				throw new IllegalArgumentException("sort must be a string or object");
 			}
 		}
 		return result;
+	}
+
+	private static void validateProviderPreferences(Map<String, @Nullable Object> result) {
+		for (String key : List.of(MIN_THROUGHPUT, MAX_LATENCY)) {
+			Object value = result.get(key);
+			if (value != null && !(value instanceof Number) && !(value instanceof Map)) {
+				throw new IllegalArgumentException(key + " must be a number or percentile object");
+			}
+		}
 	}
 
 	private static void requireType(Map<String, @Nullable Object> fields, String key, Class<?> type) {
@@ -109,49 +113,62 @@ public final class RequestExtensions {
 			if (key == null || !supported.contains(key)) {
 				throw new IllegalArgumentException("Unsupported or reserved extraBody key: " + key);
 			}
-			// Boot's map binding supplies scalar strings. Normalize only documented
-			// boolean/numeric fields; opaque strings such as cache keys stay strings.
-			Object normalized = value;
-			if ("only".equals(key) && value instanceof Map<?, ?> indexed) {
-				List<@Nullable Object> values = new ArrayList<>();
-				for (int index = 0; index < indexed.size(); index++) {
-					String position = String.valueOf(index);
-					if (!indexed.containsKey(position)) {
-						throw new IllegalArgumentException("only requires contiguous indexes starting at zero");
-					}
-					values.add(indexed.get(position));
-				}
-				normalized = values;
-			}
-			if (("logprobs".equals(key) || "zdr".equals(key)) && value instanceof String text
-					&& ("true".equals(text) || "false".equals(text))) {
-				normalized = Boolean.valueOf(text);
-			}
-			if (("top_logprobs".equals(key) || MIN_THROUGHPUT.equals(key) || MAX_LATENCY.equals(key))
-					&& value instanceof String text) {
-				normalized = new BigDecimal(text);
-			}
-			if (Set.of("logit_bias", "max_price", MIN_THROUGHPUT, MAX_LATENCY).contains(key)
-					&& value instanceof Map<?, ?> map) {
-				Map<String, @Nullable Object> numbers = new LinkedHashMap<>();
-				map.forEach((name, number) -> {
-					if (!(name instanceof String)) {
-						throw new IllegalArgumentException("Extension object keys must be strings");
-					}
-					Object normalizedNumber = number instanceof String text ? new BigDecimal(text) : number;
-					boolean nullablePercentile = normalizedNumber == null
-							&& (MIN_THROUGHPUT.equals(key) || MAX_LATENCY.equals(key));
-					if (!(normalizedNumber instanceof Number) && !nullablePercentile) {
-						throw new IllegalArgumentException(key + " entries must be numbers");
-					}
-					numbers.put((String) name, normalizedNumber);
-				});
-				normalized = numbers;
-			}
+			Object normalized = normalize(key, value);
 			validateJson(normalized);
 			result.put(key, normalized);
 		});
 		return OptionSnapshots.map(result);
+	}
+
+	private static @Nullable Object normalize(String key, @Nullable Object value) {
+		// Boot's map binding supplies scalar strings. Normalize only documented
+		// boolean/numeric fields; opaque strings such as cache keys stay strings.
+		Object normalized = value;
+		if ("only".equals(key) && value instanceof Map<?, ?> indexed) {
+			normalized = indexedProviders(indexed);
+		}
+		if (("logprobs".equals(key) || "zdr".equals(key)) && value instanceof String text
+				&& ("true".equals(text) || "false".equals(text))) {
+			normalized = Boolean.valueOf(text);
+		}
+		if (("top_logprobs".equals(key) || MIN_THROUGHPUT.equals(key) || MAX_LATENCY.equals(key))
+				&& value instanceof String text) {
+			normalized = new BigDecimal(text);
+		}
+		if (Set.of("logit_bias", "max_price", MIN_THROUGHPUT, MAX_LATENCY).contains(key)
+				&& value instanceof Map<?, ?> map) {
+			normalized = numbers(key, map);
+		}
+		return normalized;
+	}
+
+	private static List<@Nullable Object> indexedProviders(Map<?, ?> indexed) {
+		List<@Nullable Object> values = new ArrayList<>();
+		for (int index = 0; index < indexed.size(); index++) {
+			String position = String.valueOf(index);
+			if (!indexed.containsKey(position)) {
+				throw new IllegalArgumentException("only requires contiguous indexes starting at zero");
+			}
+			values.add(indexed.get(position));
+		}
+		return values;
+	}
+
+	private static Map<String, @Nullable Object> numbers(String key, Map<?, ?> map) {
+		Map<String, @Nullable Object> numbers = new LinkedHashMap<>();
+		map.forEach((name, number) -> {
+			if (!(name instanceof String)) {
+				throw new IllegalArgumentException("Extension object keys must be strings");
+			}
+			Object normalizedNumber = number instanceof String text ? new BigDecimal(text) : number;
+			boolean nullablePercentile = normalizedNumber == null
+					&& (MIN_THROUGHPUT.equals(key) || MAX_LATENCY.equals(key));
+			if (!(normalizedNumber instanceof Number) && !nullablePercentile) {
+				throw new IllegalArgumentException(key + " entries must be numbers");
+			}
+			numbers.put((String) name, normalizedNumber);
+		});
+		return numbers;
 	}
 
 	private static void validateJson(@Nullable Object value) {

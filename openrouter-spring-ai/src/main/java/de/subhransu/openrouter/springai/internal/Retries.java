@@ -39,6 +39,8 @@ public final class Retries {
 	 * {@code RetryTemplate.invoke(Supplier)} without linking to that Spring Framework
 	 * 7.0.3+ method.
 	 */
+	// RetryTemplate.invoke rethrows the original cause instead of its retry wrapper.
+	@SuppressWarnings("PMD.PreserveStackTrace")
 	public static <T> T invoke(RetryTemplate retryTemplate, Retryable<T> retryable) {
 		AtomicReference<@Nullable Duration> retryAfter = new AtomicReference<>();
 		long startedAtNanos = System.nanoTime();

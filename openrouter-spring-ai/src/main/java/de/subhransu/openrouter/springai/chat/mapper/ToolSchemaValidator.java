@@ -65,6 +65,10 @@ final class ToolSchemaValidator {
 		if (hasType(schema, "array")) {
 			require(schema.has("items"), "arrays must declare items");
 		}
+		validateChildren(schema, root, visited);
+	}
+
+	private static void validateChildren(JsonNode schema, JsonNode root, Set<JsonNode> visited) {
 		// Visit schema positions only: defaults, enums and examples are instance data.
 		for (String keyword : List.of("properties", "$defs", "definitions")) {
 			if (schema.has(keyword)) {

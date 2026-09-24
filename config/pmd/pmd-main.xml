@@ -3,28 +3,21 @@
     xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.github.io/schema/ruleset_2_0_0.xsd">
-  <description>
-    Project-specific static checks for library production code. These rules give coding agents
-    deterministic failures for common maintainability and safety mistakes.
-  </description>
+  <description>Blocking checks for maintained library production sources.</description>
+  <exclude-pattern>.*/src/test/.*</exclude-pattern>
+  <exclude-pattern>.*/openrouter-spring-ai-samples/.*</exclude-pattern>
 
-  <rule ref="category/java/bestpractices.xml/AvoidPrintStackTrace"/>
-  <rule ref="category/java/bestpractices.xml/UnusedPrivateMethod"/>
-  <rule ref="category/java/bestpractices.xml/UnusedPrivateField"/>
-  <rule ref="category/java/bestpractices.xml/UnusedFormalParameter"/>
-
-  <rule ref="category/java/errorprone.xml/AvoidDuplicateLiterals">
+  <rule ref="category/java/design.xml/CognitiveComplexity">
     <properties>
-      <property name="minimumLength" value="16"/>
-      <property name="skipAnnotations" value="true"/>
+      <property name="reportLevel" value="25"/>
     </properties>
   </rule>
-  <rule ref="category/java/errorprone.xml/CloseResource"/>
-  <rule ref="category/java/errorprone.xml/EmptyCatchBlock"/>
-  <rule ref="category/java/errorprone.xml/ImplicitSwitchFallThrough"/>
-
-  <rule ref="category/java/design.xml/FinalFieldCouldBeStatic"/>
-  <rule ref="category/java/design.xml/ImmutableField"/>
-
-  <rule ref="category/java/security.xml/HardCodedCryptoKey"/>
+  <rule ref="category/java/design.xml/CyclomaticComplexity">
+    <properties>
+      <property name="methodReportLevel" value="15"/>
+      <property name="classReportLevel" value="80"/>
+    </properties>
+  </rule>
+  <rule ref="category/java/bestpractices.xml/PreserveStackTrace"/>
+  <rule ref="category/java/codestyle.xml/UnnecessaryModifier"/>
 </ruleset>
