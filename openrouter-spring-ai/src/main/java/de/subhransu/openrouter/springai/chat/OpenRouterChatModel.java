@@ -15,6 +15,7 @@ import de.subhransu.openrouter.springai.chat.mapper.OpenRouterResponsesStreaming
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterStreamingResponseMapper;
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterStreamingToolCallAggregator;
 import de.subhransu.openrouter.springai.internal.Retries;
+import de.subhransu.openrouter.springai.internal.StreamRetries;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationRegistry;
 import io.micrometer.observation.contextpropagation.ObservationThreadLocalAccessor;
@@ -150,13 +151,16 @@ public class OpenRouterChatModel implements ChatModel {
 			Flux<ChatResponse> responses = Flux.defer(() -> switch (resolveRequestMode(options)) {
 				case OPENAI_CHAT_COMPLETIONS -> {
 					ChatCompletionRequest request = buildChatCompletionsRequest(prompt, options, true);
-					yield this.streamingResponseMapper.map(this.streamingToolCallAggregator
-						.aggregate(this.openRouterApi.chatCompletionStream(request)), options.getAudio());
+					yield this.streamingResponseMapper.map(
+							this.streamingToolCallAggregator.aggregate(StreamRetries
+								.stream(this.openRouterApi.chatCompletionStream(request), this.retryTemplate)),
+							options.getAudio());
 				}
 				case OPENAI_RESPONSES -> {
 					ResponsesRequest request = this.responsesRequestMapper.map(prompt.getInstructions(), options, true,
 							resolveToolDefinitions(options));
-					yield this.responsesStreamingResponseMapper.map(this.openRouterApi.responsesStream(request));
+					yield this.responsesStreamingResponseMapper
+						.map(StreamRetries.stream(this.openRouterApi.responsesStream(request), this.retryTemplate));
 				}
 			});
 			AtomicReference<OpenRouterUsage> usage = new AtomicReference<>();

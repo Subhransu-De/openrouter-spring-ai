@@ -411,11 +411,30 @@ Transient provider, rate-limit, and timeout failures qualify for Spring AI's
 default retry policy. Authentication, billing, invalid requests, refusals, and
 unknown failures do not.
 
-Responses streams expose the same exception types but are never automatically
-retried, including after partial output. Tool execution belongs to
-`ToolCallingAdvisor`; the model's retry scope covers only the provider request
-and response mapping. Garage uses two retries with a 200 ms delay only for
-`TransientAiException` and transport `ResourceAccessException` failures.
+Chat Completions, Responses, and image model streams retry only actual HTTP 429
+responses classified as rate-limit rejections, and only when the model's configured
+`RetryTemplate` policy also permits the exception. HTTP 5xx responses, connection
+failures, timeouts, authentication and validation failures, and errors inside an
+accepted stream are not retried. No output does not prove that an upstream request
+was not executed or billed. This deliberately narrower policy avoids replaying
+ambiguous requests. Tool execution remains with `ToolCallingAdvisor`.
+
+Streaming reuses the template's retry limit, backoff, exception predicate, and timeout,
+including the template supplied by Boot's `spring.ai.retry.*` configuration. Without
+a supplied template, Spring AI 2.0.1's default allows ten retries after the first
+attempt, starting at 2 seconds with a multiplier of 5 and a 3-minute delay cap.
+`Retry-After` can extend a delay up to 5 minutes; invalid or larger values fall back
+to configured backoff. A delay that cannot fit within the remaining policy timeout
+ends retries with the original typed exception. Delays are nonblocking, and
+cancellation cancels pending retries. Blocking `RetryListener` callbacks are not
+invoked. Use transport filters to count attempts; one model observation covers the
+whole subscription and records the final response or error once.
+
+The first decoded event closes retry eligibility, even if it contains only usage or
+metadata or is later filtered by a mapper. Partially delivered streams are never
+replayed. Direct `OpenRouterApi` streaming calls remain single-attempt. Garage's
+configured template uses two retries with a 200 ms delay; the stricter HTTP 429
+streaming eligibility rule still applies.
 
 ### HTTP customization and timeout ownership
 

@@ -15,6 +15,7 @@ import de.subhransu.openrouter.springai.errors.OpenRouterHttpExceptionFactory;
 import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
+import de.subhransu.openrouter.springai.internal.StreamRetries;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -281,7 +282,7 @@ public class OpenRouterApi {
 								OpenRouterLimitExceededException.Limit.STREAMING_ERROR_BODY_BYTES)
 						: this.httpExceptionFactory.create(uri, response.statusCode(),
 								response.headers().asHttpHeaders(), body);
-			});
+			}).flatMap(StreamRetries::rejected);
 		});
 	}
 
