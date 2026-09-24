@@ -4,12 +4,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionChunk;
+import de.subhransu.openrouter.springai.chat.errors.OpenRouterNonTransientChoiceException;
+import de.subhransu.openrouter.springai.chat.errors.OpenRouterTransientChoiceException;
 import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException;
 import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException.Limit;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
@@ -140,6 +143,39 @@ class ChatStreamBudgetTests {
 			.assertNext(response -> assertThat(response.getResult().getOutput().getText()).isEqualTo("hello"))
 			.assertNext(response -> assertThat(response.getResult().getOutput().getText()).isEqualTo("hello"))
 			.verifyComplete();
+	}
+
+	@Test
+	void providerFailurePreservesEarlierAndCurrentDiagnosticsBeforeExtensionAdmission() {
+		var first = chunk("{\"index\":0,\"delta\":{\"content\":\"before \"}}");
+		var failed = JSON.readValue("""
+				{"opaque":"extension exceeding the remaining budget",
+				 "choices":[{"index":0,"delta":{"content":"failure"},
+				 "error":{"code":"502","message":"synthetic"}}]}
+				""", ChatCompletionChunk.class);
+		StepVerifier.create(new OpenRouterStreamingResponseMapper(DIAGNOSTIC, 1).map(Flux.just(first, failed)))
+			.expectNextCount(1)
+			.expectErrorSatisfies(error -> assertThat(error).isInstanceOfSatisfying(
+					OpenRouterTransientChoiceException.class,
+					failure -> assertThat(failure.getErrorDetails().partialOutput()).isEqualTo("before failure")))
+			.verify();
+	}
+
+	@ParameterizedTest
+	@CsvSource({ "1,2,502", "4096,1,502", "1,2,400", "4096,1,400" })
+	void providerFailureTakesPrecedenceOverByteAndChoiceLimits(long maxBytes, int maxChoices, int status) {
+		var failed = JSON.readValue("""
+				{"choices":[{"index":0,"delta":{"content":"sibling"}},
+				 {"index":1,"delta":{"content":"partial"},"error":{"code":"%s","message":"synthetic"}}]}
+				""".formatted(status), ChatCompletionChunk.class);
+		AtomicBoolean cancelled = new AtomicBoolean();
+		StepVerifier
+			.create(new OpenRouterStreamingResponseMapper(maxBytes, maxChoices)
+				.map(Flux.just(failed).doOnCancel(() -> cancelled.set(true))))
+			.expectError(status == 502 ? OpenRouterTransientChoiceException.class
+					: OpenRouterNonTransientChoiceException.class)
+			.verify();
+		assertThat(cancelled).isTrue();
 	}
 
 	@Test

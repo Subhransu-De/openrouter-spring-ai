@@ -85,6 +85,7 @@ public final class OpenRouterStreamingResponseMapper {
 			throw OpenRouterApiExceptionFactory.create("OpenRouter chat completion stream failed",
 					chunk.error().toString(), chunk.error(), null);
 		}
+		throwIfChoiceFailed(chunk, partialOutputs);
 		for (Choice choice : ResponseValues.items(chunk.choices(), "choice")) {
 			if (!audio.finished(choice)) {
 				budget.open(choiceIndex(choice));
@@ -92,7 +93,6 @@ public final class OpenRouterStreamingResponseMapper {
 		}
 		budget.appendResponse(chunk.extensions());
 		accumulatePartialOutput(chunk, partialOutputs, audio);
-		throwIfChoiceFailed(chunk, partialOutputs);
 		List<Generation> generations = CollectionUtils.isEmpty(chunk.choices()) ? List.of()
 				: ResponseValues.items(chunk.choices(), "choice")
 					.stream()
@@ -135,6 +135,12 @@ public final class OpenRouterStreamingResponseMapper {
 		for (Choice choice : chunk.choices()) {
 			if (choice != null && OpenRouterChoiceErrorExceptionFactory.isFailure(choice)) {
 				PartialOutputAccumulator partialOutput = partialOutputs.get(choiceIndex(choice));
+				if (choice.delta() != null && choice.delta().content() != null) {
+					if (partialOutput == null) {
+						partialOutput = new PartialOutputAccumulator();
+					}
+					partialOutput.append(choice.delta().content());
+				}
 				String diagnostic = partialOutput != null ? partialOutput.diagnosticValue() : null;
 				throw diagnostic != null ? this.choiceErrorExceptionFactory.create(chunk, choice, diagnostic)
 						: this.choiceErrorExceptionFactory.create(chunk, choice);
