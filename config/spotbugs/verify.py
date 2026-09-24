@@ -171,6 +171,8 @@ def main():
     if work == ROOT or ROOT in work.parents:
         parser.error("Use a work directory outside the repository")
     work.mkdir(parents=True, exist_ok=True)
+    if any(work.iterdir()):
+        parser.error("Use an empty work directory for synthetic fixtures")
     prepare(work)
     source = work / MODULE / "src/main/java/example/Fixture.java"
     policies = list(POLICIES) if args.build == "maven" else ["correctness", "visibility"]
