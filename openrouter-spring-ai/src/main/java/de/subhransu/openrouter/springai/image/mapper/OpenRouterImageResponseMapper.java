@@ -22,9 +22,9 @@ public final class OpenRouterImageResponseMapper {
 
 	public ImageResponse map(ImagesResponse response) {
 		OpenRouterImageResponseValidator.validate(response);
-		List<ImageGeneration> generations = CollectionUtils.isEmpty(response.data()) ? List.of()
-				: response.data()
-					.stream()
+		var images = response.data();
+		List<ImageGeneration> generations = CollectionUtils.isEmpty(images) ? List.of()
+				: images.stream()
 					.map(Objects::requireNonNull)
 					.map(data -> new ImageGeneration(new Image(data.url(), data.b64Json()),
 							new OpenRouterImageGenerationMetadata(data.mediaType(), null)))
@@ -38,9 +38,10 @@ public final class OpenRouterImageResponseMapper {
 	 * @return the image response, or {@code null} for an ignored event
 	 */
 	public @Nullable ImageResponse map(ImagesStreamEvent event) {
-		if (event.error() != null || ImagesStreamEvent.ERROR_EVENT.equals(event.type())) {
+		var error = event.error();
+		if (error != null || ImagesStreamEvent.ERROR_EVENT.equals(event.type())) {
 			throw OpenRouterApiExceptionFactory.create("OpenRouter image generation stream failed",
-					event.error() != null ? event.error().toString() : null, event.error(), null);
+					error != null ? error.toString() : null, error, null);
 		}
 		if (!StringUtils.hasText(event.type())) {
 			throw new OpenRouterProtocolException("OpenRouter image event requires a type");

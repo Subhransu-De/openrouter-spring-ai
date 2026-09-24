@@ -1,5 +1,7 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
+import org.springframework.util.CollectionUtils;
+import java.util.Objects;
 import de.subhransu.openrouter.springai.api.dto.AudioOutput;
 import de.subhransu.openrouter.springai.api.dto.Choice;
 import de.subhransu.openrouter.springai.chat.OpenRouterAudioOptions;
@@ -45,7 +47,8 @@ final class AudioOutputMapper {
 
 	static void validateRequest(List<Message> messages, OpenRouterChatOptions options, boolean stream,
 			boolean responses) {
-		boolean requested = options.getModalities() != null && options.getModalities().contains("audio");
+		var modalities = options.getModalities();
+		boolean requested = modalities != null && modalities.contains("audio");
 		if (requested || options.getAudio() != null) {
 			Assert.isTrue(stream && !responses, "Audio output requires streaming Chat Completions");
 			Assert.isTrue(requested && options.getAudio() != null,
@@ -67,9 +70,11 @@ final class AudioOutputMapper {
 	}
 
 	synchronized void append(Choice choice, Map<String, Object> metadata, List<Media> media) {
-		AudioOutput audio = choice.delta() != null ? choice.delta().audio() : null;
+		var message = choice.message();
+		var delta = choice.delta();
+		AudioOutput audio = delta != null ? delta.audio() : null;
 		int index = index(choice);
-		if (choice.message() != null && choice.message().extensions().containsKey("audio")) {
+		if (message != null && message.extensions().containsKey("audio")) {
 			throw new IllegalArgumentException(
 					"Audio output requires delta.audio fragments, not message.audio snapshots");
 		}
@@ -88,8 +93,7 @@ final class AudioOutputMapper {
 		if (assembly == null) {
 			return;
 		}
-		Assert.state(
-				choice.delta() == null || choice.delta().toolCalls() == null || choice.delta().toolCalls().isEmpty(),
+		Assert.state(delta == null || CollectionUtils.isEmpty(delta.toolCalls()),
 				"Audio and tool calls in the same choice are unsupported");
 		if (choice.finishReason() != null) {
 			Assert.state(this.options != null, "Received audio without configured output audio options");
@@ -119,31 +123,34 @@ final class AudioOutputMapper {
 	}
 
 	private void append(Assembly assembly, AudioOutput audio, OpenRouterAudioOptions options) {
+		var data = audio.data();
+		var transcript = audio.transcript();
+		var id = audio.id();
 		Assert.state(audio.format() == null || options.format().equals(audio.format()),
 				"Conflicting audio output format");
-		Assert.state(audio.id() == null || assembly.id == null || assembly.id.equals(audio.id()),
+		Assert.state(id == null || assembly.id == null || assembly.id.equals(id),
 				"Conflicting audio identifiers in one choice");
-		if (audio.id() != null) {
+		if (id != null) {
 			if (assembly.id == null) {
-				retain(assembly, audio.id().length() * 2L);
+				retain(assembly, id.length() * 2L);
 			}
-			assembly.id = audio.id();
+			assembly.id = id;
 		}
 		if (audio.expiresAt() != null) {
 			assembly.expiresAt = audio.expiresAt();
 		}
-		if (audio.transcript() != null) {
-			retain(assembly, audio.transcript().length() * 2L);
-			assembly.transcript.append(audio.transcript());
+		if (transcript != null) {
+			retain(assembly, transcript.length() * 2L);
+			assembly.transcript.append(transcript);
 		}
-		if (audio.data() != null && !audio.data().isEmpty()) {
+		if (data != null && !data.isEmpty()) {
 			// Bound allocation before decoding. Padding can reduce the result by at most
 			// two bytes.
-			long upperBound = (audio.data().length() + 3L) / 4 * 3;
+			long upperBound = (data.length() + 3L) / 4 * 3;
 			if (upperBound > MAX_BYTES - this.retainedBytes + 2L) {
 				throw limit();
 			}
-			byte[] bytes = Base64.getDecoder().decode(audio.data());
+			byte[] bytes = Base64.getDecoder().decode(data);
 			retain(assembly, bytes.length);
 			assembly.bytes.writeBytes(bytes);
 		}
@@ -174,7 +181,7 @@ final class AudioOutputMapper {
 	}
 
 	private static int index(Choice choice) {
-		return choice.index() != null ? choice.index() : 0;
+		return Objects.requireNonNullElse(choice.index(), 0);
 	}
 
 	private static String mimeType(String format) {

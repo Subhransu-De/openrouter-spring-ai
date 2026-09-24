@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
+import org.springframework.util.CollectionUtils;
 import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
 import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException;
 import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException.Limit;
@@ -60,18 +61,18 @@ final class ResponsesStreamBudget {
 	}
 
 	private static boolean retainsState(ResponsesStreamEvent event) {
+		var response = event.response();
 		String type = event.type();
-		return event.item() != null
-				|| event.response() != null && event.response().output() != null && !event.response().output().isEmpty()
+		return event.item() != null || response != null && !CollectionUtils.isEmpty(response.output())
 				|| type != null && (type.startsWith("response.function_call_arguments.")
 						|| type.startsWith("response.output_text.") || type.startsWith("response.reasoning")
 						|| type.startsWith("response.refusal."));
 	}
 
 	private static boolean terminal(ResponsesStreamEvent event) {
-		return "response.completed".equals(event.type()) || "response.incomplete".equals(event.type())
-				|| "response.failed".equals(event.type()) || "error".equals(event.type())
-				|| event.type() != null && event.type().endsWith(".error");
+		var type = event.type();
+		return "response.completed".equals(type) || "response.incomplete".equals(type) || "response.failed".equals(type)
+				|| "error".equals(type) || type != null && type.endsWith(".error");
 	}
 
 	private static OpenRouterLimitExceededException limit(Limit limit, long configured, long observed) {
@@ -91,6 +92,7 @@ final class ResponsesStreamBudget {
 		private long items;
 
 		private void accept(ResponsesStreamEvent event) {
+			var response = event.response();
 			if (++this.chunks > maxChunks) {
 				throw limit(Limit.RESPONSES_STATE_CHUNKS, maxChunks, this.chunks);
 			}
@@ -99,8 +101,8 @@ final class ResponsesStreamBudget {
 			if ("response.output_item.done".equals(event.type()) && event.item() != null) {
 				this.items++;
 			}
-			long observed = event.response() != null && event.response().output() != null
-					? Math.max(this.items, event.response().output().size()) : this.items;
+			var output = response != null ? response.output() : null;
+			long observed = output != null ? Math.max(this.items, output.size()) : this.items;
 			if (observed > maxChunks) {
 				throw limit(Limit.RESPONSES_STATE_ITEMS, maxChunks, observed);
 			}

@@ -56,6 +56,7 @@ public final class OpenRouterResponsesRequestMapper {
 		rejectUnsupported("minP", options.getMinP());
 		rejectUnsupported("topA", options.getTopA());
 		rejectUnsupported("includeUsage", options.getIncludeUsage());
+		var serviceTier = options.getServiceTier();
 		return new ResponsesRequest(options.getModel(), options.getModels(), mapInput(messages),
 				mapInstructions(messages),
 				options.getMaxCompletionTokens() != null ? options.getMaxCompletionTokens() : options.getMaxTokens(),
@@ -63,8 +64,8 @@ public final class OpenRouterResponsesRequestMapper {
 				options.getPresencePenalty(), options.getMetadata(),
 				mapProvider(options.getProvider(), options.getProviderExtraBody()),
 				mapReasoning(options.getReasoning()), options.getRoute(),
-				options.getServiceTier() != null ? options.getServiceTier().value() : null, options.getUser(),
-				options.getParallelToolCalls(), ToolChoiceMapper.map(options.getToolChoice(), true, this.objectMapper),
+				serviceTier != null ? serviceTier.value() : null, options.getUser(), options.getParallelToolCalls(),
+				ToolChoiceMapper.map(options.getToolChoice(), true, this.objectMapper),
 				mapTools(toolDefinitions, options.getToolStrict()), options.getModalities(), options.getImageConfig(),
 				mapText(options), options.getExtraBody());
 	}

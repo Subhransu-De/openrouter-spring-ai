@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
+import java.util.Objects;
 import de.subhransu.openrouter.springai.api.dto.ResponsesContent;
 import de.subhransu.openrouter.springai.api.dto.ResponsesOutputItem;
 import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
@@ -108,9 +109,8 @@ final class ResponsesOutputState {
 				? ResponseValues.items(item.content(), "message content") : List.of();
 		for (int index = 0; index < content.size(); index++) {
 			ResponsesContent part = content.get(index);
-			snapshot(outputIndex, index,
-					("output_text".equals(part.type()) || "text".equals(part.type())) && part.text() != null
-							? part.text() : "");
+			snapshot(outputIndex, index, ("output_text".equals(part.type()) || "text".equals(part.type()))
+					? Objects.requireNonNullElse(part.text(), "") : "");
 		}
 		if (state.parts.keySet().stream().anyMatch(index -> index >= content.size())) {
 			throw protocol("Output snapshot omits a received content part");

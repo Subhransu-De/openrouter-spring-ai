@@ -164,6 +164,53 @@ jobs:
         if: matrix.build == 'Gradle'
         run: gradle --no-daemon -Pnullaway compileJava
 
+  spotbugs:
+    if: github.event_name != 'workflow_dispatch'
+    name: SpotBugs correctness · ${{ matrix.build }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        build: [Maven, Gradle]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        if: matrix.build == 'Gradle'
+        with:
+          gradle-version: 9.7.1
+      - name: Enforce correctness with Maven
+        if: matrix.build == 'Maven'
+        run: mvn -B -Pcorrectness -pl openrouter-spring-ai-autoconfigure -am -DskipTests verify
+      - name: Enforce correctness with Gradle
+        if: matrix.build == 'Gradle'
+        run: gradle --no-daemon spotbugsCorrectness
+      - name: Verify Maven detectors and profile isolation
+        if: matrix.build == 'Maven'
+        run: python3 config/spotbugs/verify.py maven --command mvn --work-dir "$RUNNER_TEMP/spotbugs-fixtures"
+      - name: Verify Gradle detectors and failure handling
+        if: matrix.build == 'Gradle'
+        run: python3 config/spotbugs/verify.py gradle --command gradle --work-dir "$RUNNER_TEMP/spotbugs-fixtures"
+      - name: Upload analysis reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: spotbugs-${{ matrix.build }}
+          retention-days: 7
+          path: |
+            **/target/spotbugs-*.xml
+            **/target/spotbugs/*/spotbugs.html
+            **/build/reports/spotbugs/*/spotbugs.xml
+            **/build/reports/spotbugs/*/spotbugs.html
+            ${{ runner.temp }}/spotbugs-fixtures/*.log
+
   security:
     if: github.event_name != 'workflow_dispatch'
     name: FindSecBugs security

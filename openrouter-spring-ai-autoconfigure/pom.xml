@@ -16,6 +16,8 @@
   <properties>
     <coverage.skip>${skipTests}</coverage.skip>
     <findsecbugs.skip>false</findsecbugs.skip>
+    <spotbugs.correctness.skip>false</spotbugs.correctness.skip>
+    <spotbugs.visibility.skip>false</spotbugs.visibility.skip>
   </properties>
 
   <dependencies>

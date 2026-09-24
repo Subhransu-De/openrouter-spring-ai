@@ -56,6 +56,7 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 	private ChatResponse map(ResponsesStreamEvent event, ReasoningMetadata.Accumulator accumulator,
 			List<ResponsesOutputItem> pending, RefusalMetadata.Accumulator refusal,
 			@Nullable ResponsesOutputState outputState) {
+		var item = event.item();
 		String type = event.type();
 		boolean incomplete = "response.incomplete".equals(type);
 		boolean completed = "response.completed".equals(type);
@@ -84,14 +85,14 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 		else if ("response.reasoning_text.delta".equals(type) || "response.reasoning_summary_text.delta".equals(type)) {
 			reasoning = event.delta();
 		}
-		else if (itemDone && event.item() != null && "function_call".equals(event.item().type())) {
+		else if (itemDone && item != null && "function_call".equals(item.type())) {
 			// Wait for the whole round: a later incomplete item or response must prevent
 			// every callback, including calls whose own item already completed.
-			pending.add(event.item());
+			pending.add(item);
 		}
-		else if (itemDone && event.item() != null && "image_generation_call".equals(event.item().type())) {
-			media = outputState != null ? outputState.image(event.item(), event.outputIndex())
-					: GeneratedImageMapper.responsesMedia(List.of(event.item()));
+		else if (itemDone && item != null && "image_generation_call".equals(item.type())) {
+			media = outputState != null ? outputState.image(item, event.outputIndex())
+					: GeneratedImageMapper.responsesMedia(List.of(item));
 		}
 		else if (completed || incomplete) {
 			result = event.response();
@@ -111,19 +112,20 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 					failed != null ? failed.error() : null, failed != null ? failed.errorType() : null);
 		}
 
+		var output = result != null ? result.output() : null;
+		var details = result != null ? result.incompleteDetails() : null;
 		String nativeFinishReason = finishReason;
 		String status = result != null && result.status() != null ? result.status()
 				: incomplete ? "incomplete" : completed ? "completed" : null;
 		if (completed || incomplete) {
 			String toolStatus = incomplete ? "incomplete" : status;
-			String reason = result != null && result.incompleteDetails() != null ? result.incompleteDetails().reason()
-					: null;
+			String reason = details != null ? details.reason() : null;
 			toolCalls = OpenRouterResponsesResponseMapper.toolCalls(toolStatus, reason, pending);
-			if (result != null && result.output() != null) {
+			if (output != null) {
 				// Validate both representations so a terminal snapshot cannot erase an
 				// explicitly non-final output_item.done status.
 				List<AssistantMessage.ToolCall> terminalCalls = OpenRouterResponsesResponseMapper.toolCalls(toolStatus,
-						reason, result.output());
+						reason, output);
 				if (!terminalCalls.isEmpty()) {
 					toolCalls = terminalCalls;
 				}
@@ -135,25 +137,24 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 		}
 
 		Map<String, Object> reasoningMetadata = ReasoningMetadata.chat(reasoning, null);
-		if (itemDone && event.item() != null) {
-			reasoningMetadata.putAll(ReasoningMetadata.responses(List.of(event.item())));
+		if (itemDone && item != null) {
+			reasoningMetadata.putAll(ReasoningMetadata.responses(List.of(item)));
 			reasoningMetadata.remove(ReasoningMetadata.REASONING);
 		}
 		Map<String, Object> snapshot = accumulator.append(reasoningMetadata);
-		if (result != null && result.output() != null) {
-			snapshot = accumulator.replace(ReasoningMetadata.responses(result.output()));
+		if (output != null) {
+			snapshot = accumulator.replace(ReasoningMetadata.responses(output));
 		}
 		RefusalMetadata.put(snapshot, refusal.update(event));
-		if (itemDone && event.item() != null && outputState != null) {
-			text = outputState.item(event.item(), event.outputIndex());
+		if (itemDone && item != null && outputState != null) {
+			text = outputState.item(item, event.outputIndex());
 		}
-		if (result != null && result.output() != null) {
-			text = outputState != null ? outputState.terminal(result.output())
-					: OpenRouterResponsesResponseMapper.text(result.output());
+		if (output != null) {
+			text = outputState != null ? outputState.terminal(output) : OpenRouterResponsesResponseMapper.text(output);
 			if (outputState != null) {
 				List<Media> images = new ArrayList<>();
-				for (int index = 0; index < result.output().size(); index++) {
-					images.addAll(outputState.image(result.output().get(index), index));
+				for (int index = 0; index < output.size(); index++) {
+					images.addAll(outputState.image(output.get(index), index));
 				}
 				media = images;
 			}

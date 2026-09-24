@@ -368,9 +368,10 @@ public class OpenRouterApi {
 
 	private boolean isTerminalEvent(Object event) {
 		if (event instanceof ResponsesStreamEvent response) {
-			return "response.completed".equals(response.type()) || "response.failed".equals(response.type())
-					|| "response.incomplete".equals(response.type()) || "error".equals(response.type())
-					|| response.type() != null && response.type().endsWith(".error");
+			var type = response.type();
+			return "response.completed".equals(type) || "response.failed".equals(type)
+					|| "response.incomplete".equals(type) || "error".equals(type)
+					|| type != null && type.endsWith(".error");
 		}
 		if (event instanceof ImagesStreamEvent image) {
 			// A completed image is not the end of the request; image SSE ends at [DONE].
@@ -391,10 +392,12 @@ public class OpenRouterApi {
 						"Legacy response.done is unsupported; expected response.completed, "
 								+ "response.incomplete, or response.failed");
 			}
-			if (event instanceof ChatCompletionChunk chunk && chunk.error() == null
-					&& ((CollectionUtils.isEmpty(chunk.choices()) && chunk.usage() == null)
-							|| (chunk.choices() != null && chunk.choices().stream().anyMatch(Objects::isNull)))) {
-				throw new OpenRouterProtocolException("OpenRouter chat chunk requires non-null choices or usage");
+			if (event instanceof ChatCompletionChunk chunk && chunk.error() == null) {
+				var choices = chunk.choices();
+				if ((CollectionUtils.isEmpty(choices) && chunk.usage() == null)
+						|| (choices != null && choices.stream().anyMatch(Objects::isNull))) {
+					throw new OpenRouterProtocolException("OpenRouter chat chunk requires non-null choices or usage");
+				}
 			}
 			return event;
 		}

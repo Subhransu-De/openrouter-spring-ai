@@ -20,14 +20,16 @@ public final class OpenRouterImageResponseValidator {
 		if (response == null) {
 			throw new OpenRouterProtocolException("Null OpenRouter image response");
 		}
-		if (response.error() != null) {
-			throw OpenRouterApiExceptionFactory.create("OpenRouter image generation failed",
-					response.error().toString(), response.error(), null);
+		var error = response.error();
+		if (error != null) {
+			throw OpenRouterApiExceptionFactory.create("OpenRouter image generation failed", error.toString(), error,
+					null);
 		}
-		if (response.data() == null) {
+		var images = response.data();
+		if (images == null) {
 			throw new OpenRouterProtocolException("OpenRouter image response requires data");
 		}
-		for (ImagesResponse.ImageData data : response.data()) {
+		for (ImagesResponse.ImageData data : images) {
 			if (data == null || !StringUtils.hasText(data.b64Json()) && !StringUtils.hasText(data.url())) {
 				throw new OpenRouterProtocolException("OpenRouter image data requires image content");
 			}

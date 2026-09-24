@@ -15,8 +15,8 @@ final class FinishReasonMapper {
 
 	static @Nullable String responses(@Nullable ResponsesResult response, @Nullable String fallbackStatus) {
 		String status = response != null && response.status() != null ? response.status() : fallbackStatus;
-		return "incomplete".equals(status) && response != null && response.incompleteDetails() != null
-				&& response.incompleteDetails().reason() != null ? response.incompleteDetails().reason() : status;
+		var details = response != null ? response.incompleteDetails() : null;
+		return "incomplete".equals(status) && details != null && details.reason() != null ? details.reason() : status;
 	}
 
 	static @Nullable String map(@Nullable String finishReason) {

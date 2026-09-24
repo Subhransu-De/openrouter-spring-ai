@@ -14,17 +14,19 @@ import org.springframework.util.Assert;
 public final class OpenRouterEmbeddingResponseMapper {
 
 	public EmbeddingResponse map(EmbeddingsResponse response) {
-		return map(response, response.data() == null ? 0 : response.data().size(), null);
+		var data = response.data();
+		return map(response, data == null ? 0 : data.size(), null);
 	}
 
 	public EmbeddingResponse map(EmbeddingsResponse response, int inputCount, @Nullable Integer dimensions) {
-		Assert.state(response != null && response.data() != null && response.data().size() == inputCount,
-				"Embedding response count must match input count");
+		var items = response != null ? response.data() : null;
+		Assert.state(items != null && items.size() == inputCount, "Embedding response count must match input count");
 		Embedding[] embeddings = new Embedding[inputCount];
-		for (EmbeddingsResponse.EmbeddingData data : response.data()) {
-			Assert.state(data != null && data.index() != null && data.index() >= 0 && data.index() < inputCount,
+		for (EmbeddingsResponse.EmbeddingData data : items) {
+			var itemIndex = data != null ? data.index() : null;
+			Assert.state(data != null && itemIndex != null && itemIndex >= 0 && itemIndex < inputCount,
 					"Embedding response index must be within input range");
-			int index = data.index();
+			int index = itemIndex;
 			Assert.state(embeddings[index] == null, "Embedding response contains duplicate index");
 			float[] vector = data.embedding();
 			Assert.state(vector != null && vector.length > 0, "Embedding response vector must not be empty");

@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
+import java.util.Objects;
 import de.subhransu.openrouter.springai.api.dto.ContentPart;
 import de.subhransu.openrouter.springai.api.dto.ResponsesOutputItem;
 import java.util.List;
@@ -28,8 +29,12 @@ final class GeneratedImageMapper {
 			return List.of();
 		}
 		return images.stream()
-			.filter(part -> part != null && part.imageUrl() != null && part.imageUrl().url() != null)
-			.map(part -> Media.builder().mimeType(mimeType(part.imageUrl().url())).data(part.imageUrl().url()).build())
+			.filter(Objects::nonNull)
+			.map(part -> part.imageUrl())
+			.filter(Objects::nonNull)
+			.map(image -> image.url())
+			.filter(Objects::nonNull)
+			.map(url -> Media.builder().mimeType(mimeType(url)).data(url).build())
 			.toList();
 	}
 

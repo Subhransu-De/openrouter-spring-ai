@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
+import java.util.Objects;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionChunk;
 import de.subhransu.openrouter.springai.api.dto.Choice;
 import de.subhransu.openrouter.springai.api.dto.Delta;
@@ -175,7 +176,8 @@ public final class OpenRouterStreamingToolCallAggregator {
 	}
 
 	private boolean hasToolCallDelta(Choice choice) {
-		return choice.delta() != null && !CollectionUtils.isEmpty(choice.delta().toolCalls());
+		var delta = choice.delta();
+		return delta != null && !CollectionUtils.isEmpty(delta.toolCalls());
 	}
 
 	private long serializedBytes(ChatCompletionChunk chunk) {
@@ -225,7 +227,7 @@ public final class OpenRouterStreamingToolCallAggregator {
 				continue;
 			}
 			for (Choice choice : ResponseValues.items(chunk.choices(), "choice")) {
-				Integer index = choice.index() != null ? choice.index() : 0;
+				Integer index = Objects.requireNonNullElse(choice.index(), 0);
 				choices.merge(index, choice, this::mergeChoices);
 			}
 		}
@@ -267,7 +269,7 @@ public final class OpenRouterStreamingToolCallAggregator {
 		Integer lastKey = null;
 		if (earlier != null) {
 			for (ToolCall toolCall : ResponseValues.items(earlier, "tool call")) {
-				int key = toolCall.index() != null ? toolCall.index() : nextSyntheticKey;
+				int key = Objects.requireNonNullElse(toolCall.index(), nextSyntheticKey);
 				nextSyntheticKey = Math.max(nextSyntheticKey, key + 1);
 				merged.merge(key, toolCall, this::mergeToolCallFragments);
 				lastKey = key;
@@ -379,7 +381,8 @@ public final class OpenRouterStreamingToolCallAggregator {
 						ready.add(choiceChunk);
 					}
 					else {
-						Assert.state(choice.delta() == null || choice.delta().audio() == null,
+						var choiceDelta = choice.delta();
+						Assert.state(choiceDelta == null || choiceDelta.audio() == null,
 								"Audio and tool calls in the same choice are unsupported");
 						long chunkBytes = serializedBytes(choiceChunk);
 						buffered.add(choiceChunk, chunkBytes);
@@ -398,9 +401,8 @@ public final class OpenRouterStreamingToolCallAggregator {
 								Delta delta = ResponseValues.required(completed.delta(), "completed tool-call delta");
 								for (ToolCall toolCall : ResponseValues.items(delta.toolCalls(),
 										"completed tool call")) {
-									Assert.state(
-											toolCall.function() != null
-													&& StringUtils.hasText(toolCall.function().name()),
+									var function = toolCall.function();
+									Assert.state(function != null && StringUtils.hasText(function.name()),
 											"Completed streamed tool call has no function name");
 								}
 							}
@@ -434,7 +436,7 @@ public final class OpenRouterStreamingToolCallAggregator {
 		}
 
 		private int choiceIndex(Choice choice) {
-			return choice.index() != null ? choice.index() : 0;
+			return Objects.requireNonNullElse(choice.index(), 0);
 		}
 
 		private synchronized void clear() {
