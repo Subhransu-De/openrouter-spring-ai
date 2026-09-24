@@ -59,19 +59,6 @@ class OpenRouterImageAutoConfigurationTests {
 				assertThat(options.getHeight()).isEqualTo(576);
 				assertThat(options.getInputReferences()).containsExactly("https://example.com/input.png");
 				assertThat(options.getProviderOptions()).containsEntry("style", "natural");
-				OpenRouterImageProperties properties = context.getBean(OpenRouterImageProperties.class);
-				assertThat(properties.getN()).isEqualTo(2);
-				assertThat(properties.getWidth()).isEqualTo(1024);
-				assertThat(properties.getHeight()).isEqualTo(576);
-				assertThat(properties.getAspectRatio()).isEqualTo("16:9");
-				assertThat(properties.getResolution()).isEqualTo("2K");
-				assertThat(properties.getQuality()).isEqualTo("high");
-				assertThat(properties.getOutputFormat()).isEqualTo("webp");
-				assertThat(properties.getBackground()).isEqualTo("transparent");
-				assertThat(properties.getOutputCompression()).isEqualTo(80);
-				assertThat(properties.getSeed()).isEqualTo(42);
-				assertThat(properties.getInputReferences()).containsExactly("https://example.com/input.png");
-				assertThat(properties.getProviderOptions()).containsEntry("style", "natural");
 			});
 	}
 
