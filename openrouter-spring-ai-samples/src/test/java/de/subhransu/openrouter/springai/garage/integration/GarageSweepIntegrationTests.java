@@ -41,6 +41,17 @@ class GarageSweepIntegrationTests extends MockedGarageIntegrationTest {
   }
 
   @Test
+  void theSweepImageQualityIsTheDefaultThatAnEntryCanOverride() {
+    String location = startSweep("{\"imageModels\": [\"google/gemini-2.5-flash-image\","
+        + "\"google/gemini-2.5-flash-image?quality=high\"], \"imageQuality\": \"low\"}");
+
+    assertThat(awaitFinished(location).path("status").asString()).isEqualTo("PASSED");
+    List<JsonNode> requests = OpenRouterMock.requests("/images");
+    assertThat(requests).extracting(request -> request.path("quality").asString())
+        .containsExactly("low", "high");
+  }
+
+  @Test
   void anImageSweepSendsEachEntryConfigAndReportsBadEntriesWithoutStopping() {
     String location = startSweep("{\"imageModels\": ["
         + "\"google/gemini-2.5-flash-image?quality=low&aspect-ratio=16:9&output-format=png\","

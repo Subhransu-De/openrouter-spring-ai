@@ -330,6 +330,9 @@ public final class GarageModalityBays {
               throw new IllegalArgumentException("unknown image sweep option: " + option.getKey());
         }
       }
+      if (!config.containsKey("quality") && StringUtils.hasText(this.imageQuality)) {
+        options.quality(this.imageQuality);
+      }
       Map<String, @Nullable Object> providerOptions =
           GarageOptionsFactory.imageProviderOptions(this.provider, providerTag);
       if (providerOptions != null) {

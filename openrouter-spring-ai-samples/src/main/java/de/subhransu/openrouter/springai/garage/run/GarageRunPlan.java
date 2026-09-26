@@ -69,6 +69,9 @@ public record GarageRunPlan(
   public static GarageRunPlan from(GarageRunRequest request, GarageProperties settings) {
     Selection selection = new Selection(settings);
     if (request.capabilities() != null) {
+      if (request.capabilities().isEmpty()) {
+        throw new IllegalArgumentException("capabilities must select at least one capability");
+      }
       for (String capability : request.capabilities()) {
         if (capability == null) {
           throw new IllegalArgumentException("capabilities must not contain null");

@@ -237,6 +237,7 @@ class GarageRunPlanTests {
         "{\"offlineContracts\":true,\"scenes\":[\"service-story\"]}",
         "{\"scenes\":[]}",
         "{\"capabilities\":[null]}",
+        "{\"capabilities\":[]}",
         "{\"reasoningEffort\":\"\"}",
         "{\"models\":{\"foreman\":\" \"}}",
         "{\"provider\":{\"sort\":\"\"}}",

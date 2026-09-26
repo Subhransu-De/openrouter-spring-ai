@@ -142,14 +142,17 @@ class GarageRunServiceTests {
         "synthetic-operation", OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS, Duration.ZERO,
         this.output, Map.of()));
     GarageRunService service = service(scene, new GarageEvidence(), writer());
-
-    GarageRun run = finished(service, service.start(request("{\"capabilities\":[\"text\"],"
-        + "\"scenes\":[\"recovery-road-test\"],\"requestModes\":[\"" + mode + "\"]}")));
+    String selection = "{\"capabilities\":[\"text\"],"
+        + "\"scenes\":[\"recovery-road-test\"],\"requestModes\":[\"" + mode + "\"]}";
 
     if ("responses".equals(mode)) {
-      assertThat(run.status()).isEqualTo(GarageRun.Status.PASSED);
+      // Nothing would run, so a PASSED run would certify work that never happened.
+      assertThatThrownBy(() -> service.start(request(selection)))
+          .isInstanceOf(IllegalArgumentException.class)
+          .hasMessageContaining("No selected scene runs in the selected request modes");
     }
     else {
+      GarageRun run = finished(service, service.start(request(selection)));
       assertThat(run.status()).isEqualTo(GarageRun.Status.FAILED);
       assertThat(run.incompleteFeatures()).contains("connection-timeout");
     }

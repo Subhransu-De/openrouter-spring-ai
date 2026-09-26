@@ -154,7 +154,13 @@ public class GarageRunService implements DisposableBean {
   public GarageRun start(GarageRunRequest request) {
     GarageProperties settings = runSettings();
     GarageRunPlan plan = GarageRunPlan.from(request, settings);
-    selectedScenes(plan.sceneIds());
+    List<GarageScene> selected = selectedScenes(plan.sceneIds());
+    boolean anySceneRuns = plan.requestModes().stream()
+        .anyMatch(mode -> selected.stream().anyMatch(scene -> runsIn(scene, mode)));
+    if (!anySceneRuns) {
+      throw new IllegalArgumentException(
+          "No selected scene runs in the selected request modes " + plan.requestModes());
+    }
     return submit(GarageRun.Kind.SCENES, plan, settings);
   }
 
@@ -233,8 +239,7 @@ public class GarageRunService implements DisposableBean {
     List<SceneResult> results = new ArrayList<>();
     for (OpenRouterRequestMode requestMode : plan.requestModes()) {
       for (GarageScene scene : selected) {
-        if ("recovery-road-test".equals(scene.id())
-            && requestMode != OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS) {
+        if (!runsIn(scene, requestMode)) {
           continue;
         }
         results.add(runScene(plan, settings, optionsFactory, scene, requestMode, run.directory()));
@@ -574,6 +579,12 @@ public class GarageRunService implements DisposableBean {
     if (!StringUtils.hasText(apiKey) || "garage-missing-api-key".equals(apiKey)) {
       throw new MissingApiKeyException();
     }
+  }
+
+  // The recovery road test covers Chat Completions transport contracts only.
+  private static boolean runsIn(GarageScene scene, OpenRouterRequestMode requestMode) {
+    return !"recovery-road-test".equals(scene.id())
+        || requestMode == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS;
   }
 
   private String modeSlug(OpenRouterRequestMode requestMode) {
