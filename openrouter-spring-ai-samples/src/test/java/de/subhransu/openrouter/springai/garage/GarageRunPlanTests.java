@@ -238,6 +238,7 @@ class GarageRunPlanTests {
         "{\"scenes\":[]}",
         "{\"capabilities\":[null]}",
         "{\"capabilities\":[]}",
+        "{\"topic\":\" \"}",
         "{\"reasoningEffort\":\"\"}",
         "{\"models\":{\"foreman\":\" \"}}",
         "{\"provider\":{\"sort\":\"\"}}",

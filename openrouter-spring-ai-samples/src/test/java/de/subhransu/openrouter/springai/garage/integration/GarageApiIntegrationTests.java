@@ -56,6 +56,7 @@ class GarageApiIntegrationTests extends MockedGarageIntegrationTest {
         "{\"capabilites\":[\"text\"]}",
         "{\"capabilities\":[null]}",
         "{\"capabilities\":[]}",
+        "{\"topic\":\" \"}",
         "{\"scenes\":[\"recovery-road-test\"],\"requestModes\":[\"responses\"]}",
         "{\"offlineContracts\":true,\"reasoningEffort\":\"\"}",
         "{\"requestModes\":[\"chats\"]}")) {

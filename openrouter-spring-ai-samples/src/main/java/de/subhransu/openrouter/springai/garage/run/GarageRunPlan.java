@@ -97,8 +97,8 @@ public record GarageRunPlan(
       selection.requestModes = parseModes(request.requestModes());
       selection.modesExplicit = true;
     }
-    if (StringUtils.hasText(request.topic())) {
-      selection.topic = request.topic();
+    if (request.topic() != null) {
+      selection.topic = text("topic", request.topic());
     }
     applyModels(selection, request.models());
     if (request.image() != null) {
