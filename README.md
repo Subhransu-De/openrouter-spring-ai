@@ -1053,8 +1053,19 @@ playback parameters must match the selected provider. No transcoding is performe
 `call()` and Responses mode reject output audio; there is no blocking adapter.
 
 Each `delta.audio.data` value is decoded independently from base64, then its bytes
-are appended per choice. One complete Spring AI `Media` is emitted at that choice's
-`stop` finish reason. No partial media is emitted. Normal text remains incremental;
+are appended per choice. One complete Spring AI `Media` is emitted when the choice
+completes, and no partial media is emitted. A choice completes in one of two ways:
+
+- It receives a `stop` finish reason. The media arrives with that event.
+- Its last audio delta contains only `expires_at` and no finish reason ever arrives.
+  Some providers, including OpenAI audio models, end audio this way. The media then
+  arrives in one extra response after the stream ends normally with `[DONE]`. That
+  response has empty text, no usage, and no finish reason.
+
+Without a finish reason, a response cut short by `max_tokens` cannot be told apart
+from a complete one. Set a limit large enough for the expected audio.
+
+Normal text remains incremental;
 the assembled transcript is exposed once in the final assistant metadata under
 `openrouter.audio`, alongside `format` and, when supplied, `id` and `expires_at`.
 The transcript is not appended to text, so simultaneous text and speech do not
@@ -1067,7 +1078,8 @@ Retained decoded audio plus transcript/identifier characters (counted as two byt
 each) are limited to 16 MiB across unfinished choices per subscription, with at
 most 128 audio choices per stream. Buffer capacity and temporary decoding/final
 copies add bounded overhead. Buffers are released on finish, cancellation, or error.
-Missing choice termination, invalid base64, conflicting identifiers/formats, and
+A stream that ends before `[DONE]`, a choice with neither completion signal, audio or
+text after the `expires_at` marker, invalid base64, conflicting identifiers/formats, and
 non-`stop` audio finishes fail explicitly. Each data value must encode a complete
 byte fragment; arbitrary splits inside a base64 value are unsupported. Audio mixed
 with tool calls in one choice and `message.audio` snapshots are unsupported.

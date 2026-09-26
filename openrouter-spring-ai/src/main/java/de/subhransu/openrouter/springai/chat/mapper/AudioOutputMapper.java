@@ -8,12 +8,14 @@ import de.subhransu.openrouter.springai.chat.OpenRouterAudioOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import java.io.ByteArrayOutputStream;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import org.jspecify.annotations.Nullable;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
@@ -21,9 +23,15 @@ import org.springframework.ai.content.Media;
 import org.springframework.ai.retry.NonTransientAiException;
 import org.springframework.util.Assert;
 import org.springframework.util.MimeTypeUtils;
+import org.springframework.util.StringUtils;
 
 /**
  * Bounded audio assembly. Each wire data value encodes one independent byte fragment.
+ * <p>
+ * A choice completes on a {@code stop} finish reason. Some providers, including OpenAI
+ * audio models, instead end the audio with an {@code expires_at}-only delta and never
+ * send a finish reason; such a choice completes only after the stream itself terminates
+ * normally.
  *
  * @author OpenRouter Spring AI contributors
  */
@@ -35,7 +43,7 @@ final class AudioOutputMapper {
 
 	private final @Nullable OpenRouterAudioOptions options;
 
-	private final Map<Integer, Assembly> pending = new HashMap<>();
+	private final Map<Integer, Assembly> pending = new TreeMap<>();
 
 	private final Set<Integer> finished = new HashSet<>();
 
@@ -95,18 +103,34 @@ final class AudioOutputMapper {
 		}
 		Assert.state(delta == null || CollectionUtils.isEmpty(delta.toolCalls()),
 				"Audio and tool calls in the same choice are unsupported");
+		updateCompletionMarker(assembly, audio, delta != null ? delta.content() : null);
 		if (choice.finishReason() != null) {
 			finish(choice, assembly, index, metadata, media);
 		}
 	}
 
+	private static void updateCompletionMarker(Assembly assembly, @Nullable AudioOutput audio,
+			@Nullable String content) {
+		boolean text = StringUtils.hasLength(content);
+		if (audio != null || text) {
+			// Empty role-only deltas may follow the marker; any later audio or text
+			// means the audio was not finished.
+			assembly.completionMarker = audio != null && !text && audio.expiresAt() != null
+					&& !StringUtils.hasLength(audio.data()) && !StringUtils.hasLength(audio.transcript());
+		}
+	}
+
 	private void finish(Choice choice, Assembly assembly, int index, Map<String, Object> metadata, List<Media> media) {
-		Assert.state(this.options != null, "Received audio without configured output audio options");
-		byte[] completedAudio = assembly.bytes.toByteArray();
-		if (!"stop".equals(choice.finishReason()) || completedAudio.length == 0) {
+		if (!"stop".equals(choice.finishReason()) || assembly.bytes.size() == 0) {
 			throw new OpenRouterTruncatedResponseException(
 					"Audio choice ended without complete audio and a stop finish reason");
 		}
+		emit(index, assembly, metadata, media);
+	}
+
+	private void emit(int index, Assembly assembly, Map<String, Object> metadata, List<Media> media) {
+		Assert.state(this.options != null, "Received audio without configured output audio options");
+		byte[] completedAudio = assembly.bytes.toByteArray();
 		Map<String, Object> snapshot = new HashMap<>();
 		snapshot.put("format", this.options.format());
 		snapshot.put("transcript", assembly.transcript.toString());
@@ -172,10 +196,27 @@ final class AudioOutputMapper {
 		return new NonTransientAiException("Retained audio and transcript exceed the 16 MiB stream limit");
 	}
 
-	synchronized void complete() {
-		if (!this.pending.isEmpty()) {
-			throw new OpenRouterTruncatedResponseException("Stream ended with unfinished audio choices");
+	/**
+	 * Completes choices that ended with a completion marker instead of a finish reason.
+	 * Call only after the stream terminated normally; a choice without the marker or
+	 * without audio bytes fails the stream instead of returning partial audio.
+	 * @return completed audio in choice-index order
+	 */
+	synchronized List<Completion> complete() {
+		for (Assembly assembly : this.pending.values()) {
+			if (!assembly.completionMarker || assembly.bytes.size() == 0) {
+				throw new OpenRouterTruncatedResponseException("Stream ended with unfinished audio choices");
+			}
 		}
+		List<Completion> completions = new ArrayList<>();
+		// emit() removes from pending, so iterate over a copy.
+		for (Map.Entry<Integer, Assembly> entry : new TreeMap<>(this.pending).entrySet()) {
+			Map<String, Object> metadata = new HashMap<>();
+			List<Media> media = new ArrayList<>();
+			emit(entry.getKey(), entry.getValue(), metadata, media);
+			completions.add(new Completion(entry.getKey(), metadata, media));
+		}
+		return completions;
 	}
 
 	synchronized void clear() {
@@ -209,6 +250,11 @@ final class AudioOutputMapper {
 
 		private int retainedBytes;
 
+		private boolean completionMarker;
+
+	}
+
+	record Completion(int index, Map<String, Object> metadata, List<Media> media) {
 	}
 
 }
