@@ -302,19 +302,29 @@ class GarageRunServiceTests {
   }
 
   @Test
-  void anUnexpectedFailureEndsTheRunAsAnErrorAndFreesTheService() throws Exception {
+  void aReportFailureEndsTheRunAsAnErrorButKeepsCompletedWorkAndFreesTheService() throws Exception {
     GarageScene scene = scene();
-    when(scene.execute(any())).thenReturn(SceneResult.passed("dyno-tuning", "synthetic-operation",
-        OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS, Duration.ZERO, this.output, Map.of()));
+    GarageEvidence evidence = new GarageEvidence();
+    when(scene.execute(any())).thenAnswer(invocation -> {
+      evidence.recordCost("synthetic-operation", 0.02);
+      return SceneResult.passed("dyno-tuning", "synthetic-operation",
+          OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS, Duration.ZERO, this.output, Map.of());
+    });
     GarageReportWriter writer = mock(GarageReportWriter.class);
     when(writer.write(any(), any(), any(), any())).thenThrow(new IOException("disk full"));
-    GarageRunService service = service(scene, new GarageEvidence(), writer);
+    GarageRunService service = service(scene, evidence, writer);
 
     GarageRun run = finished(service, service.start(request(DYNO)));
 
     assertThat(run.status()).isEqualTo(GarageRun.Status.ERROR);
     assertThat(run.message()).isEqualTo("IOException: disk full");
     assertThat(run.finishedAt()).isNotNull();
+    assertThat(run.scenes()).singleElement().satisfies(outcome -> {
+      assertThat(outcome.sceneId()).isEqualTo("dyno-tuning");
+      assertThat(outcome.status()).isEqualTo("PASSED");
+    });
+    assertThat(run.recordedCostUsd()).isEqualTo(0.02);
+    assertThat(run.files()).isEmpty();
     assertThat(service.start(request(DYNO)).status()).isEqualTo(GarageRun.Status.RUNNING);
   }
 

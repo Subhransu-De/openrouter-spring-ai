@@ -46,8 +46,8 @@ public record GarageRun(
         Map.copyOf(files));
   }
 
-  GarageRun failedToComplete(String message) {
-    return completed(Status.ERROR, this.scenes, this.incompleteFeatures, this.recordedCostUsd,
+  GarageRun failedToComplete(String message, double recordedCostUsd) {
+    return completed(Status.ERROR, this.scenes, this.incompleteFeatures, recordedCostUsd,
         message, this.files);
   }
 

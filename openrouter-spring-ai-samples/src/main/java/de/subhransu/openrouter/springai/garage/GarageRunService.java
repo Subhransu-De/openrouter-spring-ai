@@ -206,7 +206,7 @@ public class GarageRunService implements DisposableBean {
   }
 
   private void complete(GarageRun run, GarageProperties settings) {
-    GarageRun finished = run.failedToComplete("Garage run stopped unexpectedly");
+    GarageRun finished = run.failedToComplete("Garage run stopped unexpectedly", 0.0);
     try {
       finished =
           run.kind() == GarageRun.Kind.SWEEP
@@ -215,7 +215,8 @@ public class GarageRunService implements DisposableBean {
       log.info("Garage run {} finished: {}", run.id(), finished.status());
     } catch (Exception failure) {
       log.error("Garage run {} could not complete", run.id(), failure);
-      finished = run.failedToComplete(failure.getClass().getSimpleName() + ": " + failure.getMessage());
+      finished = run.failedToComplete(failure.getClass().getSimpleName() + ": " + failure.getMessage(),
+          run.kind() == GarageRun.Kind.SCENES ? this.evidence.recordedCostUsd() : 0.0);
     } finally {
       // Publish the outcome and free the service together, so a client that sees the
       // finished run can start the next one immediately.
@@ -247,19 +248,9 @@ public class GarageRunService implements DisposableBean {
     }
     List<String> incompleteFeatures = incompleteFeatures(plan, selected);
 
-    GarageReportWriter.ReportPaths reports =
-        this.reportWriter.write(run.directory(), plan, results, incompleteFeatures);
-    log.info("Capability report: {}", reports.markdown().toAbsolutePath());
-    log.info("Evidence bundle   : {}", reports.json().toAbsolutePath());
-
     long failures =
         results.stream().filter(result -> result.status() == SceneResult.Status.FAILED).count();
     double recordedCostUsd = this.evidence.recordedCostUsd();
-    boolean passed = failures == 0 && incompleteFeatures.isEmpty();
-    String message = passed
-        ? null
-        : failures + " scene runs failed and " + incompleteFeatures.size()
-            + " features lacked complete evidence " + incompleteFeatures;
     List<GarageRun.SceneOutcome> outcomes =
         results.stream()
             .map(result -> new GarageRun.SceneOutcome(
@@ -268,6 +259,24 @@ public class GarageRunService implements DisposableBean {
                 result.status().name(),
                 result.duration().toMillis()))
             .toList();
+
+    GarageReportWriter.ReportPaths reports;
+    try {
+      reports = this.reportWriter.write(run.directory(), plan, results, incompleteFeatures);
+    } catch (IOException | RuntimeException failure) {
+      // The scenes already ran and may have cost money; keep their outcomes and cost.
+      log.error("Garage run {} could not write its reports", run.id(), failure);
+      return run.completed(GarageRun.Status.ERROR, outcomes, incompleteFeatures, recordedCostUsd,
+          failure.getClass().getSimpleName() + ": " + failure.getMessage(), Map.of());
+    }
+    log.info("Capability report: {}", reports.markdown().toAbsolutePath());
+    log.info("Evidence bundle   : {}", reports.json().toAbsolutePath());
+
+    boolean passed = failures == 0 && incompleteFeatures.isEmpty();
+    String message = passed
+        ? null
+        : failures + " scene runs failed and " + incompleteFeatures.size()
+            + " features lacked complete evidence " + incompleteFeatures;
     return run.completed(
         passed ? GarageRun.Status.PASSED : GarageRun.Status.FAILED,
         outcomes,
