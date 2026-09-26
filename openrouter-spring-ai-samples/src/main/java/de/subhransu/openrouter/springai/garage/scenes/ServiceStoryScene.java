@@ -60,7 +60,7 @@ public final class ServiceStoryScene extends GarageSceneSupport {
             context.requestMode(),
             operationId,
             id(),
-            context.command().specialistModel());
+            context.plan().specialistModel());
     List<String> requiredTools = List.of(
         "inspect_vehicle_profile", "score_repair_plan", "hand_to_specialist", "log_to_jobsheet");
     List<ToolCallback> callbacks =
@@ -84,9 +84,9 @@ public final class ServiceStoryScene extends GarageSceneSupport {
             .serviceStory(
                 operationId,
                 context.requestMode(),
-                context.command().foremanModel(),
-                context.command().fallbackModels(),
-                context.command().topic(),
+                context.plan().foremanModel(),
+                context.plan().fallbackModels(),
+                context.plan().topic(),
                 callbacks);
     context.evidence().recordAll(
         applicable,
@@ -104,7 +104,7 @@ public final class ServiceStoryScene extends GarageSceneSupport {
                         + " score_repair_plan, and log_to_jobsheet in that order. Use each result"
                         + " to inform the next step, then return a one-sentence customer note."
                         + " Do not invent completed repairs."),
-                new UserMessage("Write the final service recommendation for: " + context.command().topic())),
+                new UserMessage("Write the final service recommendation for: " + context.plan().topic())),
             options);
 
     ChatResponse response;

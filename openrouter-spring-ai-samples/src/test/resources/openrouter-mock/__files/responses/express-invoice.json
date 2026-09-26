@@ -1,0 +1,56 @@
+{
+  "id": "resp-garage-invoice-responses",
+  "object": "response",
+  "created_at": 1767225600,
+  "model": "openai/gpt-oss-120b",
+  "status": "completed",
+  "completed_at": 1767225601,
+  "output": [
+    {
+      "id": "rs_invoice-responses",
+      "type": "reasoning",
+      "status": "completed",
+      "content": [
+        {
+          "type": "reasoning_text",
+          "text": "Follow the inspection order before writing the note."
+        }
+      ],
+      "summary": [],
+      "format": "unknown"
+    },
+    {
+      "id": "fc_call_invoice",
+      "type": "function_call",
+      "status": "completed",
+      "call_id": "call_invoice",
+      "name": "generate_express_invoice",
+      "arguments": "{\"item\": \"diagnostic inspection\", \"amount\": 89}"
+    }
+  ],
+  "error": null,
+  "incomplete_details": null,
+  "tool_choice": "auto",
+  "parallel_tool_calls": true,
+  "metadata": {},
+  "service_tier": "auto",
+  "store": false,
+  "usage": {
+    "input_tokens": 180,
+    "input_tokens_details": {
+      "cached_tokens": 64
+    },
+    "output_tokens": 42,
+    "output_tokens_details": {
+      "reasoning_tokens": 18
+    },
+    "total_tokens": 222,
+    "cost": 0.000183,
+    "is_byok": false,
+    "cost_details": {
+      "upstream_inference_cost": 0.000183,
+      "upstream_inference_input_cost": 8.1e-05,
+      "upstream_inference_output_cost": 0.000102
+    }
+  }
+}

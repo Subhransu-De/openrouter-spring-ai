@@ -13,10 +13,11 @@ import java.util.Map;
 import java.util.Objects;
 import org.jspecify.annotations.Nullable;
 import org.springframework.ai.tool.ToolCallback;
-import org.springframework.stereotype.Component;
 
-/** Builds all Garage request profiles and produces evidence from the effective options. */
-@Component
+/**
+ * Builds all Garage request profiles for one run and produces evidence from the effective
+ * options. Created per run from that run's settings, never shared across runs.
+ */
 public final class GarageOptionsFactory {
 
   private final GarageProperties properties;

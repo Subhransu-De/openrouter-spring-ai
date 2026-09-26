@@ -1,0 +1,23 @@
+{
+  "name": "reused-id",
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/chat/completions",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.metadata.sceneId == 'service-story')]"
+      },
+      {
+        "matchesJsonPath": "$.messages[?(@.tool_call_id == 'call_inspect')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "scenarios/service-story-reused-call-id/reused-id.json"
+  }
+}

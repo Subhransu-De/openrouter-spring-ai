@@ -1,0 +1,20 @@
+{
+  "name": "images-stream",
+  "priority": 29,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/images",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.stream == true)]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "text/event-stream"
+    },
+    "bodyFileName": "images/paint-bay-stream.sse"
+  }
+}

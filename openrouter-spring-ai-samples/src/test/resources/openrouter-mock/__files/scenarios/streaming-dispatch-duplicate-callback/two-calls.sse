@@ -1,0 +1,20 @@
+data: {"id":"gen-garage-two-calls","object":"chat.completion.chunk","created":1767225600,"model":"openai/gpt-oss-120b","provider":"GarageMock","choices":[{"index":0,"delta":{"role":"assistant","content":"","reasoning":"Dispatch the bulletin lookup.","reasoning_details":[{"type":"reasoning.text","text":"Dispatch the bulletin lookup.","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-garage-two-calls","object":"chat.completion.chunk","created":1767225600,"model":"openai/gpt-oss-120b","provider":"GarageMock","choices":[{"index":0,"delta":{"role":"assistant","content":null,"tool_calls":[{"index":0,"id":"call_bulletin","type":"function","function":{"name":"lookup_service_bulletin","arguments":""}}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-garage-two-calls","object":"chat.completion.chunk","created":1767225600,"model":"openai/gpt-oss-120b","provider":"GarageMock","choices":[{"index":0,"delta":{"role":"assistant","content":null,"tool_calls":[{"index":0,"function":{"arguments":"{\"vinPrefix\":\"TRK7\","}}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-garage-two-calls","object":"chat.completion.chunk","created":1767225600,"model":"openai/gpt-oss-120b","provider":"GarageMock","choices":[{"index":0,"delta":{"role":"assistant","content":null,"tool_calls":[{"index":0,"function":{"arguments":"\"modelYear\":1972,\"symptom\":\"overheating\"}"}}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-garage-two-calls","object":"chat.completion.chunk","created":1767225600,"model":"openai/gpt-oss-120b","provider":"GarageMock","choices":[{"index":0,"delta":{"role":"assistant","content":null,"tool_calls":[{"index":1,"id":"call_bulletin_again","type":"function","function":{"name":"lookup_service_bulletin","arguments":""}}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-garage-two-calls","object":"chat.completion.chunk","created":1767225600,"model":"openai/gpt-oss-120b","provider":"GarageMock","choices":[{"index":0,"delta":{"role":"assistant","content":null,"tool_calls":[{"index":1,"function":{"arguments":"{\"vinPrefix\":\"TRK7\","}}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-garage-two-calls","object":"chat.completion.chunk","created":1767225600,"model":"openai/gpt-oss-120b","provider":"GarageMock","choices":[{"index":0,"delta":{"role":"assistant","content":null,"tool_calls":[{"index":1,"function":{"arguments":"\"modelYear\":1972,\"symptom\":\"overheating\"}"}}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-garage-two-calls","object":"chat.completion.chunk","created":1767225600,"model":"openai/gpt-oss-120b","provider":"GarageMock","choices":[{"index":0,"delta":{"role":"assistant","content":"","reasoning":null},"finish_reason":"tool_calls","native_finish_reason":"tool_calls"}]}
+
+data: {"id":"gen-garage-two-calls","object":"chat.completion.chunk","created":1767225600,"model":"openai/gpt-oss-120b","provider":"GarageMock","service_tier":null,"choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":"tool_calls","native_finish_reason":"tool_calls"}],"usage":{"prompt_tokens":180,"completion_tokens":42,"total_tokens":222,"cost":0.000183,"is_byok":false,"cost_details":{"upstream_inference_cost":0.000183,"upstream_inference_prompt_cost":8.1e-05,"upstream_inference_completions_cost":0.000102},"prompt_tokens_details":{"cached_tokens":64,"cache_write_tokens":0,"audio_tokens":0,"video_tokens":0},"completion_tokens_details":{"reasoning_tokens":18,"image_tokens":0,"audio_tokens":0}}}
+
+data: [DONE]
+

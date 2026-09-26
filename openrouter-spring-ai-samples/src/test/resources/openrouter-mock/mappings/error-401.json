@@ -1,0 +1,20 @@
+{
+  "name": "error-401",
+  "priority": 10,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/chat/completions",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.metadata.suite == 'error-401')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "errors/401-no-credentials.json"
+  }
+}

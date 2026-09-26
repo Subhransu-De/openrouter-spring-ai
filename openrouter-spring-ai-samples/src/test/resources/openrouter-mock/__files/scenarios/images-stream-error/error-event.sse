@@ -1,0 +1,4 @@
+data: {"type":"image_generation.partial_image","partial_image_index":0,"b64_json":"iVBORw0KGgoAAAANSUhEUgAAAAQAAAAEAQMAAACTPww9AAAAA1BMVEV+iJT9LT2eAAAAC0lEQVQI12NggAAAAAgAAS8g3TEAAAAASUVORK5CYII=","media_type":"image/png","created":1767225600}
+
+data: {"type":"error","error":{"code":502,"message":"Image generation failed upstream"}}
+

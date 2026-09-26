@@ -1,0 +1,23 @@
+{
+  "name": "chat-service-story-3-score",
+  "priority": 18,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/chat/completions",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.metadata.sceneId == 'service-story')]"
+      },
+      {
+        "matchesJsonPath": "$.messages[?(@.tool_call_id == 'call_specialist')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "chat/chat-service-story-3-score.json"
+  }
+}

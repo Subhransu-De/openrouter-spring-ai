@@ -1,0 +1,21 @@
+{
+  "name": "chat-slow-provider",
+  "priority": 10,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/chat/completions",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.metadata.suite == 'slow-provider')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "chat/modality-matrix.json",
+    "fixedDelayMilliseconds": 3000
+  }
+}

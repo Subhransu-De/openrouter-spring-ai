@@ -62,8 +62,8 @@ public final class DigitalInspectionScene extends GarageSceneSupport {
             .digitalInspection(
                 operationId,
                 context.requestMode(),
-                context.command().foremanModel(),
-                context.command().topic(),
+                context.plan().foremanModel(),
+                context.plan().topic(),
                 SCHEMA,
                 false);
     OpenRouterChatOptions outputSchemaOptions =
@@ -71,8 +71,8 @@ public final class DigitalInspectionScene extends GarageSceneSupport {
             .digitalInspection(
                 operationId,
                 context.requestMode(),
-                context.command().foremanModel(),
-                context.command().topic(),
+                context.plan().foremanModel(),
+                context.plan().topic(),
                 SCHEMA,
                 true);
 
@@ -150,7 +150,7 @@ public final class DigitalInspectionScene extends GarageSceneSupport {
         new Prompt(
             List.of(
                 new SystemMessage("Return only JSON matching the supplied service inspection schema."),
-                new UserMessage("Inspect this vehicle report: " + context.command().topic())),
+                new UserMessage("Inspect this vehicle report: " + context.plan().topic())),
             options);
     ChatResponse response = context.chatModel().call(prompt);
     ServiceInspection inspection =

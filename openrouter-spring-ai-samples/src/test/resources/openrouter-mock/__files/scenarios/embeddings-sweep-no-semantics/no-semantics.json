@@ -1,0 +1,46 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "embedding",
+      "embedding": [
+        0.9,
+        0.1,
+        0.2
+      ],
+      "index": 0
+    },
+    {
+      "object": "embedding",
+      "embedding": [
+        0.05,
+        0.9,
+        0.1
+      ],
+      "index": 1
+    },
+    {
+      "object": "embedding",
+      "embedding": [
+        0.85,
+        0.15,
+        0.25
+      ],
+      "index": 2
+    }
+  ],
+  "model": "text-embedding-3-small",
+  "usage": {
+    "prompt_tokens": 64,
+    "total_tokens": 64,
+    "cost": 1.3e-06,
+    "is_byok": false,
+    "cost_details": {
+      "upstream_inference_cost": 1.3e-06,
+      "upstream_inference_prompt_cost": 1.3e-06,
+      "upstream_inference_completions_cost": 0
+    }
+  },
+  "provider": "OpenAI",
+  "id": "gen-emb-garage-synthetic"
+}

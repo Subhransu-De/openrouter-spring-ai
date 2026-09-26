@@ -6,8 +6,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
-import de.subhransu.openrouter.springai.garage.GarageProperties;
-import de.subhransu.openrouter.springai.garage.cli.GarageCommand;
+import de.subhransu.openrouter.springai.garage.GarageRunRequests;
+import de.subhransu.openrouter.springai.garage.run.GarageRunPlan;
 import de.subhransu.openrouter.springai.garage.evidence.EvidenceLevel;
 import de.subhransu.openrouter.springai.garage.evidence.GarageEvidence;
 import de.subhransu.openrouter.springai.garage.evidence.GarageFeature;
@@ -32,12 +32,13 @@ class GarageReportWriterTests {
   record PrivatePayload(String prompt) {}
 
   @ParameterizedTest
-  @ValueSource(strings = {"", "--request-mode=chat", "--request-mode=responses", "--text",
-      "--text --request-mode=chat", "--text --request-mode=responses", "--full",
-      "--embedding", "--vision", "--image"})
+  @ValueSource(strings = {"", "{\"requestModes\":[\"chat\"]}", "{\"requestModes\":[\"responses\"]}",
+      "{\"capabilities\":[\"text\"]}", "{\"capabilities\":[\"text\"],\"requestModes\":[\"chat\"]}",
+      "{\"capabilities\":[\"text\"],\"requestModes\":[\"responses\"]}", "{\"full\":true}",
+      "{\"capabilities\":[\"embedding\"]}", "{\"capabilities\":[\"vision\"]}",
+      "{\"capabilities\":[\"image\"]}"})
   void documentedSelectionsRetainRegistryAndModeOutcomes(String selection) throws Exception {
-    GarageCommand command = GarageCommand.from(selection.isEmpty() ? new String[0] : selection.split(" "),
-        new GarageProperties());
+    GarageRunPlan command = GarageRunRequests.plan(selection);
     GarageEvidence evidence = new GarageEvidence();
     ObjectMapper mapper = new ObjectMapper();
     var reports = new GarageReportWriter(mapper, evidence,
@@ -65,7 +66,7 @@ class GarageReportWriterTests {
       root = root.getParent();
     }
     String readme = Files.readString(root.resolve("README.md"));
-    String label = selection.isEmpty() ? "No flags" : "`" + selection + "`";
+    String label = selection.isEmpty() ? "Empty body" : "`" + selection + "`";
     String[] row = Arrays.stream(readme.split("\\R")).map(line -> line.split("\\|"))
         .filter(cells -> cells.length > 2 && cells[1].strip().equals(label)).findFirst().orElseThrow();
     String expectedMode = command.requestModes().size() == 2 ? "Both"
@@ -94,8 +95,8 @@ class GarageReportWriterTests {
     SceneResult result = SceneResult.failed("service-story", operation,
         OpenRouterRequestMode.valueOf(mode), Duration.ofMillis(12), this.output.resolve(secret),
         payload, failure);
-    GarageCommand command = GarageCommand.from(new String[] {"--text", "--topic=" + secret},
-        new GarageProperties());
+    GarageRunPlan command =
+        GarageRunRequests.plan("{\"capabilities\":[\"text\"],\"topic\":\"" + secret + "\"}");
 
     var reports = new GarageReportWriter(mapper, evidence, telemetry, transport)
         .write(this.output, command, List.of(result), List.of());
@@ -123,7 +124,7 @@ class GarageReportWriterTests {
     ObjectMapper mapper = new ObjectMapper();
     GarageReportWriter writer = new GarageReportWriter(mapper, new GarageEvidence(),
         mock(GarageTelemetry.class), mock(GarageTransportEvidence.class));
-    GarageCommand command = GarageCommand.from(new String[] {"--text"}, new GarageProperties());
+    GarageRunPlan command = GarageRunRequests.plan("{\"capabilities\":[\"text\"]}");
     SceneResult result = SceneResult.passed("digital-inspection", "synthetic-operation",
         OpenRouterRequestMode.OPENAI_RESPONSES, Duration.ZERO, this.output, Map.of());
     List<String> missing = incomplete ? List.of("structured-output") : List.of();
@@ -161,7 +162,8 @@ class GarageReportWriterTests {
     ObjectMapper mapper = new ObjectMapper();
     var writer = new GarageReportWriter(mapper, evidence, mock(GarageTelemetry.class), mock(GarageTransportEvidence.class));
     var reports = writer.write(this.output,
-        GarageCommand.from(new String[] {"--text", "--request-mode=both"}, new GarageProperties()), List.of(), List.of());
+        GarageRunRequests.plan("{\"capabilities\":[\"text\"],\"requestModes\":[\"both\"]}"),
+        List.of(), List.of());
     var registry = mapper.readTree(reports.json().toFile()).get("featureRegistry");
     var entry = java.util.stream.StreamSupport.stream(registry.spliterator(), false)
         .filter(item -> feature.id().equals(item.get("id").stringValue())).findFirst().orElseThrow();

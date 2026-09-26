@@ -1,0 +1,23 @@
+{
+  "name": "chat-mid-stream-error",
+  "priority": 10,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/chat/completions",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.metadata.suite == 'mid-stream-error')]"
+      },
+      {
+        "matchesJsonPath": "$[?(@.stream == true)]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "text/event-stream"
+    },
+    "bodyFileName": "chat/mid-stream-error.sse"
+  }
+}

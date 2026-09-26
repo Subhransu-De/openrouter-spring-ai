@@ -9,7 +9,7 @@ import static org.mockito.Mockito.when;
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.api.dto.ImagesStreamEvent;
-import de.subhransu.openrouter.springai.garage.cli.GarageCommand;
+import de.subhransu.openrouter.springai.garage.run.GarageRunPlan;
 import de.subhransu.openrouter.springai.garage.evidence.GarageEvidence;
 import de.subhransu.openrouter.springai.garage.evidence.GarageTelemetry;
 import de.subhransu.openrouter.springai.garage.scenes.ModalityBaysScene;
@@ -118,7 +118,8 @@ class GarageModalitySceneTelemetryTests {
 
   private SceneContext context(ObservationRegistry registry) {
     GarageProperties properties = new GarageProperties();
-    GarageCommand command = GarageCommand.from(new String[] {"--image", "--image-surface=streaming"}, properties);
+    GarageRunPlan command = GarageRunRequests.plan(
+        "{\"capabilities\":[\"image\"],\"image\":{\"surface\":\"streaming\"}}", properties);
     return new SceneContext(command, OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS, this.output,
         null, null, properties, null, null, this.evidence, this.telemetry, null, registry);
   }

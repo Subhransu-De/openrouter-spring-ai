@@ -1,0 +1,46 @@
+{
+  "id": "gen-garage-final-without-cost",
+  "object": "chat.completion",
+  "created": 1767225600,
+  "model": "openai/gpt-oss-120b",
+  "provider": "GarageMock",
+  "system_fingerprint": null,
+  "service_tier": null,
+  "choices": [
+    {
+      "index": 0,
+      "logprobs": null,
+      "finish_reason": "stop",
+      "native_finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "Your pickup needs a cooling-system pressure test and thermostat check before long drives.",
+        "refusal": null,
+        "reasoning": "Done.",
+        "reasoning_details": [
+          {
+            "type": "reasoning.text",
+            "text": "Done.",
+            "format": "unknown",
+            "index": 0
+          }
+        ]
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 180,
+    "completion_tokens": 42,
+    "total_tokens": 222,
+    "prompt_tokens_details": {
+      "cache_write_tokens": 0,
+      "audio_tokens": 0,
+      "video_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 18,
+      "image_tokens": 0,
+      "audio_tokens": 0
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "chat-streaming-dispatch-tool-call",
+  "priority": 25,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/chat/completions",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.metadata.sceneId == 'streaming-dispatch')]"
+      },
+      {
+        "matchesJsonPath": "$[?(@.stream == true)]"
+      },
+      {
+        "matchesJsonPath": "$.tools[?(@.function.name == 'lookup_service_bulletin')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "text/event-stream"
+    },
+    "bodyFileName": "chat/streaming-dispatch-tool-call.sse"
+  }
+}

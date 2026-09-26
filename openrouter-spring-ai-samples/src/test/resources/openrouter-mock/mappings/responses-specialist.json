@@ -1,0 +1,20 @@
+{
+  "name": "responses-specialist",
+  "priority": 4,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/responses",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.metadata.phase == 'specialist')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "responses/specialist.json"
+  }
+}

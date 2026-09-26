@@ -1,0 +1,20 @@
+{
+  "name": "chat-modality-matrix",
+  "priority": 10,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/chat/completions",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.metadata.suite == 'modality-matrix')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "chat/modality-matrix.json"
+  }
+}

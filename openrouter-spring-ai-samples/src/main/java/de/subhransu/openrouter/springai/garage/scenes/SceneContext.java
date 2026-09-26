@@ -4,7 +4,7 @@ import tools.jackson.databind.ObjectMapper;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.garage.GarageOptionsFactory;
 import de.subhransu.openrouter.springai.garage.GarageProperties;
-import de.subhransu.openrouter.springai.garage.cli.GarageCommand;
+import de.subhransu.openrouter.springai.garage.run.GarageRunPlan;
 import de.subhransu.openrouter.springai.garage.evidence.GarageEvidence;
 import de.subhransu.openrouter.springai.garage.evidence.GarageTelemetry;
 import de.subhransu.openrouter.springai.garage.evidence.GarageTransportEvidence;
@@ -15,7 +15,7 @@ import org.springframework.ai.chat.model.ChatModel;
 
 /** Dependencies and run identity supplied to each scene execution. */
 public record SceneContext(
-    GarageCommand command,
+    GarageRunPlan plan,
     OpenRouterRequestMode requestMode,
     Path outputDirectory,
     ChatModel chatModel,

@@ -1,0 +1,23 @@
+{
+  "name": "incomplete-final",
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/responses",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.metadata.sceneId == 'service-story')]"
+      },
+      {
+        "matchesJsonPath": "$.input[?(@.type == 'function_call_output' && @.call_id == 'call_log')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "scenarios/service-story-responses-incomplete/incomplete-final.json"
+  }
+}

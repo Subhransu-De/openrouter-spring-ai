@@ -40,8 +40,8 @@ public final class AttributionScene extends GarageSceneSupport {
                 operationId,
                 id(),
                 context.requestMode(),
-                context.command().foremanModel(),
-                context.command().topic());
+                context.plan().foremanModel(),
+                context.plan().topic());
     context.evidence().record(
         feature,
         operationId,

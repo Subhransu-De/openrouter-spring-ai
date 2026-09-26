@@ -5,12 +5,13 @@ plugins {
 
 val lombokVersion: String by rootProject.extra
 val twelveMonkeysVersion: String by rootProject.extra
+val wiremockVersion: String by rootProject.extra
 
 description = "Repository-local sample applications for the OpenRouter starter. Not published."
 
 dependencies {
 	implementation(project(":openrouter-spring-ai-starter"))
-	implementation("org.springframework.boot:spring-boot-starter")
+	implementation("org.springframework.boot:spring-boot-starter-webmvc")
 	implementation("io.micrometer:micrometer-core")
 	implementation("com.twelvemonkeys.imageio:imageio-webp:$twelveMonkeysVersion")
 
@@ -21,6 +22,8 @@ dependencies {
 	annotationProcessor("org.projectlombok:lombok:$lombokVersion")
 
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
+	testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
+	testImplementation("org.wiremock:wiremock-standalone:$wiremockVersion")
 }
 
 tasks.named<org.gradle.jvm.tasks.Jar>("jar") {

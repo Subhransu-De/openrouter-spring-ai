@@ -1,0 +1,20 @@
+{
+  "name": "chat-vision",
+  "priority": 30,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/chat/completions",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$.messages[*].content[?(@.type == 'image_url')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "chat/vision.json"
+  }
+}

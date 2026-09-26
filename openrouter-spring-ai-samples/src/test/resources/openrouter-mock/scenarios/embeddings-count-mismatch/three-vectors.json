@@ -1,0 +1,15 @@
+{
+  "name": "three-vectors",
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/embeddings"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "scenarios/embeddings-count-mismatch/three-vectors.json"
+  }
+}

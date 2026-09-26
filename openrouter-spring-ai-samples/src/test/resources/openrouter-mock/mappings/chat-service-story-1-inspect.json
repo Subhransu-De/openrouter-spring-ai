@@ -1,0 +1,20 @@
+{
+  "name": "chat-service-story-1-inspect",
+  "priority": 20,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/chat/completions",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.metadata.sceneId == 'service-story')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "chat/chat-service-story-1-inspect.json"
+  }
+}

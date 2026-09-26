@@ -1,0 +1,26 @@
+{
+  "name": "malformed",
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/chat/completions",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.metadata.sceneId == 'service-story')]"
+      },
+      {
+        "matchesJsonPath": "$.tools[?(@.function.name == 'inspect_vehicle_profile')]"
+      },
+      {
+        "matchesJsonPath": "$[?(@.messages.size() == 2)]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "scenarios/service-story-malformed-arguments/malformed.json"
+  }
+}

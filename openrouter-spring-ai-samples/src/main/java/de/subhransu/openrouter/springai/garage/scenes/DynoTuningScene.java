@@ -59,8 +59,8 @@ public final class DynoTuningScene extends GarageSceneSupport {
             .dynoTuning(
                 operationId,
                 context.requestMode(),
-                context.command().foremanModel(),
-                context.command().topic(),
+                context.plan().foremanModel(),
+                context.plan().topic(),
                 List.of(contextTool));
     Map<String, Object> snapshot = context.optionsFactory().snapshot(options);
     context.evidence().recordAll(

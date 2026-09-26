@@ -1,0 +1,23 @@
+{
+  "name": "failed",
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/responses",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.metadata.sceneId == 'streaming-dispatch')]"
+      },
+      {
+        "matchesJsonPath": "$[?(@.stream == true)]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "text/event-stream"
+    },
+    "bodyFileName": "scenarios/streaming-dispatch-responses-failed/failed.sse"
+  }
+}

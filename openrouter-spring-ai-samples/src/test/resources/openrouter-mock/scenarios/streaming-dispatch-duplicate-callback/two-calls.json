@@ -1,0 +1,26 @@
+{
+  "name": "two-calls",
+  "priority": 2,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/chat/completions",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.metadata.sceneId == 'streaming-dispatch')]"
+      },
+      {
+        "matchesJsonPath": "$[?(@.stream == true)]"
+      },
+      {
+        "matchesJsonPath": "$.tools[?(@.function.name == 'lookup_service_bulletin')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "text/event-stream"
+    },
+    "bodyFileName": "scenarios/streaming-dispatch-duplicate-callback/two-calls.sse"
+  }
+}

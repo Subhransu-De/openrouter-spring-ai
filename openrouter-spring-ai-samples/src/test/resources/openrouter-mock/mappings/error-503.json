@@ -1,0 +1,20 @@
+{
+  "name": "error-503",
+  "priority": 10,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/chat/completions",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.metadata.suite == 'error-503')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 503,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "errors/503-no-provider.json"
+  }
+}

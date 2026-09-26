@@ -1,0 +1,20 @@
+{
+  "name": "chat-paint-bay",
+  "priority": 30,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/chat/completions",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$.modalities[?(@ == 'image')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "chat/paint-bay.json"
+  }
+}
