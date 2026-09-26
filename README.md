@@ -1182,19 +1182,19 @@ Invalid selections return `400 Bad Request` with a problem detail that names the
 
 Omit a request field to keep its `garage.*` default. An empty list clears a list default, such as `"fallbacks": []` or `"order": []`. Every field applies to that run only.
 
-| Field              | Meaning                                                                                                   |
-| ------------------ | --------------------------------------------------------------------------------------------------------- |
-| `capabilities`     | Any of `text`, `embedding`, `vision`, and `image`.                                                        |
-| `scenes`           | Narrows a capability suite to these scene ids. Selected modalities require `modality-bays` in the list.   |
-| `full`             | `true` runs every scene, embeddings, vision, and all image surfaces. It cannot be narrowed with `scenes`. |
-| `offlineContracts` | `true` runs only the local recovery and dyno contracts, without an API key.                               |
-| `requestModes`     | `chat`, `responses`, or `both`; overrides a suite's default modes.                                        |
-| `topic`            | The customer and car request to inspect.                                                                  |
-| `models`           | `foreman`, `specialist`, `embedding`, `vision`, `image`, and a `fallbacks` list.                          |
-| `image`            | `surface` is `sync` (the default), `streaming`, `chat`, or `all`; `quality` is optional.                  |
-| `limits`           | `maxCompletionTokens` and `specialistMaxCompletionTokens`, both positive.                                 |
-| `reasoningEffort`  | Text reasoning effort.                                                                                    |
-| `provider`         | `sort`, `requireParameters`, and the `order`, `ignore`, and `quantizations` lists.                        |
+| Field              | Meaning                                                                                                                                                                   |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `capabilities`     | Any of `text`, `embedding`, `vision`, and `image`.                                                                                                                        |
+| `scenes`           | Narrows a capability suite to these scene ids. Selected modalities require `modality-bays` in the list.                                                                   |
+| `full`             | `true` runs every scene, embeddings, vision, and all image surfaces. It cannot be narrowed with `scenes`.                                                                 |
+| `offlineContracts` | `true` runs only the local recovery and dyno contracts, without an API key.                                                                                               |
+| `requestModes`     | `chat`, `responses`, or `both`; overrides a suite's default modes.                                                                                                        |
+| `topic`            | The customer and car request to inspect.                                                                                                                                  |
+| `models`           | `foreman`, `specialist`, `embedding`, `vision`, `image`, and a `fallbacks` list.                                                                                          |
+| `image`            | `surface` is `sync` (the default), `streaming`, `chat`, or `all`; `quality` is optional.                                                                                  |
+| `limits`           | `maxCompletionTokens` and `specialistMaxCompletionTokens`, both positive.                                                                                                 |
+| `reasoningEffort`  | Text reasoning effort.                                                                                                                                                    |
+| `provider`         | `sort` and `requireParameters` apply to every request. The `order`, `ignore`, and `quantizations` lists apply only to the routing-lane scene's full provider preferences. |
 
 | Selection                                                | Request modes                                          | Selected work                                                        |
 | -------------------------------------------------------- | ------------------------------------------------------ | -------------------------------------------------------------------- |
