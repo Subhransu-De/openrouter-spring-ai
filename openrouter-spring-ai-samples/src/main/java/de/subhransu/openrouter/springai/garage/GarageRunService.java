@@ -359,8 +359,15 @@ public class GarageRunService implements DisposableBean {
         outputs.stream().flatMap(output -> output.results().stream()).toList();
     double recordedCostUsd = GarageCosts.usageMaps(allResults);
     Map<String, Path> files = new LinkedHashMap<>();
-    for (SweepOutput output : outputs) {
-      files.put(output.key(), writeSweepDocument(run.directory(), output, recordedCostUsd));
+    try {
+      for (SweepOutput output : outputs) {
+        files.put(output.key(), writeSweepDocument(run.directory(), output, recordedCostUsd));
+      }
+    } catch (IOException | RuntimeException failure) {
+      // The model calls already ran and may have cost money; keep the cost and written files.
+      log.error("Garage run {} could not write its sweep documents", run.id(), failure);
+      return run.completed(GarageRun.Status.ERROR, List.of(), List.of(), recordedCostUsd,
+          failure.getClass().getSimpleName() + ": " + failure.getMessage(), files);
     }
     long failures =
         allResults.stream().filter(result -> !PASSED.equals(result.get(STATUS))).count();

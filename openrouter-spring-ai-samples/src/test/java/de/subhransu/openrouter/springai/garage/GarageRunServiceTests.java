@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -21,6 +22,7 @@ import de.subhransu.openrouter.springai.garage.scenes.GarageScene;
 import de.subhransu.openrouter.springai.garage.scenes.SceneContext;
 import de.subhransu.openrouter.springai.garage.scenes.SceneResult;
 import io.micrometer.observation.ObservationRegistry;
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -40,6 +42,7 @@ import org.springframework.ai.image.ImageModel;
 import org.springframework.ai.image.ImagePrompt;
 import org.springframework.mock.env.MockEnvironment;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectWriter;
 
 // Keep synthetic failure inputs explicit in each test.
 @SuppressWarnings("PMD.AvoidDuplicateLiterals")
@@ -326,6 +329,29 @@ class GarageRunServiceTests {
     assertThat(run.recordedCostUsd()).isEqualTo(0.02);
     assertThat(run.files()).isEmpty();
     assertThat(service.start(request(DYNO)).status()).isEqualTo(GarageRun.Status.RUNNING);
+  }
+
+  @Test
+  void aSweepDocumentFailureKeepsTheCostAndTheDocumentsAlreadyWritten() throws Exception {
+    EmbeddingModel embeddingModel = mock(EmbeddingModel.class);
+    when(embeddingModel.call(any(EmbeddingRequest.class))).thenThrow(new IllegalStateException("synthetic"));
+    ImageModel imageModel = mock(ImageModel.class);
+    when(imageModel.call(any(ImagePrompt.class))).thenThrow(new IllegalStateException("synthetic"));
+    ObjectMapper mapper = mock(ObjectMapper.class);
+    ObjectWriter sweepWriter = mock(ObjectWriter.class);
+    when(mapper.writerWithDefaultPrettyPrinter()).thenReturn(sweepWriter);
+    doNothing().doThrow(new IllegalStateException("disk full"))
+        .when(sweepWriter).writeValue(any(File.class), any());
+    GarageRunService service = new GarageRunService(mock(ChatModel.class), embeddingModel, imageModel,
+        mapper, environment(), List.of(), new GarageEvidence(), mock(GarageTelemetry.class),
+        mock(GarageTransportEvidence.class), ObservationRegistry.create(), writer(), Runnable::run);
+
+    GarageRun run = finished(service, service.startSweep(new GarageSweepRequest(
+        List.of("synthetic/embedding"), List.of("synthetic/image"), null, null)));
+
+    assertThat(run.status()).isEqualTo(GarageRun.Status.ERROR);
+    assertThat(run.message()).isEqualTo("IllegalStateException: disk full");
+    assertThat(run.files()).containsOnlyKeys(GarageRun.EMBEDDING_SWEEP);
   }
 
   private GarageRun finished(GarageRunService service, GarageRun started) {
