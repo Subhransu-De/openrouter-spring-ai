@@ -236,6 +236,7 @@ class GarageRunPlanTests {
         "{\"offlineContracts\":true,\"capabilities\":[\"text\"]}",
         "{\"offlineContracts\":true,\"scenes\":[\"service-story\"]}",
         "{\"scenes\":[]}",
+        "{\"capabilities\":[null]}",
         "{\"requestModes\":[]}",
         "{\"limits\":{\"maxCompletionTokens\":0}}",
         "{\"scenes\":[\"modality-bays\"]}"}) {

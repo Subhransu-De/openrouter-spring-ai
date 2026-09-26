@@ -1156,15 +1156,15 @@ The filename follows the source POM revision, not the published starter version.
 
 ### Start a run and read its evidence
 
-| Endpoint | Purpose |
-| --- | --- |
-| `GET /api/scenes` | Lists the scenes, whether each is offline, and the feature ids its evidence covers. |
-| `POST /api/runs` | Starts a run. Returns `202 Accepted` with a `Location` header for the run. |
-| `GET /api/runs/{id}` | Shows the run status (`RUNNING`, `PASSED`, `FAILED`, or `ERROR`), scene outcomes, incomplete features, recorded cost, and links to its files. |
-| `GET /api/runs/{id}/evidence` | Returns the run's `garage-run.json` evidence bundle. |
-| `GET /api/runs/{id}/report` | Returns the run's `capability-report.md`. |
-| `POST /api/sweeps` | Starts a model compatibility sweep. Returns `202 Accepted` like a run. |
-| `GET /api/runs/{id}/sweeps/{embedding\|image}` | Returns a sweep result document. |
+| Endpoint                                       | Purpose                                                                                                                                       |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/scenes`                              | Lists the scenes, whether each is offline, and the feature ids its evidence covers.                                                           |
+| `POST /api/runs`                               | Starts a run. Returns `202 Accepted` with a `Location` header for the run.                                                                    |
+| `GET /api/runs/{id}`                           | Shows the run status (`RUNNING`, `PASSED`, `FAILED`, or `ERROR`), scene outcomes, incomplete features, recorded cost, and links to its files. |
+| `GET /api/runs/{id}/evidence`                  | Returns the run's `garage-run.json` evidence bundle.                                                                                          |
+| `GET /api/runs/{id}/report`                    | Returns the run's `capability-report.md`.                                                                                                     |
+| `POST /api/sweeps`                             | Starts a model compatibility sweep. Returns `202 Accepted` like a run.                                                                        |
+| `GET /api/runs/{id}/sweeps/{embedding\|image}` | Returns a sweep result document.                                                                                                              |
 
 Runs execute in the background, one at a time, because a run's evidence collectors are shared. Starting a second run while one is active returns `409 Conflict` with a link to the active run. The evidence and report endpoints also return `409` until the run finishes. Run records last until the application stops; the files stay in the output directory.
 
@@ -1182,32 +1182,32 @@ Invalid selections return `400 Bad Request` with a problem detail that names the
 
 Omit a request field to keep its `garage.*` default. An empty list clears a list default, such as `"fallbacks": []` or `"order": []`. Every field applies to that run only.
 
-| Field | Meaning |
-| --- | --- |
-| `capabilities` | Any of `text`, `embedding`, `vision`, and `image`. |
-| `scenes` | Narrows a capability suite to these scene ids. Selected modalities require `modality-bays` in the list. |
-| `full` | `true` runs every scene, embeddings, vision, and all image surfaces. It cannot be narrowed with `scenes`. |
-| `offlineContracts` | `true` runs only the local recovery and dyno contracts, without an API key. |
-| `requestModes` | `chat`, `responses`, or `both`; overrides a suite's default modes. |
-| `topic` | The customer and car request to inspect. |
-| `models` | `foreman`, `specialist`, `embedding`, `vision`, `image`, and a `fallbacks` list. |
-| `image` | `surface` is `sync` (the default), `streaming`, `chat`, or `all`; `quality` is optional. |
-| `limits` | `maxCompletionTokens` and `specialistMaxCompletionTokens`, both positive. |
-| `reasoningEffort` | Text reasoning effort. |
-| `provider` | `sort`, `requireParameters`, and the `order`, `ignore`, and `quantizations` lists. |
+| Field              | Meaning                                                                                                   |
+| ------------------ | --------------------------------------------------------------------------------------------------------- |
+| `capabilities`     | Any of `text`, `embedding`, `vision`, and `image`.                                                        |
+| `scenes`           | Narrows a capability suite to these scene ids. Selected modalities require `modality-bays` in the list.   |
+| `full`             | `true` runs every scene, embeddings, vision, and all image surfaces. It cannot be narrowed with `scenes`. |
+| `offlineContracts` | `true` runs only the local recovery and dyno contracts, without an API key.                               |
+| `requestModes`     | `chat`, `responses`, or `both`; overrides a suite's default modes.                                        |
+| `topic`            | The customer and car request to inspect.                                                                  |
+| `models`           | `foreman`, `specialist`, `embedding`, `vision`, `image`, and a `fallbacks` list.                          |
+| `image`            | `surface` is `sync` (the default), `streaming`, `chat`, or `all`; `quality` is optional.                  |
+| `limits`           | `maxCompletionTokens` and `specialistMaxCompletionTokens`, both positive.                                 |
+| `reasoningEffort`  | Text reasoning effort.                                                                                    |
+| `provider`         | `sort`, `requireParameters`, and the `order`, `ignore`, and `quantizations` lists.                        |
 
-| Selection | Request modes | Selected work |
-| --- | --- | --- |
-| Empty body | Chat Completions | `service-story` |
-| `{"requestModes":["chat"]}` | Chat Completions | `service-story` |
-| `{"requestModes":["responses"]}` | Responses | `service-story` |
-| `{"capabilities":["text"]}` | Both | Text, tools, streaming, structured-output and offline text contracts |
-| `{"capabilities":["text"],"requestModes":["chat"]}` | Chat Completions | Same text suite, narrowed to chat |
-| `{"capabilities":["text"],"requestModes":["responses"]}` | Responses | Same suite; unsupported registry rows remain explicit |
-| `{"full":true}` | Both | Every scene, embeddings, vision and all image surfaces |
-| `{"capabilities":["embedding"]}` | Chat Completions selection; mode-independent API | Embeddings only |
-| `{"capabilities":["vision"]}` | Both | Image input only; add `"requestModes":["chat"]` to narrow it |
-| `{"capabilities":["image"]}` | Chat Completions selection; mode-independent Image API | Synchronous image generation only |
+| Selection                                                | Request modes                                          | Selected work                                                        |
+| -------------------------------------------------------- | ------------------------------------------------------ | -------------------------------------------------------------------- |
+| Empty body                                               | Chat Completions                                       | `service-story`                                                      |
+| `{"requestModes":["chat"]}`                              | Chat Completions                                       | `service-story`                                                      |
+| `{"requestModes":["responses"]}`                         | Responses                                              | `service-story`                                                      |
+| `{"capabilities":["text"]}`                              | Both                                                   | Text, tools, streaming, structured-output and offline text contracts |
+| `{"capabilities":["text"],"requestModes":["chat"]}`      | Chat Completions                                       | Same text suite, narrowed to chat                                    |
+| `{"capabilities":["text"],"requestModes":["responses"]}` | Responses                                              | Same suite; unsupported registry rows remain explicit                |
+| `{"full":true}`                                          | Both                                                   | Every scene, embeddings, vision and all image surfaces               |
+| `{"capabilities":["embedding"]}`                         | Chat Completions selection; mode-independent API       | Embeddings only                                                      |
+| `{"capabilities":["vision"]}`                            | Both                                                   | Image input only; add `"requestModes":["chat"]` to narrow it         |
+| `{"capabilities":["image"]}`                             | Chat Completions selection; mode-independent Image API | Synchronous image generation only                                    |
 
 The Garage deliberately selects both modes for the `text` and `vision` capabilities and for `full`; the library and the plain service-story demo still default to Chat Completions. Explicit `requestModes` override suite defaults. `{"full":true,"requestModes":["responses"]}` is rejected because its chat-image surface requires Chat Completions; use individual capabilities instead. The current Garage registry does not verify Responses structured output, streamed tool aggregation or recovery contracts, even where the library has synthetic coverage. Embeddings and image generation are checked once per selection, not duplicated across modes. `GET /api/scenes` lists the same registry used by generated reports; report rows alone do not mean their features were executed.
 

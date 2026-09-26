@@ -1,6 +1,7 @@
 package de.subhransu.openrouter.springai.garage.web;
 
 import de.subhransu.openrouter.springai.garage.GarageRunService;
+import org.jspecify.annotations.Nullable;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
@@ -46,7 +47,7 @@ class GarageApiExceptionHandler {
     return problem(HttpStatus.UNPROCESSABLE_CONTENT, "OpenRouter API key missing", ex.getMessage());
   }
 
-  private static ProblemDetail problem(HttpStatus status, String title, String detail) {
+  private static ProblemDetail problem(HttpStatus status, String title, @Nullable String detail) {
     ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
     problem.setTitle(title);
     return problem;

@@ -70,6 +70,9 @@ public record GarageRunPlan(
     Selection selection = new Selection(settings);
     if (request.capabilities() != null) {
       for (String capability : request.capabilities()) {
+        if (capability == null) {
+          throw new IllegalArgumentException("capabilities must not contain null");
+        }
         switch (normalize(capability)) {
           case "text" -> selection.text = true;
           case "embedding" -> selection.embedding = true;
