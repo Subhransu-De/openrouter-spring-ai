@@ -1,15 +1,25 @@
 logging:
   level:
     root: warn
+    # Startup lines, including the port the Garage API listens on.
+    org.springframework.boot: info
     de.subhransu.openrouter.springai.garage: info
-  pattern:
-    # The Garage's report lines are console output, not diagnostics: bare messages keep
-    # the run as readable as the println output they replace.
-    console: "%m%n"
+
+server:
+  # Any caller that reaches the port can start a paid run; stay on loopback unless overridden.
+  address: ${GARAGE_ADDRESS:127.0.0.1}
+  port: ${GARAGE_PORT:8080}
 
 spring:
   main:
     banner-mode: off
+  mvc:
+    problemdetails:
+      enabled: true
+  jackson:
+    deserialization:
+      # A misspelled request field would otherwise silently fall back to a default.
+      fail-on-unknown-properties: true
   ai:
     model:
       chat: openrouter

@@ -1,0 +1,8 @@
+data: {"id":"gen-garage-truncated","object":"chat.completion.chunk","created":1767225600,"model":"openai/gpt-oss-120b","provider":"GarageMock","choices":[{"index":0,"delta":{"role":"assistant","content":"","reasoning":"Summarize ","reasoning_details":[{"type":"reasoning.text","text":"Summarize ","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-garage-truncated","object":"chat.completion.chunk","created":1767225600,"model":"openai/gpt-oss-120b","provider":"GarageMock","choices":[{"index":0,"delta":{"role":"assistant","content":"","reasoning":"the intake.","reasoning_details":[{"type":"reasoning.text","text":"the intake.","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-garage-truncated","object":"chat.completion.chunk","created":1767225600,"model":"openai/gpt-oss-120b","provider":"GarageMock","choices":[{"index":0,"delta":{"role":"assistant","content":"The 1972 pickup arrived running hot. "},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-garage-truncated","object":"chat.completion.chunk","created":1767225600,"model":"openai/gpt-oss-120b","provider":"GarageMock","choices":[{"index":0,"delta":{"role":"assistant","content":"Coolant is low after long climbs. "},"finish_reason":null,"native_finish_reason":null}]}
+

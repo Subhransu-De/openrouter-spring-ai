@@ -71,8 +71,8 @@ public final class ExpressInvoiceScene extends GarageSceneSupport {
             .expressInvoice(
                 operationId,
                 context.requestMode(),
-                context.command().foremanModel(),
-                context.command().topic(),
+                context.plan().foremanModel(),
+                context.plan().topic(),
                 invoice);
     context.evidence().record(
         feature,

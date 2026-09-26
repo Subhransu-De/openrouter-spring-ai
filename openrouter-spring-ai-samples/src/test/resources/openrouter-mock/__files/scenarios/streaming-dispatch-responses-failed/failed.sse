@@ -1,0 +1,26 @@
+data: {"type":"response.created","response":{"id":"resp-garage-dispatch-failed","object":"response","created_at":1767225600,"model":"openai/gpt-oss-120b","status":"in_progress","output":[]},"sequence_number":0}
+
+data: {"type":"response.in_progress","response":{"id":"resp-garage-dispatch-failed","object":"response","created_at":1767225600,"model":"openai/gpt-oss-120b","status":"in_progress","output":[]},"sequence_number":1}
+
+data: {"type":"response.output_item.added","output_index":0,"item":{"id":"rs_dispatch-failed","type":"reasoning","status":"in_progress","summary":[]},"sequence_number":2}
+
+data: {"type":"response.content_part.added","output_index":0,"item_id":"rs_dispatch-failed","content_index":0,"part":{"type":"reasoning_text","text":""},"sequence_number":3}
+
+data: {"type":"response.reasoning_text.delta","output_index":0,"item_id":"rs_dispatch-failed","content_index":0,"delta":"Summarize the intake.","sequence_number":4}
+
+data: {"type":"response.reasoning_text.done","output_index":0,"item_id":"rs_dispatch-failed","content_index":0,"text":"Summarize the intake.","sequence_number":5}
+
+data: {"type":"response.content_part.done","output_index":0,"item_id":"rs_dispatch-failed","content_index":0,"part":{"type":"reasoning_text","text":"Summarize the intake."},"sequence_number":6}
+
+data: {"type":"response.output_item.done","output_index":0,"item":{"id":"rs_dispatch-failed","type":"reasoning","status":"completed","content":[{"type":"reasoning_text","text":"Summarize the intake."}],"summary":[],"format":"unknown"},"sequence_number":7}
+
+data: {"type":"response.output_item.added","output_index":1,"item":{"id":"msg_dispatch-failed","type":"message","role":"assistant","status":"in_progress","content":[]},"sequence_number":8}
+
+data: {"type":"response.content_part.added","output_index":1,"item_id":"msg_dispatch-failed","content_index":0,"part":{"type":"output_text","text":"","annotations":[]},"sequence_number":9}
+
+data: {"type":"response.output_text.delta","output_index":1,"item_id":"msg_dispatch-failed","content_index":0,"delta":"The 1972 pickup arrived running hot. ","logprobs":[],"sequence_number":10}
+
+data: {"type":"response.failed","response":{"id":"resp-garage-dispatch-failed","object":"response","created_at":1767225600,"model":"openai/gpt-oss-120b","status":"failed","output":[],"error":{"code":"server_error","message":"The upstream provider returned an error"}},"sequence_number":11}
+
+data: [DONE]
+

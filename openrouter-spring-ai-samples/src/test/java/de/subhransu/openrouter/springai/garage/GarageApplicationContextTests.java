@@ -9,11 +9,12 @@ import de.subhransu.openrouter.springai.autoconfigure.OpenRouterEmbeddingAutoCon
 import de.subhransu.openrouter.springai.autoconfigure.OpenRouterImageAutoConfiguration;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
 import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingModel;
-import de.subhransu.openrouter.springai.garage.cli.GarageCommand;
+import de.subhransu.openrouter.springai.garage.run.GarageRunPlan;
 import de.subhransu.openrouter.springai.garage.evidence.GarageEvidence;
 import de.subhransu.openrouter.springai.garage.evidence.GarageTelemetry;
 import de.subhransu.openrouter.springai.garage.evidence.GarageTransportEvidence;
 import de.subhransu.openrouter.springai.garage.scenes.GarageScene;
+import de.subhransu.openrouter.springai.garage.web.GarageRunController;
 import de.subhransu.openrouter.springai.image.OpenRouterImageModel;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
@@ -26,6 +27,8 @@ import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.image.ImageModel;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.boot.context.properties.bind.Bindable;
+import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.context.properties.bind.UnboundConfigurationPropertiesException;
 import org.springframework.core.env.SimpleCommandLinePropertySource;
 
@@ -34,10 +37,9 @@ import org.springframework.core.env.SimpleCommandLinePropertySource;
  * dummy API key and asserts the OpenRouter beans plus the garage collaborators wire up.
  *
  * <p>
- * {@link ApplicationContextRunner} constructs beans but does not invoke
- * {@code CommandLineRunner}s, so {@code GarageRunner.run(...)} never fires and no real
- * OpenRouter call is made. This catches missing beans or broken sample configuration
- * without touching the network or needing a real API key.
+ * Runs start only through the HTTP API, so building the context makes no OpenRouter call.
+ * This catches missing beans or broken sample configuration without touching the network
+ * or needing a real API key.
  */
 class GarageApplicationContextTests {
 
@@ -59,11 +61,12 @@ class GarageApplicationContextTests {
 			assertThat(context).hasSingleBean(EmbeddingModel.class);
 			assertThat(context).hasSingleBean(OpenRouterImageModel.class);
 			assertThat(context).hasSingleBean(ImageModel.class);
-			// Garage-specific beans and bound properties. GarageTools is created inside the
-			// runner per run, so it is intentionally not a context bean.
+			// Garage-specific beans and bound properties. GarageTools and GarageOptionsFactory
+			// are created per run from that run's settings, so they are not context beans.
 			assertThat(context).hasSingleBean(GarageProperties.class);
-			assertThat(context).hasSingleBean(GarageRunner.class);
-			assertThat(context).hasSingleBean(GarageOptionsFactory.class);
+			assertThat(context).hasSingleBean(GarageRunService.class);
+			assertThat(context).hasSingleBean(GarageRunController.class);
+			assertThat(context).doesNotHaveBean(GarageOptionsFactory.class);
 			assertThat(context).hasSingleBean(GarageEvidence.class);
 			assertThat(context).hasSingleBean(GarageTelemetry.class);
 			assertThat(context).hasSingleBean(GarageTransportEvidence.class);
@@ -86,11 +89,10 @@ class GarageApplicationContextTests {
 	}
 
 	@Test
-	void bootArgumentsBindPropertiesAndGarageOverridesRemainAuthoritative() {
+	void bootArgumentsBindDefaultsAndRequestOverridesStayPerRun() {
 		String[] args = { "--spring.profiles.active=coverage", "--spring.main.banner-mode=off",
 				"--garage.stream=true", "--garage.specialistModel=synthetic/configured",
-				"--garage.max-completion-tokens=123", "--specialist-model=synthetic/override",
-				"--max-completion-tokens=456" };
+				"--garage.max-completion-tokens=123" };
 		this.contextRunner.withInitializer(context -> context.getEnvironment().getPropertySources()
 			.addFirst(new SimpleCommandLinePropertySource(args))).run(context -> {
 				assertThat(context).hasNotFailed();
@@ -100,10 +102,15 @@ class GarageApplicationContextTests {
 				assertThat(properties.isStream()).isTrue();
 				assertThat(properties.getSpecialistModel()).isEqualTo("synthetic/configured");
 				assertThat(properties.getMaxCompletionTokens()).isEqualTo(123);
-				GarageCommand command = GarageCommand.from(args, properties);
-				assertThat(command.sceneIds()).containsExactly("service-story", "streaming-dispatch");
-				assertThat(command.specialistModel()).isEqualTo("synthetic/override");
-				assertThat(properties.getMaxCompletionTokens()).isEqualTo(456);
+				GarageProperties runSettings = Binder.get(context.getEnvironment())
+					.bindOrCreate("garage", Bindable.of(GarageProperties.class));
+				GarageRunPlan plan = GarageRunRequests.plan(
+						"{\"models\":{\"specialist\":\"synthetic/override\"},\"limits\":{\"maxCompletionTokens\":456}}",
+						runSettings);
+				assertThat(plan.sceneIds()).containsExactly("service-story", "streaming-dispatch");
+				assertThat(plan.specialistModel()).isEqualTo("synthetic/override");
+				assertThat(runSettings.getMaxCompletionTokens()).isEqualTo(456);
+				assertThat(properties.getMaxCompletionTokens()).isEqualTo(123);
 			});
 	}
 
@@ -135,7 +142,8 @@ class GarageApplicationContextTests {
 			.addFirst(new SimpleCommandLinePropertySource("--garage.enabled=false"))).run(context -> {
 				assertThat(context).hasNotFailed();
 				assertThat(context.getBean(GarageProperties.class).isEnabled()).isFalse();
-				assertThat(context).doesNotHaveBean(GarageRunner.class);
+				assertThat(context).doesNotHaveBean(GarageRunService.class);
+				assertThat(context).doesNotHaveBean(GarageRunController.class);
 			});
 	}
 

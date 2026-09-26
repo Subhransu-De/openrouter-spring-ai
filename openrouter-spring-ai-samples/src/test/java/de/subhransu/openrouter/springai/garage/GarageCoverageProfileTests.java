@@ -20,6 +20,7 @@ class GarageCoverageProfileTests {
             .properties(
                 Map.of(
                     "spring.main.banner-mode", "off",
+                    "spring.main.web-application-type", "none",
                     "logging.level.root", "off"))
             .run()) {
       OpenRouterChatProperties properties = context.getBean(OpenRouterChatProperties.class);

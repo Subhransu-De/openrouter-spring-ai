@@ -1,0 +1,24 @@
+{
+  "name": "rate-limited",
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/chat/completions",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.metadata.sceneId == 'routing-lane')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 429,
+    "headers": {
+      "Content-Type": "application/json",
+      "Retry-After": "0"
+    },
+    "bodyFileName": "scenarios/routing-lane-rate-limited-once/rate-limited.json"
+  },
+  "scenarioName": "routing-rate-limit",
+  "requiredScenarioState": "Started",
+  "newScenarioState": "recovered"
+}

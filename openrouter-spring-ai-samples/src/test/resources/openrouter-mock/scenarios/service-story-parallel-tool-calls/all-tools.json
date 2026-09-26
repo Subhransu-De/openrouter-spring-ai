@@ -1,0 +1,23 @@
+{
+  "name": "all-tools",
+  "priority": 2,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/chat/completions",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.metadata.sceneId == 'service-story')]"
+      },
+      {
+        "matchesJsonPath": "$.tools[?(@.function.name == 'inspect_vehicle_profile')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "scenarios/service-story-parallel-tool-calls/all-tools.json"
+  }
+}

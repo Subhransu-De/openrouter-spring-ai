@@ -1,0 +1,6 @@
+data: {"type":"image_generation.partial_image","partial_image_index":0,"b64_json":"iVBORw0KGgoAAAANSUhEUgAAAAQAAAAEAQMAAACTPww9AAAAA1BMVEV+iJT9LT2eAAAAC0lEQVQI12NggAAAAAgAAS8g3TEAAAAASUVORK5CYII=","media_type":"image/png","created":1767225600}
+
+data: {"type":"image_generation.completed","b64_json":"UklGRiQAAABXRUJQVlA4TBgAAAAvB8ABAA/wttunyL/AZf5jCR/+j+h/DAM=","media_type":"image/webp","created":1767225600,"usage":{"prompt_tokens":38,"completion_tokens":1290,"total_tokens":1328,"cost":0.04,"is_byok":false,"prompt_tokens_details":{"cached_tokens":0,"cache_write_tokens":0,"audio_tokens":0,"video_tokens":0},"cost_details":{"upstream_inference_cost":0.04,"upstream_inference_prompt_cost":1e-05,"upstream_inference_completions_cost":0.03999},"completion_tokens_details":{"reasoning_tokens":0,"image_tokens":1290}}}
+
+data: [DONE]
+

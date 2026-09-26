@@ -1,0 +1,23 @@
+{
+  "name": "responses-attribution-stream",
+  "priority": 29,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/responses",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.metadata.sceneId == 'attribution-check-in')]"
+      },
+      {
+        "matchesJsonPath": "$[?(@.stream == true)]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "text/event-stream"
+    },
+    "bodyFileName": "responses/attribution.sse"
+  }
+}

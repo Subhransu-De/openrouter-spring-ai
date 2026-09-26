@@ -1,0 +1,24 @@
+{
+  "name": "error-429-first",
+  "priority": 10,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/chat/completions",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.metadata.suite == 'error-429')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 429,
+    "headers": {
+      "Content-Type": "application/json",
+      "Retry-After": "0"
+    },
+    "bodyFileName": "errors/429-rate-limited.json"
+  },
+  "scenarioName": "rate-limit",
+  "requiredScenarioState": "Started",
+  "newScenarioState": "recovered"
+}

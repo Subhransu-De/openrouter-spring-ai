@@ -1,0 +1,23 @@
+{
+  "name": "chat-service-story-5-final",
+  "priority": 15,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/chat/completions",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.metadata.sceneId == 'service-story')]"
+      },
+      {
+        "matchesJsonPath": "$.messages[?(@.tool_call_id == 'call_log')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "chat/chat-service-story-5-final.json"
+  }
+}

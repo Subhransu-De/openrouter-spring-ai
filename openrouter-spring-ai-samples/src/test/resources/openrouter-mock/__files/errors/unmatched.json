@@ -1,0 +1,6 @@
+{
+  "error": {
+    "message": "No Garage mock matches this request",
+    "code": 400
+  }
+}

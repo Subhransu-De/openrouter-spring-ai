@@ -1,0 +1,15 @@
+{
+  "name": "fake-webp",
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/images"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "scenarios/images-webp-without-signature/fake-webp.json"
+  }
+}

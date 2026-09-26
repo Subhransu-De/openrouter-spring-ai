@@ -1,0 +1,20 @@
+{
+  "name": "primary-served",
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/chat/completions",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.metadata.sceneId == 'routing-lane')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "scenarios/routing-lane-no-fallback/primary-served.json"
+  }
+}

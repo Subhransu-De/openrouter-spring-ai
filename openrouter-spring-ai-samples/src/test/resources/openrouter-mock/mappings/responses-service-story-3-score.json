@@ -1,0 +1,23 @@
+{
+  "name": "responses-service-story-3-score",
+  "priority": 18,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/responses",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.metadata.sceneId == 'service-story')]"
+      },
+      {
+        "matchesJsonPath": "$.input[?(@.type == 'function_call_output' && @.call_id == 'call_specialist')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "responses/responses-service-story-3-score.json"
+  }
+}

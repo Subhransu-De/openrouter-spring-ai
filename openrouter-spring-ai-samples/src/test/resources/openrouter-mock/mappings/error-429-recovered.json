@@ -1,0 +1,22 @@
+{
+  "name": "error-429-recovered",
+  "priority": 10,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/chat/completions",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.metadata.suite == 'error-429')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "chat/modality-matrix.json"
+  },
+  "scenarioName": "rate-limit",
+  "requiredScenarioState": "recovered"
+}

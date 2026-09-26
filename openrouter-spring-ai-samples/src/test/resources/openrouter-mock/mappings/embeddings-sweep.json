@@ -1,0 +1,20 @@
+{
+  "name": "embeddings-sweep",
+  "priority": 20,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/embeddings",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.input.size() == 3)]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "embeddings/sweep.json"
+  }
+}

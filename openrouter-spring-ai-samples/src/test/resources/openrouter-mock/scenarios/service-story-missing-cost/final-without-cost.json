@@ -1,0 +1,23 @@
+{
+  "name": "final-without-cost",
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/chat/completions",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.metadata.sceneId == 'service-story')]"
+      },
+      {
+        "matchesJsonPath": "$.messages[?(@.tool_call_id == 'call_log')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "scenarios/service-story-missing-cost/final-without-cost.json"
+  }
+}

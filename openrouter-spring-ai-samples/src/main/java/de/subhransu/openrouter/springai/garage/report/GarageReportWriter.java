@@ -2,7 +2,7 @@ package de.subhransu.openrouter.springai.garage.report;
 
 import java.util.Objects;
 import tools.jackson.databind.ObjectMapper;
-import de.subhransu.openrouter.springai.garage.cli.GarageCommand;
+import de.subhransu.openrouter.springai.garage.run.GarageRunPlan;
 import de.subhransu.openrouter.springai.garage.evidence.GarageEvidence;
 import de.subhransu.openrouter.springai.garage.evidence.GarageFeature;
 import de.subhransu.openrouter.springai.garage.evidence.GarageTelemetry;
@@ -41,7 +41,7 @@ public final class GarageReportWriter {
 
   @SuppressWarnings("unchecked")
   public ReportPaths write(
-      Path runDirectory, GarageCommand command, List<SceneResult> results,
+      Path runDirectory, GarageRunPlan command, List<SceneResult> results,
       List<String> incompleteFeatures) throws IOException {
     Files.createDirectories(runDirectory);
     List<Map<String, Object>> featureEvidence = this.evidence.featureSnapshot();
@@ -96,7 +96,7 @@ public final class GarageReportWriter {
     return new ReportPaths(json, report, readme);
   }
 
-  private List<Map<String, Object>> registry(List<Map<String, Object>> featureEvidence, GarageCommand command) {
+  private List<Map<String, Object>> registry(List<Map<String, Object>> featureEvidence, GarageRunPlan command) {
     List<Map<String, Object>> registry = new ArrayList<>();
     for (GarageFeature feature : GarageFeature.values()) {
       List<Map<String, Object>> matching =
@@ -125,7 +125,7 @@ public final class GarageReportWriter {
     return registry;
   }
 
-  private Map<String, Object> commandEvidence(GarageCommand command) {
+  private Map<String, Object> commandEvidence(GarageRunPlan command) {
     Map<String, Object> values = new LinkedHashMap<>();
     values.put("topic", "[REDACTED]");
     values.put("full", command.full());

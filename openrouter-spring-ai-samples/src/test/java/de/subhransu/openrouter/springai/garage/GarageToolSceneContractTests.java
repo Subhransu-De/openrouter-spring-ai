@@ -23,7 +23,7 @@ import de.subhransu.openrouter.springai.api.dto.ResponsesOutputItem;
 import de.subhransu.openrouter.springai.api.dto.Usage;
 import de.subhransu.openrouter.springai.autoconfigure.OpenRouterChatProperties;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
-import de.subhransu.openrouter.springai.garage.cli.GarageCommand;
+import de.subhransu.openrouter.springai.garage.run.GarageRunPlan;
 import de.subhransu.openrouter.springai.garage.evidence.GarageEvidence;
 import de.subhransu.openrouter.springai.garage.evidence.GarageObservationConvention;
 import de.subhransu.openrouter.springai.garage.evidence.GarageTelemetry;
@@ -283,9 +283,9 @@ class GarageToolSceneContractTests {
             .objectMapper(new ObjectMapper())
             .build();
     model.setObservationConvention(new GarageObservationConvention());
-    GarageCommand command =
-        GarageCommand.from(
-            new String[] {"--scene=" + sceneId, "--foreman-model=garage/model"},
+    GarageRunPlan command =
+        GarageRunRequests.plan(
+            "{\"scenes\":[\"" + sceneId + "\"],\"models\":{\"foreman\":\"garage/model\"}}",
             properties);
     GarageTransportEvidence transport = new GarageTransportEvidence(evidence);
     return new TestContext(

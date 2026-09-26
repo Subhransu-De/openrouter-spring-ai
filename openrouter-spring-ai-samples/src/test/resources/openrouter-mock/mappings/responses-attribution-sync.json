@@ -1,0 +1,20 @@
+{
+  "name": "responses-attribution-sync",
+  "priority": 30,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/responses",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.metadata.sceneId == 'attribution-check-in')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "responses/attribution.json"
+  }
+}

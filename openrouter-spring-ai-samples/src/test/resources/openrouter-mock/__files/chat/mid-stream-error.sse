@@ -1,0 +1,6 @@
+data: {"id":"gen-garage-mid-stream","object":"chat.completion.chunk","created":1767225600,"model":"openai/gpt-oss-120b","provider":"GarageMock","choices":[{"index":0,"delta":{"role":"assistant","content":"The cooling system "},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-garage-mid-stream","object":"chat.completion.chunk","created":1767225600,"model":"openai/gpt-oss-120b","provider":"GarageMock","choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":"error","native_finish_reason":"error"}],"error":{"code":"server_error","message":"The upstream provider returned an error"}}
+
+data: [DONE]
+

@@ -1,0 +1,7 @@
+{
+  "error": {
+    "message": "No available provider for this request",
+    "code": 503
+  },
+  "user_id": "user_garage_synthetic"
+}

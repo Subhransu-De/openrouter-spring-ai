@@ -1,0 +1,7 @@
+{
+  "error": {
+    "message": "Rate limit exceeded",
+    "code": 429
+  },
+  "user_id": "user_garage_synthetic"
+}

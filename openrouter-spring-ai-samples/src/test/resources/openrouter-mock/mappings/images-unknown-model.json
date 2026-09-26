@@ -1,0 +1,20 @@
+{
+  "name": "images-unknown-model",
+  "priority": 5,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/images",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.model == 'garage/does-not-exist')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "errors/404-image-model.json"
+  }
+}

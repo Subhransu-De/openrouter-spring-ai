@@ -1,0 +1,15 @@
+{
+  "name": "images-sync",
+  "priority": 30,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/images"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "images/paint-bay.json"
+  }
+}

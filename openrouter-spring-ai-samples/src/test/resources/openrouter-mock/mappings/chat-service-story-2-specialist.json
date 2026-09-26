@@ -1,0 +1,23 @@
+{
+  "name": "chat-service-story-2-specialist",
+  "priority": 19,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/chat/completions",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.metadata.sceneId == 'service-story')]"
+      },
+      {
+        "matchesJsonPath": "$.messages[?(@.tool_call_id == 'call_inspect')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "chat/chat-service-story-2-specialist.json"
+  }
+}

@@ -1,0 +1,34 @@
+data: {"type":"response.created","response":{"id":"resp-garage-dispatch-plain","object":"response","created_at":1767225600,"model":"openai/gpt-oss-120b","status":"in_progress","output":[]},"sequence_number":0}
+
+data: {"type":"response.in_progress","response":{"id":"resp-garage-dispatch-plain","object":"response","created_at":1767225600,"model":"openai/gpt-oss-120b","status":"in_progress","output":[]},"sequence_number":1}
+
+data: {"type":"response.output_item.added","output_index":0,"item":{"id":"rs_dispatch-plain","type":"reasoning","status":"in_progress","summary":[]},"sequence_number":2}
+
+data: {"type":"response.content_part.added","output_index":0,"item_id":"rs_dispatch-plain","content_index":0,"part":{"type":"reasoning_text","text":""},"sequence_number":3}
+
+data: {"type":"response.reasoning_text.delta","output_index":0,"item_id":"rs_dispatch-plain","content_index":0,"delta":"Summarize the intake.","sequence_number":4}
+
+data: {"type":"response.reasoning_text.done","output_index":0,"item_id":"rs_dispatch-plain","content_index":0,"text":"Summarize the intake.","sequence_number":5}
+
+data: {"type":"response.content_part.done","output_index":0,"item_id":"rs_dispatch-plain","content_index":0,"part":{"type":"reasoning_text","text":"Summarize the intake."},"sequence_number":6}
+
+data: {"type":"response.output_item.done","output_index":0,"item":{"id":"rs_dispatch-plain","type":"reasoning","status":"completed","content":[{"type":"reasoning_text","text":"Summarize the intake."}],"summary":[],"format":"unknown"},"sequence_number":7}
+
+data: {"type":"response.output_item.added","output_index":1,"item":{"id":"msg_dispatch-plain","type":"message","role":"assistant","status":"in_progress","content":[]},"sequence_number":8}
+
+data: {"type":"response.content_part.added","output_index":1,"item_id":"msg_dispatch-plain","content_index":0,"part":{"type":"output_text","text":"","annotations":[]},"sequence_number":9}
+
+data: {"type":"response.output_text.delta","output_index":1,"item_id":"msg_dispatch-plain","content_index":0,"delta":"The 1972 pickup arrived running hot. ","logprobs":[],"sequence_number":10}
+
+data: {"type":"response.output_text.delta","output_index":1,"item_id":"msg_dispatch-plain","content_index":0,"delta":"Coolant is low after long climbs. ","logprobs":[],"sequence_number":11}
+
+data: {"type":"response.output_text.delta","output_index":1,"item_id":"msg_dispatch-plain","content_index":0,"delta":"Rough idle and brake vibration are noted for inspection.","logprobs":[],"sequence_number":12}
+
+data: {"type":"response.output_text.done","output_index":1,"item_id":"msg_dispatch-plain","content_index":0,"text":"The 1972 pickup arrived running hot. Coolant is low after long climbs. Rough idle and brake vibration are noted for inspection.","logprobs":[],"sequence_number":13}
+
+data: {"type":"response.output_item.done","output_index":1,"item":{"id":"msg_dispatch-plain","type":"message","role":"assistant","status":"completed","content":[{"type":"output_text","text":"The 1972 pickup arrived running hot. Coolant is low after long climbs. Rough idle and brake vibration are noted for inspection.","annotations":[],"logprobs":[]}]},"sequence_number":14}
+
+data: {"type":"response.completed","response":{"id":"resp-garage-dispatch-plain","object":"response","created_at":1767225600,"model":"openai/gpt-oss-120b","status":"completed","completed_at":1767225601,"output":[{"id":"rs_dispatch-plain","type":"reasoning","status":"completed","content":[{"type":"reasoning_text","text":"Follow the inspection order before writing the note."}],"summary":[],"format":"unknown"},{"id":"msg_dispatch-plain","type":"message","role":"assistant","status":"completed","content":[{"type":"output_text","text":"The 1972 pickup arrived running hot. Coolant is low after long climbs. Rough idle and brake vibration are noted for inspection.","annotations":[],"logprobs":[]}]}],"error":null,"incomplete_details":null,"tool_choice":"auto","parallel_tool_calls":true,"metadata":{},"service_tier":"auto","store":false,"usage":{"input_tokens":180,"input_tokens_details":{"cached_tokens":64},"output_tokens":42,"output_tokens_details":{"reasoning_tokens":18},"total_tokens":222,"cost":0.000183,"is_byok":false,"cost_details":{"upstream_inference_cost":0.000183,"upstream_inference_input_cost":8.1e-05,"upstream_inference_output_cost":0.000102}}},"sequence_number":15}
+
+data: [DONE]
+

@@ -1,0 +1,6 @@
+{
+  "error": {
+    "message": "Model garage/does-not-exist not found",
+    "code": 404
+  }
+}

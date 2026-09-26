@@ -57,6 +57,7 @@ val libraryProjects =
 extra["archunitVersion"] = archunitVersion
 extra["lombokVersion"] = pomProperty("lombok.version")
 extra["twelveMonkeysVersion"] = pomProperty("twelvemonkeys.version")
+extra["wiremockVersion"] = pomProperty("wiremock.version")
 extra["pitestVersion"] = pomProperty("pitest.version")
 extra["pitestJunitVersion"] = pomProperty("pitest-junit5.version")
 extra["mutationTargets"] = pomProperty("mutation.targets")

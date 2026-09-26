@@ -1,0 +1,29 @@
+{
+  "name": "keepalive",
+  "priority": 2,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/chat/completions",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.metadata.sceneId == 'streaming-dispatch')]"
+      },
+      {
+        "matchesJsonPath": "$[?(@.stream == true)]"
+      },
+      {
+        "matchesJsonPath": {
+          "expression": "$.tools",
+          "absent": true
+        }
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "text/event-stream"
+    },
+    "bodyFileName": "scenarios/streaming-dispatch-keepalive/keepalive.sse"
+  }
+}

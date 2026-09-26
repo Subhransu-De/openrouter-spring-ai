@@ -18,11 +18,16 @@ import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.stereotype.Component;
 
-/** Forces an unavailable primary through the configured model fallback/routing lane. */
+/** Forces a primary that cannot serve the request through the configured model fallback lane. */
 @Component
 public final class RoutingLaneScene extends GarageSceneSupport {
 
-  private static final String UNAVAILABLE_PRIMARY = "garage/primary-unavailable";
+  // OpenRouter rejects an unknown model id with HTTP 400 instead of falling back, so the
+  // primary is a real model whose 4,095-token context the padded prompt below exceeds.
+  private static final String UNAVAILABLE_PRIMARY = "openai/gpt-3.5-turbo-0613";
+
+  private static final String CONTEXT_OVERFLOW =
+      "Inspection log line: coolant level checked, hoses inspected, no leaks found. ".repeat(320);
 
   public RoutingLaneScene() {
     super(
@@ -38,8 +43,8 @@ public final class RoutingLaneScene extends GarageSceneSupport {
     String mode = context.requestMode().name();
     String operationId = context.evidence().newOperation(id(), mode);
     List<String> routingModels = new ArrayList<>();
-    routingModels.add(context.command().foremanModel());
-    context.command().fallbackModels().stream()
+    routingModels.add(context.plan().foremanModel());
+    context.plan().fallbackModels().stream()
         .filter(model -> !routingModels.contains(model))
         .forEach(routingModels::add);
     OpenRouterChatOptions options =
@@ -49,7 +54,7 @@ public final class RoutingLaneScene extends GarageSceneSupport {
                 context.requestMode(),
                 UNAVAILABLE_PRIMARY,
                 routingModels,
-                context.command().topic());
+                context.plan().topic());
     Map<String, Object> requestEvidence = context.optionsFactory().snapshot(options);
     context.evidence().recordAll(
         features(),
@@ -67,7 +72,8 @@ public final class RoutingLaneScene extends GarageSceneSupport {
               .call(
                   new Prompt(
                       new UserMessage(
-                          "Reply with one sentence confirming the routing-lane inspection."),
+                          CONTEXT_OVERFLOW
+                              + "\nReply with one sentence confirming the routing-lane inspection."),
                       options));
     }
     String servedModel = response.getMetadata().getModel();

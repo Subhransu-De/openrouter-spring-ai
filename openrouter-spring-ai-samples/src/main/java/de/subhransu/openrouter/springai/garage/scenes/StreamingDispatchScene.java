@@ -57,13 +57,13 @@ public final class StreamingDispatchScene extends GarageSceneSupport {
                 operationId,
                 id(),
                 context.requestMode(),
-                context.command().foremanModel(),
-                context.command().topic());
+                context.plan().foremanModel(),
+                context.plan().topic());
     Prompt plainPrompt =
         new Prompt(
             List.of(
                 new SystemMessage("Stream a three-sentence Garage intake note."),
-                new UserMessage(context.command().topic())),
+                new UserMessage(context.plan().topic())),
             plainOptions);
     List<ChatResponse> plainChunks;
     try (GarageTransportEvidence.Scope ignored =
@@ -107,8 +107,8 @@ public final class StreamingDispatchScene extends GarageSceneSupport {
               .streamingDispatch(
                   operationId,
                   context.requestMode(),
-                  context.command().foremanModel(),
-                  context.command().topic(),
+                  context.plan().foremanModel(),
+                  context.plan().topic(),
                   callback)
               .mutate()
               .toolChoice("auto")

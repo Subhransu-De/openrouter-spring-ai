@@ -8,8 +8,8 @@ import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.STATUS;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.garage.GarageModalityBays;
 import de.subhransu.openrouter.springai.garage.GarageOptionsFactory;
-import de.subhransu.openrouter.springai.garage.cli.GarageCommand;
-import de.subhransu.openrouter.springai.garage.cli.GarageCommand.ImageSurface;
+import de.subhransu.openrouter.springai.garage.run.GarageRunPlan;
+import de.subhransu.openrouter.springai.garage.run.GarageRunPlan.ImageSurface;
 import de.subhransu.openrouter.springai.garage.evidence.EvidenceLevel;
 import de.subhransu.openrouter.springai.garage.evidence.GarageFeature;
 import java.time.Duration;
@@ -54,7 +54,7 @@ public final class ModalityBaysScene extends GarageSceneSupport {
     Instant started = Instant.now();
     String mode = context.requestMode().name();
     String operationId = context.evidence().newOperation(id(), mode);
-    GarageCommand command = context.command();
+    GarageRunPlan command = context.plan();
     GarageModalityBays bays =
         new GarageModalityBays(
             context.chatModel(),
@@ -140,7 +140,7 @@ public final class ModalityBaysScene extends GarageSceneSupport {
 
   private Map<GarageFeature, List<Map<String, Object>>> runProbes(
       SceneContext context, GarageModalityBays bays) {
-    GarageCommand command = context.command();
+    GarageRunPlan command = context.plan();
     boolean modeIndependentBays =
         context.requestMode() == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS
             || !command.requestModes().contains(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS);
