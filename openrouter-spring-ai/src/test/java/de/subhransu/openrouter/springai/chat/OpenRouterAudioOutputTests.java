@@ -42,6 +42,10 @@ import tools.jackson.databind.ObjectMapper;
 
 class OpenRouterAudioOutputTests {
 
+	private static final String TRANSPORT_FAILURE = "synthetic transport failure";
+
+	private static final String AUDIO_FRAGMENT = "{\"audio\":{\"data\":\"AA==\"}}";
+
 	private final ObjectMapper json = new ObjectMapper();
 
 	private final OpenRouterAudioOptions audio = new OpenRouterAudioOptions("alloy", "pcm16");
@@ -107,9 +111,9 @@ class OpenRouterAudioOutputTests {
 			.verify();
 		StepVerifier
 			.create(map(Flux.concat(Flux.just(chunk(0, null, "AA==", null, null)),
-					Flux.error(new IllegalStateException("synthetic transport failure")))))
+					Flux.error(new IllegalStateException(TRANSPORT_FAILURE)))))
 			.expectNextCount(1)
-			.expectErrorMessage("synthetic transport failure")
+			.expectErrorMessage(TRANSPORT_FAILURE)
 			.verify();
 	}
 
@@ -290,6 +294,135 @@ class OpenRouterAudioOutputTests {
 		else {
 			verifier.expectError(OpenRouterTruncatedResponseException.class).verify();
 		}
+	}
+
+	@ParameterizedTest
+	@ValueSource(booleans = { true, false })
+	void realSseCompletesMarkerTerminatedAudioOnlyAfterDone(boolean done) {
+		// Synthetic stream in the shape used by providers that end audio with an
+		// expires_at-only delta and never send a finish reason.
+		String body = sse(markerTerminatedStream()) + (done ? "data: [DONE]\n\n" : "");
+		OpenRouterApi api = OpenRouterApi.builder()
+			.apiKey("synthetic-key")
+			.webClientBuilder(WebClient.builder()
+				.exchangeFunction(request -> Mono.just(ClientResponse.create(HttpStatus.OK)
+					.header("Content-Type", "text/event-stream")
+					.body(body)
+					.build())))
+			.build();
+		OpenRouterChatModel model = OpenRouterChatModel.builder()
+			.openRouterApi(api)
+			.defaultOptions(this.options)
+			.build();
+		if (!done) {
+			StepVerifier.create(model.stream(new Prompt("synthetic")))
+				.thenConsumeWhile(response -> response.getResults()
+					.stream()
+					.allMatch(generation -> generation.getOutput().getMedia().isEmpty()))
+				.expectError(OpenRouterTruncatedResponseException.class)
+				.verify();
+			return;
+		}
+		List<ChatResponse> responses = model.stream(new Prompt("synthetic")).collectList().block();
+		assertThat(responses.stream()
+			.flatMap(response -> response.getResults().stream())
+			.filter(generation -> !generation.getOutput().getMedia().isEmpty())).hasSize(1);
+		assertThat(responses).anyMatch(response -> response.getMetadata().getUsage().getTotalTokens() == 5);
+		ChatResponse last = responses.get(responses.size() - 1);
+		AssistantMessage output = last.getResult().getOutput();
+		assertThat(output.getText()).isEmpty();
+		assertThat(output.getMedia().get(0).getDataAsByteArray()).containsExactly(0, 1, 2);
+		assertThat(output.getMetadata().get("openrouter.audio")).isEqualTo(
+				Map.of("id", "synthetic-audio", "expires_at", 123L, "format", "pcm16", "transcript", "Hello world"));
+		assertThat(last.getResult().getMetadata().getFinishReason()).isNull();
+	}
+
+	@Test
+	void completesMarkerTerminatedAudioOnceAfterNormalCompletion() {
+		List<ChatResponse> responses = map(Flux.fromIterable(markerTerminatedStream())).collectList().block();
+		List<ChatResponse> withMedia = responses.stream()
+			.filter(response -> response.getResults()
+				.stream()
+				.anyMatch(generation -> !generation.getOutput().getMedia().isEmpty()))
+			.toList();
+		assertThat(withMedia).containsExactly(responses.get(responses.size() - 1));
+		ChatResponse last = withMedia.get(0);
+		assertThat(last.getResult().getOutput().getMedia().get(0).getDataAsByteArray()).containsExactly(0, 1, 2);
+		assertThat(last.getResult().getMetadata().<Integer>get("openrouter.choice_index")).isZero();
+		assertThat(last.getMetadata().getId()).isEqualTo("synthetic");
+		assertThat(last.getMetadata().getUsage().getTotalTokens()).isZero();
+	}
+
+	@Test
+	void unmarkedEmptyOrContinuedAudioStillFailsAtCompletion() {
+		ChatCompletionChunk marker = raw("{\"audio\":{\"expires_at\":123}}", null);
+		ChatCompletionChunk empty = raw("{\"role\":\"assistant\",\"content\":\"\"}", null);
+		for (List<ChatCompletionChunk> sequence : List.of(
+				// No marker and no finish reason.
+				List.of(raw(AUDIO_FRAGMENT, null), empty),
+				// More audio after the marker.
+				List.of(raw(AUDIO_FRAGMENT, null), marker, raw("{\"audio\":{\"data\":\"AQ==\"}}", null)),
+				// Text after the marker.
+				List.of(raw(AUDIO_FRAGMENT, null), marker, raw("{\"content\":\"more\"}", null)),
+				// Marker without audio bytes.
+				List.of(raw("{\"audio\":{\"transcript\":\"Hello\"}}", null), marker))) {
+			StepVerifier.create(map(Flux.fromIterable(sequence)))
+				.thenConsumeWhile(response -> response.getResults()
+					.stream()
+					.allMatch(generation -> generation.getOutput().getMedia().isEmpty()))
+				.expectError(OpenRouterTruncatedResponseException.class)
+				.verify();
+		}
+		StepVerifier
+			.create(map(Flux.concat(Flux.just(raw(AUDIO_FRAGMENT, null), marker),
+					Flux.error(new IllegalStateException(TRANSPORT_FAILURE)))))
+			.expectNextCount(2)
+			.expectErrorMessage(TRANSPORT_FAILURE)
+			.verify();
+	}
+
+	@Test
+	void completesMarkerTerminatedChoicesAlongsideStoppedChoices() {
+		ChatCompletionChunk stopped = chunk(0, null, "AA==", null, "stop");
+		ChatCompletionChunk markerData = this.json.readValue(
+				"{\"id\":\"synthetic\",\"choices\":[{\"index\":1,\"delta\":{\"audio\":{\"data\":\"AQ==\"}}}]}",
+				ChatCompletionChunk.class);
+		ChatCompletionChunk marker = this.json.readValue(
+				"{\"id\":\"synthetic\",\"choices\":[{\"index\":1,\"delta\":{\"audio\":{\"expires_at\":123}}}]}",
+				ChatCompletionChunk.class);
+		List<ChatResponse> responses = map(Flux.just(markerData, stopped, marker)).collectList().block();
+		assertThat(responses).hasSize(4);
+		assertThat(responses.get(1).getResult().getOutput().getMedia().get(0).getDataAsByteArray()).containsExactly(0);
+		ChatResponse completion = responses.get(3);
+		assertThat(completion.getResults()).hasSize(1);
+		assertThat(completion.getResult().getMetadata().<Integer>get("openrouter.choice_index")).isEqualTo(1);
+		assertThat(completion.getResult().getOutput().getMedia().get(0).getDataAsByteArray()).containsExactly(1);
+	}
+
+	private List<ChatCompletionChunk> markerTerminatedStream() {
+		return List.of(raw(
+				"{\"role\":\"assistant\",\"content\":\"\",\"audio\":{\"id\":\"synthetic-audio\",\"transcript\":\"Hello \"}}",
+				null), raw("{\"content\":\"\",\"audio\":{\"transcript\":\"world\"}}", null),
+				raw("{\"content\":\"\",\"audio\":{\"id\":\"synthetic-audio\",\"data\":\"AAE=\"}}", null),
+				raw("{\"content\":\"\",\"audio\":{\"data\":\"Ag==\"}}", null),
+				raw("{\"content\":\"\",\"audio\":{\"expires_at\":123}}", null),
+				raw("{\"role\":\"assistant\",\"content\":\"\"}", null), raw("{\"role\":\"assistant\",\"content\":\"\"}",
+						"{\"prompt_tokens\":2,\"completion_tokens\":3,\"total_tokens\":5}"));
+	}
+
+	private ChatCompletionChunk raw(String delta, String usage) {
+		return this.json.readValue(
+				"{\"id\":\"synthetic\",\"model\":\"synthetic/audio\",\"choices\":[{\"index\":0,\"delta\":" + delta
+						+ ",\"finish_reason\":null}]" + (usage != null ? ",\"usage\":" + usage : "") + "}",
+				ChatCompletionChunk.class);
+	}
+
+	private String sse(List<ChatCompletionChunk> chunks) {
+		StringBuilder body = new StringBuilder();
+		for (ChatCompletionChunk chunk : chunks) {
+			body.append("data: ").append(this.json.writeValueAsString(chunk)).append("\n\n");
+		}
+		return body.toString();
 	}
 
 	private Flux<ChatResponse> map(Flux<ChatCompletionChunk> chunks) {

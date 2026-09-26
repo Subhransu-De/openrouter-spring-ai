@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import org.jspecify.annotations.Nullable;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.metadata.ChatGenerationMetadata;
@@ -70,10 +71,38 @@ public final class OpenRouterStreamingResponseMapper {
 			Map<String, @Nullable Object> extensions = new LinkedHashMap<>();
 			AudioOutputMapper audio = new AudioOutputMapper(audioOptions);
 			ChatStreamBudget budget = new ChatStreamBudget(this.maxStateBytes, this.maxStateChoices);
-			return chunks.map(chunk -> map(chunk, partialOutputs, reasoning, extensions, audio, budget))
-				.doOnComplete(audio::complete)
+			AtomicReference<ChatCompletionChunk> last = new AtomicReference<>();
+			return chunks.doOnNext(last::set)
+				.map(chunk -> map(chunk, partialOutputs, reasoning, extensions, audio, budget))
+				// Runs only after normal completion; errors and cancellation skip it.
+				.concatWith(Flux.defer(() -> completeAudio(audio, reasoning, extensions, last.get())))
 				.doFinally(signal -> audio.clear());
 		});
+	}
+
+	private Flux<ChatResponse> completeAudio(AudioOutputMapper audio,
+			Map<Integer, ReasoningMetadata.Accumulator> reasoning, Map<String, @Nullable Object> extensions,
+			@Nullable ChatCompletionChunk last) {
+		List<AudioOutputMapper.Completion> completions = audio.complete();
+		if (completions.isEmpty() || last == null) {
+			return Flux.empty();
+		}
+		List<Generation> generations = completions.stream().map(completion -> {
+			ReasoningMetadata.Accumulator accumulator = reasoning.computeIfAbsent(completion.index(),
+					key -> new ReasoningMetadata.Accumulator());
+			AssistantMessage message = AssistantMessage.builder()
+				.content("")
+				.properties(accumulator.append(completion.metadata()))
+				.media(completion.media())
+				.build();
+			// No finish reason is fabricated: the provider did not send one.
+			ChatGenerationMetadata.Builder metadata = ChatGenerationMetadata.builder()
+				.metadata("openrouter.choice_index", completion.index());
+			ResponseValues.ifPresent(last.model(), value -> metadata.metadata("openrouter.model", value));
+			return new Generation(message, metadata.build());
+		}).toList();
+		// Usage was already reported by the stream; repeating it here would duplicate it.
+		return Flux.just(new ChatResponse(generations, mapMetadata(last, extensions, false)));
 	}
 
 	private ChatResponse map(ChatCompletionChunk chunk, Map<Integer, PartialOutputAccumulator> partialOutputs,
@@ -113,7 +142,7 @@ public final class OpenRouterStreamingResponseMapper {
 				});
 		}
 		extensions.putAll(chunk.extensions());
-		return new ChatResponse(generations, mapMetadata(chunk, extensions));
+		return new ChatResponse(generations, mapMetadata(chunk, extensions, true));
 	}
 
 	private void accumulatePartialOutput(ChatCompletionChunk chunk,
@@ -232,11 +261,14 @@ public final class OpenRouterStreamingResponseMapper {
 			.toList();
 	}
 
-	private ChatResponseMetadata mapMetadata(ChatCompletionChunk chunk, Map<String, @Nullable Object> extensions) {
+	private ChatResponseMetadata mapMetadata(ChatCompletionChunk chunk, Map<String, @Nullable Object> extensions,
+			boolean usage) {
 		ChatResponseMetadata.Builder metadataBuilder = ChatResponseMetadata.builder();
 		ResponseValues.ifPresent(chunk.id(), metadataBuilder::id);
 		ResponseValues.ifPresent(chunk.model(), metadataBuilder::model);
-		ResponseValues.ifPresent(UsageMapper.map(chunk.usage()), metadataBuilder::usage);
+		if (usage) {
+			ResponseValues.ifPresent(UsageMapper.map(chunk.usage()), metadataBuilder::usage);
+		}
 		metadataBuilder.keyValue(ExtensionMetadata.RESPONSE, OptionSnapshots.map(extensions));
 		metadataBuilder.keyValue("openrouter.provider", chunk.provider());
 		metadataBuilder.keyValue("openrouter.object", chunk.object());
