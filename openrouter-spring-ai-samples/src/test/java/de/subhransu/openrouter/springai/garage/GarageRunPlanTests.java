@@ -237,6 +237,10 @@ class GarageRunPlanTests {
         "{\"offlineContracts\":true,\"scenes\":[\"service-story\"]}",
         "{\"scenes\":[]}",
         "{\"capabilities\":[null]}",
+        "{\"reasoningEffort\":\"\"}",
+        "{\"models\":{\"foreman\":\" \"}}",
+        "{\"provider\":{\"sort\":\"\"}}",
+        "{\"capabilities\":[\"image\"],\"image\":{\"quality\":\"\"}}",
         "{\"requestModes\":[]}",
         "{\"limits\":{\"maxCompletionTokens\":0}}",
         "{\"scenes\":[\"modality-bays\"]}"}) {

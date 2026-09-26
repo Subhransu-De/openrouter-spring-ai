@@ -103,7 +103,7 @@ public record GarageRunPlan(
         selection.imageSurface = ImageSurface.parse(request.image().surface());
         selection.surfaceExplicit = true;
       }
-      selection.imageQuality = request.image().quality();
+      selection.imageQuality = optionalText("image.quality", request.image().quality());
     }
     if (request.limits() != null) {
       if (request.limits().maxCompletionTokens() != null) {
@@ -118,7 +118,7 @@ public record GarageRunPlan(
       }
     }
     if (request.reasoningEffort() != null) {
-      settings.setReasoningEffort(request.reasoningEffort());
+      settings.setReasoningEffort(text("reasoningEffort", request.reasoningEffort()));
     }
     applyProvider(settings, request.provider());
     return selection.validate(settings);
@@ -133,7 +133,7 @@ public record GarageRunPlan(
       throw new IllegalArgumentException("A sweep needs embeddingModels or imageModels");
     }
     selection.sceneIds = List.of();
-    selection.imageQuality = request.imageQuality();
+    selection.imageQuality = optionalText("imageQuality", request.imageQuality());
     applyProvider(settings, request.provider());
     return selection.validate(settings);
   }
@@ -185,19 +185,19 @@ public record GarageRunPlan(
       return;
     }
     if (models.foreman() != null) {
-      selection.foremanModel = models.foreman();
+      selection.foremanModel = text("models.foreman", models.foreman());
     }
     if (models.specialist() != null) {
-      selection.specialistModel = models.specialist();
+      selection.specialistModel = text("models.specialist", models.specialist());
     }
     if (models.embedding() != null) {
-      selection.embeddingModel = models.embedding();
+      selection.embeddingModel = text("models.embedding", models.embedding());
     }
     if (models.vision() != null) {
-      selection.visionModel = models.vision();
+      selection.visionModel = text("models.vision", models.vision());
     }
     if (models.image() != null) {
-      selection.imageModel = models.image();
+      selection.imageModel = text("models.image", models.image());
     }
     if (models.fallbacks() != null) {
       selection.fallbackModels = sanitize(models.fallbacks());
@@ -210,7 +210,7 @@ public record GarageRunPlan(
       return;
     }
     if (provider.sort() != null) {
-      settings.setProviderSort(provider.sort());
+      settings.setProviderSort(text("provider.sort", provider.sort()));
     }
     if (provider.requireParameters() != null) {
       settings.setProviderRequireParameters(provider.requireParameters());
@@ -224,6 +224,18 @@ public record GarageRunPlan(
     if (provider.quantizations() != null) {
       settings.setProviderQuantizations(sanitize(provider.quantizations()));
     }
+  }
+
+  // Blank overrides would only fail once a scene builds its request, after the run was accepted.
+  private static String text(String field, String value) {
+    if (!StringUtils.hasText(value)) {
+      throw new IllegalArgumentException(field + " must not be blank");
+    }
+    return value.strip();
+  }
+
+  private static @Nullable String optionalText(String field, @Nullable String value) {
+    return value == null ? null : text(field, value);
   }
 
   private static int positive(String field, int value) {

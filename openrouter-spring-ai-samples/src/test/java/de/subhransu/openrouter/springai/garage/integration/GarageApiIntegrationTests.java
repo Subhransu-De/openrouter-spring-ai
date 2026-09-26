@@ -55,6 +55,7 @@ class GarageApiIntegrationTests extends MockedGarageIntegrationTest {
         "{\"full\":true,\"scenes\":[\"service-story\"]}",
         "{\"capabilites\":[\"text\"]}",
         "{\"capabilities\":[null]}",
+        "{\"offlineContracts\":true,\"reasoningEffort\":\"\"}",
         "{\"requestModes\":[\"chats\"]}")) {
       assertThat(this.mvc.post().uri("/api/runs").contentType(MediaType.APPLICATION_JSON).content(invalid))
           .as(invalid).hasStatus(HttpStatus.BAD_REQUEST);
