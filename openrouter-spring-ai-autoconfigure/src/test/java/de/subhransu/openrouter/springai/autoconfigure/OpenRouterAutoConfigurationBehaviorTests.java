@@ -131,9 +131,11 @@ class OpenRouterAutoConfigurationBehaviorTests {
 	}
 
 	private ChatCompletionRequest minimalRequest() {
-		return new ChatCompletionRequest("m", null, List.of(new ChatMessage("user", "hi", null, null, null)), null,
-				null, null, null, null, null, null, null, null, null, null, null, null, false, null, null, null, null,
-				null, null, null, null, null, null, null, null);
+		return ChatCompletionRequest.builder()
+			.model("m")
+			.messages(List.of(new ChatMessage("user", "hi", null, null, null)))
+			.stream(false)
+			.build();
 	}
 
 	@Configuration(proxyBeanMethods = false)

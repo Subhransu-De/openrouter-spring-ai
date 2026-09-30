@@ -160,6 +160,9 @@ for its API. The sections below describe **main**: strict function tools, explic
 breakpoints, optional request/response extensions, embedding metadata/dimension discovery,
 cumulative Responses state limits, PDF/audio/video inputs, and chat audio output are
 post-RC2 additions. They require a source build until a release includes them.
+RC2 code that calls a `ChatCompletionRequest` or `ResponsesRequest` constructor no
+longer compiles on main: those signatures are gone. Build the requests with
+`builder()` instead (see [Supported API and nullability](#supported-api-and-nullability)).
 
 ### Options: replacement and composition
 
@@ -214,10 +217,28 @@ The supported consumer API consists of the following types under
 | `chat`, `embedding`, `image`                                                                                               | Models and their builders, options and option builders, routing/reasoning/format records, usage and generated-image metadata. Use the Spring AI model interfaces for calls and streams.                            |
 | `OpenRouterIdentifiers`                                                                                                    | Provider identifiers used to select this integration.                                                                                                                                                              |
 | `api.OpenRouterApi`, `api.OpenRouterRequestMode`                                                                           | Direct HTTP calls and client construction, including `RestClient.Builder`, `WebClient.Builder`, Jackson, attribution, timeouts, and response limits.                                                               |
-| `api.dto`                                                                                                                  | Low-level request and response records used by `OpenRouterApi`. Consumers may construct requests and inspect responses; wire fields can be absent. Responses mode remains experimental.                            |
+| `api.dto`                                                                                                                  | Low-level request and response records used by `OpenRouterApi`. Build `ChatCompletionRequest` and `ResponsesRequest` with `builder()`; wire fields can be absent. Responses mode remains experimental.             |
 | `chat.OpenRouterToolFailurePolicy`, `chat.OpenRouterToolCallingManagers`, `chat.OpenRouterToolExecutionExceptionProcessor` | Custom tool-manager failure policy, a factory for policy-declaring managers, and failure rendering. The policy accessor must return the actual, non-null processor. Tool execution belongs to Spring AI's advisor. |
 | `errors`, `chat.errors`, `api.errors.OpenRouterApiException`                                                               | Exception types, diagnostic records, category enums, and inspection interfaces. Missing diagnostics are nullable. `OpenRouterHttpException` is sealed; consumers cannot implement it.                              |
 | `autoconfigure.*Properties` and `spring.ai.openrouter.*`                                                                   | Boot property binding. Custom model, API, and tool beans use the existing auto-configuration backoff rules.                                                                                                        |
+
+Build low-level requests by naming the fields you set; unset fields are omitted from
+the JSON body. `build()` throws `NullPointerException` when the required `messages`
+(Chat Completions) or `input` (Responses) is missing:
+
+```java
+ChatCompletionRequest request = ChatCompletionRequest.builder()
+    .model("your-model")
+    .messages(List.of(new ChatMessage("user", "Say hello.", null, null, null)))
+    .temperature(0.2)
+    .maxTokens(256)
+    .build();
+ChatCompletionResponse response = api.chatCompletion(request);
+```
+
+New OpenRouter request fields are added to the builders. The records' canonical
+constructors stay public because Java requires it, but their parameter lists grow
+with each new field, so code that calls them breaks when a field is added.
 
 Mapper packages, `internal`, `support.OptionSnapshots`, error factories/classifiers,
 `OpenRouterExceptionMessage`, `OpenRouterErrorResponse`, deserializers, runtime hints, and auto-configuration

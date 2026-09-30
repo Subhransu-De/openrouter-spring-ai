@@ -57,17 +57,33 @@ public final class OpenRouterResponsesRequestMapper {
 		rejectUnsupported("topA", options.getTopA());
 		rejectUnsupported("includeUsage", options.getIncludeUsage());
 		var serviceTier = options.getServiceTier();
-		return new ResponsesRequest(options.getModel(), options.getModels(), mapInput(messages),
-				mapInstructions(messages),
-				options.getMaxCompletionTokens() != null ? options.getMaxCompletionTokens() : options.getMaxTokens(),
-				stream, options.getTemperature(), options.getTopP(), options.getTopK(), options.getFrequencyPenalty(),
-				options.getPresencePenalty(), options.getMetadata(),
-				mapProvider(options.getProvider(), options.getProviderExtraBody()),
-				mapReasoning(options.getReasoning()), options.getRoute(),
-				serviceTier != null ? serviceTier.value() : null, options.getUser(), options.getParallelToolCalls(),
-				ToolChoiceMapper.map(options.getToolChoice(), true, this.objectMapper),
-				mapTools(toolDefinitions, options.getToolStrict()), options.getModalities(), options.getImageConfig(),
-				mapText(options), options.getExtraBody());
+		return ResponsesRequest.builder()
+			.model(options.getModel())
+			.models(options.getModels())
+			.input(mapInput(messages))
+			.instructions(mapInstructions(messages))
+			.maxOutputTokens(options.getMaxCompletionTokens() != null ? options.getMaxCompletionTokens()
+					: options.getMaxTokens())
+			.stream(stream)
+			.temperature(options.getTemperature())
+			.topP(options.getTopP())
+			.topK(options.getTopK())
+			.frequencyPenalty(options.getFrequencyPenalty())
+			.presencePenalty(options.getPresencePenalty())
+			.metadata(options.getMetadata())
+			.provider(mapProvider(options.getProvider(), options.getProviderExtraBody()))
+			.reasoning(mapReasoning(options.getReasoning()))
+			.route(options.getRoute())
+			.serviceTier(serviceTier != null ? serviceTier.value() : null)
+			.user(options.getUser())
+			.parallelToolCalls(options.getParallelToolCalls())
+			.toolChoice(ToolChoiceMapper.map(options.getToolChoice(), true, this.objectMapper))
+			.tools(mapTools(toolDefinitions, options.getToolStrict()))
+			.modalities(options.getModalities())
+			.imageConfig(options.getImageConfig())
+			.text(mapText(options))
+			.extraBody(options.getExtraBody())
+			.build();
 	}
 
 	private static void rejectUnsupported(String name, @Nullable Object value) {
