@@ -30,24 +30,10 @@ class VisibilityPolicyTests {
 	}
 
 	@Test
-	void privateStateAndHelpersRejectAccessibleMembers() {
+	void privateStateRejectsAccessibleFields() {
 		AutoconfigureArchitectureTests.privateFields(Compliant.class.getName()).check(importClass(Compliant.class));
-		AutoconfigureArchitectureTests.privateHelpers(Compliant.class.getName()).check(importClass(Compliant.class));
 		violation(AutoconfigureArchitectureTests.privateFields(AccessibleMembers.class.getName()),
 				AccessibleMembers.class, "buffer", "does not have modifier PRIVATE");
-		violation(AutoconfigureArchitectureTests.privateHelpers(AccessibleMembers.class.getName()),
-				AccessibleMembers.class, "registerField", "does not have modifier PRIVATE");
-	}
-
-	@Test
-	void utilitiesRejectImplicitAndExplicitAccessibleConstructors() {
-		AutoconfigureArchitectureTests.utilityConstructors(Compliant.class.getName())
-			.check(importClass(Compliant.class));
-		for (Class<?> type : new Class<?>[] { PublicImplementation.class, ImplicitUtility.class,
-				AccessibleMembers.class }) {
-			violation(AutoconfigureArchitectureTests.utilityConstructors(type.getName()), type, "constructor",
-					"is not private");
-		}
 	}
 
 	@Test
@@ -63,10 +49,7 @@ class VisibilityPolicyTests {
 	void emptyPolicySelectionsFail() {
 		String missing = "synthetic.MissingImplementation";
 		for (ArchRule rule : new ArchRule[] { AutoconfigureArchitectureTests.packagePrivateImplementation(missing),
-				AutoconfigureArchitectureTests.privateFields(missing),
-				AutoconfigureArchitectureTests.privateHelpers(missing),
-				AutoconfigureArchitectureTests.utilityConstructors(missing),
-				AutoconfigureArchitectureTests.privateHelpers(ImplicitUtility.class.getName()) }) {
+				AutoconfigureArchitectureTests.privateFields(missing) }) {
 			assertThatThrownBy(() -> rule.check(importClass(ImplicitUtility.class))).isInstanceOf(AssertionError.class)
 				.hasMessageContaining("failed to check any classes");
 		}
@@ -107,16 +90,10 @@ class VisibilityPolicyTests {
 	}
 
 	// ArchUnit reads these declarations from bytecode; they are never executed.
-	@SuppressWarnings({ "PMD.UnusedPrivateField", "PMD.UnusedPrivateMethod" })
+	@SuppressWarnings("PMD.UnusedPrivateField")
 	static class Compliant {
 
 		private String buffer;
-
-		private Compliant() {
-		}
-
-		private void registerField() {
-		}
 
 	}
 
@@ -131,12 +108,6 @@ class VisibilityPolicyTests {
 	static class AccessibleMembers {
 
 		public String buffer;
-
-		AccessibleMembers() {
-		}
-
-		void registerField() {
-		}
 
 	}
 

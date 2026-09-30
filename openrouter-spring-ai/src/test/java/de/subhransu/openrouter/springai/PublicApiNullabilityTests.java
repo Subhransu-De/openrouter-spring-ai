@@ -58,6 +58,8 @@ class PublicApiNullabilityTests {
 				    val url: String? = images.data()?.firstOrNull()?.url()
 				    val cost: Double? = OpenRouterUsage(null, null, null, null, null, null, null).cost
 				    val processor: ToolExecutionExceptionProcessor = Policy().toolExecutionExceptionProcessor()
+				    val manager: org.springframework.ai.model.tool.ToolCallingManager =
+				        OpenRouterToolCallingManagers.withFailurePolicy(processor) { it.maxCallsPerTool(3) }
 				}
 				""", ExitCode.OK);
 	}

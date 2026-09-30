@@ -12,9 +12,7 @@ import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.Set;
 import org.springframework.aop.scope.ScopedObject;
-import org.springframework.ai.model.tool.DefaultToolCallingManager;
 import org.springframework.ai.model.tool.ToolCallingManager;
-import org.springframework.ai.tool.execution.DefaultToolExecutionExceptionProcessor;
 import org.springframework.ai.tool.execution.ToolExecutionExceptionProcessor;
 import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.beans.factory.config.BeanDefinition;
@@ -89,20 +87,13 @@ final class OpenRouterToolCallingManagerGuard implements BeanPostProcessor, Smar
 	}
 
 	private void validate(ToolCallingManager manager) {
-		ToolExecutionExceptionProcessor actualProcessor;
-		if (manager instanceof OpenRouterToolFailurePolicy policy) {
-			actualProcessor = policy.toolExecutionExceptionProcessor();
+		if (!(manager instanceof OpenRouterToolFailurePolicy policy)) {
+			throw missingPolicy(manager);
 		}
-		else if (manager instanceof DefaultToolCallingManager defaultManager) {
-			actualProcessor = SpringAiToolFailurePolicyAdapter.processor(defaultManager);
-		}
-		else {
-			throw unsafeManager(manager);
-		}
+		ToolExecutionExceptionProcessor actualProcessor = policy.toolExecutionExceptionProcessor();
 		if (actualProcessor == null || !(isDeclaredProcessor(actualProcessor)
-				|| actualProcessor instanceof OpenRouterToolExecutionExceptionProcessor
-				|| throwsInsteadOfReturning(actualProcessor))) {
-			throw unsafeManager(manager);
+				|| actualProcessor instanceof OpenRouterToolExecutionExceptionProcessor)) {
+			throw undeclaredProcessor(manager);
 		}
 	}
 
@@ -123,16 +114,20 @@ final class OpenRouterToolCallingManagerGuard implements BeanPostProcessor, Smar
 		}
 	}
 
-	private static boolean throwsInsteadOfReturning(ToolExecutionExceptionProcessor processor) {
-		return processor instanceof DefaultToolExecutionExceptionProcessor defaultProcessor
-				&& SpringAiToolFailurePolicyAdapter.alwaysThrows(defaultProcessor);
+	private static IllegalStateException missingPolicy(ToolCallingManager manager) {
+		return new IllegalStateException("Custom ToolCallingManager " + manager.getClass().getName()
+				+ " does not declare a provider-visible tool failure policy. Build it with "
+				+ "OpenRouterToolCallingManagers.withFailurePolicy(...), implement OpenRouterToolFailurePolicy, or "
+				+ "explicitly set spring.ai.openrouter.chat.allow-unsafe-tool-failure-results=true after auditing its "
+				+ "behavior.");
 	}
 
-	private static IllegalStateException unsafeManager(ToolCallingManager manager) {
+	private static IllegalStateException undeclaredProcessor(ToolCallingManager manager) {
 		return new IllegalStateException("Custom ToolCallingManager " + manager.getClass().getName()
-				+ " does not expose a verifiable provider-visible failure policy. Implement OpenRouterToolFailurePolicy and install the declared "
-				+ "ToolExecutionExceptionProcessor in the manager, or explicitly set "
-				+ "spring.ai.openrouter.chat.allow-unsafe-tool-failure-results=true after auditing its behavior.");
+				+ " uses a ToolExecutionExceptionProcessor that is not an application-declared bean or an "
+				+ "OpenRouterToolExecutionExceptionProcessor. Declare the processor as a bean and pass that bean to "
+				+ "the manager, or explicitly set spring.ai.openrouter.chat.allow-unsafe-tool-failure-results=true "
+				+ "after auditing its behavior.");
 	}
 
 	private static final class IdentityWeakReference<T> extends WeakReference<T> {

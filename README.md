@@ -209,15 +209,15 @@ extension, and accepting a `Document` for embedding does not implement `Document
 The supported consumer API consists of the following types under
 `de.subhransu.openrouter.springai`. Existing public visibility is unchanged.
 
-| API                                                                                  | Supported use                                                                                                                                                                           |
-| ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `chat`, `embedding`, `image`                                                         | Models and their builders, options and option builders, routing/reasoning/format records, usage and generated-image metadata. Use the Spring AI model interfaces for calls and streams. |
-| `OpenRouterIdentifiers`                                                              | Provider identifiers used to select this integration.                                                                                                                                   |
-| `api.OpenRouterApi`, `api.OpenRouterRequestMode`                                     | Direct HTTP calls and client construction, including `RestClient.Builder`, `WebClient.Builder`, Jackson, attribution, timeouts, and response limits.                                    |
-| `api.dto`                                                                            | Low-level request and response records used by `OpenRouterApi`. Consumers may construct requests and inspect responses; wire fields can be absent. Responses mode remains experimental. |
-| `chat.OpenRouterToolFailurePolicy`, `chat.OpenRouterToolExecutionExceptionProcessor` | Custom tool-manager failure policy and failure rendering. The policy accessor must return the actual, non-null processor. Tool execution belongs to Spring AI's advisor.                |
-| `errors`, `chat.errors`, `api.errors.OpenRouterApiException`                         | Exception types, diagnostic records, category enums, and inspection interfaces. Missing diagnostics are nullable.                                                                       |
-| `autoconfigure.*Properties` and `spring.ai.openrouter.*`                             | Boot property binding. Custom model, API, and tool beans use the existing auto-configuration backoff rules.                                                                             |
+| API                                                                                                                        | Supported use                                                                                                                                                                                                      |
+| -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `chat`, `embedding`, `image`                                                                                               | Models and their builders, options and option builders, routing/reasoning/format records, usage and generated-image metadata. Use the Spring AI model interfaces for calls and streams.                            |
+| `OpenRouterIdentifiers`                                                                                                    | Provider identifiers used to select this integration.                                                                                                                                                              |
+| `api.OpenRouterApi`, `api.OpenRouterRequestMode`                                                                           | Direct HTTP calls and client construction, including `RestClient.Builder`, `WebClient.Builder`, Jackson, attribution, timeouts, and response limits.                                                               |
+| `api.dto`                                                                                                                  | Low-level request and response records used by `OpenRouterApi`. Consumers may construct requests and inspect responses; wire fields can be absent. Responses mode remains experimental.                            |
+| `chat.OpenRouterToolFailurePolicy`, `chat.OpenRouterToolCallingManagers`, `chat.OpenRouterToolExecutionExceptionProcessor` | Custom tool-manager failure policy, a factory for policy-declaring managers, and failure rendering. The policy accessor must return the actual, non-null processor. Tool execution belongs to Spring AI's advisor. |
+| `errors`, `chat.errors`, `api.errors.OpenRouterApiException`                                                               | Exception types, diagnostic records, category enums, and inspection interfaces. Missing diagnostics are nullable.                                                                                                  |
+| `autoconfigure.*Properties` and `spring.ai.openrouter.*`                                                                   | Boot property binding. Custom model, API, and tool beans use the existing auto-configuration backoff rules.                                                                                                        |
 
 Mapper packages, `internal`, `support.OptionSnapshots`, error factories/classifiers,
 `OpenRouterExceptionMessage`, `OpenRouterErrorResponse`, deserializers, runtime hints, and auto-configuration
@@ -647,21 +647,36 @@ to other providers using that shared manager. A declared `ToolExecutionException
 bean takes precedence; `spring.ai.tools.throw-exception-on-error=true` retains Spring AI's
 throwing policy instead.
 
-Custom and delegating `ToolCallingManager` implementations can implement
-`de.subhransu.openrouter.springai.chat.OpenRouterToolFailurePolicy`. Return the processor
-actually used by execution from `toolExecutionExceptionProcessor()`: an application-declared
-processor bean, `OpenRouterToolExecutionExceptionProcessor`, or Spring AI's default processor
-configured with `alwaysThrow(true)`. Delegates must use that same processor. The contract
-applies to both calls and streams; it declares application responsibility and cannot prove
-that a custom implementation honors its declaration.
+A custom `ToolCallingManager` bean must declare its failure policy. To build Spring AI's
+default manager with a known processor, use
+`de.subhransu.openrouter.springai.chat.OpenRouterToolCallingManagers`:
 
-Existing `DefaultToolCallingManager` beans remain supported through a private-field
-compatibility adapter tested against Spring AI **2.0.1**, the dependency baseline. Other
-versions are not verified. The public contract with an application-declared processor avoids
-this adapter entirely. If upstream internals change, inspection fails with migration guidance;
-missing fields no longer fail class initialization or native hint registration.
+```java
+@Bean
+ToolCallingManager toolCallingManager(ToolExecutionExceptionProcessor processor,
+		ToolCallbackResolver resolver) {
+	return OpenRouterToolCallingManagers.withFailurePolicy(processor,
+			builder -> builder.toolCallbackResolver(resolver));
+}
+```
 
-Managers without a verifiable policy still fail validation. The existing
+The customizer receives Spring AI's `DefaultToolCallingManager.Builder`. The factory sets
+the processor after the customizer runs, so a processor set inside the customizer is
+replaced. A plain `ToolCallingManager.builder().build()` bean fails at startup because
+Spring AI does not expose which processor it uses.
+
+Custom and delegating implementations can instead implement
+`de.subhransu.openrouter.springai.chat.OpenRouterToolFailurePolicy` and return the processor
+actually used by execution from `toolExecutionExceptionProcessor()`. Delegates must use that
+same processor. The contract applies to both calls and streams; it declares application
+responsibility and cannot prove that a custom implementation honors its declaration.
+
+Either way, the processor must be an application-declared bean or an
+`OpenRouterToolExecutionExceptionProcessor`. To keep Spring AI's throwing behavior in a
+custom manager, declare `DefaultToolExecutionExceptionProcessor.builder().alwaysThrow(true).build()`
+as a bean and pass that bean to the manager; an inline instance fails validation.
+
+Managers without a verifiable policy fail validation. The existing
 `spring.ai.openrouter.chat.allow-unsafe-tool-failure-results=true` opt-out skips manager
 validation and transfers failure-result redaction responsibility to the application; it does
 not disable the automatically supplied processor. Declaring an unrelated processor bean
