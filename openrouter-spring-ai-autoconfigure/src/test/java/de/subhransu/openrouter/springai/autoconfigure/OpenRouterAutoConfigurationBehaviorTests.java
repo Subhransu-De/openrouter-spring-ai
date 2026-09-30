@@ -7,6 +7,7 @@ import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionRequest;
 import de.subhransu.openrouter.springai.api.dto.ChatMessage;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
+import de.subhransu.openrouter.springai.chat.OpenRouterToolCallingManagers;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -167,7 +168,8 @@ class OpenRouterAutoConfigurationBehaviorTests {
 
 		@Bean
 		ToolCallingManager toolCallingManager(ToolExecutionExceptionProcessor processor) {
-			return ToolCallingManager.builder().toolExecutionExceptionProcessor(processor).build();
+			return OpenRouterToolCallingManagers.withFailurePolicy(processor, builder -> {
+			});
 		}
 
 	}

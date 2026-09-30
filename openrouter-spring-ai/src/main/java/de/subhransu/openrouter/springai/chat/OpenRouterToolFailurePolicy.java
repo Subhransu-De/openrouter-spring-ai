@@ -6,9 +6,11 @@ import org.springframework.ai.tool.execution.ToolExecutionExceptionProcessor;
  * Explicit failure-policy contract for custom Spring AI tool calling managers.
  * Implementations must return the processor actually used for tool failures, including
  * delegated execution. The same policy must apply to synchronous and streaming use. The
- * processor must be an application-declared bean, an
- * {@link OpenRouterToolExecutionExceptionProcessor}, or a Spring AI throwing processor.
- * This declaration is an application responsibility, not an inspection of execution.
+ * processor must be an application-declared bean or an
+ * {@link OpenRouterToolExecutionExceptionProcessor}; declare a throwing Spring AI
+ * processor as a bean. This declaration is an application responsibility, not an
+ * inspection of execution. {@link OpenRouterToolCallingManagers} builds a Spring AI
+ * manager that implements this contract.
  *
  * @author Subhransu De
  */

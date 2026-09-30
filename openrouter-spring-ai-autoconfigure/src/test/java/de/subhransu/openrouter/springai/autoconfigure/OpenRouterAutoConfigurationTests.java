@@ -211,9 +211,9 @@ class OpenRouterAutoConfigurationTests {
 		@Bean
 		org.springframework.ai.model.tool.ToolCallingManager customToolCallingManager(
 				org.springframework.ai.tool.execution.ToolExecutionExceptionProcessor processor) {
-			return org.springframework.ai.model.tool.ToolCallingManager.builder()
-				.toolExecutionExceptionProcessor(processor)
-				.build();
+			return de.subhransu.openrouter.springai.chat.OpenRouterToolCallingManagers.withFailurePolicy(processor,
+					builder -> {
+					});
 		}
 
 	}

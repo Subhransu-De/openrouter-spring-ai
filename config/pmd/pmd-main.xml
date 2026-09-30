@@ -20,4 +20,20 @@
   </rule>
   <rule ref="category/java/bestpractices.xml/PreserveStackTrace"/>
   <rule ref="category/java/codestyle.xml/UnnecessaryModifier"/>
+
+  <!-- Name-based so it also catches wrappers such as Spring's ReflectionUtils.makeAccessible
+       without needing type resolution. Tests may still inspect this library's own classes. -->
+  <rule name="NoAccessibilityOverride"
+      language="java"
+      message="Production code must not open private members; use a public contract such as OpenRouterToolFailurePolicy"
+      class="net.sourceforge.pmd.lang.rule.xpath.XPathRule">
+    <priority>2</priority>
+    <properties>
+      <property name="xpath">
+        <value>
+          //MethodCall[@MethodName = ('setAccessible', 'trySetAccessible', 'makeAccessible')]
+        </value>
+      </property>
+    </properties>
+  </rule>
 </ruleset>

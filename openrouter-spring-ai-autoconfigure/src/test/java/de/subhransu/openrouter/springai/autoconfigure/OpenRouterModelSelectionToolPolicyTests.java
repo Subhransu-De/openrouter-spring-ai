@@ -15,6 +15,7 @@ import de.subhransu.openrouter.springai.api.dto.Delta;
 import de.subhransu.openrouter.springai.api.dto.FunctionCall;
 import de.subhransu.openrouter.springai.api.dto.ToolCall;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
+import de.subhransu.openrouter.springai.chat.OpenRouterToolCallingManagers;
 import de.subhransu.openrouter.springai.chat.OpenRouterToolExecutionExceptionProcessor;
 import de.subhransu.openrouter.springai.chat.OpenRouterToolFailurePolicy;
 import java.time.Duration;
@@ -64,7 +65,8 @@ class OpenRouterModelSelectionToolPolicyTests {
 				: "application failure";
 		ToolExecutionExceptionProcessor processor = exception -> expected;
 		ToolCallingManager manager = "custom".equals(policy) ? new PolicyManager(processor)
-				: ToolCallingManager.builder().toolExecutionExceptionProcessor(processor).build();
+				: OpenRouterToolCallingManagers.withFailurePolicy(processor, builder -> {
+				});
 		if (!defaultPolicy) {
 			runner = runner.withBean(ToolExecutionExceptionProcessor.class, () -> processor)
 				.withBean(ToolCallingManager.class, () -> manager);

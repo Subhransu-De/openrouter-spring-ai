@@ -13,7 +13,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.ImportRuntimeHints;
 
 /**
  * Installs provider-safe tool failure handling before Spring AI creates its shared tool
@@ -26,7 +25,6 @@ import org.springframework.context.annotation.ImportRuntimeHints;
 @ConditionalOnMissingBean(ChatModel.class)
 @ConditionalOnProperty(name = SpringAIModelProperties.CHAT_MODEL, havingValue = OpenRouterIdentifiers.PROVIDER_ID,
 		matchIfMissing = true)
-@ImportRuntimeHints(OpenRouterToolCallingRuntimeHints.class)
 public class OpenRouterToolCallingAutoConfiguration {
 
 	@Bean
