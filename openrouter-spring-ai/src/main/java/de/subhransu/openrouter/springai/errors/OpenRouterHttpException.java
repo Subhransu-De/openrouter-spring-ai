@@ -7,34 +7,56 @@ import org.springframework.http.HttpStatusCode;
  * Common inspectable contract implemented by retryable and non-retryable OpenRouter HTTP
  * and in-band Responses failures.
  *
+ * <p>
+ * The interface is sealed: every implementation is one of the permitted exception
+ * classes, so a caught {@code OpenRouterHttpException} is always a
+ * {@link RuntimeException}.
+ *
  * @author Subhransu De
  */
-public interface OpenRouterHttpException {
+public sealed interface OpenRouterHttpException
+		permits OpenRouterTransientApiException, OpenRouterNonTransientApiException, OpenRouterLimitExceededException {
 
 	@Nullable String getMessage();
+
+	/**
+	 * Return the shared HTTP failure details.
+	 * @return failure details
+	 */
+	OpenRouterHttpFailure getFailure();
 
 	/**
 	 * Return the HTTP status, or a status derived from an in-band Responses error.
 	 * @return actual or derived failure status
 	 */
-	@Nullable HttpStatusCode getStatusCode();
+	default @Nullable HttpStatusCode getStatusCode() {
+		return getFailure().statusCode();
+	}
 
 	/**
 	 * Return a bounded, single-line, credential-safe excerpt of the untrusted provider
 	 * response body.
 	 * @return provider diagnostic excerpt, or {@code null}
 	 */
-	@Nullable String getResponseBody();
+	default @Nullable String getResponseBody() {
+		return getFailure().responseBody();
+	}
 
-	@Nullable OpenRouterErrorDetails getErrorDetails();
+	default @Nullable OpenRouterErrorDetails getErrorDetails() {
+		return getFailure().errorDetails();
+	}
 
 	default OpenRouterErrorCategory getCategory() {
 		OpenRouterErrorDetails details = getErrorDetails();
 		return details != null ? details.category() : OpenRouterErrorCategory.UNKNOWN;
 	}
 
-	@Nullable OpenRouterRetryAfter getRetryAfter();
+	default @Nullable OpenRouterRetryAfter getRetryAfter() {
+		return getFailure().retryAfter();
+	}
 
-	@Nullable String getEndpoint();
+	default @Nullable String getEndpoint() {
+		return getFailure().endpoint();
+	}
 
 }

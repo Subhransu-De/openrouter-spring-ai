@@ -47,6 +47,7 @@ class OpenRouterHttpExceptionFactoryTests {
 	@NullAndEmptySource
 	@ValueSource(strings = { " ", "null", "{}", "{\"error\":null}",
 			"{\"error\":{\"code\":null,\"message\":null,\"metadata\":null}}",
+			"{\"error\":{\"code\":null,\"message\":null,\"metadata\":null},\"padding\":\"truncated",
 			"{\"unrelated\":{\"error_type\":\"authentication\"},\"padding\":\"truncated",
 			"{\"unrelated\":[{\"error_type\":\"authentication\"}],\"padding\":\"truncated" })
 	void missingErrorDetailsPreserveStatusFallbackForWholeAndTruncatedBodies(String body) {

@@ -12,50 +12,18 @@ import org.springframework.http.HttpStatusCode;
  */
 public final class OpenRouterTransientApiException extends TransientAiException implements OpenRouterHttpException {
 
-	private final @Nullable HttpStatusCode statusCode;
-
-	private final @Nullable String responseBody;
-
-	private final @Nullable OpenRouterErrorDetails errorDetails;
-
-	private final @Nullable OpenRouterRetryAfter retryAfter;
-
-	private final @Nullable String endpoint;
+	private final OpenRouterHttpFailure failure;
 
 	public OpenRouterTransientApiException(String message, @Nullable HttpStatusCode statusCode,
 			@Nullable String responseBody, @Nullable OpenRouterErrorDetails errorDetails,
 			@Nullable OpenRouterRetryAfter retryAfter, @Nullable String endpoint) {
 		super(message);
-		this.statusCode = statusCode;
-		this.responseBody = responseBody;
-		this.errorDetails = errorDetails;
-		this.retryAfter = retryAfter;
-		this.endpoint = endpoint;
+		this.failure = new OpenRouterHttpFailure(statusCode, responseBody, errorDetails, retryAfter, endpoint);
 	}
 
 	@Override
-	public @Nullable HttpStatusCode getStatusCode() {
-		return this.statusCode;
-	}
-
-	@Override
-	public @Nullable String getResponseBody() {
-		return this.responseBody;
-	}
-
-	@Override
-	public @Nullable OpenRouterErrorDetails getErrorDetails() {
-		return this.errorDetails;
-	}
-
-	@Override
-	public @Nullable OpenRouterRetryAfter getRetryAfter() {
-		return this.retryAfter;
-	}
-
-	@Override
-	public @Nullable String getEndpoint() {
-		return this.endpoint;
+	public OpenRouterHttpFailure getFailure() {
+		return this.failure;
 	}
 
 }
