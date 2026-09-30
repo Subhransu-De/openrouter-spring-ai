@@ -74,13 +74,7 @@ public final class OpenRouterLimitExceededException extends NonTransientAiExcept
 
 	private final long observedValue;
 
-	private final @Nullable HttpStatusCode statusCode;
-
-	private final @Nullable String responseBody;
-
-	private final @Nullable OpenRouterErrorDetails errorDetails;
-
-	private final @Nullable String endpoint;
+	private final OpenRouterHttpFailure failure;
 
 	public OpenRouterLimitExceededException(Limit limit, long configuredLimit, long observedValue,
 			@Nullable String endpoint, @Nullable HttpStatusCode statusCode, @Nullable String responseBody,
@@ -89,10 +83,7 @@ public final class OpenRouterLimitExceededException extends NonTransientAiExcept
 		this.limit = limit;
 		this.configuredLimit = configuredLimit;
 		this.observedValue = observedValue;
-		this.statusCode = statusCode;
-		this.responseBody = responseBody;
-		this.errorDetails = errorDetails;
-		this.endpoint = endpoint;
+		this.failure = new OpenRouterHttpFailure(statusCode, responseBody, errorDetails, null, endpoint);
 	}
 
 	private static String message(Limit limit, long configuredLimit, long observedValue, @Nullable String endpoint) {
@@ -115,28 +106,8 @@ public final class OpenRouterLimitExceededException extends NonTransientAiExcept
 	}
 
 	@Override
-	public @Nullable HttpStatusCode getStatusCode() {
-		return this.statusCode;
-	}
-
-	@Override
-	public @Nullable String getResponseBody() {
-		return this.responseBody;
-	}
-
-	@Override
-	public @Nullable OpenRouterErrorDetails getErrorDetails() {
-		return this.errorDetails;
-	}
-
-	@Override
-	public @Nullable OpenRouterRetryAfter getRetryAfter() {
-		return null;
-	}
-
-	@Override
-	public @Nullable String getEndpoint() {
-		return this.endpoint;
+	public OpenRouterHttpFailure getFailure() {
+		return this.failure;
 	}
 
 }
