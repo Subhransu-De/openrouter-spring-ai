@@ -144,10 +144,11 @@ class OpenRouterHttpClientStarterTests {
 	}
 
 	private static ChatCompletionRequest chatRequest(boolean stream) {
-		return new ChatCompletionRequest("openai/gpt-5.4-mini", null,
-				List.of(new ChatMessage("user", "hello", null, null, null)), null, null, null, null, null, null, null,
-				null, null, null, null, null, null, stream, null, null, null, null, null, null, null, null, null, null,
-				null, null);
+		return ChatCompletionRequest.builder()
+			.model("openai/gpt-5.4-mini")
+			.messages(List.of(new ChatMessage("user", "hello", null, null, null)))
+			.stream(stream)
+			.build();
 	}
 
 	private static void assertBlockingRequest(CapturedRequest request, String customHeader) {

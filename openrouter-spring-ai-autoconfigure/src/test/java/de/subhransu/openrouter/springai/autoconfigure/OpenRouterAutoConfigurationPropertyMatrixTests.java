@@ -64,10 +64,11 @@ class OpenRouterAutoConfigurationPropertyMatrixTests {
 				assertThat(resolvedOptions(context).getModel()).isEqualTo("openai/gpt-5.4");
 
 				context.getBean(de.subhransu.openrouter.springai.api.OpenRouterApi.class)
-					.chatCompletion(new ChatCompletionRequest("openai/gpt-5.4", null,
-							List.of(new ChatMessage("user", "hi", null, null, null)), null, null, null, null, null,
-							null, null, null, null, null, null, null, null, false, null, null, null, null, null, null,
-							null, null, null, null, null, null));
+					.chatCompletion(ChatCompletionRequest.builder()
+						.model("openai/gpt-5.4")
+						.messages(List.of(new ChatMessage("user", "hi", null, null, null)))
+						.stream(false)
+						.build());
 
 				assertThat(requestUri.get().toString()).startsWith("https://proxy.example/api/v1");
 				assertThat(authorization.get()).isEqualTo("Bearer test-key");

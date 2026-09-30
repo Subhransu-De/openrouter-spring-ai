@@ -88,15 +88,20 @@ class OpenRouterApiContractTests {
 	}
 
 	private ChatCompletionRequest minimalChatRequest() {
-		return new ChatCompletionRequest("openai/gpt-5.4-mini", null,
-				List.of(new ChatMessage("user", "hello", null, null, null)), null, null, null, null, null, null, null,
-				null, null, null, null, null, null, false, null, null, null, null, null, null, null, null, null, null,
-				null, null);
+		return ChatCompletionRequest.builder()
+			.model("openai/gpt-5.4-mini")
+			.messages(List.of(new ChatMessage("user", "hello", null, null, null)))
+			.stream(false)
+			.build();
 	}
 
 	private ResponsesRequest minimalResponsesRequest() {
-		return new ResponsesRequest("openai/gpt-5.4", null, "hello", null, 128, false, null, null, null, null, null,
-				null, null, null, null, null, null, null, null, null, null, null);
+		return ResponsesRequest.builder()
+			.model("openai/gpt-5.4")
+			.input("hello")
+			.maxOutputTokens(128)
+			.stream(false)
+			.build();
 	}
 
 	// ---------------------------------------------------------------------
@@ -198,15 +203,37 @@ class OpenRouterApiContractTests {
 
 	@Test
 	void serializesFullChatRequestWithOpenRouterWireNames() {
-		ChatCompletionRequest request = new ChatCompletionRequest("openai/gpt-5.4-mini",
-				List.of("anthropic/claude-3.5-sonnet", "openai/gpt-5.4"),
-				List.of(new ChatMessage("user", "hello", null, null, null)), 0.7, 0.9, 40, 0.1, 0.2, 1.1, 0.05, 0.8,
-				256, 512, List.of("STOP"), 42, "user-7", false, Map.of("type", "json_object"), null,
-				Map.of("type", "auto"), true,
-				new ProviderPreferences(true, false, "deny", List.of("openai"), List.of("anthropic"), List.of("fp16"),
-						"throughput"),
-				new ReasoningOptions("high", 1024, false, true), "flex", Map.of("trace", "abc"), "fallback",
-				new UsageConfig(true), List.of("image", "text"), Map.of("aspect_ratio", "16:9"));
+		ChatCompletionRequest request = ChatCompletionRequest.builder()
+			.model("openai/gpt-5.4-mini")
+			.models(List.of("anthropic/claude-3.5-sonnet", "openai/gpt-5.4"))
+			.messages(List.of(new ChatMessage("user", "hello", null, null, null)))
+			.temperature(0.7)
+			.topP(0.9)
+			.topK(40)
+			.frequencyPenalty(0.1)
+			.presencePenalty(0.2)
+			.repetitionPenalty(1.1)
+			.minP(0.05)
+			.topA(0.8)
+			.maxTokens(256)
+			.maxCompletionTokens(512)
+			.stop(List.of("STOP"))
+			.seed(42)
+			.user("user-7")
+			.stream(false)
+			.responseFormat(Map.of("type", "json_object"))
+			.toolChoice(Map.of("type", "auto"))
+			.parallelToolCalls(true)
+			.provider(new ProviderPreferences(true, false, "deny", List.of("openai"), List.of("anthropic"),
+					List.of("fp16"), "throughput"))
+			.reasoning(new ReasoningOptions("high", 1024, false, true))
+			.serviceTier("flex")
+			.metadata(Map.of("trace", "abc"))
+			.route("fallback")
+			.usage(new UsageConfig(true))
+			.modalities(List.of("image", "text"))
+			.imageConfig(Map.of("aspect_ratio", "16:9"))
+			.build();
 		Fixture fixture = fixture(baseBuilder());
 		fixture.server()
 			.expect(once(), requestTo(CHAT_COMPLETIONS))
@@ -268,11 +295,28 @@ class OpenRouterApiContractTests {
 
 	@Test
 	void serializesResponsesRequestWithWireNames() {
-		ResponsesRequest request = new ResponsesRequest("openai/gpt-5.4", null, "hello", "be terse", 256, false, 0.3,
-				0.8, 20, 0.1, 0.2, Map.of("trace", "xyz"),
-				new ProviderPreferences(true, null, null, null, null, null, null),
-				new ReasoningOptions("medium", null, null, null), "fallback", "priority", "user-1", true,
-				Map.of("type", "auto"), null, List.of("image", "text"), Map.of("aspect_ratio", "16:9"));
+		ResponsesRequest request = ResponsesRequest.builder()
+			.model("openai/gpt-5.4")
+			.input("hello")
+			.instructions("be terse")
+			.maxOutputTokens(256)
+			.stream(false)
+			.temperature(0.3)
+			.topP(0.8)
+			.topK(20)
+			.frequencyPenalty(0.1)
+			.presencePenalty(0.2)
+			.metadata(Map.of("trace", "xyz"))
+			.provider(new ProviderPreferences(true, null, null, null, null, null, null))
+			.reasoning(new ReasoningOptions("medium", null, null, null))
+			.route("fallback")
+			.serviceTier("priority")
+			.user("user-1")
+			.parallelToolCalls(true)
+			.toolChoice(Map.of("type", "auto"))
+			.modalities(List.of("image", "text"))
+			.imageConfig(Map.of("aspect_ratio", "16:9"))
+			.build();
 		Fixture fixture = fixture(baseBuilder());
 		fixture.server()
 			.expect(once(), requestTo(RESPONSES))

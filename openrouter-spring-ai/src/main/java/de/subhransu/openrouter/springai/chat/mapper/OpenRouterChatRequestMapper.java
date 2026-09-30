@@ -44,18 +44,39 @@ public final class OpenRouterChatRequestMapper {
 		CacheBreakpointMapper.validate(messages);
 		var serviceTier = options.getServiceTier();
 		var audio = options.getAudio();
-		return new ChatCompletionRequest(options.getModel(), options.getModels(), mapMessages(messages),
-				options.getTemperature(), options.getTopP(), options.getTopK(), options.getFrequencyPenalty(),
-				options.getPresencePenalty(), options.getRepetitionPenalty(), options.getMinP(), options.getTopA(),
-				options.getMaxTokens(), options.getMaxCompletionTokens(), options.getStopSequences(), options.getSeed(),
-				options.getUser(), stream, new OutputFormatMapper(this.objectMapper).map(options), tools,
-				ToolChoiceMapper.map(options.getToolChoice(), false, this.objectMapper), options.getParallelToolCalls(),
-				mapProvider(options.getProvider(), options.getProviderExtraBody()),
-				mapReasoning(options.getReasoning()), serviceTier != null ? serviceTier.value() : null,
-				options.getMetadata(), options.getRoute(),
-				options.getIncludeUsage() != null ? new UsageConfig(options.getIncludeUsage()) : null,
-				options.getModalities(), options.getImageConfig(),
-				audio != null ? new AudioConfig(audio.voice(), audio.format()) : null, options.getExtraBody());
+		return ChatCompletionRequest.builder()
+			.model(options.getModel())
+			.models(options.getModels())
+			.messages(mapMessages(messages))
+			.temperature(options.getTemperature())
+			.topP(options.getTopP())
+			.topK(options.getTopK())
+			.frequencyPenalty(options.getFrequencyPenalty())
+			.presencePenalty(options.getPresencePenalty())
+			.repetitionPenalty(options.getRepetitionPenalty())
+			.minP(options.getMinP())
+			.topA(options.getTopA())
+			.maxTokens(options.getMaxTokens())
+			.maxCompletionTokens(options.getMaxCompletionTokens())
+			.stop(options.getStopSequences())
+			.seed(options.getSeed())
+			.user(options.getUser())
+			.stream(stream)
+			.responseFormat(new OutputFormatMapper(this.objectMapper).map(options))
+			.tools(tools)
+			.toolChoice(ToolChoiceMapper.map(options.getToolChoice(), false, this.objectMapper))
+			.parallelToolCalls(options.getParallelToolCalls())
+			.provider(mapProvider(options.getProvider(), options.getProviderExtraBody()))
+			.reasoning(mapReasoning(options.getReasoning()))
+			.serviceTier(serviceTier != null ? serviceTier.value() : null)
+			.metadata(options.getMetadata())
+			.route(options.getRoute())
+			.usage(options.getIncludeUsage() != null ? new UsageConfig(options.getIncludeUsage()) : null)
+			.modalities(options.getModalities())
+			.imageConfig(options.getImageConfig())
+			.audio(audio != null ? new AudioConfig(audio.voice(), audio.format()) : null)
+			.extraBody(options.getExtraBody())
+			.build();
 	}
 
 	private List<ChatMessage> mapMessages(List<Message> messages) {

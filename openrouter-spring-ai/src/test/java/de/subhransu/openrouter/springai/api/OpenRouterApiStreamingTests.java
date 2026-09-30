@@ -36,10 +36,11 @@ class OpenRouterApiStreamingTests {
 	}
 
 	private ChatCompletionRequest chatRequest() {
-		return new ChatCompletionRequest("openai/gpt-5.4-mini", null,
-				List.of(new ChatMessage("user", "hello", null, null, null)), null, null, null, null, null, null, null,
-				null, null, null, null, null, null, true, null, null, null, null, null, null, null, null, null, null,
-				null, null);
+		return ChatCompletionRequest.builder()
+			.model("openai/gpt-5.4-mini")
+			.messages(List.of(new ChatMessage("user", "hello", null, null, null)))
+			.stream(true)
+			.build();
 	}
 
 	@Test

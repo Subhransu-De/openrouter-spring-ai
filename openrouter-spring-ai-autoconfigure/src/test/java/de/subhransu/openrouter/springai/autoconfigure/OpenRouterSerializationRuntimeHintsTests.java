@@ -33,6 +33,10 @@ class OpenRouterSerializationRuntimeHintsTests {
 				continue;
 			}
 			Class<?> type = Class.forName(reader.getMetadataReader(resource).getClassMetadata().getClassName());
+			// Request builders run in caller code and are never serialized.
+			if (type.getEnclosingClass() != null && "Builder".equals(type.getSimpleName())) {
+				continue;
+			}
 			assertThat(hints.reflection().getTypeHint(type)).as(type.getName()).isNotNull();
 			for (var constructor : type.getDeclaredConstructors()) {
 				assertThat(RuntimeHintsPredicates.reflection().onConstructorInvocation(constructor).test(hints))

@@ -48,8 +48,12 @@ class OpenRouterApiTests {
 				}
 				""", MediaType.APPLICATION_JSON));
 
-		ResponsesResult result = api.responses(new ResponsesRequest("openai/gpt-5.4", null, "hello", null, 128, false,
-				null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null));
+		ResponsesResult result = api.responses(ResponsesRequest.builder()
+			.model("openai/gpt-5.4")
+			.input("hello")
+			.maxOutputTokens(128)
+			.stream(false)
+			.build());
 
 		assertThat(result.id()).isEqualTo("resp-2");
 		server.verify();
