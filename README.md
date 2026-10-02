@@ -40,7 +40,7 @@ module backlinks and cannot be changed in place. RC2 contains the corrected link
 
 ## Install and make a first call
 
-Use the published `de.subhransu:openrouter-spring-ai-starter:0.1.0-RC2` from Maven
+Use the published `de.subhransu:openrouter-spring-ai-starter:0.1.0-RC3` from Maven
 Central. For a new application, create this `pom.xml`:
 
 ```xml
@@ -60,7 +60,7 @@ Central. For a new application, create this `pom.xml`:
         <dependency>
             <groupId>de.subhransu</groupId>
             <artifactId>openrouter-spring-ai-starter</artifactId>
-            <version>0.1.0-RC2</version>
+            <version>0.1.0-RC3</version>
         </dependency>
     </dependencies>
     <build><plugins><plugin>
@@ -81,7 +81,7 @@ repositories { mavenCentral() }
 java { sourceCompatibility = JavaVersion.VERSION_17 }
 dependencies {
     implementation(platform("org.springframework.boot:spring-boot-dependencies:4.1.1"))
-    implementation("de.subhransu:openrouter-spring-ai-starter:0.1.0-RC2")
+    implementation("de.subhransu:openrouter-spring-ai-starter:0.1.0-RC3")
 }
 ```
 
@@ -144,24 +144,23 @@ and subscribe to the returned `Flux<String>` for the application's lifetime.
 | -------------------------------------------------------------------------------------- | ------------------- | ----------- | --------- |
 | [RC1: `74da429`](https://github.com/Subhransu-De/openrouter-spring-ai/tree/v0.1.0-RC1) | 17                  | 4.1.1       | 2.0.1     |
 | [RC2: `23473f7`](https://github.com/Subhransu-De/openrouter-spring-ai/tree/v0.1.0-RC2) | 17                  | 4.1.1       | 2.0.1     |
+| [RC3: `e336517`](https://github.com/Subhransu-De/openrouter-spring-ai/tree/v0.1.0-RC3) | 17                  | 4.1.1       | 2.0.1     |
 | Unreleased main (`0.1.0-SNAPSHOT`)                                                     | 17                  | 4.1.1       | 2.0.1     |
 
 Baselines come from the tagged/root POMs and
-[published RC2 parent POM](https://repo.maven.apache.org/maven2/de/subhransu/openrouter-spring-ai-parent/0.1.0-RC2/openrouter-spring-ai-parent-0.1.0-RC2.pom).
+[published RC3 parent POM](https://repo.maven.apache.org/maven2/de/subhransu/openrouter-spring-ai-parent/0.1.0-RC3/openrouter-spring-ai-parent-0.1.0-RC3.pom).
 CI targets JDK 17, 21, and 25; this does not establish compatibility with arbitrary
 Boot or Spring AI versions. Use the matching BOM baseline in the consuming application.
 
-[RC2, released September 19, 2026](https://github.com/Subhransu-De/openrouter-spring-ai/releases/tag/v0.1.0-RC2),
-includes option snapshot isolation (#18/#85), image stream completion (#20/#119),
-and malformed-terminal validation (#60/#101/#117), among other fixes in its release notes.
-Those fixes must not be attributed to RC1 merely because their issues are closed.
+[RC3, released October 2, 2026](https://github.com/Subhransu-De/openrouter-spring-ai/releases/tag/v0.1.0-RC3),
+adds strict function tools, explicit cache breakpoints, optional request/response extensions,
+embedding metadata/dimension discovery, cumulative Responses state limits, PDF/audio/video
+inputs, and chat audio output, among other changes in its release notes.
 See the [RC2 README](https://github.com/Subhransu-De/openrouter-spring-ai/blob/v0.1.0-RC2/README.md)
-for its API. The sections below describe **main**: strict function tools, explicit cache
-breakpoints, optional request/response extensions, embedding metadata/dimension discovery,
-cumulative Responses state limits, PDF/audio/video inputs, and chat audio output are
-post-RC2 additions. They require a source build until a release includes them.
+for the RC2 API. The sections below describe **main**, which matches RC3 until a later
+change lands.
 RC2 code that calls a `ChatCompletionRequest` or `ResponsesRequest` constructor no
-longer compiles on main: those signatures are gone. Build the requests with
+longer compiles on RC3: those signatures are gone. Build the requests with
 `builder()` instead (see [Supported API and nullability](#supported-api-and-nullability)).
 
 ### Options: replacement and composition
