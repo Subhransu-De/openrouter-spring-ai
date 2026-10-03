@@ -1405,13 +1405,6 @@ The baseline has no findings at 45, which is retained as a review threshold for
 future public API growth. Published methods are retained. Advisory findings neither replace the
 blocking report nor change its failure policy.
 
-CI's Java 25 legs also run `config/pmd/verify.py` against each build's actual PMD
-wiring. To repeat locally, use `uv run config/pmd/verify.py maven --command mvn
---work-dir <empty-scratch-directory>` or replace `maven --command mvn` with
-`gradle --command gradle`. Fixtures verify both sides of each threshold, exact
-rule diagnostics, source scope, the three added rules, and advisory isolation.
-Keep the scratch directory outside the repository.
-
 On JDK 25+, run `mvn -B -Pnullaway clean compile` or
 `gradle --no-daemon -Pnullaway clean compileJava` to enforce production null contracts.
 CI checks both build systems with NullAway errors and JSpecify generic
@@ -1487,14 +1480,9 @@ cannot infer; existing tests and NullAway cover those contracts. Repeated nullab
 record accessors use local values so their guards remain visible to the analyzer.
 NullAway checks source null contracts independently and does not inherit these exclusions.
 
-`config/spotbugs/verify.py` exercises bad and corrected fixtures for all four correctness detectors,
-FindSecBugs SQL injection, and Maven profile combinations. Run it with `maven --command mvn`
-or `gradle --command gradle`, plus `--work-dir` pointing outside the repository.
-The fixtures and reports use synthetic data and never call OpenRouter.
-
 CI's `Qodana declaration access` job runs IntelliJ's `WeakerAccess` inspection ("Declaration access can be weaker") with the free `jetbrains/qodana-jvm-community` linter, pinned in `qodana.yaml`. It needs no Qodana Cloud token. The inspection profile in `.qodana/weaker-access.yaml` enables only this inspection. Any finding fails the job and appears as an annotation on the pull request; the full report is uploaded as the `qodana-report` artifact. The job analyzes production sources of the core and autoconfiguration modules. Tests, samples, and the dependency-only starter are excluded.
 
-The inspection only sees callers inside this repository, so it ignores the supported API listed under [Supported API and nullability](#supported-api-and-nullability). Mapper packages, `internal`, `support`, and the remaining auto-configuration and `api` classes are checked. Narrow a reported declaration. When a framework or reflection needs the wider access, annotate the declaration with `@SuppressWarnings("WeakerAccess")` and a comment that gives the reason. Run the check locally with Docker from the repository root:
+The inspection only sees callers inside this repository, so it ignores the supported API listed under [Supported API and nullability](#supported-api-and-nullability). Mapper packages, `internal`, `support`, the error factories, classifiers, messages, wire responses, and deserializers in `errors`, and the remaining auto-configuration and `api` classes are checked. Narrow a reported declaration. When a framework or reflection needs the wider access, annotate the declaration with `@SuppressWarnings("WeakerAccess")` and a comment that gives the reason. Run the check locally with Docker from the repository root:
 
 ```sh
 docker run --rm -v "$PWD:/data/project" -v "$PWD/../qodana-results:/data/results" jetbrains/qodana-jvm-community:2026.2
@@ -1522,11 +1510,7 @@ tests. `mvn -B -DskipTests package` and `gradle --no-daemon assemble` still pack
 without coverage verification. Explicit Maven `-DskipTests` verification, used for
 static security analysis, also skips coverage enforcement.
 
-The JDK 25 verification jobs also exercise the gates with tiny synthetic modules.
-Run `uv run config/coverage/verify.py maven --command mvn --work-dir <empty-directory>`
-or use `gradle --command gradle` in place of `maven --command mvn`. Keep the fixture
-directory outside the checkout. These cases verify the exact boundary, independent
-line and branch failures, module isolation, new starter code, and missing execution data.
+The library's own code passes every gate, so a normal build cannot show that a gate is still switched on. `mvn -B -N -Pgate-its verify` runs `maven-invoker-plugin` over the projects in `src/it`. Each project inherits the real parent POM, breaks one gate on purpose, and must fail for that reason: `coverage-below-floor` (JaCoCo line floor), `pmd-lost-cause` (`PreserveStackTrace`), `spotbugs-correctness` (`NP_NULL_ON_SOME_PATH` and `OBL_UNSATISFIED_OBLIGATION`), and `findsecbugs-sql-injection` (`SQL_INJECTION_JDBC`). A `verify.groovy` script in each project checks the rule, so a build that fails for another reason still fails the run. The Java 25 Maven verification job runs this profile. When you change a gate's configuration, add or update the matching project.
 
 Coverage percentages supplement the behavioral tests for fragment ordering,
 cancellation, terminal errors, reasoning replay, and tool aggregation.

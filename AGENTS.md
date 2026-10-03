@@ -55,6 +55,7 @@ If a mode does not support an option, preserve or add explicit validation rather
 - For auto-configuration and its upstream module: `mvn -B -pl openrouter-spring-ai-autoconfigure -am test`.
 - Gradle focused equivalent: `gradle --no-daemon :openrouter-spring-ai:test --tests '*OpenRouterChatModelStreamingTests'`.
 - For dependency, build, or broad cross-module changes, run `mvn -B -DskipTests package`, `mvn -B verify`, `gradle --no-daemon assemble`, and `gradle --no-daemon check` as applicable to the affected builds.
+- When a coverage, PMD, or SpotBugs gate configuration changes, run `mvn -B -N -Pgate-its verify`. Each project in `src/it` must still fail for its named rule; add or update a project when a gate gains a rule that must fail the build.
 - Run affected-module `verify` (Maven) or `check` (Gradle) when quality rules or substantial Java changes warrant it. CI runs these quality gates, plus explicit POM/properties formatting and Java style checks. Checkstyle is enabled only on JDK 21+ and samples have exclusions.
 - For publication or packaging changes, inspect `.github/workflows/release.yml`; preserve the unsigned release build before the optional signed upload.
 - For runtime-hint or native compatibility changes, inspect the samples native build and run `gradle --no-daemon :openrouter-spring-ai-samples:nativeCompile` with the matching GraalVM when available.

@@ -14,7 +14,8 @@ inspections:
       - "scope#src:de.subhransu.openrouter.springai.api.OpenRouterApi"
       - "scope#src:de.subhransu.openrouter.springai.api.OpenRouterRequestMode"
       - "scope#src:de.subhransu.openrouter.springai.api.dto..*"
-      - "scope#src:de.subhransu.openrouter.springai.errors.*"
+      # Error factories, classifiers, wire responses, messages, and deserializers are implementation details.
+      - "scope#src:de.subhransu.openrouter.springai.errors.*&&!src:de.subhransu.openrouter.springai.errors.*Factory&&!src:de.subhransu.openrouter.springai.errors.*Classifier&&!src:de.subhransu.openrouter.springai.errors.OpenRouterErrorResponse&&!src:de.subhransu.openrouter.springai.errors.OpenRouterExceptionMessage&&!src:de.subhransu.openrouter.springai.errors.*Deserializer"
       - "scope#src:de.subhransu.openrouter.springai.chat.errors.*"
       - "scope#src:de.subhransu.openrouter.springai.api.errors.OpenRouterApiException"
       - "scope#src:de.subhransu.openrouter.springai.autoconfigure.*Properties"

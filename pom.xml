@@ -43,7 +43,9 @@
     <revision>0.1.0-SNAPSHOT</revision>
 
     <java.version>17</java.version>
-    <checkstyle.config>${maven.multiModuleProjectDirectory}/config/checkstyle/checkstyle.xml</checkstyle.config>
+    <!-- Integration projects under src/it point this at the repository's config directory. -->
+    <quality.config.dir>${maven.multiModuleProjectDirectory}/config</quality.config.dir>
+    <checkstyle.config>${quality.config.dir}/checkstyle/checkstyle.xml</checkstyle.config>
     <maven.compiler.source>${java.version}</maven.compiler.source>
     <maven.compiler.target>${java.version}</maven.compiler.target>
     <maven.compiler.release>${java.version}</maven.compiler.release>
@@ -72,6 +74,7 @@
     <coverage.skip>true</coverage.skip>
     <skipTests>false</skipTests>
     <maven-antrun-plugin.version>3.2.0</maven-antrun-plugin.version>
+    <maven-invoker-plugin.version>3.10.1</maven-invoker-plugin.version>
     <archunit.version>1.5.1</archunit.version>
     <error-prone.version>2.50.0</error-prone.version>
     <error-prone-gradle-plugin.version>5.1.1</error-prone-gradle-plugin.version>
@@ -420,9 +423,9 @@
           <minimumTokens>200</minimumTokens>
           <targetJdk>${java.version}</targetJdk>
           <rulesets>
-            <ruleset>${maven.multiModuleProjectDirectory}/config/pmd/pmd-common.xml</ruleset>
-            <ruleset>${maven.multiModuleProjectDirectory}/config/pmd/pmd-main.xml</ruleset>
-            <ruleset>${maven.multiModuleProjectDirectory}/config/pmd/pmd-test.xml</ruleset>
+            <ruleset>${quality.config.dir}/pmd/pmd-common.xml</ruleset>
+            <ruleset>${quality.config.dir}/pmd/pmd-main.xml</ruleset>
+            <ruleset>${quality.config.dir}/pmd/pmd-test.xml</ruleset>
           </rulesets>
         </configuration>
         <!-- Pin the PMD distribution the plugin loads: without this Maven analyses with the
@@ -468,7 +471,7 @@
             <configuration>
               <includeTests>false</includeTests>
               <rulesets combine.self="override">
-                <ruleset>${maven.multiModuleProjectDirectory}/config/pmd/pmd-review.xml</ruleset>
+                <ruleset>${quality.config.dir}/pmd/pmd-review.xml</ruleset>
               </rulesets>
               <targetDirectory>${project.build.directory}/pmd-review</targetDirectory>
               <outputDirectory>${project.build.directory}/site/pmd-review</outputDirectory>
@@ -619,8 +622,8 @@
                   <includeTests>false</includeTests>
                   <failOnError>true</failOnError>
                   <maxAllowedViolations>0</maxAllowedViolations>
-                  <includeFilterFile>${maven.multiModuleProjectDirectory}/config/spotbugs/security-include.xml</includeFilterFile>
-                  <excludeFilterFile>${maven.multiModuleProjectDirectory}/config/spotbugs/security-exclude.xml</excludeFilterFile>
+                  <includeFilterFile>${quality.config.dir}/spotbugs/security-include.xml</includeFilterFile>
+                  <excludeFilterFile>${quality.config.dir}/spotbugs/security-exclude.xml</excludeFilterFile>
                   <spotbugsXmlOutputFilename>findsecbugs.xml</spotbugsXmlOutputFilename>
                   <htmlOutput>true</htmlOutput>
                   <outputDirectory>${project.build.directory}/spotbugs/security</outputDirectory>
@@ -722,8 +725,8 @@
                   <includeTests>false</includeTests>
                   <failOnError>true</failOnError>
                   <maxAllowedViolations>0</maxAllowedViolations>
-                  <includeFilterFile>${maven.multiModuleProjectDirectory}/config/spotbugs/correctness-include.xml</includeFilterFile>
-                  <excludeFilterFile>${maven.multiModuleProjectDirectory}/config/spotbugs/correctness-exclude.xml</excludeFilterFile>
+                  <includeFilterFile>${quality.config.dir}/spotbugs/correctness-include.xml</includeFilterFile>
+                  <excludeFilterFile>${quality.config.dir}/spotbugs/correctness-exclude.xml</excludeFilterFile>
                   <spotbugsXmlOutputFilename>spotbugs-correctness.xml</spotbugsXmlOutputFilename>
                   <htmlOutput>true</htmlOutput>
                   <outputDirectory>${project.build.directory}/spotbugs/correctness</outputDirectory>
@@ -790,6 +793,38 @@
                     </fail>
                   </target>
                 </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
+      <id>gate-its</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-invoker-plugin</artifactId>
+            <version>${maven-invoker-plugin.version}</version>
+            <!-- Runs once from the root; each project under src/it fails one quality gate on purpose. -->
+            <inherited>false</inherited>
+            <configuration>
+              <projectsDirectory>src/it</projectsDirectory>
+              <cloneProjectsTo>${project.build.directory}/it</cloneProjectsTo>
+              <localRepositoryPath>${project.build.directory}/it-repo</localRepositoryPath>
+              <settingsFile>src/it/settings.xml</settingsFile>
+              <postBuildHookScript>verify</postBuildHookScript>
+              <streamLogsOnFailures>true</streamLogsOnFailures>
+              <failIfNoProjects>true</failIfNoProjects>
+            </configuration>
+            <executions>
+              <execution>
+                <id>gate-its</id>
+                <goals>
+                  <goal>install</goal>
+                  <goal>run</goal>
+                </goals>
               </execution>
             </executions>
           </plugin>
