@@ -351,7 +351,7 @@ Model/provider support still applies; `top_logprobs` on Chat Completions require
 `OpenRouterExtensionTests` covers serialization, endpoint rejection, routing, and
 response preservation; `OpenRouterExtensionPropertiesTests` covers Boot binding.
 
-OpenRouter applies its [middle-out message transform](https://openrouter.ai/docs/guides/features/message-transforms) by default to endpoints with a context of 8,192 tokens or less. A prompt longer than the context is then shortened and answered without an error. Send `extraBody(Map.of("transforms", List.of()))` to receive a context-length error instead. Set it in Java: an empty list cannot be expressed as a Boot property.
+OpenRouter applies its [middle-out message transform](https://openrouter.ai/docs/guides/features/message-transforms) by default to endpoints with a context of 8,192 tokens or less. A prompt longer than the context is then shortened and answered without an error. Send `extraBody(Map.of("transforms", List.of()))` to receive a context-length error instead. In Boot properties, `spring.ai.openrouter.chat.extra-body.[transforms]=` sends an empty list, and indexed entries such as `[transforms][0]=middle-out` send a list.
 
 Provider extensions use `OpenRouterChatOptions.builder().providerExtraBody(...)`.
 `OpenRouterProviderPreferences` retains its existing constructor and string `sort` accessor. An extension
