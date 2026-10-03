@@ -151,7 +151,7 @@ public final class RequestExtensions {
 			return indexedList(key, indexed);
 		}
 		// A Boot property with no value is the only way to write an empty list there.
-		if ("transforms".equals(key) && "".equals(value)) {
+		if ("transforms".equals(key) && value instanceof String text && text.isEmpty()) {
 			return List.of();
 		}
 		return value;
