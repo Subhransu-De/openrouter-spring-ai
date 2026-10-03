@@ -42,7 +42,6 @@ val javaVersion = pomProperty("java.version").toInt()
 val revision = pomProperty("revision")
 val springAiVersion = pomProperty("spring-ai.version")
 val springBootVersion = pomProperty("spring-boot.version")
-val jackson3Version = pomProperty("jackson3.version")
 val junitJupiterVersion = pomProperty("junit-jupiter.version")
 val archunitVersion = pomProperty("archunit.version")
 val checkstyleVersion = pomProperty("checkstyle.version")
@@ -156,7 +155,6 @@ subprojects {
 	}
 
 	dependencies {
-		"api"(platform("tools.jackson:jackson-bom:$jackson3Version"))
 		"api"(platform("org.springframework.boot:spring-boot-dependencies:$springBootVersion"))
 		"api"(platform("org.springframework.ai:spring-ai-bom:$springAiVersion"))
 		"annotationProcessor"(platform("org.springframework.boot:spring-boot-dependencies:$springBootVersion"))
