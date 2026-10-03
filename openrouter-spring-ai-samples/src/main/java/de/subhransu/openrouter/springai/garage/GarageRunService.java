@@ -257,6 +257,7 @@ public class GarageRunService implements DisposableBean {
                 result.sceneId(),
                 result.requestMode().name(),
                 result.status().name(),
+                result.reason() != null ? result.reason().code() : null,
                 result.duration().toMillis()))
             .toList();
 
@@ -317,21 +318,25 @@ public class GarageRunService implements DisposableBean {
       log.info("PASS {} ({} ms)", scene.id(), result.duration().toMillis());
       return result;
     } catch (Exception failure) {
-      log.error("FAIL {}: {}", scene.id(), failure.getMessage());
       String operationId = lastOperationId(scene.id(), requestMode);
-      this.evidence.featureSnapshot().stream()
-          .filter(item -> operationId.equals(item.get("operationId")))
-          .filter(item -> requestMode.name().equals(item.get("requestMode")))
-          .forEach(item -> this.evidence.error(GarageFeature.fromId(Objects.requireNonNull(item.get("featureId"), "featureId").toString()),
-              operationId, requestMode.name(), failure));
-      return SceneResult.failed(
+      boolean truncatedReply = this.telemetry.observationsFor(operationId).stream()
+          .anyMatch(observation -> Boolean.TRUE.equals(observation.get("truncated")));
+      SceneResult result = SceneResult.failed(
           scene.id(),
           operationId,
           requestMode,
           Duration.between(started, Instant.now()),
           outputDirectory,
           Map.of("costUsd", this.evidence.costFor(operationId)),
-          failure);
+          failure,
+          truncatedReply);
+      log.error("FAIL {} [{}]: {}", scene.id(), Objects.requireNonNull(result.reason()).code(), result.error());
+      this.evidence.featureSnapshot().stream()
+          .filter(item -> operationId.equals(item.get("operationId")))
+          .filter(item -> requestMode.name().equals(item.get("requestMode")))
+          .forEach(item -> this.evidence.error(GarageFeature.fromId(Objects.requireNonNull(item.get("featureId"), "featureId").toString()),
+              operationId, requestMode.name(), failure));
+      return result;
     }
   }
 

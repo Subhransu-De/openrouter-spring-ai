@@ -21,6 +21,10 @@
     "headers": {
       "Content-Type": "text/event-stream"
     },
-    "bodyFileName": "chat/streaming-dispatch-tool-call.sse"
+    "bodyFileName": "chat/streaming-dispatch-tool-call.sse",
+    "chunkedDribbleDelay": {
+      "numberOfChunks": 8,
+      "totalDuration": 80
+    }
   }
 }

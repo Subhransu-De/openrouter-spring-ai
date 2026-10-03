@@ -86,7 +86,7 @@ class GarageRunPlanTests {
     assertThat(selected.runsImageInput()).isFalse();
     assertThat(selected.runsImageGeneration()).isFalse();
     assertThat(selected.foremanModel()).isEqualTo(this.properties.getForemanModel());
-    assertThat(this.properties.getMaxCompletionTokens()).isEqualTo(900);
+    assertThat(this.properties.getMaxCompletionTokens()).isEqualTo(4096);
     assertThat(plan("{\"capabilities\":[\"embedding\",\"text\"]}")).isEqualTo(selected);
   }
 

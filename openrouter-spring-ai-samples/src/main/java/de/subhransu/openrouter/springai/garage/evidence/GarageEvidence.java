@@ -30,7 +30,7 @@ public final class GarageEvidence {
       "incompleteFeatures", "costsByOperation", "command", "scenes", "featureRegistry",
       "featureEvidence", "events", "observations", "meters", "transport", "results", "sweep",
       "passed", "failed", "id", "title", "featureId", "feature", "kind", "sceneId",
-      "operationId", "requestMode", "requestModes", "sceneIds", "levels", "complete",
+      "operationId", "requestMode", "requestModes", "sceneIds", "levels", "complete", "reason", "truncated",
       "details", "errors", "error", "type", "cause", "evidenceOperations", "durationMillis",
       "durationNanos", "streaming", "returnDirect", "resultCharacters", "costUsd",
       "dimensions", "similarCosine", "unrelatedCosine", "imageBytes", "usage",
@@ -61,6 +61,9 @@ public final class GarageEvidence {
     }
     for (EvidenceLevel level : EvidenceLevel.values()) {
       labels.add(level.name());
+    }
+    for (SceneFailureReason reason : SceneFailureReason.values()) {
+      labels.add(reason.code());
     }
     return Set.copyOf(labels);
   }

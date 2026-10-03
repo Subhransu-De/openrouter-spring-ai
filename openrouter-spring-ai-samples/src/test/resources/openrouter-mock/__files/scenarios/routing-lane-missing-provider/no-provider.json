@@ -1,10 +1,12 @@
+
+         
 {
   "id": "gen-garage-no-provider",
   "object": "chat.completion",
   "created": 1767225600,
   "model": "openai/gpt-oss-20b",
   "system_fingerprint": null,
-  "service_tier": null,
+  "service_tier": "default",
   "choices": [
     {
       "index": 0,

@@ -4,6 +4,7 @@ import org.jspecify.annotations.Nullable;
 import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.ERROR;
 import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.FAILED;
 import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.PASSED;
+import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.REASON;
 import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.STATUS;
 import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.USAGE;
 
@@ -12,6 +13,7 @@ import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
 import de.subhransu.openrouter.springai.chat.OpenRouterUsage;
 import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingOptions;
+import de.subhransu.openrouter.springai.garage.evidence.SceneFailureReason;
 import de.subhransu.openrouter.springai.image.OpenRouterImageGenerationMetadata;
 import de.subhransu.openrouter.springai.image.OpenRouterImageModel;
 import de.subhransu.openrouter.springai.image.OpenRouterImageOptions;
@@ -167,7 +169,7 @@ public final class GarageModalityBays {
               .model(this.visionModelId)
               .requestMode(requestMode)
               .temperature(0.1)
-              .maxCompletionTokens(600)
+              .maxCompletionTokens(2048)
               .includeUsage(requestMode == OpenRouterRequestMode.OPENAI_RESPONSES ? null : true)
               .provider(this.provider)
               .build();
@@ -270,7 +272,7 @@ public final class GarageModalityBays {
                       ? Map.of("quality", this.imageQuality)
                       : Map.of())
               // Generated images are billed as a large block of completion tokens; the
-              // sample's default 900-token cap would truncate them.
+              // sample's default completion cap would truncate them.
               .maxCompletionTokens(8000)
               .includeUsage(true)
               .provider(this.provider)
@@ -479,6 +481,7 @@ public final class GarageModalityBays {
   private void fail(Map<String, Object> probe, Exception ex) {
     probe.put(STATUS, FAILED);
     probe.put(ERROR, ex.getClass().getSimpleName() + ": " + ex.getMessage());
+    probe.put(REASON, SceneFailureReason.classify(ex, false).code());
   }
 
   private byte[] decodeDataUrl(String data) {

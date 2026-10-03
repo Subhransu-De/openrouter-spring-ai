@@ -1,11 +1,13 @@
+
+         
 {
   "id": "gen-garage-invoice-chat",
   "object": "chat.completion",
   "created": 1767225600,
   "model": "openai/gpt-oss-120b",
-  "provider": "GarageMock",
+  "provider": "DeepInfra",
   "system_fingerprint": null,
-  "service_tier": null,
+  "service_tier": "default",
   "choices": [
     {
       "index": 0,

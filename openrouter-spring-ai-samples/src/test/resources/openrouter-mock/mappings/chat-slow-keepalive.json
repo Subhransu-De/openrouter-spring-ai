@@ -1,0 +1,28 @@
+{
+  "name": "chat-slow-keepalive",
+  "priority": 10,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/chat/completions",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.metadata.suite == 'slow-keepalive')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json",
+      "Content-Encoding": "identity"
+    },
+    "bodyFileName": "chat/slow-keepalive.json",
+    "chunkedDribbleDelay": {
+      "numberOfChunks": 12,
+      "totalDuration": 1800
+    }
+  },
+  "metadata": {
+    "note": "OpenRouter gzips JSON but flushes each whitespace keepalive. The mock server buffers small gzip writes, so this reply is sent uncompressed to keep the keepalive gaps intact."
+  }
+}

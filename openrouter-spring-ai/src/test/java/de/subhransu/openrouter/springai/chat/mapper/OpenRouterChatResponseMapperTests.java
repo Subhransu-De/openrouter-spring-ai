@@ -45,6 +45,20 @@ class OpenRouterChatResponseMapperTests {
 	}
 
 	@Test
+	void blankToolCallNameFailsProtocolValidation() {
+		for (String name : List.of("", "  ")) {
+			var tool = new ToolCall("call-1", "function", new FunctionCall(name, "{\"job\":\"a\"}"));
+			var response = new ChatCompletionResponse(
+					"gen-1", "chat.completion", 123L, "model", "provider", List.of(new Choice(0,
+							new ChatMessage("assistant", null, null, null, List.of(tool)), null, "tool_calls", null)),
+					null);
+			assertThatThrownBy(() -> new OpenRouterChatResponseMapper().map(response))
+				.isInstanceOf(OpenRouterProtocolException.class)
+				.hasMessageContaining("nonblank tool call name");
+		}
+	}
+
+	@Test
 	void mapsResponseContentMetadataAndUsage() {
 		ChatCompletionResponse response = new ChatCompletionResponse("gen-1", "chat.completion", 123L,
 				"openai/gpt-5.4-mini", "openai",

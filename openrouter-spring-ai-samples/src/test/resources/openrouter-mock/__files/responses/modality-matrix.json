@@ -1,3 +1,5 @@
+
+         
 {
   "id": "resp-garage-matrix-responses",
   "object": "response",
@@ -31,7 +33,8 @@
   "usage": {
     "input_tokens": 180,
     "input_tokens_details": {
-      "cached_tokens": 64
+      "cached_tokens": 64,
+      "cache_write_tokens": 0
     },
     "output_tokens": 42,
     "output_tokens_details": {
@@ -42,8 +45,30 @@
     "is_byok": false,
     "cost_details": {
       "upstream_inference_cost": 0.000183,
-      "upstream_inference_input_cost": 8.1e-05,
+      "upstream_inference_input_cost": 0.000081,
       "upstream_inference_output_cost": 0.000102
     }
-  }
+  },
+  "background": false,
+  "frequency_penalty": 0,
+  "instructions": null,
+  "max_output_tokens": 4096,
+  "max_tool_calls": null,
+  "presence_penalty": 0,
+  "previous_response_id": null,
+  "prompt_cache_key": null,
+  "prompt_cache_options": null,
+  "reasoning": null,
+  "safety_identifier": null,
+  "temperature": null,
+  "text": {
+    "format": {
+      "type": "text"
+    }
+  },
+  "tools": [],
+  "top_logprobs": 0,
+  "top_p": 1,
+  "truncation": "disabled",
+  "user": null
 }

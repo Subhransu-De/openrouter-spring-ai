@@ -1,0 +1,15 @@
+{
+  "name": "guardrail",
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/embeddings"
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "scenarios/embeddings-guardrail-blocked/guardrail.json"
+  }
+}

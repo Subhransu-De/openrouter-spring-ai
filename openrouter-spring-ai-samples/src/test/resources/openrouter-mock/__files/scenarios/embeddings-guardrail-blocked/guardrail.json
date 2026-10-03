@@ -1,0 +1,24 @@
+{
+  "error": {
+    "message": "0 endpoints out of 1 requested are available matching your guardrail restrictions and data policy.",
+    "code": 404,
+    "metadata": {
+      "input_endpoint_count": 1,
+      "ineligibility_reasons": [
+        {
+          "reason": "free-model-training-violation-by-account",
+          "endpoint_count": 1,
+          "configure_url": "https://openrouter.ai/settings/privacy"
+        }
+      ],
+      "routing_funnel": [
+        {
+          "step": "Initial Endpoints",
+          "endpoint_count": 1
+        }
+      ],
+      "failed_routing_step": "Filter by Guardrails"
+    }
+  },
+  "user_id": "user_garage_synthetic"
+}

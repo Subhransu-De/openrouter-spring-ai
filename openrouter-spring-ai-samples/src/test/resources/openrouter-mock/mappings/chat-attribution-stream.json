@@ -18,6 +18,10 @@
     "headers": {
       "Content-Type": "text/event-stream"
     },
-    "bodyFileName": "chat/attribution.sse"
+    "bodyFileName": "chat/attribution.sse",
+    "chunkedDribbleDelay": {
+      "numberOfChunks": 8,
+      "totalDuration": 80
+    }
   }
 }

@@ -18,6 +18,10 @@
     "headers": {
       "Content-Type": "text/event-stream"
     },
-    "bodyFileName": "responses/failed.sse"
+    "bodyFileName": "responses/failed.sse",
+    "chunkedDribbleDelay": {
+      "numberOfChunks": 8,
+      "totalDuration": 80
+    }
   }
 }

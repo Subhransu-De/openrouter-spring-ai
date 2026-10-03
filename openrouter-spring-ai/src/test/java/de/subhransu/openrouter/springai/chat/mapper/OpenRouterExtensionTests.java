@@ -85,6 +85,7 @@ class OpenRouterExtensionTests {
 		fields.put(CACHE_KEY, null);
 		fields.put("verbosity", "low");
 		fields.put("logit_bias", Map.of("42", 0));
+		fields.put("transforms", List.of());
 		var options = OpenRouterChatOptions.builder().model("synthetic/model").extraBody(fields).build();
 		for (boolean stream : List.of(false, true)) {
 			var request = new OpenRouterChatRequestMapper(this.json).map(List.of(new UserMessage("synthetic")), options,
@@ -96,7 +97,12 @@ class OpenRouterExtensionTests {
 			assertThat(wire.get(CACHE_KEY).isNull()).isTrue();
 			assertThat(wire.has("extraBody")).isFalse();
 			assertThat(wire.get("logit_bias").get("42").asInt()).isZero();
+			assertThat(wire.get("transforms").isArray()).isTrue();
+			assertThat(wire.get("transforms")).isEmpty();
 		}
+		assertThatThrownBy(() -> OpenRouterChatOptions.builder().extraBody(Map.of("transforms", List.of(1))))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("transforms");
 	}
 
 	@Test
@@ -126,8 +132,13 @@ class OpenRouterExtensionTests {
 				.isInstanceOf(IllegalArgumentException.class)
 				.hasMessageContaining(key);
 		}
-		for (String key : List.of("logprobs", "logit_bias", "verbosity")) {
-			Object value = "logprobs".equals(key) ? false : "verbosity".equals(key) ? "low" : Map.of("42", 0);
+		for (String key : List.of("logprobs", "logit_bias", "verbosity", "transforms")) {
+			Object value = switch (key) {
+				case "logprobs" -> false;
+				case "verbosity" -> "low";
+				case "transforms" -> List.of();
+				default -> Map.of("42", 0);
+			};
 			var options = OpenRouterChatOptions.builder().extraBody(Map.of(key, value)).build();
 			assertThatThrownBy(
 					() -> new OpenRouterResponsesRequestMapper(this.json).map(List.of(), options, false, List.of()))

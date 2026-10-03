@@ -115,8 +115,8 @@ public final class OpenRouterResponsesResponseMapper {
 			}
 		}
 		return calls.stream()
-			.map(item -> new AssistantMessage.ToolCall(ResponseValues.required(item.callId(), "tool call id"),
-					"function", ResponseValues.required(item.name(), "tool call name"),
+			.map(item -> new AssistantMessage.ToolCall(ResponseValues.requiredText(item.callId(), "tool call id"),
+					"function", ResponseValues.requiredText(item.name(), "tool call name"),
 					ResponseValues.required(item.arguments(), "tool call arguments")))
 			.toList();
 	}

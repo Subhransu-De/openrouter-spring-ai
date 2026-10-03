@@ -248,7 +248,7 @@ class GarageRunServiceTests {
     assertThat(seen).hasSize(2);
     assertThat(seen.get(0).getMaxCompletionTokens()).isEqualTo(256);
     assertThat(seen.get(0).getProviderSort()).isEqualTo("price");
-    assertThat(seen.get(1).getMaxCompletionTokens()).isEqualTo(900);
+    assertThat(seen.get(1).getMaxCompletionTokens()).isEqualTo(4096);
     assertThat(seen.get(1).getProviderSort()).isEqualTo("throughput");
   }
 

@@ -3,6 +3,7 @@ package de.subhransu.openrouter.springai.garage.scenes;
 import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.BAY;
 import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.ERROR;
 import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.PASSED;
+import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.REASON;
 import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.STATUS;
 
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
@@ -12,6 +13,8 @@ import de.subhransu.openrouter.springai.garage.run.GarageRunPlan;
 import de.subhransu.openrouter.springai.garage.run.GarageRunPlan.ImageSurface;
 import de.subhransu.openrouter.springai.garage.evidence.EvidenceLevel;
 import de.subhransu.openrouter.springai.garage.evidence.GarageFeature;
+import de.subhransu.openrouter.springai.garage.evidence.SceneFailure;
+import de.subhransu.openrouter.springai.garage.evidence.SceneFailureReason;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -72,6 +75,7 @@ public final class ModalityBaysScene extends GarageSceneSupport {
 
     List<Map<String, Object>> probes = new ArrayList<>();
     List<String> failures = new ArrayList<>();
+    SceneFailureReason firstReason = null;
     for (Map.Entry<GarageFeature, List<Map<String, Object>>> entry : probesByFeature.entrySet()) {
       GarageFeature feature = entry.getKey();
       context.evidence().record(
@@ -100,6 +104,9 @@ public final class ModalityBaysScene extends GarageSceneSupport {
         if (!PASSED.equals(probe.get(STATUS))) {
           featurePassed = false;
           failures.add(probe.get(BAY) + ": " + probe.getOrDefault(ERROR, "unknown failure"));
+          if (firstReason == null && probe.get(REASON) instanceof String code) {
+            firstReason = SceneFailureReason.fromCode(code);
+          }
         }
       }
       if (featurePassed) {
@@ -117,9 +124,10 @@ public final class ModalityBaysScene extends GarageSceneSupport {
       failures.add(failure.getMessage());
     }
     if (!failures.isEmpty()) {
+      String message = "Garage modality bay checks failed: " + String.join("; ", failures);
+      // Bays catch their own exceptions, so keep the first failed bay's reason explicitly.
       IllegalStateException failure =
-          new IllegalStateException(
-              "Garage modality bay checks failed: " + String.join("; ", failures));
+          firstReason != null ? new SceneFailure(message, firstReason) : new IllegalStateException(message);
       probesByFeature.keySet().forEach(
           feature -> context.evidence().error(feature, operationId, mode, failure));
       throw failure;

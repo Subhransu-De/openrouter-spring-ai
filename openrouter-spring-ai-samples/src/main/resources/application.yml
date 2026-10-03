@@ -4,6 +4,9 @@ logging:
     # Startup lines, including the port the Garage API listens on.
     org.springframework.boot: info
     de.subhransu.openrouter.springai.garage: info
+    # The recovery road test sends deliberately broken streams. The Garage reports stream
+    # failures itself; Spring AI's aggregator would log each one again as an ERROR stack trace.
+    org.springframework.ai.chat.model.MessageAggregator: off
 
 server:
   # Any caller that reaches the port can start a paid run; stay on loopback unless overridden.
@@ -41,7 +44,7 @@ spring:
         # Usage is enabled per Chat Completions request; a global default would
         # be inherited by ChatClient when switching to Responses mode.
         temperature: 0.2
-        max-completion-tokens: 900
+        max-completion-tokens: 4096
       embedding:
         model: ${GARAGE_EMBEDDING_MODEL:openai/text-embedding-3-small}
       image:

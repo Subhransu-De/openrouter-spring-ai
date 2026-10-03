@@ -68,5 +68,9 @@ public record GarageRun(
   }
 
   public record SceneOutcome(
-      String sceneId, String requestMode, String status, long durationMillis) {}
+      String sceneId,
+      String requestMode,
+      String status,
+      @Nullable String reason,
+      long durationMillis) {}
 }

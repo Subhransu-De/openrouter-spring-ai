@@ -21,7 +21,7 @@ public final class RequestExtensions {
 	private static final String MAX_LATENCY = "preferred_max_latency";
 
 	private static final Set<String> CHAT = Set.of("logit_bias", "logprobs", "top_logprobs", "verbosity",
-			"prompt_cache_key");
+			"prompt_cache_key", "transforms");
 
 	private static final Set<String> RESPONSES = Set.of("top_logprobs", "prompt_cache_key");
 
@@ -48,6 +48,7 @@ public final class RequestExtensions {
 		requireType(result, "logprobs", Boolean.class);
 		requireType(result, "prompt_cache_key", String.class);
 		requireType(result, "logit_bias", Map.class);
+		requireStringList(result, "transforms", "transforms must contain transform name strings");
 		Object verbosity = result.get("verbosity");
 		if (verbosity != null && !Set.of("low", "medium", "high", "xhigh", "max").contains(verbosity)) {
 			throw new IllegalArgumentException("Unsupported verbosity value");
@@ -70,11 +71,7 @@ public final class RequestExtensions {
 			throw new IllegalArgumentException("providerExtraBody sort conflicts with provider.sort");
 		}
 		if (result != null) {
-			requireType(result, "only", List.class);
-			if (result.get("only") instanceof List<?> only
-					&& only.stream().anyMatch(value -> !(value instanceof String))) {
-				throw new IllegalArgumentException("only must contain provider strings");
-			}
+			requireStringList(result, "only", "only must contain provider strings");
 			requireType(result, "zdr", Boolean.class);
 			requireType(result, "max_price", Map.class);
 			validateProviderPreferences(result);
@@ -92,6 +89,14 @@ public final class RequestExtensions {
 			if (value != null && !(value instanceof Number) && !(value instanceof Map)) {
 				throw new IllegalArgumentException(key + " must be a number or percentile object");
 			}
+		}
+	}
+
+	private static void requireStringList(Map<String, @Nullable Object> fields, String key, String message) {
+		requireType(fields, key, List.class);
+		if (fields.get(key) instanceof List<?> values
+				&& values.stream().anyMatch(value -> !(value instanceof String))) {
+			throw new IllegalArgumentException(message);
 		}
 	}
 

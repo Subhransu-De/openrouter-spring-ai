@@ -108,6 +108,9 @@ public final class GarageTelemetry implements ObservationHandler<Observation.Con
       }
       if (chatContext.getResponse() != null) {
         usage = chatContext.getResponse().getMetadata().getUsage();
+        // Chat "length" and Responses "max_output_tokens" both map to LENGTH.
+        observation.put("truncated", chatContext.getResponse().getResults().stream()
+            .anyMatch(generation -> "LENGTH".equals(generation.getMetadata().getFinishReason())));
       }
     } else if (context instanceof EmbeddingModelObservationContext embeddingContext) {
       observation.put("modality", "embedding");

@@ -21,6 +21,10 @@
     "headers": {
       "Content-Type": "text/event-stream"
     },
-    "bodyFileName": "scenarios/streaming-dispatch-duplicate-callback/two-calls.sse"
+    "bodyFileName": "scenarios/streaming-dispatch-duplicate-callback/two-calls.sse",
+    "chunkedDribbleDelay": {
+      "numberOfChunks": 8,
+      "totalDuration": 80
+    }
   }
 }
