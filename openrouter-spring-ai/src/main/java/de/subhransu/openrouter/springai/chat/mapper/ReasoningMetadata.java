@@ -12,7 +12,8 @@ import java.util.Map;
 final class ReasoningMetadata {
 
 	static final String REASONING = "openrouter.reasoning";
-	static final String DETAILS = "openrouter.reasoning_details";
+
+	private static final String DETAILS = "openrouter.reasoning_details";
 	static final String RESPONSES_OUTPUT_ITEMS = "openrouter.responses.output_items";
 
 	static final String RESPONSES_ITEMS = "openrouter.responses.reasoning_items";

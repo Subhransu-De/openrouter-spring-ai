@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <!-- The real parent POM, installed into target/it-repo by invoker:install. -->
+  <parent>
+    <groupId>de.subhransu</groupId>
+    <artifactId>openrouter-spring-ai-parent</artifactId>
+    <version>@project.version@</version>
+    <relativePath/>
+  </parent>
+
+  <artifactId>gate-it-coverage-below-floor</artifactId>
+
+  <properties>
+    <quality.config.dir>@project.basedir@/config</quality.config.dir>
+    <coverage.skip>false</coverage.skip>
+    <pmd.skip>true</pmd.skip>
+    <cpd.skip>true</cpd.skip>
+    <!-- Only the gate under test may fail this build. -->
+    <spring-javaformat.validate.skip>true</spring-javaformat.validate.skip>
+    <checkstyle.skip>true</checkstyle.skip>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>

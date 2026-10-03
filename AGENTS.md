@@ -55,6 +55,7 @@ If a mode does not support an option, preserve or add explicit validation rather
 - For auto-configuration and its upstream module: `mvn -B -pl openrouter-spring-ai-autoconfigure -am test`.
 - Gradle focused equivalent: `gradle --no-daemon :openrouter-spring-ai:test --tests '*OpenRouterChatModelStreamingTests'`.
 - For dependency, build, or broad cross-module changes, run `mvn -B -DskipTests package`, `mvn -B verify`, `gradle --no-daemon assemble`, and `gradle --no-daemon check` as applicable to the affected builds.
+- When a coverage, PMD, or SpotBugs gate configuration changes, run `mvn -B -N -Pgate-its verify`. Each project in `src/it` must still fail for its named rule; add or update a project when a gate gains a rule that must fail the build.
 - Run affected-module `verify` (Maven) or `check` (Gradle) when quality rules or substantial Java changes warrant it. CI runs these quality gates, plus explicit POM/properties formatting and Java style checks. Checkstyle is enabled only on JDK 21+ and samples have exclusions.
 - For publication or packaging changes, inspect `.github/workflows/release.yml`; preserve the unsigned release build before the optional signed upload.
 - For runtime-hint or native compatibility changes, inspect the samples native build and run `gradle --no-daemon :openrouter-spring-ai-samples:nativeCompile` with the matching GraalVM when available.
@@ -65,7 +66,8 @@ If a mode does not support an option, preserve or add explicit validation rather
 - Prefer synthetic wire fixtures and existing test doubles. Use `StepVerifier` for reactive behavior and `ApplicationContextRunner` for Boot wiring.
 - Include meaningful edge cases: fragmented events, multiple choices, missing optional fields, provider errors, and unknown additive fields when relevant.
 - Wire DTO records must tolerate unknown JSON fields, as required by the architecture tests.
-- Architecture suites pin selected internal classes, fields, helper methods, and utility constructors. Update their target checks when intentionally renaming a selected declaration; preserve public and framework access. Java `assert` statements need a detail expression, and `AssertionError` needs a diagnostic argument. This rule does not require messages on JUnit or AssertJ assertions.
+- Java `assert` statements need a detail expression, and `AssertionError` needs a diagnostic argument. This rule does not require messages on JUnit or AssertJ assertions.
+- CI's Qodana job fails when IntelliJ's `WeakerAccess` inspection finds a library production declaration whose access can be narrower. `.qodana/weaker-access.yaml` ignores the supported API listed in the README; keep its scopes in sync when the supported API changes. Fix a finding by narrowing the declaration. Suppress it with `@SuppressWarnings("WeakerAccess")` only when a framework, reflection, or a supported consumer needs the wider access, and add a comment that gives the reason. Do not add a baseline.
 - Do not copy private prompts, account responses, logs, or credentials into fixtures or committed evidence.
 - Run the Garage live harness only when live API use is authorized. Confirm its output location and keep generated reports and service records outside the repository.
 - Never print an API key or place it in a command argument, documentation, or a commit. Use the existing environment-based configuration.

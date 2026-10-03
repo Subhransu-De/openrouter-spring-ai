@@ -18,19 +18,19 @@ final class OpenRouterModelSelectionCondition extends AnyNestedCondition {
 
 	@ConditionalOnProperty(name = SpringAIModelProperties.CHAT_MODEL, havingValue = OpenRouterIdentifiers.PROVIDER_ID,
 			matchIfMissing = true)
-	static final class ChatModelSelected {
+	private static final class ChatModelSelected {
 
 	}
 
 	@ConditionalOnProperty(name = SpringAIModelProperties.EMBEDDING_MODEL,
 			havingValue = OpenRouterIdentifiers.PROVIDER_ID, matchIfMissing = true)
-	static final class EmbeddingModelSelected {
+	private static final class EmbeddingModelSelected {
 
 	}
 
 	@ConditionalOnProperty(name = SpringAIModelProperties.IMAGE_MODEL, havingValue = OpenRouterIdentifiers.PROVIDER_ID,
 			matchIfMissing = true)
-	static final class ImageModelSelected {
+	private static final class ImageModelSelected {
 
 	}
 

@@ -37,9 +37,9 @@ import org.springframework.util.StringUtils;
  */
 final class AudioOutputMapper {
 
-	static final String METADATA = "openrouter.audio";
+	private static final String METADATA = "openrouter.audio";
 
-	static final int MAX_BYTES = 16 * 1024 * 1024;
+	private static final int MAX_BYTES = 16 * 1024 * 1024;
 
 	private final @Nullable OpenRouterAudioOptions options;
 
