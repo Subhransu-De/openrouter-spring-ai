@@ -79,16 +79,11 @@ subprojects {
 
 	if (name in setOf("openrouter-spring-ai", "openrouter-spring-ai-autoconfigure")) {
 		val spotbugsEngine = configurations.create("spotbugsEngine") { isCanBeConsumed = false }
-		val spotbugsVisibilityPlugin = configurations.create("spotbugsVisibilityPlugin") {
-			isCanBeConsumed = false
-			isTransitive = false
-		}
 		dependencies {
 			add(spotbugsEngine.name, "com.github.spotbugs:spotbugs:${pomProperty("spotbugs.version")}")
-			add(spotbugsVisibilityPlugin.name, "com.mebigfatguy.sb-contrib:sb-contrib:${pomProperty("sb-contrib.version")}")
 		}
 		val main = extensions.getByType<SourceSetContainer>()["main"]
-		for (policy in listOf("correctness", "visibility")) {
+		for (policy in listOf("correctness")) {
 			tasks.register<JavaExec>("spotbugs${policy.replaceFirstChar { it.uppercase() }}") {
 				group = "verification"
 				description = "Analyze production classes with the SpotBugs $policy policy"
@@ -113,13 +108,12 @@ subprojects {
 						"-auxclasspathFromFile", auxiliary.absolutePath,
 						"-xml:withMessages=${directory.resolve("spotbugs.xml")}",
 						"-html=${directory.resolve("spotbugs.html")}"))
-					if (policy == "visibility") args("-pluginList", spotbugsVisibilityPlugin.asPath)
 					args(main.output.classesDirs.files.map { it.absolutePath })
 				}
 				doLast {
 					val exit = executionResult.get().exitValue
 					// SpotBugs returns 1 for findings, 2 for missing classes, and 4 for analysis errors.
-					check(exit == 0 || (policy == "visibility" && exit == 1)) {
+					check(exit == 0) {
 						"SpotBugs $policy failed with exit code $exit; see ${reportDir.get().asFile}"
 					}
 				}

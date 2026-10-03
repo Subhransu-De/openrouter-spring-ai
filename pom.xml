@@ -83,9 +83,7 @@
     <modernizer-maven-plugin.version>3.5.0</modernizer-maven-plugin.version>
     <spotbugs-maven-plugin.version>4.10.4.1</spotbugs-maven-plugin.version>
     <spotbugs.version>4.10.4</spotbugs.version>
-    <sb-contrib.version>7.7.4</sb-contrib.version>
     <spotbugs.correctness.skip>true</spotbugs.correctness.skip>
-    <spotbugs.visibility.skip>true</spotbugs.visibility.skip>
     <findsecbugs.version>1.14.0</findsecbugs.version>
     <findsecbugs.skip>true</findsecbugs.skip>
     <pmd.version>7.28.0</pmd.version>
@@ -786,97 +784,6 @@
                           <and>
                             <equals arg1="${correctness.BugCollection.Errors(errors)}" arg2="0"/>
                             <equals arg1="${correctness.BugCollection.Errors(missingClasses)}" arg2="0"/>
-                          </and>
-                        </not>
-                      </condition>
-                    </fail>
-                  </target>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
-    <profile>
-      <id>visibility</id>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>com.github.spotbugs</groupId>
-            <artifactId>spotbugs-maven-plugin</artifactId>
-            <executions>
-              <!-- verify reads this execution's report without check's configuration-losing fork. -->
-              <execution>
-                <id>spotbugs-visibility</id>
-                <goals>
-                  <goal>spotbugs</goal>
-
-                </goals>
-                <phase>package</phase>
-                <configuration>
-                  <skip>${spotbugs.visibility.skip}</skip>
-                  <effort>Max</effort>
-                  <threshold>Low</threshold>
-                  <includeTests>false</includeTests>
-                  <failOnError>true</failOnError>
-                  <maxAllowedViolations>0</maxAllowedViolations>
-                  <includeFilterFile>${maven.multiModuleProjectDirectory}/config/spotbugs/visibility-include.xml</includeFilterFile>
-                  <excludeFilterFile>${maven.multiModuleProjectDirectory}/config/spotbugs/visibility-exclude.xml</excludeFilterFile>
-                  <spotbugsXmlOutputFilename>spotbugs-visibility.xml</spotbugsXmlOutputFilename>
-                  <htmlOutput>true</htmlOutput>
-                  <outputDirectory>${project.build.directory}/spotbugs/visibility</outputDirectory>
-                  <plugins>
-                    <plugin>
-                      <groupId>com.mebigfatguy.sb-contrib</groupId>
-                      <artifactId>sb-contrib</artifactId>
-                      <version>${sb-contrib.version}</version>
-                    </plugin>
-                  </plugins>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-antrun-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>prepare-spotbugs-visibility</id>
-                <goals>
-                  <goal>run</goal>
-                </goals>
-                <phase>prepare-package</phase>
-                <configuration>
-                  <skip>${spotbugs.visibility.skip}</skip>
-                  <target>
-                    <delete file="${project.build.directory}/spotbugs-visibility.xml"/>
-                    <fail message="Empty required SpotBugs visibility analysis scope">
-                      <condition>
-                        <resourcecount count="0">
-                          <fileset dir="${project.build.outputDirectory}" erroronmissingdir="false" excludes="**/package-info.class,**/module-info.class" includes="**/*.class"/>
-                        </resourcecount>
-                      </condition>
-                    </fail>
-                  </target>
-                </configuration>
-              </execution>
-              <execution>
-                <id>validate-spotbugs-visibility-report</id>
-                <goals>
-                  <goal>run</goal>
-                </goals>
-                <phase>verify</phase>
-                <configuration>
-                  <skip>${spotbugs.visibility.skip}</skip>
-                  <target>
-                    <xmlproperty file="${project.build.directory}/spotbugs-visibility.xml" prefix="visibility"/>
-                    <fail message="SpotBugs visibility report is missing or contains analysis errors/missing classes">
-                      <condition>
-                        <not>
-                          <and>
-                            <equals arg1="${visibility.BugCollection.Errors(errors)}" arg2="0"/>
-                            <equals arg1="${visibility.BugCollection.Errors(missingClasses)}" arg2="0"/>
                           </and>
                         </not>
                       </condition>

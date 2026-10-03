@@ -227,6 +227,34 @@ jobs:
       - name: Analyze production library classes
         run: mvn -B -Psecurity -pl openrouter-spring-ai-autoconfigure -am -DskipTests verify
 
+  qodana:
+    if: github.event_name != 'workflow_dispatch'
+    name: Qodana declaration access
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      # Annotations and PR comments need write tokens, so findings are annotated from SARIF below.
+      - name: Check declaration access
+        uses: JetBrains/qodana-action@3e8d76ff0e0241618abd808682f426afe84bab3f # v2026.2.2
+        with:
+          pr-mode: false
+          use-annotations: false
+          post-pr-comment: false
+          upload-result: true
+      - name: Annotate findings
+        if: always()
+        run: |
+          sarif="$RUNNER_TEMP/qodana/results/qodana.sarif.json"
+          if [[ ! -f "$sarif" ]]; then exit 0; fi
+          jq -r '.runs[].results[] | .locations[0].physicalLocation as $l
+            | "::error file=\($l.artifactLocation.uri),line=\($l.region.startLine),title=\(.ruleId)::"
+              + (.message.text | gsub("%"; "%25") | gsub("\r"; "%0D") | gsub("\n"; "%0A"))' "$sarif"
+
   gitleaks:
     if: github.event_name != 'workflow_dispatch'
     name: Secret scan

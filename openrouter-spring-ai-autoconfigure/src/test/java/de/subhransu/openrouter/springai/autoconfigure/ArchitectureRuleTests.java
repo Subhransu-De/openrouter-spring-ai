@@ -1,14 +1,13 @@
 package de.subhransu.openrouter.springai.autoconfigure;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.lang.ArchRule;
 import org.junit.jupiter.api.Test;
 
-class VisibilityPolicyTests {
+class ArchitectureRuleTests {
 
 	@Test
 	void wiringRejectsEveryMapperFamily() {
@@ -22,37 +21,12 @@ class VisibilityPolicyTests {
 	}
 
 	@Test
-	void packageVisibilityRejectsPublicImplementations() {
-		AutoconfigureArchitectureTests.packagePrivateImplementation(Compliant.class.getName())
-			.check(importClass(Compliant.class));
-		violation(AutoconfigureArchitectureTests.packagePrivateImplementation(PublicImplementation.class.getName()),
-				PublicImplementation.class, "has modifier PUBLIC");
-	}
-
-	@Test
-	void privateStateRejectsAccessibleFields() {
-		AutoconfigureArchitectureTests.privateFields(Compliant.class.getName()).check(importClass(Compliant.class));
-		violation(AutoconfigureArchitectureTests.privateFields(AccessibleMembers.class.getName()),
-				AccessibleMembers.class, "buffer", "does not have modifier PRIVATE");
-	}
-
-	@Test
 	void assertionsRequireJavaDiagnosticDetail() {
 		AutoconfigureArchitectureTests.java_assertions_have_messages.check(importClass(DetailedAssertions.class));
 		violation(AutoconfigureArchitectureTests.java_assertions_have_messages, BareAssertion.class,
 				"java.lang.AssertionError.<init>()");
 		violation(AutoconfigureArchitectureTests.java_assertions_have_messages, BareAssertionError.class,
 				"java.lang.AssertionError.<init>()");
-	}
-
-	@Test
-	void emptyPolicySelectionsFail() {
-		String missing = "synthetic.MissingImplementation";
-		for (ArchRule rule : new ArchRule[] { AutoconfigureArchitectureTests.packagePrivateImplementation(missing),
-				AutoconfigureArchitectureTests.privateFields(missing) }) {
-			assertThatThrownBy(() -> rule.check(importClass(ImplicitUtility.class))).isInstanceOf(AssertionError.class)
-				.hasMessageContaining("failed to check any classes");
-		}
 	}
 
 	private static JavaClasses importClass(Class<?> type) {
@@ -86,28 +60,6 @@ class VisibilityPolicyTests {
 	static class ImageMapping {
 
 		private de.subhransu.openrouter.springai.image.mapper.OpenRouterImageRequestMapper mapper;
-
-	}
-
-	// ArchUnit reads these declarations from bytecode; they are never executed.
-	@SuppressWarnings("PMD.UnusedPrivateField")
-	static class Compliant {
-
-		private String buffer;
-
-	}
-
-	public static class PublicImplementation {
-
-	}
-
-	static class ImplicitUtility {
-
-	}
-
-	static class AccessibleMembers {
-
-		public String buffer;
 
 	}
 

@@ -1,0 +1,18 @@
+version: "1.0"
+linter: qodana-jvm-community
+image: jetbrains/qodana-jvm-community:2026.2
+projectJDK: "17"
+properties:
+  project.open.type: Maven
+profile:
+  path: .qodana/weaker-access.yaml
+exclude:
+  - name: All
+    paths:
+      - openrouter-spring-ai/src/test
+      - openrouter-spring-ai-autoconfigure/src/test
+      - openrouter-spring-ai-starter
+      - openrouter-spring-ai-samples
+failureConditions:
+  severityThresholds:
+    any: 0

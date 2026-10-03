@@ -16,10 +16,6 @@ POLICIES = {
         "NP_NULL_ON_SOME_PATH", "NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE",
         "OBL_UNSATISFIED_OBLIGATION", "DC_DOUBLECHECK",
     },
-    "visibility": {
-        "OPM_OVERLY_PERMISSIVE_METHOD", "EI_EXPOSE_REP", "EI_EXPOSE_REP2",
-        "URF_UNREAD_PUBLIC_OR_PROTECTED_FIELD",
-    },
     "security": {"SQL_INJECTION_JDBC"},
 }
 
@@ -78,7 +74,7 @@ def run(work, build, command, policies, label, bad, skipped=()):
     with (work / f"{label}.log").open("w", encoding="utf-8") as log:
         result = subprocess.run([command, *args], cwd=work, stdout=log,
                                 stderr=subprocess.STDOUT, check=False)
-    blocking = bad and any(p != "visibility" and p not in skipped for p in policies)
+    blocking = bad and any(p not in skipped for p in policies)
     if (result.returncode != 0) != blocking:
         raise AssertionError(f"Unexpected exit {result.returncode}: {label}.log")
     for policy in policies:
@@ -145,20 +141,12 @@ tasks.named<JavaCompile>("compileJava") {
     doLast { destinationDirectory.file("example/Missing.class").get().asFile.delete() }
 }
 ''')
-    for policy in ("correctness", "visibility"):
+    for policy in ("correctness",):
         diagnostic = "analysis errors/missing classes" if build == "maven" else "failed with exit code"
         failure(work, build, command, policy, f"Missing-class-{policy}", diagnostic)
         xml = ET.parse(report(work, build, policy)).getroot()
         if "example.Missing" not in [node.text for node in xml.findall("Errors/MissingClass")]:
             raise AssertionError(f"Missing-class detector did not identify example.Missing: {policy}")
-    write(source, (ROOT / "config/spotbugs/fixtures/Good.java").read_text().replace("Good", "Fixture"))
-    pom = work / "pom.xml"
-    tree = ET.parse(pom)
-    tree.find("m:properties/m:sb-contrib.version", NS).text = "0.0.0-missing-fixture"
-    tree.write(pom, encoding="unicode")
-    diagnostic = ("sb-contrib:jar:0.0.0-missing-fixture" if build == "maven" else
-                  "Could not find com.mebigfatguy.sb-contrib:sb-contrib:0.0.0-missing-fixture")
-    failure(work, build, command, "visibility", "Unavailable-extension", diagnostic)
 
 
 def main():
@@ -175,7 +163,7 @@ def main():
         parser.error("Use an empty work directory for synthetic fixtures")
     prepare(work)
     source = work / MODULE / "src/main/java/example/Fixture.java"
-    policies = list(POLICIES) if args.build == "maven" else ["correctness", "visibility"]
+    policies = list(POLICIES) if args.build == "maven" else ["correctness"]
     for bad in (True, False):
         name = "Bad" if bad else "Good"
         write(source, (ROOT / f"config/spotbugs/fixtures/{name}.java").read_text().replace(name, "Fixture"))
@@ -188,7 +176,6 @@ def main():
         for combo in combinations:
             run(work, args.build, args.command, combo, f"{name}-{'-'.join(combo)}", bad)
         if bad and args.build == "maven":
-            run(work, args.build, args.command, policies, "Skip-review", True, ("visibility",))
             run(work, args.build, args.command, policies, "Skip-required", True, ("correctness", "security"))
     broken_analysis(work, args.build, args.command, source)
 

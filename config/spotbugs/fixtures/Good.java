@@ -5,15 +5,9 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.util.Date;
 
 public class Good {
     private volatile Object instance;
-    private final Date date;
-    public int read = 42;
-
-    public Good(Date date) { this.date = new Date(date.getTime()); }
-    public Date date() { return new Date(date.getTime()); }
 
     public int nullablePath(boolean present) {
         String value = present ? "value" : null;
@@ -37,9 +31,6 @@ public class Good {
         }
         return instance;
     }
-
-    public int entry() { return internal(read); }
-    private int internal(int value) { return value + 1; }
 
     public void sql(Connection connection, String value) throws SQLException {
         try (var statement = connection.prepareStatement("SELECT name FROM users WHERE name = ?")) {
