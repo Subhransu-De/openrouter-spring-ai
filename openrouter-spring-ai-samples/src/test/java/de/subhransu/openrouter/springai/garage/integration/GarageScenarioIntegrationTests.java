@@ -117,6 +117,8 @@ class GarageScenarioIntegrationTests extends MockedGarageIntegrationTest {
             "stopped at its token limit"),
         new SadPath("digital-inspection-no-endpoint", INSPECTION, "digital-inspection", CHAT_MODE, NO_ENDPOINT,
             "failed with status 404"),
+        new SadPath("digital-inspection-choice-error", INSPECTION, "digital-inspection", CHAT_MODE, PROVIDER,
+            "chat-completion choice failed"),
         new SadPath("streaming-dispatch-no-tool-endpoint", DISPATCH_CHAT, "streaming-dispatch", CHAT_MODE,
             NO_ENDPOINT, "failed with status 404"),
         new SadPath("embeddings-guardrail-blocked", EMBEDDINGS, "modality-bays", CHAT_MODE, NO_ENDPOINT,

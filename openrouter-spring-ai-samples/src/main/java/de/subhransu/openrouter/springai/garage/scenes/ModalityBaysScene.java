@@ -22,6 +22,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
+import org.jspecify.annotations.Nullable;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.image.ImageModel;
 import org.springframework.stereotype.Component;
@@ -75,7 +76,7 @@ public final class ModalityBaysScene extends GarageSceneSupport {
 
     List<Map<String, Object>> probes = new ArrayList<>();
     List<String> failures = new ArrayList<>();
-    SceneFailureReason firstReason = null;
+    List<Map<String, Object>> failedProbes = new ArrayList<>();
     for (Map.Entry<GarageFeature, List<Map<String, Object>>> entry : probesByFeature.entrySet()) {
       GarageFeature feature = entry.getKey();
       context.evidence().record(
@@ -104,9 +105,7 @@ public final class ModalityBaysScene extends GarageSceneSupport {
         if (!PASSED.equals(probe.get(STATUS))) {
           featurePassed = false;
           failures.add(probe.get(BAY) + ": " + probe.getOrDefault(ERROR, "unknown failure"));
-          if (firstReason == null && probe.get(REASON) instanceof String code) {
-            firstReason = SceneFailureReason.fromCode(code);
-          }
+          failedProbes.add(probe);
         }
       }
       if (featurePassed) {
@@ -126,6 +125,7 @@ public final class ModalityBaysScene extends GarageSceneSupport {
     if (!failures.isEmpty()) {
       String message = "Garage modality bay checks failed: " + String.join("; ", failures);
       // Bays catch their own exceptions, so keep the first failed bay's reason explicitly.
+      SceneFailureReason firstReason = firstFailureReason(failedProbes);
       IllegalStateException failure =
           firstReason != null ? new SceneFailure(message, firstReason) : new IllegalStateException(message);
       probesByFeature.keySet().forEach(
@@ -182,5 +182,16 @@ public final class ModalityBaysScene extends GarageSceneSupport {
     }
 
     return probesByFeature;
+  }
+
+  /**
+   * The reason recorded by the first failed bay, in bay order. A first bay that failed its own
+   * check has no reason code, so a later bay's error must not stand in for it.
+   */
+  static @Nullable SceneFailureReason firstFailureReason(List<Map<String, Object>> failedProbes) {
+    if (failedProbes.isEmpty()) {
+      return null;
+    }
+    return failedProbes.get(0).get(REASON) instanceof String code ? SceneFailureReason.fromCode(code) : null;
   }
 }

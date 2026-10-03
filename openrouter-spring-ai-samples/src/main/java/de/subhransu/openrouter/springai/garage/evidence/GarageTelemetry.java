@@ -19,7 +19,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.Supplier;
 import org.jspecify.annotations.Nullable;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.observation.ChatModelObservationContext;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.embedding.observation.EmbeddingModelObservationContext;
 import org.springframework.ai.image.observation.ImageModelObservationContext;
@@ -108,9 +110,8 @@ public final class GarageTelemetry implements ObservationHandler<Observation.Con
       }
       if (chatContext.getResponse() != null) {
         usage = chatContext.getResponse().getMetadata().getUsage();
-        // Chat "length" and Responses "max_output_tokens" both map to LENGTH.
-        observation.put("truncated", chatContext.getResponse().getResults().stream()
-            .anyMatch(generation -> "LENGTH".equals(generation.getMetadata().getFinishReason())));
+        observation.put("truncated",
+            truncated(chatContext.getResponse(), chatContext.getRequest().getOptions()));
       }
     } else if (context instanceof EmbeddingModelObservationContext embeddingContext) {
       observation.put("modality", "embedding");
@@ -158,6 +159,24 @@ public final class GarageTelemetry implements ObservationHandler<Observation.Con
     return context instanceof ChatModelObservationContext
         || context instanceof EmbeddingModelObservationContext
         || context instanceof ImageModelObservationContext;
+  }
+
+  /**
+   * Whether a reply ended at its token limit. Chat {@code length} and Responses
+   * {@code max_output_tokens} map to {@code LENGTH}, but a provider can also report a normal stop
+   * after using every allowed token, so the completion-token count is compared with the limit.
+   */
+  static boolean truncated(ChatResponse response, @Nullable ChatOptions options) {
+    if (response.getResults().stream()
+        .anyMatch(generation -> "LENGTH".equals(generation.getMetadata().getFinishReason()))) {
+      return true;
+    }
+    Integer limit = options instanceof OpenRouterChatOptions openRouter && openRouter.getMaxCompletionTokens() != null
+        ? openRouter.getMaxCompletionTokens()
+        : options != null ? options.getMaxTokens() : null;
+    Usage usage = response.getMetadata().getUsage();
+    Integer completion = usage != null ? usage.getCompletionTokens() : null;
+    return limit != null && completion != null && completion >= limit;
   }
 
   public List<Map<String, Object>> observationSnapshot() {
