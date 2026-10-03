@@ -13,6 +13,7 @@ import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
 import de.subhransu.openrouter.springai.chat.OpenRouterUsage;
 import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingOptions;
+import de.subhransu.openrouter.springai.garage.evidence.GarageTelemetry;
 import de.subhransu.openrouter.springai.garage.evidence.SceneFailureReason;
 import de.subhransu.openrouter.springai.image.OpenRouterImageGenerationMetadata;
 import de.subhransu.openrouter.springai.image.OpenRouterImageModel;
@@ -186,6 +187,7 @@ public final class GarageModalityBays {
       probe.put(STATUS, passed ? PASSED : FAILED);
       if (!passed) {
         probe.put(ERROR, "model reply did not read the CHECK ENGINE warning from the photo");
+        markTruncated(probe, response, options);
       }
     } catch (IOException | RuntimeException ex) {
       fail(probe, ex);
@@ -288,6 +290,7 @@ public final class GarageModalityBays {
       if (media.isEmpty()) {
         probe.put(STATUS, FAILED);
         probe.put(ERROR, "assistant message carried no generated-image media");
+        markTruncated(probe, response, options);
         return probe;
       }
       Media image = media.get(0);
@@ -476,6 +479,13 @@ public final class GarageModalityBays {
     probe.put("bay", bay);
     probe.put("model", model);
     return probe;
+  }
+
+  // A failed check on a reply that ended at its token limit is reported as truncated for this bay.
+  private static void markTruncated(Map<String, Object> probe, ChatResponse response, OpenRouterChatOptions options) {
+    if (GarageTelemetry.truncated(response, options)) {
+      probe.put(REASON, SceneFailureReason.TRUNCATED.code());
+    }
   }
 
   private void fail(Map<String, Object> probe, Exception ex) {

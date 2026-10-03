@@ -166,7 +166,7 @@ public final class GarageTelemetry implements ObservationHandler<Observation.Con
    * {@code max_output_tokens} map to {@code LENGTH}, but a provider can also report a normal stop
    * after using every allowed token, so the completion-token count is compared with the limit.
    */
-  static boolean truncated(ChatResponse response, @Nullable ChatOptions options) {
+  public static boolean truncated(ChatResponse response, @Nullable ChatOptions options) {
     if (response.getResults().stream()
         .anyMatch(generation -> "LENGTH".equals(generation.getMetadata().getFinishReason()))) {
       return true;
