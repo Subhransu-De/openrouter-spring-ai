@@ -185,9 +185,9 @@ public final class ModalityBaysScene extends GarageSceneSupport {
   }
 
   /**
-   * The reason for the first failed bay, in bay order, or {@code null} when no bay failed. A bay
-   * records a reason for an error or a reply cut off at its limit; a first bay without one failed
-   * its own check, so neither a later bay's error nor a later cut-off reply may stand in for it.
+   * The reason for the first failed bay, in bay order, or {@code null} when no bay failed. Bays
+   * are independent, so each failed bay resolves its reason from its own model call, and a later
+   * bay's call cannot stand in for the first failure.
    */
   static @Nullable SceneFailureReason firstFailureReason(List<Map<String, Object>> failedProbes) {
     if (failedProbes.isEmpty()) {

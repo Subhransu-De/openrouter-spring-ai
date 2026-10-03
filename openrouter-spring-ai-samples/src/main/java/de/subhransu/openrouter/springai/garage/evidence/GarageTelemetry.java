@@ -11,6 +11,7 @@ import io.micrometer.observation.ObservationHandler;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,9 +20,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.Supplier;
 import org.jspecify.annotations.Nullable;
-import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.observation.ChatModelObservationContext;
-import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.embedding.observation.EmbeddingModelObservationContext;
 import org.springframework.ai.image.observation.ImageModelObservationContext;
@@ -35,7 +34,12 @@ public final class GarageTelemetry implements ObservationHandler<Observation.Con
       Duration.ofMillis(5).toNanos();
 
   private static final String CORRELATION = GarageTelemetry.class.getName() + ".correlation";
+  private static final String EXPECTED_FAILURE = GarageTelemetry.class.getName() + ".expectedFailure";
+  private static final String OUTCOME = "outcome";
+  // Orders calls by start; the evidence allowlist drops this key before persistence.
+  private static final String START_ORDER = "startNanos";
   private final ThreadLocal<Map<String, Object>> currentOperation = new ThreadLocal<>();
+  private final ThreadLocal<Boolean> expectingFailure = new ThreadLocal<>();
 
   private final SimpleMeterRegistry meterRegistry;
   private final GarageEvidence evidence;
@@ -51,6 +55,9 @@ public final class GarageTelemetry implements ObservationHandler<Observation.Con
   public void onStart(Observation.Context context) {
     context.put(START_NANOS, System.nanoTime());
     context.put(START_INSTANT, Instant.now().toString());
+    if (Boolean.TRUE.equals(this.expectingFailure.get())) {
+      context.put(EXPECTED_FAILURE, true);
+    }
     Map<String, ?> correlation = this.currentOperation.get();
     if (context instanceof ChatModelObservationContext chatContext
         && chatContext.getRequest().getOptions() instanceof OpenRouterChatOptions options
@@ -84,6 +91,19 @@ public final class GarageTelemetry implements ObservationHandler<Observation.Con
     }
   }
 
+  /**
+   * Runs model calls that a scene expects to fail, such as error-handling checks. Their outcomes
+   * stay in the evidence but cannot explain a later scene failure.
+   */
+  public void expectFailure(Runnable action) {
+    this.expectingFailure.set(true);
+    try {
+      action.run();
+    } finally {
+      this.expectingFailure.remove();
+    }
+  }
+
   @Override
   public void onStop(Observation.Context context) {
     long started = context.getOrDefault(START_NANOS, System.nanoTime());
@@ -91,6 +111,7 @@ public final class GarageTelemetry implements ObservationHandler<Observation.Con
     observation.put("name", context.getName());
     observation.put("contextualName", context.getContextualName());
     observation.put("startedAt", context.getOrDefault(START_INSTANT, Instant.now().toString()));
+    observation.put(START_ORDER, started);
     observation.put("endedAt", Instant.now().toString());
     observation.put("durationNanos", Math.max(0, System.nanoTime() - started));
     observation.put("error", error(context.getError()));
@@ -101,7 +122,11 @@ public final class GarageTelemetry implements ObservationHandler<Observation.Con
     String operationId = value(correlation, "operationId");
     String sceneId = value(correlation, "sceneId");
     observation.putAll(correlation);
+    if (context.getOrDefault(EXPECTED_FAILURE, false)) {
+      observation.put("expectedFailure", true);
+    }
     Usage usage = null;
+    String outcome = null;
     if (context instanceof ChatModelObservationContext chatContext) {
       observation.put("modality", "chat");
       observation.put("streaming", chatContext.isStreaming());
@@ -110,8 +135,7 @@ public final class GarageTelemetry implements ObservationHandler<Observation.Con
       }
       if (chatContext.getResponse() != null) {
         usage = chatContext.getResponse().getMetadata().getUsage();
-        observation.put("truncated",
-            truncated(chatContext.getResponse(), chatContext.getRequest().getOptions()));
+        outcome = CallOutcome.of(chatContext.getResponse(), chatContext.getRequest().getOptions());
       }
     } else if (context instanceof EmbeddingModelObservationContext embeddingContext) {
       observation.put("modality", "embedding");
@@ -122,6 +146,7 @@ public final class GarageTelemetry implements ObservationHandler<Observation.Con
       if (embeddingContext.getResponse() != null) {
         observation.put("count", embeddingContext.getResponse().getResults().size());
         usage = embeddingContext.getResponse().getMetadata().getUsage();
+        outcome = CallOutcome.OK;
       }
     } else if (context instanceof ImageModelObservationContext imageContext) {
       observation.put("modality", "image");
@@ -131,11 +156,19 @@ public final class GarageTelemetry implements ObservationHandler<Observation.Con
       }
       if (imageContext.getResponse() != null) {
         observation.put("count", imageContext.getResponse().getResults().size());
+        outcome = CallOutcome.OK;
         Object imageUsage = imageContext.getResponse().getMetadata().get("openrouter.usage");
         if (imageUsage instanceof Usage recordedUsage) {
           usage = recordedUsage;
         }
       }
+    }
+    if (context.getError() != null) {
+      outcome = CallOutcome.of(context.getError());
+    }
+    // A cancelled stream stops without a reply or an error and has no outcome.
+    if (outcome != null) {
+      observation.put(OUTCOME, outcome);
     }
     if (usage != null) {
       observation.put("usage", GarageResponses.usage(usage));
@@ -161,24 +194,6 @@ public final class GarageTelemetry implements ObservationHandler<Observation.Con
         || context instanceof ImageModelObservationContext;
   }
 
-  /**
-   * Whether a reply ended at its token limit. Chat {@code length} and Responses
-   * {@code max_output_tokens} map to {@code LENGTH}, but a provider can also report a normal stop
-   * after using every allowed token, so the completion-token count is compared with the limit.
-   */
-  public static boolean truncated(ChatResponse response, @Nullable ChatOptions options) {
-    if (response.getResults().stream()
-        .anyMatch(generation -> "LENGTH".equals(generation.getMetadata().getFinishReason()))) {
-      return true;
-    }
-    Integer limit = options instanceof OpenRouterChatOptions openRouter && openRouter.getMaxCompletionTokens() != null
-        ? openRouter.getMaxCompletionTokens()
-        : options != null ? options.getMaxTokens() : null;
-    Usage usage = response.getMetadata().getUsage();
-    Integer completion = usage != null ? usage.getCompletionTokens() : null;
-    return limit != null && completion != null && completion >= limit;
-  }
-
   public List<Map<String, Object>> observationSnapshot() {
     return this.observations.stream().map(this::sanitize).toList();
   }
@@ -187,6 +202,20 @@ public final class GarageTelemetry implements ObservationHandler<Observation.Con
     return this.observations.stream()
         .filter(item -> operationId.equals(item.get("operationId")))
         .map(this::sanitize)
+        .toList();
+  }
+
+  /**
+   * The {@link CallOutcome} codes of an operation's model calls in start order, without calls
+   * the scene expected to fail.
+   */
+  public List<String> callOutcomesFor(String operationId) {
+    return this.observations.stream()
+        .filter(item -> operationId.equals(item.get("operationId")))
+        .filter(item -> !Boolean.TRUE.equals(item.get("expectedFailure")))
+        .filter(item -> item.get(OUTCOME) instanceof String)
+        .sorted(Comparator.comparingLong(item -> (Long) item.get(START_ORDER)))
+        .map(item -> (String) item.get(OUTCOME))
         .toList();
   }
 

@@ -433,6 +433,8 @@ Transient provider, rate-limit, and timeout failures qualify for Spring AI's
 default retry policy. Authentication, billing, invalid requests, refusals, and
 unknown failures do not.
 
+A response that breaks the wire contract the library enforces raises `OpenRouterProtocolException`, a `NonTransientAiException`, in every request mode, whether the call is synchronous or streaming. This covers undecodable JSON, missing required fields, blank tool names, conflicting stream fragments, embedding count, index, or dimension mismatches, and invalid audio. Earlier releases raised `IllegalStateException` or `IllegalArgumentException` for some of these, so catch `OpenRouterProtocolException` instead. Invalid request options still raise `IllegalArgumentException` before the request is sent.
+
 Chat Completions, Responses, and image model streams retry only actual HTTP 429
 responses classified as rate-limit rejections, and only when the model's configured
 `RetryTemplate` policy also permits the exception. HTTP 5xx responses, connection
@@ -526,7 +528,7 @@ its body or log credentials. HTTP errors separately expose parsed `Retry-After` 
 into model metadata, and inspecting them does not alter retry behavior.
 
 Chat, Responses, and image SSE streams reject malformed JSON and non-object data
-payloads with a decoding or protocol error and cancel the HTTP body. This also
+payloads with `OpenRouterProtocolException` and cancel the HTTP body. This also
 applies after partial output. SSE comments and empty heartbeat events are ignored.
 Chat and image streams terminate at `[DONE]`; Responses requires its own protocol
 terminal event.
@@ -617,7 +619,7 @@ that design exactly (as do Spring AI's own OpenAI and Anthropic models):
 In Chat Completions streams, a tool's function name must arrive as a complete name.
 Missing or blank names are ignored until a nonblank name arrives; identical repeated
 names are accepted. Differing nonblank names (including split-name fragments) and
-completed calls without a usable name fail with `IllegalStateException` before the
+completed calls without a usable name fail with `OpenRouterProtocolException` before the
 call is emitted. JSON argument fragments are still concatenated by tool index, and
 calls require a tool-call finish reason before they can be emitted.
 
@@ -1113,7 +1115,8 @@ A stream that ends before `[DONE]`, a choice with neither completion signal, aud
 text after the `expires_at` marker, invalid base64, conflicting identifiers/formats, and
 non-`stop` audio finishes fail explicitly. Each data value must encode a complete
 byte fragment; arbitrary splits inside a base64 value are unsupported. Audio mixed
-with tool calls in one choice and `message.audio` snapshots are unsupported.
+with tool calls in one choice and `message.audio` snapshots are unsupported. Except for
+truncation and size limits, these failures raise `OpenRouterProtocolException`.
 
 Assistant audio replay is rejected in both request modes, including identifier-only
 metadata. To continue using only its transcript, explicitly create a new text-only
@@ -1207,6 +1210,8 @@ The filename follows the source POM revision, not the published starter version.
 | `GET /api/runs/{id}/report`                    | Returns the run's `capability-report.md`.                                                                                                                                                                                                                                          |
 | `POST /api/sweeps`                             | Starts a model compatibility sweep. Returns `202 Accepted` like a run.                                                                                                                                                                                                             |
 | `GET /api/runs/{id}/sweeps/{embedding\|image}` | Returns a sweep result document.                                                                                                                                                                                                                                                   |
+
+The Garage records how each model call ended. A failed scene takes its reason from the first call that raised an error, then from the failure itself, then from a call cut off at its token limit. Otherwise the scene failed its own check. Each modality bay takes its reason from its own call, and the scene reports the first failed bay.
 
 Runs execute in the background, one at a time, because a run's evidence collectors are shared. Starting a second run while one is active returns `409 Conflict` with a link to the active run. The evidence and report endpoints also return `409` until the run finishes. Run records last until the application stops; the files stay in the output directory.
 

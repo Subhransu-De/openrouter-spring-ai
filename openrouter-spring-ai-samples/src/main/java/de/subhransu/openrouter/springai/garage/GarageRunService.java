@@ -319,8 +319,6 @@ public class GarageRunService implements DisposableBean {
       return result;
     } catch (Exception failure) {
       String operationId = lastOperationId(scene.id(), requestMode);
-      boolean truncatedReply = this.telemetry.observationsFor(operationId).stream()
-          .anyMatch(observation -> Boolean.TRUE.equals(observation.get("truncated")));
       SceneResult result = SceneResult.failed(
           scene.id(),
           operationId,
@@ -329,7 +327,7 @@ public class GarageRunService implements DisposableBean {
           outputDirectory,
           Map.of("costUsd", this.evidence.costFor(operationId)),
           failure,
-          truncatedReply);
+          this.telemetry.callOutcomesFor(operationId));
       log.error("FAIL {} [{}]: {}", scene.id(), Objects.requireNonNull(result.reason()).code(), result.error());
       this.evidence.featureSnapshot().stream()
           .filter(item -> operationId.equals(item.get("operationId")))

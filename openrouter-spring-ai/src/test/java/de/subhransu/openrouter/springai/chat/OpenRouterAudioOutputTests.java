@@ -16,6 +16,7 @@ import de.subhransu.openrouter.springai.api.dto.ChatCompletionRequest;
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterChatRequestMapper;
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterResponsesRequestMapper;
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterStreamingResponseMapper;
+import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import java.util.Arrays;
 import java.util.Base64;
@@ -101,7 +102,7 @@ class OpenRouterAudioOutputTests {
 			.expectError(OpenRouterTruncatedResponseException.class)
 			.verify();
 		StepVerifier.create(map(Flux.just(chunk(0, null, "invalid!", null, "stop"))))
-			.expectError(IllegalArgumentException.class)
+			.expectError(OpenRouterProtocolException.class)
 			.verify();
 		StepVerifier
 			.create(map(Flux.just(chunk(0, null, "AA==", null, null), this.json
@@ -231,13 +232,13 @@ class OpenRouterAudioOutputTests {
 					"{\"choices\":[{\"index\":0,\"delta\":{\"audio\":" + audio + "}}]}", ChatCompletionChunk.class);
 			StepVerifier.create(map(Flux.just(chunk(0, null, "AA==", null, null), conflicting)))
 				.expectNextCount(1)
-				.expectError(IllegalStateException.class)
+				.expectError(OpenRouterProtocolException.class)
 				.verify();
 		}
 		ChatCompletionChunk snapshot = this.json.readValue(
 				"{\"choices\":[{\"index\":0,\"message\":{\"audio\":{\"data\":\"AA==\"}},\"finish_reason\":\"stop\"}]}",
 				ChatCompletionChunk.class);
-		StepVerifier.create(map(Flux.just(snapshot))).expectError(IllegalArgumentException.class).verify();
+		StepVerifier.create(map(Flux.just(snapshot))).expectError(OpenRouterProtocolException.class).verify();
 		// A repeated final message snapshot after the delta-based completion adds no
 		// media.
 		StepVerifier.create(map(Flux.just(chunk(0, null, "AA==", null, "stop"), snapshot)))
@@ -263,7 +264,8 @@ class OpenRouterAudioOutputTests {
 				.build();
 			StepVerifier.create(model.stream(new Prompt("synthetic")))
 				.thenConsumeWhile(response -> response.getResult().getOutput().getMedia().isEmpty())
-				.expectErrorMessage("Audio and tool calls in the same choice are unsupported")
+				.expectErrorMatches(error -> error instanceof OpenRouterProtocolException
+						&& "Audio and tool calls in the same choice are unsupported".equals(error.getMessage()))
 				.verify();
 		}
 	}

@@ -5,6 +5,7 @@ import de.subhransu.openrouter.springai.garage.evidence.SceneFailureReason;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
@@ -65,12 +66,12 @@ public record SceneResult(
       Map<String, Object> details,
       Throwable failure) {
     return failed(
-        sceneId, operationId, requestMode, duration, outputDirectory, details, failure, false);
+        sceneId, operationId, requestMode, duration, outputDirectory, details, failure, List.of());
   }
 
   /**
-   * Records a failed scene. {@code truncatedReply} is true when a model reply in the scene
-   * stopped at its token limit, which usually explains a later failed check.
+   * Records a failed scene with the outcome codes of its model calls in start order,
+   * which {@link SceneFailureReason#resolve} uses to explain the failure.
    */
   public static SceneResult failed(
       String sceneId,
@@ -80,10 +81,10 @@ public record SceneResult(
       Path outputDirectory,
       Map<String, Object> details,
       Throwable failure,
-      boolean truncatedReply) {
-    SceneFailureReason reason = SceneFailureReason.classify(failure, truncatedReply);
+      List<String> callOutcomes) {
+    SceneFailureReason reason = SceneFailureReason.resolve(failure, callOutcomes);
     String message = failure.getClass().getName() + ": " + failure.getMessage();
-    if (reason == SceneFailureReason.TRUNCATED && truncatedReply) {
+    if (reason == SceneFailureReason.TRUNCATED && SceneFailureReason.classify(failure) == null) {
       message = "A model reply stopped at its token limit; " + message;
     }
     return new SceneResult(

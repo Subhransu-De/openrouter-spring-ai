@@ -180,7 +180,7 @@ public class OpenRouterApi {
 			return decoded;
 		}
 		catch (JacksonException ex) {
-			throw new IllegalStateException("Failed to decode OpenRouter " + uri + " response", ex);
+			throw new OpenRouterProtocolException("Failed to decode OpenRouter " + uri + " response", ex);
 		}
 	}
 
@@ -399,7 +399,7 @@ public class OpenRouterApi {
 			return event;
 		}
 		catch (JacksonException ex) {
-			throw new IllegalStateException("Failed to decode OpenRouter stream chunk", ex);
+			throw new OpenRouterProtocolException("Failed to decode OpenRouter stream chunk", ex);
 		}
 	}
 

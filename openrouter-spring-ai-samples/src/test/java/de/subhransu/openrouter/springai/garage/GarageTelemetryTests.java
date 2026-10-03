@@ -5,12 +5,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterUsage;
+import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import de.subhransu.openrouter.springai.garage.evidence.GarageEvidence;
 import de.subhransu.openrouter.springai.garage.evidence.GarageTelemetry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.LockSupport;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.observation.ChatModelObservationContext;
@@ -52,6 +54,27 @@ class GarageTelemetryTests {
     telemetry.onStart(completed);
     telemetry.onStop(completed);
     assertThat(telemetry.awaitObservationsFor("operation-1", Duration.ZERO)).hasSize(1);
+  }
+
+  @Test
+  void callOutcomesFollowStartOrderAndSkipExpectedFailures() {
+    GarageTelemetry telemetry = new GarageTelemetry(new SimpleMeterRegistry(), new GarageEvidence());
+    ChatModelObservationContext first = context("operation-1", 0);
+    ChatModelObservationContext failed = context("operation-1", 0);
+    failed.setError(new OpenRouterProtocolException("synthetic"));
+    ChatModelObservationContext expected = context("operation-1", 0);
+    expected.setError(new IllegalStateException(new TimeoutException()));
+    telemetry.onStart(first);
+    telemetry.onStart(failed);
+    telemetry.expectFailure(() -> telemetry.onStart(expected));
+    telemetry.onStop(expected);
+    telemetry.onStop(failed);
+    telemetry.onStop(first);
+
+    assertThat(telemetry.callOutcomesFor("operation-1")).containsExactly("ok", "protocol-error");
+    assertThat(telemetry.observationsFor("operation-1"))
+        .extracting(observation -> observation.get("outcome"))
+        .containsExactly("transport-error", "protocol-error", "ok");
   }
 
   private ChatModelObservationContext context(String operationId, double cost) {

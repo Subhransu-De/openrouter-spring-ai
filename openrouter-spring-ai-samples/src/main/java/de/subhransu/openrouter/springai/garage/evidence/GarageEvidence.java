@@ -30,7 +30,7 @@ public final class GarageEvidence {
       "incompleteFeatures", "costsByOperation", "command", "scenes", "featureRegistry",
       "featureEvidence", "events", "observations", "meters", "transport", "results", "sweep",
       "passed", "failed", "id", "title", "featureId", "feature", "kind", "sceneId",
-      "operationId", "requestMode", "requestModes", "sceneIds", "levels", "complete", "reason", "truncated",
+      "operationId", "requestMode", "requestModes", "sceneIds", "levels", "complete", "reason", "outcome", "expectedFailure",
       "details", "errors", "error", "type", "cause", "evidenceOperations", "durationMillis",
       "durationNanos", "streaming", "returnDirect", "resultCharacters", "costUsd",
       "dimensions", "similarCosine", "unrelatedCosine", "imageBytes", "usage",
@@ -46,7 +46,7 @@ public final class GarageEvidence {
 
   private static Set<String> labels() {
     Set<String> labels = new HashSet<>(Set.of(
-        REDACTED, "garage", "passed", "failed", "PASSED", "FAILED", "success", "error",
+        REDACTED, "garage", "passed", "failed", "PASSED", "FAILED", "success", "error", "ok",
         "covered", "not-executed", "incomplete", "unsupported-in-mode", "partial",
         "OPENAI_CHAT_COMPLETIONS", "OPENAI_RESPONSES", "embedding-models", "image-models",
         "operation.started", "feature.error", "transport.request", "observation.stopped",

@@ -3,6 +3,7 @@ package de.subhransu.openrouter.springai.garage;
 import org.jspecify.annotations.Nullable;
 import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.ERROR;
 import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.FAILED;
+import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.OUTCOME;
 import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.PASSED;
 import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.REASON;
 import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.STATUS;
@@ -13,7 +14,7 @@ import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
 import de.subhransu.openrouter.springai.chat.OpenRouterUsage;
 import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingOptions;
-import de.subhransu.openrouter.springai.garage.evidence.GarageTelemetry;
+import de.subhransu.openrouter.springai.garage.evidence.CallOutcome;
 import de.subhransu.openrouter.springai.garage.evidence.SceneFailureReason;
 import de.subhransu.openrouter.springai.image.OpenRouterImageGenerationMetadata;
 import de.subhransu.openrouter.springai.image.OpenRouterImageModel;
@@ -30,6 +31,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+import java.util.function.Function;
+import java.util.function.Supplier;
 import javax.imageio.ImageIO;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
@@ -106,14 +110,15 @@ public final class GarageModalityBays {
       List<String> texts = new ArrayList<>();
       texts.add(topic);
       texts.addAll(TRIAGE_CATALOGUE);
+      EmbeddingRequest request =
+          new EmbeddingRequest(
+              texts,
+              OpenRouterEmbeddingOptions.builder()
+                  .model(this.embeddingModelId)
+                  .provider(this.provider)
+                  .build());
       EmbeddingResponse response =
-          this.embeddingModel.call(
-              new EmbeddingRequest(
-                  texts,
-                  OpenRouterEmbeddingOptions.builder()
-                      .model(this.embeddingModelId)
-                      .provider(this.provider)
-                      .build()));
+          modelCall(probe, () -> this.embeddingModel.call(request), reply -> CallOutcome.OK);
       probe.put(USAGE, GarageResponses.usage(response.getMetadata().getUsage()));
 
       List<Embedding> results = response.getResults();
@@ -144,7 +149,7 @@ public final class GarageModalityBays {
     } catch (RuntimeException ex) {
       fail(probe, ex);
     }
-    return probe;
+    return withReason(probe);
   }
 
   /**
@@ -164,7 +169,6 @@ public final class GarageModalityBays {
             .includeUsage(requestMode == OpenRouterRequestMode.OPENAI_RESPONSES ? null : true)
             .provider(this.provider)
             .build();
-    ChatResponse response = null;
     try {
       byte[] photo = new ClassPathResource(DASHBOARD_PHOTO).getContentAsByteArray();
       UserMessage message =
@@ -176,7 +180,7 @@ public final class GarageModalityBays {
               .media(Media.builder().mimeType(MimeTypeUtils.IMAGE_PNG).data(photo).build())
               .build();
 
-      response = this.chatModel.call(new Prompt(List.of(message), options));
+      ChatResponse response = chatCall(probe, new Prompt(List.of(message), options), options);
       probe.put(USAGE, GarageResponses.usage(response.getMetadata().getUsage()));
       String reply = GarageResponses.text(response);
       boolean warningRead = reply.toLowerCase(Locale.ROOT).contains("engine");
@@ -192,24 +196,21 @@ public final class GarageModalityBays {
     } catch (IOException | RuntimeException ex) {
       fail(probe, ex);
     }
-    markTruncated(probe, response, options);
-    return probe;
+    return withReason(probe);
   }
 
   /** Generates an image through the unified Image API (POST /images) and saves it. */
   public Map<String, Object> runPaintBay(String topic) {
     Map<String, Object> probe = probe("paint_bay/image-api", this.imageModelId);
     try {
+      ImagePrompt prompt = new ImagePrompt(paintPrompt(topic), imageOptions());
       ImageResponse response =
-          this.imageModel.call(
-              new ImagePrompt(
-                  paintPrompt(topic),
-                  imageOptions()));
+          modelCall(probe, () -> this.imageModel.call(prompt), reply -> CallOutcome.OK);
       recordGeneratedImage(probe, response, "paint-bay-image");
     } catch (IOException | RuntimeException ex) {
       fail(probe, ex);
     }
-    return probe;
+    return withReason(probe);
   }
 
   /**
@@ -220,17 +221,14 @@ public final class GarageModalityBays {
     Map<String, Object> probe = probe("paint_bay/image-api-streaming", this.imageModelId);
     try {
       OpenRouterImageModel openRouterImageModel = (OpenRouterImageModel) this.imageModel;
+      ImagePrompt prompt = new ImagePrompt(paintPrompt(topic), imageOptions());
       List<ImageResponse> events =
-          openRouterImageModel
-              .stream(
-                  new ImagePrompt(
-                      paintPrompt(topic),
-                      imageOptions()))
-              .collectList()
-              .block(STREAM_TIMEOUT);
-      if (events == null) {
-        events = List.of();
-      }
+          modelCall(
+              probe,
+              () -> Objects.requireNonNullElse(
+                  openRouterImageModel.stream(prompt).collectList().block(STREAM_TIMEOUT),
+                  List.<ImageResponse>of()),
+              reply -> CallOutcome.OK);
 
       int partialEvents = 0;
       ImageResponse completed = null;
@@ -256,7 +254,7 @@ public final class GarageModalityBays {
     } catch (IOException | RuntimeException ex) {
       fail(probe, ex);
     }
-    return probe;
+    return withReason(probe);
   }
 
   /**
@@ -279,17 +277,15 @@ public final class GarageModalityBays {
             .includeUsage(true)
             .provider(this.provider)
             .build();
-    ChatResponse response = null;
     try {
-      response =
-          this.chatModel.call(new Prompt(List.of(new UserMessage(paintPrompt(topic))), options));
+      ChatResponse response =
+          chatCall(probe, new Prompt(List.of(new UserMessage(paintPrompt(topic))), options), options);
       probe.put(USAGE, GarageResponses.usage(response.getMetadata().getUsage()));
       paintFromChatMedia(probe, response);
     } catch (IOException | RuntimeException ex) {
       fail(probe, ex);
     }
-    markTruncated(probe, response, options);
-    return probe;
+    return withReason(probe);
   }
 
   private void paintFromChatMedia(Map<String, Object> probe, ChatResponse response) throws IOException {
@@ -348,17 +344,18 @@ public final class GarageModalityBays {
       if (providerOptions != null) {
         options.providerOptions(providerOptions);
       }
+      ImagePrompt prompt =
+          new ImagePrompt(
+              "A small workshop poster illustration of a vintage pickup truck in a garage,"
+                  + " flat colors",
+              options.build());
       ImageResponse response =
-          this.imageModel.call(
-              new ImagePrompt(
-                  "A small workshop poster illustration of a vintage pickup truck in a garage,"
-                      + " flat colors",
-                  options.build()));
+          modelCall(probe, () -> this.imageModel.call(prompt), reply -> CallOutcome.OK);
       recordGeneratedImage(probe, response, fileStem);
     } catch (IOException | RuntimeException ex) {
       fail(probe, ex);
     }
-    return probe;
+    return withReason(probe);
   }
 
   private void recordGeneratedImage(Map<String, Object> probe, ImageResponse response, String stem)
@@ -486,19 +483,36 @@ public final class GarageModalityBays {
     return probe;
   }
 
-  // A bay that failed on a reply ended at its token limit reports truncation, whether its own
-  // check or a decoding step failed. Without a reply, the call itself failed and keeps its reason.
-  private static void markTruncated(
-      Map<String, Object> probe, @Nullable ChatResponse response, OpenRouterChatOptions options) {
-    if (response != null && FAILED.equals(probe.get(STATUS)) && GarageTelemetry.truncated(response, options)) {
-      probe.put(REASON, SceneFailureReason.TRUNCATED.code());
+  private ChatResponse chatCall(Map<String, Object> probe, Prompt prompt, OpenRouterChatOptions options) {
+    return modelCall(probe, () -> this.chatModel.call(prompt), reply -> CallOutcome.of(reply, options));
+  }
+
+  // Records how the bay's model call ended, so a failed bay is explained by its own call rather
+  // than by whichever exception, from the model or a local step, reached the catch block.
+  private static <T> T modelCall(
+      Map<String, Object> probe, Supplier<T> call, Function<T, String> outcome) {
+    T reply;
+    try {
+      reply = call.get();
+    } catch (RuntimeException ex) {
+      probe.put(OUTCOME, CallOutcome.of(ex));
+      throw ex;
     }
+    probe.put(OUTCOME, outcome.apply(reply));
+    return reply;
+  }
+
+  private static Map<String, Object> withReason(Map<String, Object> probe) {
+    if (FAILED.equals(probe.get(STATUS))) {
+      List<String> outcomes = probe.get(OUTCOME) instanceof String outcome ? List.of(outcome) : List.of();
+      probe.put(REASON, SceneFailureReason.resolve(null, outcomes).code());
+    }
+    return probe;
   }
 
   private void fail(Map<String, Object> probe, Exception ex) {
     probe.put(STATUS, FAILED);
     probe.put(ERROR, ex.getClass().getSimpleName() + ": " + ex.getMessage());
-    probe.put(REASON, SceneFailureReason.classify(ex, false).code());
   }
 
   private byte[] decodeDataUrl(String data) {
