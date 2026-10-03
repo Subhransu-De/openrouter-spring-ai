@@ -97,7 +97,14 @@ public final class GarageOptionsFactory {
       String model,
       List<String> fallbackModels,
       String topic) {
-    return common(operationId, "routing-lane", requestMode, model, fallbackModels, topic)
+    OpenRouterChatOptions.Builder builder =
+        common(operationId, "routing-lane", requestMode, model, fallbackModels, topic);
+    if (requestMode == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS) {
+      // Without this, OpenRouter shortens the oversized prompt for the small-context primary
+      // instead of falling back, and the lane can no longer prove the fallback.
+      builder.extraBody(Map.of("transforms", List.of()));
+    }
+    return builder
         .provider(fullProviderPreferences())
         .route(this.properties.getRoute())
         .serviceTier(

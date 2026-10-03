@@ -13,8 +13,8 @@
   "response": {
     "status": 200,
     "headers": {
-      "Content-Type": "text/event-stream"
+      "Content-Type": "application/json"
     },
-    "bodyFileName": "images/paint-bay-stream.sse"
+    "bodyFileName": "images/paint-bay.json"
   }
 }

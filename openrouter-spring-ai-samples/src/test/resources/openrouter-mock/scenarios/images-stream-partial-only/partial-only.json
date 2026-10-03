@@ -15,6 +15,10 @@
     "headers": {
       "Content-Type": "text/event-stream"
     },
-    "bodyFileName": "scenarios/images-stream-partial-only/partial-only.sse"
+    "bodyFileName": "scenarios/images-stream-partial-only/partial-only.sse",
+    "chunkedDribbleDelay": {
+      "numberOfChunks": 8,
+      "totalDuration": 80
+    }
   }
 }

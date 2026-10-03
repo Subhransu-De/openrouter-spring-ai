@@ -155,12 +155,13 @@ public final class GarageReportWriter {
     List<Map<String, Object>> results = (List<Map<String, Object>>) Objects.requireNonNull(diagnostic.get("scenes"), "scenes");
     List<Map<String, Object>> registry = (List<Map<String, Object>>) Objects.requireNonNull(diagnostic.get("featureRegistry"), "featureRegistry");
     report.append("## Scene results\n\n");
-    report.append("| Scene | Mode | Status | Duration (ms) | Error |\n");
-    report.append("| --- | --- | --- | ---: | --- |\n");
+    report.append("| Scene | Mode | Status | Reason | Duration (ms) | Error |\n");
+    report.append("| --- | --- | --- | --- | ---: | --- |\n");
     for (Map<String, Object> result : results) {
       report.append("| `").append(result.get("sceneId")).append("` | `")
           .append(result.get("requestMode")).append("` | ")
           .append(result.get("status")).append(" | ")
+          .append(result.get("reason") != null ? "`" + result.get("reason") + "`" : "").append(" | ")
           .append(result.get("durationMillis")).append(" | ")
           .append(result.get("error") != null ? result.get("error") : "")
           .append(" |\n");

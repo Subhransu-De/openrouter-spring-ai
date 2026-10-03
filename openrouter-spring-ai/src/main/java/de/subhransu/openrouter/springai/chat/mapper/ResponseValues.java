@@ -22,6 +22,15 @@ final class ResponseValues {
 		return value;
 	}
 
+	// A blank identifier cannot select a tool callback or correlate a tool result.
+	@org.springframework.lang.Contract("null, _ -> fail")
+	static String requiredText(@Nullable String value, String field) {
+		if (value == null || value.isBlank()) {
+			throw new OpenRouterProtocolException("OpenRouter response requires a nonblank " + field);
+		}
+		return value;
+	}
+
 	static <T> List<T> items(@Nullable List<? extends @Nullable T> values, String field) {
 		return values == null ? List.of() : values.stream().map(value -> required(value, field)).toList();
 	}

@@ -18,6 +18,10 @@
     "headers": {
       "Content-Type": "text/event-stream"
     },
-    "bodyFileName": "chat/mid-stream-error.sse"
+    "bodyFileName": "chat/mid-stream-error.sse",
+    "chunkedDribbleDelay": {
+      "numberOfChunks": 8,
+      "totalDuration": 80
+    }
   }
 }

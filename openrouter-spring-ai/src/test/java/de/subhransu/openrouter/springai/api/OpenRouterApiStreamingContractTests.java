@@ -373,14 +373,13 @@ class OpenRouterApiStreamingContractTests {
 
 	@ParameterizedTest
 	@ValueSource(strings = { "data: {not valid json}\n\n", "data: {\ndata: \"choices\": [\ndata: }\n\n" })
-	void malformedJsonStreamLineFailsWithIllegalStateNotApiException(String sse) {
-		// A line that looks like a data line but is invalid JSON is a parsing failure,
-		// not
-		// a provider error -- callers must be able to tell them apart.
+	void malformedJsonStreamLineFailsWithProtocolErrorNotApiException(String sse) {
+		// A line that looks like a data line but is invalid JSON is a protocol failure,
+		// not a provider error -- callers must be able to tell them apart.
 		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE, sse);
 
 		StepVerifier.create(capture.api().chatCompletionStream(chatRequest()))
-			.expectErrorSatisfies(error -> assertThat(error).isInstanceOf(IllegalStateException.class)
+			.expectErrorSatisfies(error -> assertThat(error).isInstanceOf(OpenRouterProtocolException.class)
 				.isNotInstanceOf(OpenRouterApiException.class))
 			.verify();
 	}
@@ -431,8 +430,7 @@ class OpenRouterApiStreamingContractTests {
 					};
 					// A coalesced payload starting with invalid JSON fails as a whole.
 					StepVerifier.create(stream).expectNextCount(position).expectErrorSatisfies(error -> {
-						assertThat(error)
-							.isInstanceOfAny(IllegalStateException.class, OpenRouterProtocolException.class)
+						assertThat(error).isInstanceOf(OpenRouterProtocolException.class)
 							.isNotInstanceOf(OpenRouterTruncatedResponseException.class);
 					}).verify(Duration.ofSeconds(3));
 					assertThat(cancelled).as("%s, position %s", endpoint, position).isTrue();
@@ -449,7 +447,7 @@ class OpenRouterApiStreamingContractTests {
 		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE, sse);
 
 		StepVerifier.create(capture.api().responsesStream(responsesRequest()))
-			.expectErrorSatisfies(error -> assertThat(error).isInstanceOf(IllegalStateException.class)
+			.expectErrorSatisfies(error -> assertThat(error).isInstanceOf(OpenRouterProtocolException.class)
 				.hasMessage("Failed to decode OpenRouter stream chunk"))
 			.verify();
 	}

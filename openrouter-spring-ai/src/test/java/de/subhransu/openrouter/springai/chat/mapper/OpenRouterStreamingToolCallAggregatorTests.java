@@ -144,7 +144,8 @@ class OpenRouterStreamingToolCallAggregatorTests {
 		StepVerifier
 			.create(this.aggregator.aggregate(Flux.just(chunk(toolFragment(0, 0, "call-0", "synthetic_", "{")),
 					chunk(toolFragment(0, 0, null, laterName, "}")), chunk(finishChoice(0)))))
-			.expectErrorMessage("Conflicting streamed tool-call function names; fragmented names are not supported")
+			.expectErrorMatches(error -> error instanceof OpenRouterProtocolException && error.getMessage()
+				.equals("Conflicting streamed tool-call function names; fragmented names are not supported"))
 			.verify();
 	}
 
@@ -158,7 +159,8 @@ class OpenRouterStreamingToolCallAggregatorTests {
 				Flux.just(chunk(new Choice(0, null, fragment.delta(), "tool_calls", null))),
 				Flux.just(chunk(fragment), chunk(finishChoice(0))))) {
 			StepVerifier.create(this.aggregator.aggregate(source))
-				.expectErrorMessage("Completed streamed tool call has no function name")
+				.expectErrorMatches(error -> error instanceof OpenRouterProtocolException
+						&& "Completed streamed tool call has no function name".equals(error.getMessage()))
 				.verify();
 		}
 	}

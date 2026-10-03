@@ -7,6 +7,7 @@ import de.subhransu.openrouter.springai.api.dto.Delta;
 import de.subhransu.openrouter.springai.api.dto.FunctionCall;
 import de.subhransu.openrouter.springai.api.dto.ToolCall;
 import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException;
+import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import java.io.OutputStream;
 import java.time.Duration;
@@ -316,8 +317,10 @@ public final class OpenRouterStreamingToolCallAggregator {
 			return later;
 		}
 		// Names are complete identifiers, unlike incremental JSON arguments.
-		Assert.state(!StringUtils.hasText(later) || earlier.equals(later),
-				"Conflicting streamed tool-call function names; fragmented names are not supported");
+		if (StringUtils.hasText(later) && !earlier.equals(later)) {
+			throw new OpenRouterProtocolException(
+					"Conflicting streamed tool-call function names; fragmented names are not supported");
+		}
 		return earlier;
 	}
 
@@ -395,8 +398,9 @@ public final class OpenRouterStreamingToolCallAggregator {
 			}
 			else {
 				var choiceDelta = choice.delta();
-				Assert.state(choiceDelta == null || choiceDelta.audio() == null,
-						"Audio and tool calls in the same choice are unsupported");
+				if (choiceDelta != null && choiceDelta.audio() != null) {
+					throw new OpenRouterProtocolException("Audio and tool calls in the same choice are unsupported");
+				}
 				long chunkBytes = serializedBytes(choiceChunk);
 				buffered.add(choiceChunk, chunkBytes);
 				retain(chunkBytes);
@@ -420,8 +424,9 @@ public final class OpenRouterStreamingToolCallAggregator {
 				Delta delta = ResponseValues.required(completed.delta(), "completed tool-call delta");
 				for (ToolCall toolCall : ResponseValues.items(delta.toolCalls(), "completed tool call")) {
 					var function = toolCall.function();
-					Assert.state(function != null && StringUtils.hasText(function.name()),
-							"Completed streamed tool call has no function name");
+					if (function == null || !StringUtils.hasText(function.name())) {
+						throw new OpenRouterProtocolException("Completed streamed tool call has no function name");
+					}
 				}
 			}
 			ready.add(merged);

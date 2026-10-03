@@ -74,26 +74,29 @@ public final class RecoveryRoadTestScene extends GarageSceneSupport {
       int retryAttempts = server.attempts();
 
       server.mode(GarageRoadTestServer.Mode.SYNC_TIMEOUT);
-      expectedErrors.add(expectedFailure("sync-timeout", () -> noRetryModel.call(prompt)));
+      expectedErrors.add(expectedFailure(context, "sync-timeout", () -> noRetryModel.call(prompt)));
 
       server.mode(GarageRoadTestServer.Mode.HTTP_ERROR);
-      expectedErrors.add(expectedFailure("http-422", () -> noRetryModel.call(prompt)));
+      expectedErrors.add(expectedFailure(context, "http-422", () -> noRetryModel.call(prompt)));
 
       server.mode(GarageRoadTestServer.Mode.STREAM_TIMEOUT);
       expectedErrors.add(
           expectedFailure(
+              context,
               "stream-timeout",
               () -> noRetryModel.stream(prompt).collectList().block(BLOCK_CAP)));
 
       server.mode(GarageRoadTestServer.Mode.MALFORMED_STREAM);
       expectedErrors.add(
           expectedFailure(
+              context,
               "malformed-stream",
               () -> noRetryModel.stream(prompt).collectList().block(BLOCK_CAP)));
 
       server.mode(GarageRoadTestServer.Mode.TERMINAL_STREAM_ERROR);
       expectedErrors.add(
           expectedFailure(
+              context,
               "terminal-stream-error",
               () -> noRetryModel.stream(prompt).collectList().block(BLOCK_CAP)));
 
@@ -202,11 +205,11 @@ public final class RecoveryRoadTestScene extends GarageSceneSupport {
     return model;
   }
 
-  private Map<String, Object> expectedFailure(String scenario, Runnable action) {
+  private Map<String, Object> expectedFailure(SceneContext context, String scenario, Runnable action) {
     Map<String, Object> result = new LinkedHashMap<>();
     result.put("scenario", scenario);
     try {
-      action.run();
+      context.telemetry().expectFailure(action);
       result.put("failed", false);
     } catch (RuntimeException failure) {
       result.put("failed", true);

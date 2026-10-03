@@ -6,6 +6,7 @@ import de.subhransu.openrouter.springai.api.dto.AudioOutput;
 import de.subhransu.openrouter.springai.api.dto.Choice;
 import de.subhransu.openrouter.springai.chat.OpenRouterAudioOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
+import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
@@ -21,6 +22,7 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.content.Media;
 import org.springframework.ai.retry.NonTransientAiException;
+import org.springframework.lang.Contract;
 import org.springframework.util.Assert;
 import org.springframework.util.MimeTypeUtils;
 import org.springframework.util.StringUtils;
@@ -82,13 +84,11 @@ final class AudioOutputMapper {
 		var delta = choice.delta();
 		AudioOutput audio = delta != null ? delta.audio() : null;
 		int index = index(choice);
-		if (message != null && message.extensions().containsKey("audio")) {
-			throw new IllegalArgumentException(
-					"Audio output requires delta.audio fragments, not message.audio snapshots");
-		}
+		require(message == null || !message.extensions().containsKey("audio"),
+				"Audio output requires delta.audio fragments, not message.audio snapshots");
 		Assembly assembly = this.pending.get(index);
 		if (audio != null) {
-			Assert.state(this.options != null, "Received audio without configured output audio options");
+			require(this.options != null, "Received audio without configured output audio options");
 			if (assembly == null) {
 				if (this.pending.size() + this.finished.size() >= 128) {
 					throw new NonTransientAiException("Audio output exceeds the 128-choice limit");
@@ -101,7 +101,7 @@ final class AudioOutputMapper {
 		if (assembly == null) {
 			return;
 		}
-		Assert.state(delta == null || CollectionUtils.isEmpty(delta.toolCalls()),
+		require(delta == null || CollectionUtils.isEmpty(delta.toolCalls()),
 				"Audio and tool calls in the same choice are unsupported");
 		updateCompletionMarker(assembly, audio, delta != null ? delta.content() : null);
 		if (choice.finishReason() != null) {
@@ -154,9 +154,8 @@ final class AudioOutputMapper {
 		var data = audio.data();
 		var transcript = audio.transcript();
 		var id = audio.id();
-		Assert.state(audio.format() == null || options.format().equals(audio.format()),
-				"Conflicting audio output format");
-		Assert.state(id == null || assembly.id == null || assembly.id.equals(id),
+		require(audio.format() == null || options.format().equals(audio.format()), "Conflicting audio output format");
+		require(id == null || assembly.id == null || assembly.id.equals(id),
 				"Conflicting audio identifiers in one choice");
 		if (id != null) {
 			if (assembly.id == null) {
@@ -178,9 +177,27 @@ final class AudioOutputMapper {
 			if (upperBound > MAX_BYTES - this.retainedBytes + 2L) {
 				throw limit();
 			}
-			byte[] bytes = Base64.getDecoder().decode(data);
+			byte[] bytes = decode(data);
 			retain(assembly, bytes.length);
 			assembly.bytes.writeBytes(bytes);
+		}
+	}
+
+	private static byte[] decode(String data) {
+		try {
+			return Base64.getDecoder().decode(data);
+		}
+		catch (IllegalArgumentException ex) {
+			throw new OpenRouterProtocolException("Audio output fragment is not valid base64", ex);
+		}
+	}
+
+	// Provider audio that breaks the stream contract is a protocol error, not a local
+	// state error.
+	@Contract("false, _ -> fail")
+	private static void require(boolean valid, String message) {
+		if (!valid) {
+			throw new OpenRouterProtocolException(message);
 		}
 	}
 

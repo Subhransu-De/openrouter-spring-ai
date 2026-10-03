@@ -261,6 +261,24 @@ class OpenRouterModalityIntegrationTests {
     assertThat(requestsFor("slow-provider")).isEqualTo(3);
   }
 
+  @Test
+  void aSlowReplyThatSendsWhitespaceKeepalivesOutlastsTheConnectionTimeout() {
+    // OpenRouter sends headers at once, then whitespace until the JSON is ready; each read
+    // resets the timeout, so the whole reply may take longer than the timeout itself.
+    long started = System.nanoTime();
+    List<String> reply = new ArrayList<>();
+    this.contextRunner
+        .withPropertyValues("spring.ai.openrouter.api-key=garage-mock-key",
+            "spring.ai.openrouter.base-url=" + OpenRouterMock.baseUrl(),
+            "spring.ai.openrouter.connection.timeout=500ms")
+        .run(context -> reply.add(context.getBean(ChatModel.class).call(new Prompt("Is the pickup ready?",
+            options(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS, "slow-keepalive"))).getResult().getOutput()
+            .getText()));
+    assertThat(reply).containsExactly("Received the attachment for the inspection.");
+    assertThat(Duration.ofNanos(System.nanoTime() - started)).isGreaterThan(Duration.ofMillis(1500));
+    assertThat(requestsFor("slow-keepalive")).isEqualTo(1);
+  }
+
   private String call(OpenRouterRequestMode mode, Media media) {
     return call(mode, media, "modality-matrix");
   }

@@ -1,0 +1,26 @@
+{
+  "name": "inspect",
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/chat/completions",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.metadata.sceneId == 'service-story')]"
+      },
+      {
+        "matchesJsonPath": "$[?(@.messages.size() == 2)]"
+      },
+      {
+        "matchesJsonPath": "$.tools[?(@.function.name == 'inspect_vehicle_profile')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "scenarios/service-story-blank-tool-name/inspect.json"
+  }
+}

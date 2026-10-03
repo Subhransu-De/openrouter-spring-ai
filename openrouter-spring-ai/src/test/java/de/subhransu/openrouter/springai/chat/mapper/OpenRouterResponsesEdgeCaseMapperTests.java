@@ -62,7 +62,9 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 
 	@ParameterizedTest
 	@ValueSource(strings = { "[null]", "[{\"type\":\"message\",\"content\":[null]}]",
-			"[{\"type\":\"function_call\",\"name\":\"lookup\",\"arguments\":\"{}\"}]" })
+			"[{\"type\":\"function_call\",\"name\":\"lookup\",\"arguments\":\"{}\"}]",
+			"[{\"type\":\"function_call\",\"call_id\":\"call-1\",\"name\":\"\",\"arguments\":\"{\\\"job\\\":\\\"a\\\"}{\\\"job\\\":\\\"b\\\"}\"}]",
+			"[{\"type\":\"function_call\",\"call_id\":\" \",\"name\":\"lookup\",\"arguments\":\"{}\"}]" })
 	void malformedOutputFailsConsistentlyInSyncAndStreaming(String output) {
 		String json = "{\"status\":\"completed\",\"output\":" + output + "}";
 		ResponsesResult response = this.objectMapper.readValue(json, ResponsesResult.class);

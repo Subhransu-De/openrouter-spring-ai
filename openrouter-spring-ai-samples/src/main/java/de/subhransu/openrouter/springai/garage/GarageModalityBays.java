@@ -3,7 +3,9 @@ package de.subhransu.openrouter.springai.garage;
 import org.jspecify.annotations.Nullable;
 import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.ERROR;
 import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.FAILED;
+import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.OUTCOME;
 import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.PASSED;
+import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.REASON;
 import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.STATUS;
 import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.USAGE;
 
@@ -12,6 +14,8 @@ import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
 import de.subhransu.openrouter.springai.chat.OpenRouterUsage;
 import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingOptions;
+import de.subhransu.openrouter.springai.garage.evidence.CallOutcome;
+import de.subhransu.openrouter.springai.garage.evidence.SceneFailureReason;
 import de.subhransu.openrouter.springai.image.OpenRouterImageGenerationMetadata;
 import de.subhransu.openrouter.springai.image.OpenRouterImageModel;
 import de.subhransu.openrouter.springai.image.OpenRouterImageOptions;
@@ -27,6 +31,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+import java.util.function.Function;
+import java.util.function.Supplier;
 import javax.imageio.ImageIO;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
@@ -103,14 +110,15 @@ public final class GarageModalityBays {
       List<String> texts = new ArrayList<>();
       texts.add(topic);
       texts.addAll(TRIAGE_CATALOGUE);
+      EmbeddingRequest request =
+          new EmbeddingRequest(
+              texts,
+              OpenRouterEmbeddingOptions.builder()
+                  .model(this.embeddingModelId)
+                  .provider(this.provider)
+                  .build());
       EmbeddingResponse response =
-          this.embeddingModel.call(
-              new EmbeddingRequest(
-                  texts,
-                  OpenRouterEmbeddingOptions.builder()
-                      .model(this.embeddingModelId)
-                      .provider(this.provider)
-                      .build()));
+          modelCall(probe, () -> this.embeddingModel.call(request), reply -> CallOutcome.OK);
       probe.put(USAGE, GarageResponses.usage(response.getMetadata().getUsage()));
 
       List<Embedding> results = response.getResults();
@@ -141,7 +149,7 @@ public final class GarageModalityBays {
     } catch (RuntimeException ex) {
       fail(probe, ex);
     }
-    return probe;
+    return withReason(probe);
   }
 
   /**
@@ -152,6 +160,15 @@ public final class GarageModalityBays {
     Map<String, Object> probe = probe("digital_inspection/image-input", this.visionModelId);
     probe.put("requestMode", requestMode.name());
     probe.put("photo", DASHBOARD_PHOTO);
+    OpenRouterChatOptions options =
+        OpenRouterChatOptions.builder()
+            .model(this.visionModelId)
+            .requestMode(requestMode)
+            .temperature(0.1)
+            .maxCompletionTokens(2048)
+            .includeUsage(requestMode == OpenRouterRequestMode.OPENAI_RESPONSES ? null : true)
+            .provider(this.provider)
+            .build();
     try {
       byte[] photo = new ClassPathResource(DASHBOARD_PHOTO).getContentAsByteArray();
       UserMessage message =
@@ -162,17 +179,8 @@ public final class GarageModalityBays {
                       + " sentence on what the mechanic should check first.")
               .media(Media.builder().mimeType(MimeTypeUtils.IMAGE_PNG).data(photo).build())
               .build();
-      OpenRouterChatOptions options =
-          OpenRouterChatOptions.builder()
-              .model(this.visionModelId)
-              .requestMode(requestMode)
-              .temperature(0.1)
-              .maxCompletionTokens(600)
-              .includeUsage(requestMode == OpenRouterRequestMode.OPENAI_RESPONSES ? null : true)
-              .provider(this.provider)
-              .build();
 
-      ChatResponse response = this.chatModel.call(new Prompt(List.of(message), options));
+      ChatResponse response = chatCall(probe, new Prompt(List.of(message), options), options);
       probe.put(USAGE, GarageResponses.usage(response.getMetadata().getUsage()));
       String reply = GarageResponses.text(response);
       boolean warningRead = reply.toLowerCase(Locale.ROOT).contains("engine");
@@ -188,23 +196,21 @@ public final class GarageModalityBays {
     } catch (IOException | RuntimeException ex) {
       fail(probe, ex);
     }
-    return probe;
+    return withReason(probe);
   }
 
   /** Generates an image through the unified Image API (POST /images) and saves it. */
   public Map<String, Object> runPaintBay(String topic) {
     Map<String, Object> probe = probe("paint_bay/image-api", this.imageModelId);
     try {
+      ImagePrompt prompt = new ImagePrompt(paintPrompt(topic), imageOptions());
       ImageResponse response =
-          this.imageModel.call(
-              new ImagePrompt(
-                  paintPrompt(topic),
-                  imageOptions()));
+          modelCall(probe, () -> this.imageModel.call(prompt), reply -> CallOutcome.OK);
       recordGeneratedImage(probe, response, "paint-bay-image");
     } catch (IOException | RuntimeException ex) {
       fail(probe, ex);
     }
-    return probe;
+    return withReason(probe);
   }
 
   /**
@@ -215,17 +221,14 @@ public final class GarageModalityBays {
     Map<String, Object> probe = probe("paint_bay/image-api-streaming", this.imageModelId);
     try {
       OpenRouterImageModel openRouterImageModel = (OpenRouterImageModel) this.imageModel;
+      ImagePrompt prompt = new ImagePrompt(paintPrompt(topic), imageOptions());
       List<ImageResponse> events =
-          openRouterImageModel
-              .stream(
-                  new ImagePrompt(
-                      paintPrompt(topic),
-                      imageOptions()))
-              .collectList()
-              .block(STREAM_TIMEOUT);
-      if (events == null) {
-        events = List.of();
-      }
+          modelCall(
+              probe,
+              () -> Objects.requireNonNullElse(
+                  openRouterImageModel.stream(prompt).collectList().block(STREAM_TIMEOUT),
+                  List.<ImageResponse>of()),
+              reply -> CallOutcome.OK);
 
       int partialEvents = 0;
       ImageResponse completed = null;
@@ -251,7 +254,7 @@ public final class GarageModalityBays {
     } catch (IOException | RuntimeException ex) {
       fail(probe, ex);
     }
-    return probe;
+    return withReason(probe);
   }
 
   /**
@@ -260,52 +263,55 @@ public final class GarageModalityBays {
    */
   public Map<String, Object> runChatPaintBay(String topic) {
     Map<String, Object> probe = probe("paint_bay/chat-modalities", this.imageModelId);
+    OpenRouterChatOptions options =
+        OpenRouterChatOptions.builder()
+            .model(this.imageModelId)
+            .modalities(List.of("image", "text"))
+            .imageConfig(
+                StringUtils.hasText(this.imageQuality)
+                    ? Map.of("quality", this.imageQuality)
+                    : Map.of())
+            // Generated images are billed as a large block of completion tokens; the
+            // sample's default completion cap would truncate them.
+            .maxCompletionTokens(8000)
+            .includeUsage(true)
+            .provider(this.provider)
+            .build();
     try {
-      OpenRouterChatOptions options =
-          OpenRouterChatOptions.builder()
-              .model(this.imageModelId)
-              .modalities(List.of("image", "text"))
-              .imageConfig(
-                  StringUtils.hasText(this.imageQuality)
-                      ? Map.of("quality", this.imageQuality)
-                      : Map.of())
-              // Generated images are billed as a large block of completion tokens; the
-              // sample's default 900-token cap would truncate them.
-              .maxCompletionTokens(8000)
-              .includeUsage(true)
-              .provider(this.provider)
-              .build();
       ChatResponse response =
-          this.chatModel.call(new Prompt(List.of(new UserMessage(paintPrompt(topic))), options));
+          chatCall(probe, new Prompt(List.of(new UserMessage(paintPrompt(topic))), options), options);
       probe.put(USAGE, GarageResponses.usage(response.getMetadata().getUsage()));
-
-      Assert.state(response.getResult() != null, "Image response requires a generation");
-      List<Media> media = response.getResult().getOutput().getMedia();
-      probe.put("mediaCount", media.size());
-      probe.put("replyText", GarageResponses.text(response));
-      if (media.isEmpty()) {
-        probe.put(STATUS, FAILED);
-        probe.put(ERROR, "assistant message carried no generated-image media");
-        return probe;
-      }
-      Media image = media.get(0);
-      byte[] bytes = decodeDataUrl(String.valueOf(image.getData()));
-      Path file =
-          this.outputDirectory.resolve(
-              "chat-paint-bay-image." + extension(image.getMimeType().toString()));
-      Files.write(file, bytes);
-      probe.put("mimeType", image.getMimeType().toString());
-      probe.put("imageBytes", bytes.length);
-      probe.put("file", file.toString());
-      boolean validImage = recordDimensions(probe, bytes, image.getMimeType().toString());
-      probe.put(STATUS, bytes.length > 0 && validImage ? PASSED : FAILED);
-      if (bytes.length == 0 || !validImage) {
-        probe.put(ERROR, "generated-image media was empty or could not be decoded");
-      }
+      paintFromChatMedia(probe, response);
     } catch (IOException | RuntimeException ex) {
       fail(probe, ex);
     }
-    return probe;
+    return withReason(probe);
+  }
+
+  private void paintFromChatMedia(Map<String, Object> probe, ChatResponse response) throws IOException {
+    Assert.state(response.getResult() != null, "Image response requires a generation");
+    List<Media> media = response.getResult().getOutput().getMedia();
+    probe.put("mediaCount", media.size());
+    probe.put("replyText", GarageResponses.text(response));
+    if (media.isEmpty()) {
+      probe.put(STATUS, FAILED);
+      probe.put(ERROR, "assistant message carried no generated-image media");
+      return;
+    }
+    Media image = media.get(0);
+    byte[] bytes = decodeDataUrl(String.valueOf(image.getData()));
+    Path file =
+        this.outputDirectory.resolve(
+            "chat-paint-bay-image." + extension(image.getMimeType().toString()));
+    Files.write(file, bytes);
+    probe.put("mimeType", image.getMimeType().toString());
+    probe.put("imageBytes", bytes.length);
+    probe.put("file", file.toString());
+    boolean validImage = recordDimensions(probe, bytes, image.getMimeType().toString());
+    probe.put(STATUS, bytes.length > 0 && validImage ? PASSED : FAILED);
+    if (bytes.length == 0 || !validImage) {
+      probe.put(ERROR, "generated-image media was empty or could not be decoded");
+    }
   }
 
   /**
@@ -338,17 +344,18 @@ public final class GarageModalityBays {
       if (providerOptions != null) {
         options.providerOptions(providerOptions);
       }
+      ImagePrompt prompt =
+          new ImagePrompt(
+              "A small workshop poster illustration of a vintage pickup truck in a garage,"
+                  + " flat colors",
+              options.build());
       ImageResponse response =
-          this.imageModel.call(
-              new ImagePrompt(
-                  "A small workshop poster illustration of a vintage pickup truck in a garage,"
-                      + " flat colors",
-                  options.build()));
+          modelCall(probe, () -> this.imageModel.call(prompt), reply -> CallOutcome.OK);
       recordGeneratedImage(probe, response, fileStem);
     } catch (IOException | RuntimeException ex) {
       fail(probe, ex);
     }
-    return probe;
+    return withReason(probe);
   }
 
   private void recordGeneratedImage(Map<String, Object> probe, ImageResponse response, String stem)
@@ -473,6 +480,33 @@ public final class GarageModalityBays {
     Map<String, Object> probe = new LinkedHashMap<>();
     probe.put("bay", bay);
     probe.put("model", model);
+    return probe;
+  }
+
+  private ChatResponse chatCall(Map<String, Object> probe, Prompt prompt, OpenRouterChatOptions options) {
+    return modelCall(probe, () -> this.chatModel.call(prompt), reply -> CallOutcome.of(reply, options));
+  }
+
+  // Records how the bay's model call ended, so a failed bay is explained by its own call rather
+  // than by whichever exception, from the model or a local step, reached the catch block.
+  private static <T> T modelCall(
+      Map<String, Object> probe, Supplier<T> call, Function<T, String> outcome) {
+    T reply;
+    try {
+      reply = call.get();
+    } catch (RuntimeException ex) {
+      probe.put(OUTCOME, CallOutcome.of(ex));
+      throw ex;
+    }
+    probe.put(OUTCOME, outcome.apply(reply));
+    return reply;
+  }
+
+  private static Map<String, Object> withReason(Map<String, Object> probe) {
+    if (FAILED.equals(probe.get(STATUS))) {
+      List<String> outcomes = probe.get(OUTCOME) instanceof String outcome ? List.of(outcome) : List.of();
+      probe.put(REASON, SceneFailureReason.resolve(null, outcomes).code());
+    }
     return probe;
   }
 

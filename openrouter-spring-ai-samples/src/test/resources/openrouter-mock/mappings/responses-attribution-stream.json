@@ -18,6 +18,10 @@
     "headers": {
       "Content-Type": "text/event-stream"
     },
-    "bodyFileName": "responses/attribution.sse"
+    "bodyFileName": "responses/attribution.sse",
+    "chunkedDribbleDelay": {
+      "numberOfChunks": 8,
+      "totalDuration": 80
+    }
   }
 }

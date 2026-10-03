@@ -43,7 +43,7 @@ class GarageApiIntegrationTests extends MockedGarageIntegrationTest {
     OpenRouterMock.reset();
     assertThat(runToCompletion(ROUTING).path("status").asString()).isEqualTo("PASSED");
     JsonNode next = routingRequest();
-    assertThat(next.path("max_completion_tokens").asInt()).isEqualTo(900);
+    assertThat(next.path("max_completion_tokens").asInt()).isEqualTo(4096);
     assertThat(next.path("provider").path("sort").asString()).isEqualTo("throughput");
     assertThat(next.path("provider").path("require_parameters").asBoolean()).isFalse();
   }

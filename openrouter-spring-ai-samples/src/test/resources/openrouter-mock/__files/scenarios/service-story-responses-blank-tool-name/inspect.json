@@ -1,0 +1,81 @@
+
+         
+{
+  "id": "resp-garage-service-responses-inspect",
+  "object": "response",
+  "created_at": 1767225600,
+  "model": "openai/gpt-oss-120b",
+  "status": "completed",
+  "completed_at": 1767225601,
+  "output": [
+    {
+      "id": "msg_synthetic",
+      "type": "message",
+      "role": "assistant",
+      "status": "completed",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "inspect_vehicle_profile",
+          "annotations": []
+        }
+      ]
+    },
+    {
+      "id": "fc_call_inspect",
+      "type": "function_call",
+      "status": "completed",
+      "call_id": "call_inspect",
+      "name": "",
+      "arguments": "{\"concern\": \"overheating\"}{\"concern\": \"rough idle\"}"
+    }
+  ],
+  "error": null,
+  "incomplete_details": null,
+  "tool_choice": "auto",
+  "parallel_tool_calls": true,
+  "metadata": {},
+  "service_tier": "auto",
+  "store": false,
+  "usage": {
+    "input_tokens": 180,
+    "input_tokens_details": {
+      "cached_tokens": 64,
+      "cache_write_tokens": 0
+    },
+    "output_tokens": 42,
+    "output_tokens_details": {
+      "reasoning_tokens": 18
+    },
+    "total_tokens": 222,
+    "cost": 0.000183,
+    "is_byok": false,
+    "cost_details": {
+      "upstream_inference_cost": 0.000183,
+      "upstream_inference_input_cost": 0.000081,
+      "upstream_inference_output_cost": 0.000102
+    }
+  },
+  "background": false,
+  "frequency_penalty": 0,
+  "instructions": null,
+  "max_output_tokens": 4096,
+  "max_tool_calls": null,
+  "presence_penalty": 0,
+  "previous_response_id": null,
+  "prompt_cache_key": null,
+  "prompt_cache_options": null,
+  "reasoning": null,
+  "safety_identifier": null,
+  "temperature": null,
+  "text": {
+    "format": {
+      "type": "text"
+    }
+  },
+  "tools": [],
+  "top_logprobs": 0,
+  "top_p": 1,
+  "truncation": "disabled",
+  "user": null
+}

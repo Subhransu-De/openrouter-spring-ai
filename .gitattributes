@@ -1,0 +1,3 @@
+# The OpenRouter mock serves these files byte for byte. Keep LF so every platform sends the
+# same stream framing that OpenRouter uses; text=auto leaves binary media untouched.
+openrouter-spring-ai-samples/src/test/resources/openrouter-mock/** text=auto eol=lf

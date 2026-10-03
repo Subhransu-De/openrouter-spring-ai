@@ -1,0 +1,25 @@
+{
+  "error": {
+    "message": "No endpoints found for synthetic/model. Every candidate endpoint was removed during routing: Filter by Tool Compatibility removed synthetic/fp8; Add BYOK Endpoints removed synthetic/region (the endpoint is BYOK-only).",
+    "code": 404,
+    "metadata": {
+      "routing_funnel": [
+        {
+          "step": "Initial Endpoints",
+          "endpoint_count": 2
+        },
+        {
+          "step": "Filter by Tool Compatibility",
+          "endpoint_count": 1
+        },
+        {
+          "step": "Add BYOK Endpoints",
+          "endpoint_count": 0,
+          "reason": "the endpoint is BYOK-only"
+        }
+      ],
+      "failed_routing_step": "Add BYOK Endpoints"
+    }
+  },
+  "user_id": "user_garage_synthetic"
+}

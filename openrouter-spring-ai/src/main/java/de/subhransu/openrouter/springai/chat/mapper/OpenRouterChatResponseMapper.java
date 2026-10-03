@@ -100,7 +100,8 @@ public final class OpenRouterChatResponseMapper {
 			.stream()
 			.map(toolCall -> new AssistantMessage.ToolCall(toolCall.id() != null ? toolCall.id() : "",
 					ResponseValues.required(toolCall.type(), "tool call type"),
-					ResponseValues.required(ResponseValues.required(toolCall.function(), "tool call function").name(),
+					ResponseValues.requiredText(
+							ResponseValues.required(toolCall.function(), "tool call function").name(),
 							"tool call name"),
 					ResponseValues.required(
 							ResponseValues.required(toolCall.function(), "tool call function").arguments(),

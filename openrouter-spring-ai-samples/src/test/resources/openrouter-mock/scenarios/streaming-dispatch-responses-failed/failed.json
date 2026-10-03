@@ -18,6 +18,10 @@
     "headers": {
       "Content-Type": "text/event-stream"
     },
-    "bodyFileName": "scenarios/streaming-dispatch-responses-failed/failed.sse"
+    "bodyFileName": "scenarios/streaming-dispatch-responses-failed/failed.sse",
+    "chunkedDribbleDelay": {
+      "numberOfChunks": 8,
+      "totalDuration": 80
+    }
   }
 }

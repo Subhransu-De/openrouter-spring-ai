@@ -45,6 +45,26 @@ class OpenRouterExtensionPropertiesTests {
 	}
 
 	@Test
+	void transformsBindFromIndexedAndEmptyProperties() {
+		var json = new ObjectMapper();
+		this.runner.withPropertyValues("spring.ai.openrouter.chat.extra-body.[transforms][0]=middle-out")
+			.run(context -> {
+				var options = context.getBean(OpenRouterChatProperties.class).toOptions();
+				var wire = json
+					.valueToTree(new OpenRouterChatRequestMapper(json).map(List.of(), options, false, List.of()));
+				assertThat(wire.get("transforms").isArray()).isTrue();
+				assertThat(wire.get("transforms").get(0).asString()).isEqualTo("middle-out");
+			});
+		this.runner.withPropertyValues("spring.ai.openrouter.chat.extra-body.[transforms]=").run(context -> {
+			var options = context.getBean(OpenRouterChatProperties.class).toOptions();
+			var wire = json
+				.valueToTree(new OpenRouterChatRequestMapper(json).map(List.of(), options, false, List.of()));
+			assertThat(wire.get("transforms").isArray()).isTrue();
+			assertThat(wire.get("transforms")).isEmpty();
+		});
+	}
+
+	@Test
 	void propertiesCannotReplaceStandardRequestFields() {
 		this.runner.withPropertyValues("spring.ai.openrouter.chat.extra-body.[model]=synthetic")
 			.run(context -> assertThatThrownBy(() -> context.getBean(OpenRouterChatProperties.class).toOptions())

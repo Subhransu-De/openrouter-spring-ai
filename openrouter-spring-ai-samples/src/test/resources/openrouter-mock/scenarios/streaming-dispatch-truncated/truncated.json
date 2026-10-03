@@ -24,6 +24,10 @@
     "headers": {
       "Content-Type": "text/event-stream"
     },
-    "bodyFileName": "scenarios/streaming-dispatch-truncated/truncated.sse"
+    "bodyFileName": "scenarios/streaming-dispatch-truncated/truncated.sse",
+    "chunkedDribbleDelay": {
+      "numberOfChunks": 8,
+      "totalDuration": 80
+    }
   }
 }

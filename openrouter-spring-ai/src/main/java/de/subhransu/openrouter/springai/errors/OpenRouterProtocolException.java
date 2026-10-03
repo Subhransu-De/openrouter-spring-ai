@@ -13,4 +13,8 @@ public final class OpenRouterProtocolException extends NonTransientAiException {
 		super(message);
 	}
 
+	public OpenRouterProtocolException(String message, Throwable cause) {
+		super(message, cause);
+	}
+
 }

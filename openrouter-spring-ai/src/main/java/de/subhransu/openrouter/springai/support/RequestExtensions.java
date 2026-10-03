@@ -21,11 +21,13 @@ public final class RequestExtensions {
 	private static final String MAX_LATENCY = "preferred_max_latency";
 
 	private static final Set<String> CHAT = Set.of("logit_bias", "logprobs", "top_logprobs", "verbosity",
-			"prompt_cache_key");
+			"prompt_cache_key", "transforms");
 
 	private static final Set<String> RESPONSES = Set.of("top_logprobs", "prompt_cache_key");
 
 	private static final Set<String> PROVIDER = Set.of("only", "zdr", "max_price", "sort", MIN_THROUGHPUT, MAX_LATENCY);
+
+	private static final Set<String> INDEXED_LISTS = Set.of("only", "transforms");
 
 	private RequestExtensions() {
 	}
@@ -48,6 +50,7 @@ public final class RequestExtensions {
 		requireType(result, "logprobs", Boolean.class);
 		requireType(result, "prompt_cache_key", String.class);
 		requireType(result, "logit_bias", Map.class);
+		requireStringList(result, "transforms", "transforms must contain transform name strings");
 		Object verbosity = result.get("verbosity");
 		if (verbosity != null && !Set.of("low", "medium", "high", "xhigh", "max").contains(verbosity)) {
 			throw new IllegalArgumentException("Unsupported verbosity value");
@@ -70,11 +73,7 @@ public final class RequestExtensions {
 			throw new IllegalArgumentException("providerExtraBody sort conflicts with provider.sort");
 		}
 		if (result != null) {
-			requireType(result, "only", List.class);
-			if (result.get("only") instanceof List<?> only
-					&& only.stream().anyMatch(value -> !(value instanceof String))) {
-				throw new IllegalArgumentException("only must contain provider strings");
-			}
+			requireStringList(result, "only", "only must contain provider strings");
 			requireType(result, "zdr", Boolean.class);
 			requireType(result, "max_price", Map.class);
 			validateProviderPreferences(result);
@@ -92,6 +91,14 @@ public final class RequestExtensions {
 			if (value != null && !(value instanceof Number) && !(value instanceof Map)) {
 				throw new IllegalArgumentException(key + " must be a number or percentile object");
 			}
+		}
+	}
+
+	private static void requireStringList(Map<String, @Nullable Object> fields, String key, String message) {
+		requireType(fields, key, List.class);
+		if (fields.get(key) instanceof List<?> values
+				&& values.stream().anyMatch(value -> !(value instanceof String))) {
+			throw new IllegalArgumentException(message);
 		}
 	}
 
@@ -123,10 +130,7 @@ public final class RequestExtensions {
 	private static @Nullable Object normalize(String key, @Nullable Object value) {
 		// Boot's map binding supplies scalar strings. Normalize only documented
 		// boolean/numeric fields; opaque strings such as cache keys stay strings.
-		Object normalized = value;
-		if ("only".equals(key) && value instanceof Map<?, ?> indexed) {
-			normalized = indexedProviders(indexed);
-		}
+		Object normalized = list(key, value);
 		if (("logprobs".equals(key) || "zdr".equals(key)) && value instanceof String text
 				&& ("true".equals(text) || "false".equals(text))) {
 			normalized = Boolean.valueOf(text);
@@ -142,12 +146,24 @@ public final class RequestExtensions {
 		return normalized;
 	}
 
-	private static List<@Nullable Object> indexedProviders(Map<?, ?> indexed) {
+	private static @Nullable Object list(String key, @Nullable Object value) {
+		if (INDEXED_LISTS.contains(key) && value instanceof Map<?, ?> indexed) {
+			return indexedList(key, indexed);
+		}
+		// A Boot property with no value is the only way to write an empty list there.
+		if ("transforms".equals(key) && value instanceof String text && text.isEmpty()) {
+			return List.of();
+		}
+		return value;
+	}
+
+	// Boot binds indexed list properties, such as [only][0], to a map keyed by position.
+	private static List<@Nullable Object> indexedList(String key, Map<?, ?> indexed) {
 		List<@Nullable Object> values = new ArrayList<>();
 		for (int index = 0; index < indexed.size(); index++) {
 			String position = String.valueOf(index);
 			if (!indexed.containsKey(position)) {
-				throw new IllegalArgumentException("only requires contiguous indexes starting at zero");
+				throw new IllegalArgumentException(key + " requires contiguous indexes starting at zero");
 			}
 			values.add(indexed.get(position));
 		}

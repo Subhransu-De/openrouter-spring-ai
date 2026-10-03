@@ -10,6 +10,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.chat.OpenRouterUsage;
+import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -170,7 +171,7 @@ class OpenRouterEmbeddingModelTests {
 			.andRespond(withSuccess("{\"data\":" + data + "}", MediaType.APPLICATION_JSON));
 
 		assertThatThrownBy(() -> fixture.model().embed(List.of("first", "second")))
-			.isInstanceOf(IllegalStateException.class)
+			.isInstanceOf(OpenRouterProtocolException.class)
 			.hasMessageContaining("Embedding response");
 		fixture.server().verify();
 	}
@@ -192,7 +193,7 @@ class OpenRouterEmbeddingModelTests {
 			assertThat(fixture.model().call(request).getResults()).hasSize(2);
 		}
 		else {
-			assertThatThrownBy(() -> fixture.model().call(request)).isInstanceOf(IllegalStateException.class)
+			assertThatThrownBy(() -> fixture.model().call(request)).isInstanceOf(OpenRouterProtocolException.class)
 				.hasMessageContaining("dimensions");
 		}
 		fixture.server().verify();

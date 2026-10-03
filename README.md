@@ -339,6 +339,7 @@ unknown keys and standard fields such as `model`, `messages`, `input`, `stream`,
 | `logit_bias`, `logprobs`                                             | Supported        | Rejected  | Token-ID map / boolean at request root                                       |
 | `top_logprobs`, `prompt_cache_key`                                   | Supported        | Supported | Integer / nullable string at request root                                    |
 | `verbosity`                                                          | Supported        | Rejected  | String at request root; Responses `text.verbosity` is not exposed            |
+| `transforms`                                                         | Supported        | Rejected  | List of transform names at request root; `[]` disables middle-out            |
 | Provider `only`, `zdr`, `max_price`                                  | Supported        | Supported | List / boolean / object inside `provider`; hard routing restrictions         |
 | Provider `sort`, `preferred_min_throughput`, `preferred_max_latency` | Supported        | Supported | String or structured sort / number or percentile object; routing preferences |
 
@@ -349,6 +350,8 @@ Model/provider support still applies; `top_logprobs` on Chat Completions require
 `logprobs=true`. The same mapping and validation apply to calls and streams.
 `OpenRouterExtensionTests` covers serialization, endpoint rejection, routing, and
 response preservation; `OpenRouterExtensionPropertiesTests` covers Boot binding.
+
+OpenRouter applies its [middle-out message transform](https://openrouter.ai/docs/guides/features/message-transforms) by default to endpoints with a context of 8,192 tokens or less. A prompt longer than the context is then shortened and answered without an error. Send `extraBody(Map.of("transforms", List.of()))` to receive a context-length error instead. In Boot properties, `spring.ai.openrouter.chat.extra-body.[transforms]=` sends an empty list, and indexed entries such as `[transforms][0]=middle-out` send a list.
 
 Provider extensions use `OpenRouterChatOptions.builder().providerExtraBody(...)`.
 `OpenRouterProviderPreferences` retains its existing constructor and string `sort` accessor. An extension
@@ -429,6 +432,8 @@ the status is derived from the in-band error, and the endpoint is `/responses`.
 Transient provider, rate-limit, and timeout failures qualify for Spring AI's
 default retry policy. Authentication, billing, invalid requests, refusals, and
 unknown failures do not.
+
+A response that breaks the wire contract the library enforces raises `OpenRouterProtocolException`, a `NonTransientAiException`, in every request mode, whether the call is synchronous or streaming. This covers undecodable JSON, missing required fields, blank tool names, conflicting stream fragments, embedding count, index, or dimension mismatches, and invalid audio. Earlier releases raised `IllegalStateException` or `IllegalArgumentException` for some of these, so catch `OpenRouterProtocolException` instead. Invalid request options still raise `IllegalArgumentException` before the request is sent.
 
 Chat Completions, Responses, and image model streams retry only actual HTTP 429
 responses classified as rate-limit rejections, and only when the model's configured
@@ -523,7 +528,7 @@ its body or log credentials. HTTP errors separately expose parsed `Retry-After` 
 into model metadata, and inspecting them does not alter retry behavior.
 
 Chat, Responses, and image SSE streams reject malformed JSON and non-object data
-payloads with a decoding or protocol error and cancel the HTTP body. This also
+payloads with `OpenRouterProtocolException` and cancel the HTTP body. This also
 applies after partial output. SSE comments and empty heartbeat events are ignored.
 Chat and image streams terminate at `[DONE]`; Responses requires its own protocol
 terminal event.
@@ -614,9 +619,11 @@ that design exactly (as do Spring AI's own OpenAI and Anthropic models):
 In Chat Completions streams, a tool's function name must arrive as a complete name.
 Missing or blank names are ignored until a nonblank name arrives; identical repeated
 names are accepted. Differing nonblank names (including split-name fragments) and
-completed calls without a usable name fail with `IllegalStateException` before the
+completed calls without a usable name fail with `OpenRouterProtocolException` before the
 call is emitted. JSON argument fragments are still concatenated by tool index, and
 calls require a tool-call finish reason before they can be emitted.
+
+A synchronous Chat Completions tool call, or any Responses tool call, with a blank function name fails with `OpenRouterProtocolException` before a callback is selected. A blank Responses `call_id` fails the same way. Missing Chat Completions tool-call IDs remain accepted, and malformed JSON arguments still reach the tool, which reports them as a tool failure.
 
 Option builders, copies, and model defaults own detached collection snapshots. Provider
 routing lists, image input references, and nested JSON maps/lists (metadata, image
@@ -870,6 +877,8 @@ fields are ignored, but invalid typed fields fail decoding rather than discardin
 status or output. Valid empty text, refusals, tool calls, media, and incomplete text remain
 supported.
 
+A `completed` status or `stop` finish reason does not prove that the output ended before the token limit. When it matters, compare the output token usage with the configured `maxCompletionTokens`.
+
 ### Embeddings
 
 `OpenRouterEmbeddingModel` is auto-configured next to the chat model and implements Spring
@@ -1106,7 +1115,8 @@ A stream that ends before `[DONE]`, a choice with neither completion signal, aud
 text after the `expires_at` marker, invalid base64, conflicting identifiers/formats, and
 non-`stop` audio finishes fail explicitly. Each data value must encode a complete
 byte fragment; arbitrary splits inside a base64 value are unsupported. Audio mixed
-with tool calls in one choice and `message.audio` snapshots are unsupported.
+with tool calls in one choice and `message.audio` snapshots are unsupported. Except for
+truncation and size limits, these failures raise `OpenRouterProtocolException`.
 
 Assistant audio replay is rejected in both request modes, including identifier-only
 metadata. To continue using only its transcript, explicitly create a new text-only
@@ -1191,15 +1201,17 @@ The filename follows the source POM revision, not the published starter version.
 
 ### Start a run and read its evidence
 
-| Endpoint                                       | Purpose                                                                                                                                       |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/scenes`                              | Lists the scenes, whether each is offline, and the feature ids its evidence covers.                                                           |
-| `POST /api/runs`                               | Starts a run. Returns `202 Accepted` with a `Location` header for the run.                                                                    |
-| `GET /api/runs/{id}`                           | Shows the run status (`RUNNING`, `PASSED`, `FAILED`, or `ERROR`), scene outcomes, incomplete features, recorded cost, and links to its files. |
-| `GET /api/runs/{id}/evidence`                  | Returns the run's `garage-run.json` evidence bundle.                                                                                          |
-| `GET /api/runs/{id}/report`                    | Returns the run's `capability-report.md`.                                                                                                     |
-| `POST /api/sweeps`                             | Starts a model compatibility sweep. Returns `202 Accepted` like a run.                                                                        |
-| `GET /api/runs/{id}/sweeps/{embedding\|image}` | Returns a sweep result document.                                                                                                              |
+| Endpoint                                       | Purpose                                                                                                                                                                                                                                                                            |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/scenes`                              | Lists the scenes, whether each is offline, and the feature ids its evidence covers.                                                                                                                                                                                                |
+| `POST /api/runs`                               | Starts a run. Returns `202 Accepted` with a `Location` header for the run.                                                                                                                                                                                                         |
+| `GET /api/runs/{id}`                           | Shows the run status (`RUNNING`, `PASSED`, `FAILED`, or `ERROR`), scene outcomes, incomplete features, recorded cost, and links to its files. A failed scene names a reason: `truncated`, `no-endpoint`, `provider-error`, `protocol-error`, `transport-error`, or `check-failed`. |
+| `GET /api/runs/{id}/evidence`                  | Returns the run's `garage-run.json` evidence bundle.                                                                                                                                                                                                                               |
+| `GET /api/runs/{id}/report`                    | Returns the run's `capability-report.md`.                                                                                                                                                                                                                                          |
+| `POST /api/sweeps`                             | Starts a model compatibility sweep. Returns `202 Accepted` like a run.                                                                                                                                                                                                             |
+| `GET /api/runs/{id}/sweeps/{embedding\|image}` | Returns a sweep result document.                                                                                                                                                                                                                                                   |
+
+The Garage records how each model call ended. A failed scene takes its reason from the first call that raised an error, then from the failure itself, then from a call cut off at its token limit. Otherwise the scene failed its own check. Each modality bay takes its reason from its own call, and the scene reports the first failed bay.
 
 Runs execute in the background, one at a time, because a run's evidence collectors are shared. Starting a second run while one is active returns `409 Conflict` with a link to the active run. The evidence and report endpoints also return `409` until the run finishes. Run records last until the application stops; the files stay in the output directory.
 
@@ -1227,7 +1239,7 @@ Omit a request field to keep its `garage.*` default. An empty list clears a list
 | `topic`            | The customer and car request to inspect.                                                                                                                                  |
 | `models`           | `foreman`, `specialist`, `embedding`, `vision`, `image`, and a `fallbacks` list.                                                                                          |
 | `image`            | `surface` is `sync` (the default), `streaming`, `chat`, or `all`; `quality` is optional.                                                                                  |
-| `limits`           | `maxCompletionTokens` and `specialistMaxCompletionTokens`, both positive.                                                                                                 |
+| `limits`           | `maxCompletionTokens` and `specialistMaxCompletionTokens`, both positive. Defaults are 4096 and 2048, which leave room for reasoning models.                              |
 | `reasoningEffort`  | Text reasoning effort.                                                                                                                                                    |
 | `provider`         | `sort` and `requireParameters` apply to every request. The `order`, `ignore`, and `quantizations` lists apply only to the routing-lane scene's full provider preferences. |
 
@@ -1259,12 +1271,12 @@ The samples tests come in two kinds, and neither needs a key or network access. 
 The integration tests cover:
 
 - A `full` run that must pass every scene in both request modes, with the request shape each modality sends and the attribution headers.
-- Sad paths that must fail only the targeted scene for the intended reason. Examples include a model that answers without calling its tools, malformed or unknown tool calls, a reused tool-call ID, missing usage evidence, an unavailable specialist, a fallback that never happens, schema-violating structured output, a stream that ends early or fails, undecodable images, and an embedding count mismatch.
-- Edge cases that must still pass, such as parallel tool calls, SSE keepalive comments, a rate limit that clears on retry, SVG images, and an image stream answered with a single JSON body.
+- Sad paths that must fail only the targeted scene for the intended reason. Examples include a model that answers without calling its tools, malformed or unknown tool calls, a reused tool-call ID, missing usage evidence, an unavailable specialist, a fallback that never happens, schema-violating structured output, a stream that ends early or fails, a reply cut off at its token limit, a request no OpenRouter endpoint can serve, a tool call with a blank name, undecodable images, and an embedding count mismatch. Each sad path also checks the failed scene's reason code.
+- Edge cases that must still pass, such as parallel tool calls, SSE keepalive comments, a rate limit that clears on retry, SVG images, an image stream answered with a single JSON body, and an image stream of partial images. Reasoning in the Gemini, Anthropic, and OpenAI formats must reach the next tool round with its encrypted data and signatures unchanged, in both request modes.
 - Sweeps, one-run-at-a-time scheduling, per-run settings on the wire, and that evidence and reports never contain the topic, prompts, model replies, or the API key.
-- Library surfaces the Garage scenes do not send: PDF, audio, and video input in every supported format, streamed audio output, provider errors, and a provider slower than the connection timeout.
+- Library surfaces the Garage scenes do not send: PDF, audio, and video input in every supported format, streamed audio output, provider errors, a provider slower than the connection timeout, and a slow reply that whitespace keepalives keep within it.
 
-The mock is [WireMock](https://wiremock.org), serving the corpus in [`openrouter-spring-ai-samples/src/test/resources/openrouter-mock`](openrouter-spring-ai-samples/src/test/resources/openrouter-mock). Default stubs in `mappings` answer the happy paths; a test loads one directory from `scenarios` to override them for a single sad or edge case. Stubs select a reply from the request body: the scene in `metadata.sceneId`, whether the request streams, and which tool results it already carries. A request that no stub matches fails the test. The corpus is synthetic; its structure mirrors OpenRouter's response format, including field names, usage details, stream event order, and error bodies. A mocked run shows that the library and the Garage handle these responses; it does not show that a model or provider behaves the same way.
+The mock is [WireMock](https://wiremock.org), serving the corpus in [`openrouter-spring-ai-samples/src/test/resources/openrouter-mock`](openrouter-spring-ai-samples/src/test/resources/openrouter-mock). Default stubs in `mappings` answer the happy paths; a test loads one directory from `scenarios` to override them for a single sad or edge case. Stubs select a reply from the request body: the scene in `metadata.sceneId`, whether the request streams, and which tool results it already carries. A request that no stub matches fails the test. The corpus is synthetic; its structure mirrors OpenRouter's response format, including field names, usage details, stream event order, and error bodies. It also mirrors how OpenRouter delivers responses: successful JSON replies start with whitespace keepalive lines, streams start with keepalive comments and arrive split at arbitrary byte boundaries, Responses bodies echo the request settings, and Gemini image models answer a streaming image request with one JSON body. A mocked run shows that the library and the Garage handle these responses; it does not show that a model or provider behaves the same way.
 
 ### Evidence and privacy
 

@@ -3,6 +3,7 @@ package de.subhransu.openrouter.springai.garage.scenes;
 import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.BAY;
 import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.ERROR;
 import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.PASSED;
+import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.REASON;
 import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.STATUS;
 
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
@@ -12,6 +13,8 @@ import de.subhransu.openrouter.springai.garage.run.GarageRunPlan;
 import de.subhransu.openrouter.springai.garage.run.GarageRunPlan.ImageSurface;
 import de.subhransu.openrouter.springai.garage.evidence.EvidenceLevel;
 import de.subhransu.openrouter.springai.garage.evidence.GarageFeature;
+import de.subhransu.openrouter.springai.garage.evidence.SceneFailure;
+import de.subhransu.openrouter.springai.garage.evidence.SceneFailureReason;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -19,6 +22,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
+import org.jspecify.annotations.Nullable;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.image.ImageModel;
 import org.springframework.stereotype.Component;
@@ -72,6 +76,7 @@ public final class ModalityBaysScene extends GarageSceneSupport {
 
     List<Map<String, Object>> probes = new ArrayList<>();
     List<String> failures = new ArrayList<>();
+    List<Map<String, Object>> failedProbes = new ArrayList<>();
     for (Map.Entry<GarageFeature, List<Map<String, Object>>> entry : probesByFeature.entrySet()) {
       GarageFeature feature = entry.getKey();
       context.evidence().record(
@@ -100,6 +105,7 @@ public final class ModalityBaysScene extends GarageSceneSupport {
         if (!PASSED.equals(probe.get(STATUS))) {
           featurePassed = false;
           failures.add(probe.get(BAY) + ": " + probe.getOrDefault(ERROR, "unknown failure"));
+          failedProbes.add(probe);
         }
       }
       if (featurePassed) {
@@ -117,9 +123,11 @@ public final class ModalityBaysScene extends GarageSceneSupport {
       failures.add(failure.getMessage());
     }
     if (!failures.isEmpty()) {
+      String message = "Garage modality bay checks failed: " + String.join("; ", failures);
+      // Bays catch their own exceptions, so keep the first failed bay's reason explicitly.
+      SceneFailureReason firstReason = firstFailureReason(failedProbes);
       IllegalStateException failure =
-          new IllegalStateException(
-              "Garage modality bay checks failed: " + String.join("; ", failures));
+          firstReason != null ? new SceneFailure(message, firstReason) : new IllegalStateException(message);
       probesByFeature.keySet().forEach(
           feature -> context.evidence().error(feature, operationId, mode, failure));
       throw failure;
@@ -174,5 +182,19 @@ public final class ModalityBaysScene extends GarageSceneSupport {
     }
 
     return probesByFeature;
+  }
+
+  /**
+   * The reason for the first failed bay, in bay order, or {@code null} when no bay failed. Bays
+   * are independent, so each failed bay resolves its reason from its own model call, and a later
+   * bay's call cannot stand in for the first failure.
+   */
+  static @Nullable SceneFailureReason firstFailureReason(List<Map<String, Object>> failedProbes) {
+    if (failedProbes.isEmpty()) {
+      return null;
+    }
+    return failedProbes.get(0).get(REASON) instanceof String code
+        ? SceneFailureReason.fromCode(code)
+        : SceneFailureReason.CHECK_FAILED;
   }
 }

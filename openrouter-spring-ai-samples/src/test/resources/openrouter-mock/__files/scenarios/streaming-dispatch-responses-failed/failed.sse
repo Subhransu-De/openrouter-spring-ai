@@ -1,6 +1,8 @@
-data: {"type":"response.created","response":{"id":"resp-garage-dispatch-failed","object":"response","created_at":1767225600,"model":"openai/gpt-oss-120b","status":"in_progress","output":[]},"sequence_number":0}
+: 
 
-data: {"type":"response.in_progress","response":{"id":"resp-garage-dispatch-failed","object":"response","created_at":1767225600,"model":"openai/gpt-oss-120b","status":"in_progress","output":[]},"sequence_number":1}
+data: {"type":"response.created","response":{"id":"resp-garage-dispatch-failed","object":"response","created_at":1767225600,"model":"openai/gpt-oss-120b","status":"in_progress","output":[],"background":false,"frequency_penalty":0,"instructions":null,"max_output_tokens":4096,"max_tool_calls":null,"parallel_tool_calls":true,"presence_penalty":0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_options":null,"reasoning":null,"safety_identifier":null,"service_tier":"auto","store":false,"temperature":null,"text":{"format":{"type":"text"}},"tool_choice":"auto","tools":[],"top_logprobs":0,"top_p":1,"truncation":"disabled","user":null},"sequence_number":0}
+
+data: {"type":"response.in_progress","response":{"id":"resp-garage-dispatch-failed","object":"response","created_at":1767225600,"model":"openai/gpt-oss-120b","status":"in_progress","output":[],"background":false,"frequency_penalty":0,"instructions":null,"max_output_tokens":4096,"max_tool_calls":null,"parallel_tool_calls":true,"presence_penalty":0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_options":null,"reasoning":null,"safety_identifier":null,"service_tier":"auto","store":false,"temperature":null,"text":{"format":{"type":"text"}},"tool_choice":"auto","tools":[],"top_logprobs":0,"top_p":1,"truncation":"disabled","user":null},"sequence_number":1}
 
 data: {"type":"response.output_item.added","output_index":0,"item":{"id":"rs_dispatch-failed","type":"reasoning","status":"in_progress","summary":[]},"sequence_number":2}
 
@@ -20,7 +22,7 @@ data: {"type":"response.content_part.added","output_index":1,"item_id":"msg_disp
 
 data: {"type":"response.output_text.delta","output_index":1,"item_id":"msg_dispatch-failed","content_index":0,"delta":"The 1972 pickup arrived running hot. ","logprobs":[],"sequence_number":10}
 
-data: {"type":"response.failed","response":{"id":"resp-garage-dispatch-failed","object":"response","created_at":1767225600,"model":"openai/gpt-oss-120b","status":"failed","output":[],"error":{"code":"server_error","message":"The upstream provider returned an error"}},"sequence_number":11}
+data: {"type":"response.failed","response":{"id":"resp-garage-dispatch-failed","object":"response","created_at":1767225600,"model":"openai/gpt-oss-120b","status":"failed","output":[],"error":{"code":"server_error","message":"The upstream provider returned an error"},"background":false,"frequency_penalty":0,"instructions":null,"max_output_tokens":4096,"max_tool_calls":null,"parallel_tool_calls":true,"presence_penalty":0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_options":null,"reasoning":null,"safety_identifier":null,"service_tier":"auto","store":false,"temperature":null,"text":{"format":{"type":"text"}},"tool_choice":"auto","tools":[],"top_logprobs":0,"top_p":1,"truncation":"disabled","user":null},"sequence_number":11}
 
 data: [DONE]
 

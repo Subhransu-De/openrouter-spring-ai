@@ -24,8 +24,10 @@ public class GarageProperties {
   private boolean full;
   private List<OpenRouterRequestMode> requestModes =
       new ArrayList<>(List.of(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS));
-  private Integer maxCompletionTokens = 900;
-  private Integer specialistMaxCompletionTokens = 500;
+  // Reasoning models spend completion tokens before answering, and Anthropic thinking needs
+  // a budget of at least 1,024 tokens; smaller caps return empty or reasoning-free replies.
+  private Integer maxCompletionTokens = 4096;
+  private Integer specialistMaxCompletionTokens = 2048;
   private Double temperature = 0.2;
   private Double topP = 0.85;
   private Integer topK = 40;
