@@ -62,7 +62,7 @@
     <mutation.skip>true</mutation.skip>
     <mutation.targets>de.subhransu.openrouter.springai.errors.OpenRouterRetryAfter*,de.subhransu.openrouter.springai.errors.OpenRouterHttpExceptionFactory*,de.subhransu.openrouter.springai.chat.mapper.ReasoningDetailsMerger*,de.subhransu.openrouter.springai.chat.mapper.OpenRouterStreamingToolCallAggregator*,de.subhransu.openrouter.springai.api.OpenRouterImageResponseValidator*</mutation.targets>
     <lombok.version>1.18.48</lombok.version>
-    <twelvemonkeys.version>3.15.2</twelvemonkeys.version>
+    <twelvemonkeys.version>3.15.3</twelvemonkeys.version>
     <wiremock.version>3.13.2</wiremock.version>
 
     <flatten-maven-plugin.version>1.8.0</flatten-maven-plugin.version>
