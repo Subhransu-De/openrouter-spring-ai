@@ -80,7 +80,7 @@
     <nullaway.version>0.14.2</nullaway.version>
     <spring-javaformat.version>0.0.48</spring-javaformat.version>
     <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
-    <checkstyle.version>14.1.0</checkstyle.version>
+    <checkstyle.version>14.3.0</checkstyle.version>
     <maven-pmd-plugin.version>3.28.0</maven-pmd-plugin.version>
     <modernizer-maven-plugin.version>3.5.0</modernizer-maven-plugin.version>
     <spotbugs-maven-plugin.version>4.10.4.1</spotbugs-maven-plugin.version>
