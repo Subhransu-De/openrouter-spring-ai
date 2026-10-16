@@ -1290,6 +1290,12 @@ Maven and Gradle build the same three published thin library JARs. Versions and 
 baselines come from the root Maven POM, and CI builds and tests both build systems across the
 supported Java versions. The executable samples application is intentionally separate.
 
+The Maven Central Release workflow accepts a release version and a commit on `main`.
+With `upload=false`, it builds unsigned artifacts in a fresh Maven repository, then
+assembles a Central bundle and checks its contents. This rehearses packaging without
+uploading; Central validates the signed bundle when `upload=true`, before manual
+publication in Central Portal.
+
 ## Build quality checks
 
 ### Focused mutation testing
