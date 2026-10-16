@@ -7,6 +7,11 @@ updates:
       time: "00:00"
       timezone: "Asia/Kolkata"
     open-pull-requests-limit: 100
+    groups:
+      spotbugs:
+        patterns:
+          - "com.github.spotbugs:spotbugs"
+          - "com.github.spotbugs:spotbugs-maven-plugin"
     assignees:
       - "Subhransu-De"
     cooldown:
@@ -22,5 +27,9 @@ updates:
       time: "00:00"
       timezone: "Asia/Kolkata"
     open-pull-requests-limit: 5
+    groups:
+      codeql:
+        patterns:
+          - "github/codeql-action/*"
     assignees:
       - "Subhransu-De"

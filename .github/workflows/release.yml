@@ -106,9 +106,31 @@ jobs:
           server-password: CENTRAL_PASSWORD
       - name: Build unsigned release artifacts in a fresh local repository
         run: >-
-          mvn -B -ntp -Prelease -pl '!openrouter-spring-ai-samples'
+          mvn -B -ntp -P release -pl '!openrouter-spring-ai-samples'
           "-Drevision=$VERSION" -Dgpg.skip=true
           "-Dmaven.repo.local=$RUNNER_TEMP/release-repository" clean install
+      - name: Assemble and check practice release bundle
+        if: ${{ !inputs.upload }}
+        run: |
+          mvn -B -ntp -P release -pl '!openrouter-spring-ai-samples' \
+            "-Drevision=$VERSION" -Dgpg.skip=true -DskipUpload=true \
+            "-Dmaven.repo.local=$RUNNER_TEMP/release-repository" deploy
+          bundle=target/central-publishing/central-bundle.zip
+          test -s "$bundle"
+          entries=$(jar tf "$bundle")
+          for artifact in openrouter-spring-ai-parent openrouter-spring-ai openrouter-spring-ai-autoconfigure openrouter-spring-ai-starter; do
+            base="de/subhransu/$artifact/$VERSION/$artifact-$VERSION"
+            grep -Fx "$base.pom" <<< "$entries"
+            if [[ "$artifact" != openrouter-spring-ai-parent ]]; then
+              for classifier in '' '-sources' '-javadoc'; do
+                grep -Fx "$base$classifier.jar" <<< "$entries"
+              done
+            fi
+          done
+          if grep -E '(^|/)(openrouter-spring-ai-samples/|maven-metadata[^/]*\.xml$|_remote\.repositories$)' <<< "$entries"; then
+            echo 'Unexpected sample artifacts or repository metadata in release bundle.'
+            exit 1
+          fi
       - name: Sign and upload with Maven; wait for Central validation
         if: ${{ inputs.upload }}
         env:
@@ -117,7 +139,7 @@ jobs:
           MAVEN_GPG_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
           MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: |
-          mvn -B -ntp -Prelease -pl '!openrouter-spring-ai-samples' "-Drevision=$VERSION" "-Dmaven.repo.local=$RUNNER_TEMP/release-repository" deploy
+          mvn -B -ntp -P release -pl '!openrouter-spring-ai-samples' "-Drevision=$VERSION" "-Dmaven.repo.local=$RUNNER_TEMP/release-repository" deploy
       - name: Summarize publication steps
         run: |
           echo 'Practice runs do not upload anything.'
