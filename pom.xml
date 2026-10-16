@@ -56,7 +56,7 @@
     <spring-ai.version>2.0.1</spring-ai.version>
     <spring-boot.version>4.1.1</spring-boot.version>
     <junit-jupiter.version>6.1.3</junit-jupiter.version>
-    <pitest.version>1.30.0</pitest.version>
+    <pitest.version>1.30.1</pitest.version>
     <pitest-junit5.version>1.2.3</pitest-junit5.version>
     <mutation.threads>2</mutation.threads>
     <mutation.skip>true</mutation.skip>
@@ -66,7 +66,7 @@
     <wiremock.version>3.13.2</wiremock.version>
 
     <flatten-maven-plugin.version>1.8.0</flatten-maven-plugin.version>
-    <spotless-maven-plugin.version>3.10.3</spotless-maven-plugin.version>
+    <spotless-maven-plugin.version>3.10.4</spotless-maven-plugin.version>
     <jacoco-maven-plugin.version>0.8.15</jacoco-maven-plugin.version>
     <coverage.line.minimum>0.90</coverage.line.minimum>
     <coverage.branch.minimum>0.80</coverage.branch.minimum>
@@ -83,8 +83,8 @@
     <checkstyle.version>14.1.0</checkstyle.version>
     <maven-pmd-plugin.version>3.28.0</maven-pmd-plugin.version>
     <modernizer-maven-plugin.version>3.5.0</modernizer-maven-plugin.version>
-    <spotbugs-maven-plugin.version>4.10.4.1</spotbugs-maven-plugin.version>
-    <spotbugs.version>4.10.4</spotbugs.version>
+    <spotbugs-maven-plugin.version>4.10.5.0</spotbugs-maven-plugin.version>
+    <spotbugs.version>4.10.5</spotbugs.version>
     <spotbugs.correctness.skip>true</spotbugs.correctness.skip>
     <findsecbugs.version>1.14.0</findsecbugs.version>
     <findsecbugs.skip>true</findsecbugs.skip>
