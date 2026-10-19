@@ -67,7 +67,7 @@ If a mode does not support an option, preserve or add explicit validation rather
 - Include meaningful edge cases: fragmented events, multiple choices, missing optional fields, provider errors, and unknown additive fields when relevant.
 - Wire DTO records must tolerate unknown JSON fields, as required by the architecture tests.
 - Java `assert` statements need a detail expression, and `AssertionError` needs a diagnostic argument. This rule does not require messages on JUnit or AssertJ assertions.
-- CI's Qodana job fails when IntelliJ's `WeakerAccess` inspection finds a library production declaration whose access can be narrower. `.qodana/weaker-access.yaml` ignores the supported API listed in the README; keep its scopes in sync when the supported API changes. Fix a finding by narrowing the declaration. Suppress it with `@SuppressWarnings("WeakerAccess")` only when a framework, reflection, or a supported consumer needs the wider access, and add a comment that gives the reason. Do not add a baseline.
+- CI's Qodana job fails when IntelliJ's `WeakerAccess` inspection finds a library production declaration whose access can be narrower. `.qodana/weaker-access.yaml` ignores the supported API listed in `docs/api.md`; keep its scopes in sync when the supported API changes. Fix a finding by narrowing the declaration. Suppress it with `@SuppressWarnings("WeakerAccess")` only when a framework, reflection, or a supported consumer needs the wider access, and add a comment that gives the reason. Do not add a baseline.
 - Do not copy private prompts, account responses, logs, or credentials into fixtures or committed evidence.
 - Run the Garage live harness only when live API use is authorized. Confirm its output location and keep generated reports and service records outside the repository.
 - Never print an API key or place it in a command argument, documentation, or a commit. Use the existing environment-based configuration.
@@ -83,7 +83,7 @@ If a mode does not support an option, preserve or add explicit validation rather
 
 ## Documentation and artifacts
 
-- Update the relevant README guidance when installation, public options, request modes, or observable behavior changes.
+- Update the relevant README or `docs/` page when installation, public options, request modes, or observable behavior changes. Build and quality-check guidance belongs in `CONTRIBUTING.md`; notable user-facing changes belong in `CHANGELOG.md`.
 - Explain how a consumer uses a capability and its limitations. Keep local implementation reasoning near the code; create a separate architecture document only for a durable decision spanning components.
 - Rewrite stale guidance instead of appending a competing explanation. Do not copy field catalogs from source into documentation.
 - Keep plans, review HTML, screenshots, raw logs, and agent scratch files outside the repository. Do not stage them with product changes.
