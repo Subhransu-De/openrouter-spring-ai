@@ -43,7 +43,7 @@
     <revision>0.1.0-SNAPSHOT</revision>
 
     <java.version>17</java.version>
-    <!-- Integration projects under src/it point this at the repository's config directory. -->
+    <!-- Integration projects under config/gate-its point this at the repository's config directory. -->
     <quality.config.dir>${maven.multiModuleProjectDirectory}/config</quality.config.dir>
     <checkstyle.config>${quality.config.dir}/checkstyle/checkstyle.xml</checkstyle.config>
     <maven.compiler.source>${java.version}</maven.compiler.source>
@@ -799,13 +799,13 @@
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-invoker-plugin</artifactId>
             <version>${maven-invoker-plugin.version}</version>
-            <!-- Runs once from the root; each project under src/it fails one quality gate on purpose. -->
+            <!-- Runs once from the root; each project under config/gate-its fails one quality gate on purpose. -->
             <inherited>false</inherited>
             <configuration>
-              <projectsDirectory>src/it</projectsDirectory>
+              <projectsDirectory>config/gate-its</projectsDirectory>
               <cloneProjectsTo>${project.build.directory}/it</cloneProjectsTo>
               <localRepositoryPath>${project.build.directory}/it-repo</localRepositoryPath>
-              <settingsFile>src/it/settings.xml</settingsFile>
+              <settingsFile>config/gate-its/settings.xml</settingsFile>
               <postBuildHookScript>verify</postBuildHookScript>
               <streamLogsOnFailures>true</streamLogsOnFailures>
               <failIfNoProjects>true</failIfNoProjects>
