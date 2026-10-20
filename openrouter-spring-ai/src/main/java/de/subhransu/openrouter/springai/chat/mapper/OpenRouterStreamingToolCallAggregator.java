@@ -54,7 +54,7 @@ public final class OpenRouterStreamingToolCallAggregator {
 
 	public static final long DEFAULT_MAX_BYTES = 1024 * 1024;
 
-	public static final int DEFAULT_MAX_CHUNKS = 1024;
+	public static final int DEFAULT_MAX_CHUNKS = 8192;
 
 	public static final Duration DEFAULT_MAX_DURATION = Duration.ofMinutes(2);
 

@@ -623,6 +623,8 @@ completed calls without a usable name fail with `OpenRouterProtocolException` be
 call is emitted. JSON argument fragments are still concatenated by tool index, and
 calls require a tool-call finish reason before they can be emitted.
 
+Buffered fragments count against the [Chat Completions streamed tool-call limits](#chat-completions-streamed-tool-call-limits), which bound the argument size a streamed tool call can carry.
+
 A synchronous Chat Completions tool call, or any Responses tool call, with a blank function name fails with `OpenRouterProtocolException` before a callback is selected. A blank Responses `call_id` fails the same way. Missing Chat Completions tool-call IDs remain accepted, and malformed JSON arguments still reach the tool, which reports them as a tool failure.
 
 Option builders, copies, and model defaults own detached collection snapshots. Provider
@@ -805,6 +807,20 @@ cancels upstream with `OpenRouterLimitExceededException`, using `CHAT_STATE_BYTE
 `CHAT_STATE_CHOICES`; replay metadata is never silently truncated. Earlier emitted
 snapshots retained by the caller are outside this budget.
 
+### Chat Completions streamed tool-call limits
+
+Chat Completions streams split a tool call's JSON arguments across many chunks. The model buffers each choice from its first tool-call delta through its tool-call finish chunk and then emits one merged tool call, so `ToolCallingAdvisor` never receives a partial call. Three per-subscription limits bound this buffer. Configure them with the `OpenRouterChatModel.Builder` methods `toolCallAggregationMaxBytes`, `toolCallAggregationMaxChunks`, and `toolCallAggregationMaxDuration`, or with the Boot properties under `spring.ai.openrouter.chat.tool-call-aggregation`:
+
+| Property       | Default                 | Chat Completions scope                                                                                                          |
+| -------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `max-size`     | `1MB` (1,048,576 bytes) | Serialized UTF-8 JSON bytes of the buffered chunks, including each chunk's envelope, across all buffered choices                |
+| `max-chunks`   | `8192`                  | Buffered chunks across all buffered choices, including usage-only and other choice-less chunks that arrive while a call is open |
+| `max-duration` | `2m`                    | Absolute time from a choice's first tool-call delta to its finish chunk                                                         |
+
+The upstream provider decides how finely it splits the arguments, so the argument size that fits depends on the provider. A call fails at whichever limit it reaches first. A chunk that carries OpenRouter's usual id, model, and provider fields serializes to about 250 to 300 bytes, so the 1 MB byte limit usually applies after roughly 3,500 to 4,200 chunks; the chunk limit applies first only when chunks average less than 128 bytes. For example, a 6,000-character argument sent in four-character fragments needs about 1,500 chunks and fits both defaults.
+
+Exceeding a limit cancels the upstream request and fails the stream with `OpenRouterLimitExceededException`, using `STREAMING_TOOL_CALL_BYTES`, `STREAMING_TOOL_CALL_CHUNKS`, or `STREAMING_TOOL_CALL_DURATION` and the `/chat/completions` endpoint. No partial tool call is emitted, so `ToolCallingAdvisor` runs no tool. If your tools expect larger arguments, raise `max-chunks` and `max-size` together, for example `spring.ai.openrouter.chat.tool-call-aggregation.max-chunks=32768` with `spring.ai.openrouter.chat.tool-call-aggregation.max-size=4MB`. All three values must be positive. These are model-level settings, not per-request options. Text-only streams and synchronous calls do not use them. Responses streaming shares these settings with a different scope, described in the next section.
+
 ### Responses stream state limits
 
 Responses streaming reuses the model builder's `toolCallAggregationMaxBytes`,
@@ -814,7 +830,7 @@ properties under `spring.ai.openrouter.chat.tool-call-aggregation`:
 | Property       | Default                 | Responses scope                                                                                               |
 | -------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `max-size`     | `1MB` (1,048,576 bytes) | Cumulative serialized UTF-8 JSON bytes admitted from the first state-bearing event through the terminal event |
-| `max-chunks`   | `1024`                  | Events in that interval, and separately the number of retained output items or items in a response snapshot   |
+| `max-chunks`   | `8192`                  | Events in that interval, and separately the number of retained output items or items in a response snapshot   |
 | `max-duration` | `2m`                    | Absolute elapsed time from the first state-bearing event; activity and keepalives do not reset it             |
 
 State-bearing events include output items, text and function-argument fragments, reasoning, refusals,

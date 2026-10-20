@@ -453,7 +453,7 @@ public class OpenRouterChatProperties {
 
 		private DataSize maxSize = DataSize.ofMegabytes(1);
 
-		private int maxChunks = 1024;
+		private int maxChunks = 8192;
 
 		private Duration maxDuration = Duration.ofMinutes(2);
 
