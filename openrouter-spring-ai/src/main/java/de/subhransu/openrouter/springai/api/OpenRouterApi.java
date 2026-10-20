@@ -17,6 +17,9 @@ import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseExcept
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import de.subhransu.openrouter.springai.internal.StreamRetries;
 import java.io.ByteArrayOutputStream;
+import java.io.ByteArrayInputStream;
+import java.io.SequenceInputStream;
+import java.util.Collections;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -36,6 +39,8 @@ import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.http.codec.ServerSentEvent;
+import org.springframework.http.codec.AbstractJacksonDecoder;
+import org.springframework.http.codec.DecoderHttpMessageReader;
 import org.springframework.util.Assert;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
@@ -45,8 +50,10 @@ import org.springframework.web.reactive.function.client.ClientResponse;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Flux;
 import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectReader;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.json.JsonMapper;
 
 public class OpenRouterApi {
 
@@ -65,6 +72,12 @@ public class OpenRouterApi {
 
 	private final ObjectMapper objectMapper;
 
+	private final boolean customObjectMapper;
+
+	private final StreamEventBinder eventBinder;
+
+	private final @Nullable BlockingResponseDecoder responseDecoder;
+
 	private final OpenRouterHttpExceptionFactory httpExceptionFactory;
 
 	private final @Nullable Duration timeout;
@@ -79,6 +92,8 @@ public class OpenRouterApi {
 
 		String baseUrl = StringUtils.hasText(builder.baseUrl) ? builder.baseUrl : DEFAULT_BASE_URL;
 		this.objectMapper = builder.objectMapper;
+		this.customObjectMapper = builder.customObjectMapper;
+		this.eventBinder = new StreamEventBinder(this.objectMapper, !this.customObjectMapper);
 		this.httpExceptionFactory = new OpenRouterHttpExceptionFactory(this.objectMapper, builder.apiKey);
 		this.timeout = builder.timeout;
 		Assert.isTrue(builder.maxResponseBodyBytes > 0, "Maximum response body size must be greater than zero");
@@ -89,24 +104,26 @@ public class OpenRouterApi {
 				"Maximum error body size must be less than Integer.MAX_VALUE");
 		this.maxResponseBodyBytes = builder.maxResponseBodyBytes;
 		this.maxErrorBodyBytes = builder.maxErrorBodyBytes;
+		this.responseDecoder = this.customObjectMapper ? null
+				: new BlockingResponseDecoder(this.objectMapper, this.maxResponseBodyBytes);
 
 		// Blocking timeouts belong to the request factory. Auto-configuration installs
 		// a timeout-configured factory on its own builder clone; programmatic callers
 		// supply their factory. This timeout field only guards streaming idle gaps.
 		RestClient.Builder restClientBuilder = builder.restClientBuilder != null ? builder.restClientBuilder.clone()
 				: RestClient.builder();
+		restClientBuilder.requestInterceptor(new OpenRouterAttributionInterceptor(builder.httpReferer,
+				builder.applicationTitle, builder.applicationCategories));
 		this.restClient = restClientBuilder.baseUrl(baseUrl)
 			.defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + builder.apiKey)
 			.defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
 			.defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
-			.requestInterceptor(new OpenRouterAttributionInterceptor(builder.httpReferer, builder.applicationTitle,
-					builder.applicationCategories))
 			.build();
 
 		WebClient.Builder webClientBuilder = builder.webClientBuilder != null ? builder.webClientBuilder.clone()
 				: WebClient.builder();
 		this.webClient = webClientBuilder.baseUrl(baseUrl)
-			.codecs((codecs) -> codecs.defaultCodecs().maxInMemorySize(this.maxResponseBodyBytes))
+			.codecs(codecs -> codecs.defaultCodecs().maxInMemorySize(this.maxResponseBodyBytes))
 			.defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + builder.apiKey)
 			.defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
 			.defaultHeader(HttpHeaders.ACCEPT, MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -145,10 +162,22 @@ public class OpenRouterApi {
 	}
 
 	private <T> T blockingPost(String uri, Object request, Class<T> responseType) {
-		return this.restClient.post()
-			.uri(uri)
-			.body(request)
-			.exchange((httpRequest, response) -> readBlockingResponse(uri, response, responseType));
+		var outgoing = this.restClient.post().uri(uri);
+		if (this.customObjectMapper) {
+			outgoing.body(output -> this.objectMapper.writeValue(output, request));
+		}
+		else {
+			outgoing.body(request);
+		}
+		return outgoing.exchange((httpRequest, response) -> readResponse(uri, response, responseType));
+	}
+
+	private <T> T readResponse(String uri, ClientHttpResponse response, Class<T> responseType) throws IOException {
+		HttpStatusCode statusCode = response.getStatusCode();
+		if (this.responseDecoder != null && !statusCode.isError()) {
+			return this.responseDecoder.decode(uri, statusCode, response.getBody(), responseType);
+		}
+		return readBlockingResponse(uri, response, responseType);
 	}
 
 	private <T> T readBlockingResponse(String uri, ClientHttpResponse response, Class<T> responseType)
@@ -169,11 +198,11 @@ public class OpenRouterApi {
 			String errorBody = new String(body.bytes(), StandardCharsets.UTF_8);
 			throw this.httpExceptionFactory.create(uri, statusCode, response.getHeaders(), errorBody);
 		}
-		if (body.bytes().length == 0) {
+		if (body.size() == 0) {
 			throw new OpenRouterProtocolException("Empty OpenRouter " + uri + " response");
 		}
 		try {
-			T decoded = this.objectMapper.readValue(body.bytes(), responseType);
+			T decoded = body.decode(this.objectMapper, responseType);
 			if (decoded == null) {
 				throw new OpenRouterProtocolException("Null OpenRouter " + uri + " response");
 			}
@@ -185,9 +214,20 @@ public class OpenRouterApi {
 	}
 
 	private BoundedBody readBounded(InputStream input, int limit) throws IOException {
-		byte[] bytes = input.readNBytes(limit + 1);
-		return bytes.length > limit ? new BoundedBody(Arrays.copyOf(bytes, limit), true)
-				: new BoundedBody(bytes, false);
+		List<byte[]> chunks = new ArrayList<>();
+		int size = 0;
+		while (size <= limit) {
+			int requested = Math.min(chunks.isEmpty() ? 1024 : 8192, limit + 1 - size);
+			byte[] chunk = input.readNBytes(requested);
+			if (chunk.length > 0) {
+				chunks.add(chunk);
+				size += chunk.length;
+			}
+			if (chunk.length < requested) {
+				break;
+			}
+		}
+		return new BoundedBody(chunks, size, size > limit);
 	}
 
 	public Flux<ChatCompletionChunk> chatCompletionStream(ChatCompletionRequest request) {
@@ -199,25 +239,21 @@ public class OpenRouterApi {
 	// (found live by the Garage paint bay). Branching on the response content type turns
 	// that answer into completed events, so callers see one uniform contract.
 	public Flux<ImagesStreamEvent> imagesStream(ImagesRequest request) {
-		return this.webClient.post()
-			.uri("/images")
-			.accept(MediaType.TEXT_EVENT_STREAM)
-			.bodyValue(request)
-			.exchangeToFlux((response) -> {
-				if (response.statusCode().isError()) {
-					return streamingError("/images", response).flatMapMany(Flux::error);
-				}
-				MediaType contentType = response.headers().contentType().orElse(MediaType.APPLICATION_JSON);
-				if (MediaType.TEXT_EVENT_STREAM.isCompatibleWith(contentType)) {
-					return response.bodyToFlux(STRING_SSE_TYPE).map(event -> new ImageStreamBody(event, null));
-				}
-				return response.bodyToMono(ImagesResponse.class)
-					.onErrorMap(DecodingException.class,
-							ex -> new OpenRouterProtocolException("Invalid OpenRouter image response JSON"))
-					.switchIfEmpty(Mono.error(new OpenRouterProtocolException("Empty OpenRouter image response")))
-					.map(images -> new ImageStreamBody(null, images))
-					.flux();
-			})
+		return streamingPost("/images", request).exchangeToFlux((response) -> {
+			if (response.statusCode().isError()) {
+				return streamingError("/images", response).flatMapMany(Flux::error);
+			}
+			MediaType contentType = response.headers().contentType().orElse(MediaType.APPLICATION_JSON);
+			if (MediaType.TEXT_EVENT_STREAM.isCompatibleWith(contentType)) {
+				return response.bodyToFlux(STRING_SSE_TYPE).map(event -> new ImageStreamBody(event, null));
+			}
+			return readImagesResponse(response)
+				.onErrorMap(DecodingException.class,
+						ex -> new OpenRouterProtocolException("Invalid OpenRouter image response JSON"))
+				.switchIfEmpty(Mono.error(new OpenRouterProtocolException("Empty OpenRouter image response")))
+				.map(images -> new ImageStreamBody(null, images))
+				.flux();
+		})
 			// Include headers and error bodies, while letting SSE comments reset the
 			// guard.
 			.transform(this::applyTimeout)
@@ -228,6 +264,33 @@ public class OpenRouterApi {
 				}
 				return decodeStream(body.map(item -> Objects.requireNonNull(item.event())), ImagesStreamEvent.class);
 			});
+	}
+
+	private Mono<ImagesResponse> readImagesResponse(ClientResponse response) {
+		if (!this.customObjectMapper) {
+			return response.bodyToMono(ImagesResponse.class);
+		}
+		var decoder = new AbstractJacksonDecoder<>(this.objectMapper, MediaType.APPLICATION_JSON,
+				new MediaType("application", "*+json"), MediaType.APPLICATION_NDJSON) {
+		};
+		decoder.setMaxInMemorySize(this.maxResponseBodyBytes);
+		return ClientResponse.create(response.statusCode(), List.of(new DecoderHttpMessageReader<>(decoder)))
+			.headers(headers -> headers.addAll(response.headers().asHttpHeaders()))
+			.body(response.bodyToFlux(DataBuffer.class))
+			.build()
+			.bodyToMono(ImagesResponse.class);
+	}
+
+	private WebClient.RequestHeadersSpec<?> streamingPost(String uri, Object request) {
+		var outgoing = this.webClient.post().uri(uri).accept(MediaType.TEXT_EVENT_STREAM);
+		if (!this.customObjectMapper) {
+			return outgoing.bodyValue(request);
+		}
+		return outgoing.body((output, context) -> Mono.fromCallable(() -> this.objectMapper.writeValueAsBytes(request))
+			.flatMap(bytes -> {
+				output.getHeaders().setContentLength(bytes.length);
+				return output.writeWith(Mono.just(output.bufferFactory().wrap(bytes)));
+			}));
 	}
 
 	private List<ImagesStreamEvent> completedEvents(ImagesResponse images) {
@@ -248,11 +311,7 @@ public class OpenRouterApi {
 	}
 
 	private <T> Flux<T> stream(String uri, Object request, Class<T> eventType) {
-		return this.webClient.post()
-			.uri(uri)
-			.accept(MediaType.TEXT_EVENT_STREAM)
-			.bodyValue(request)
-			.retrieve()
+		return streamingPost(uri, request).retrieve()
 			.onStatus(HttpStatusCode::isError, response -> streamingError(uri, response))
 			.bodyToFlux(STRING_SSE_TYPE)
 			.transform(this::applyTimeout)
@@ -317,6 +376,9 @@ public class OpenRouterApi {
 			return List.of(data);
 		}
 		String firstLine = data.substring(0, newline).trim();
+		if (!this.customObjectMapper && "{".equals(firstLine)) {
+			return List.of(data);
+		}
 		if (!firstLine.startsWith("data:") && !"[DONE]".equals(firstLine)) {
 			try {
 				if (!this.objectMapper.reader()
@@ -336,6 +398,7 @@ public class OpenRouterApi {
 	private <T> Flux<T> decodeStream(Flux<ServerSentEvent<String>> events, Class<T> eventType) {
 		return Flux.defer(() -> {
 			AtomicBoolean protocolTerminated = new AtomicBoolean();
+			ObjectReader reader = this.eventBinder.reader(eventType);
 			return eventData(events).concatMapIterable(this::streamPayloads)
 				.map(String::trim)
 				.map(line -> line.startsWith("data:") ? line.substring(5).trim() : line)
@@ -352,7 +415,7 @@ public class OpenRouterApi {
 					}
 					return true;
 				})
-				.map(line -> readEvent(line, eventType))
+				.map(line -> readEvent(line, reader, eventType))
 				.doOnNext(event -> {
 					if (isTerminalEvent(event) || event instanceof ChatCompletionChunk chunk && chunk.error() != null) {
 						protocolTerminated.set(true);
@@ -381,13 +444,9 @@ public class OpenRouterApi {
 		return false;
 	}
 
-	private <T> T readEvent(String line, Class<T> eventType) {
+	private <T> T readEvent(String line, @Nullable ObjectReader reader, Class<T> eventType) {
 		try {
-			var tree = this.objectMapper.reader().with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS).readTree(line);
-			if (tree == null || !tree.isObject()) {
-				throw new OpenRouterProtocolException("OpenRouter stream chunk must be a JSON object");
-			}
-			T event = this.objectMapper.treeToValue(tree, eventType);
+			T event = this.eventBinder.bind(line, reader, eventType);
 			if (event instanceof ResponsesStreamEvent response && "response.done".equals(response.type())) {
 				throw new OpenRouterProtocolException(
 						"Legacy response.done is unsupported; expected response.completed, "
@@ -406,7 +465,7 @@ public class OpenRouterApi {
 	private void validateChunk(ChatCompletionChunk chunk) {
 		var choices = chunk.choices();
 		if (chunk.error() == null && ((CollectionUtils.isEmpty(choices) && chunk.usage() == null)
-				|| (choices != null && choices.stream().anyMatch(Objects::isNull)))) {
+				|| (choices != null && CollectionUtils.containsInstance(choices, null)))) {
 			throw new OpenRouterProtocolException("OpenRouter chat chunk requires non-null choices or usage");
 		}
 	}
@@ -414,7 +473,17 @@ public class OpenRouterApi {
 	private record ImageStreamBody(@Nullable ServerSentEvent<String> event, @Nullable ImagesResponse images) {
 	}
 
-	private record BoundedBody(byte[] bytes, boolean exceeded) {
+	private record BoundedBody(List<byte[]> chunks, int size, boolean exceeded) {
+
+		private <T> T decode(ObjectMapper objectMapper, Class<T> responseType) throws IOException {
+			return objectMapper.readValue(chunks.size() == 1 ? chunks.get(0) : bytes(), responseType);
+		}
+
+		private byte[] bytes() throws IOException {
+			return new SequenceInputStream(
+					Collections.enumeration(chunks.stream().map(ByteArrayInputStream::new).toList()))
+				.readNBytes(exceeded ? size - 1 : size);
+		}
 	}
 
 	public static final class Builder {
@@ -433,7 +502,9 @@ public class OpenRouterApi {
 
 		private WebClient.@Nullable Builder webClientBuilder;
 
-		private ObjectMapper objectMapper = new ObjectMapper();
+		private ObjectMapper objectMapper = JsonMapper.builder().addModule(new WireRecordModule()).build();
+
+		private boolean customObjectMapper;
 
 		private @Nullable Duration timeout;
 
@@ -481,6 +552,7 @@ public class OpenRouterApi {
 
 		public Builder objectMapper(ObjectMapper objectMapper) {
 			this.objectMapper = objectMapper;
+			this.customObjectMapper = true;
 			return this;
 		}
 

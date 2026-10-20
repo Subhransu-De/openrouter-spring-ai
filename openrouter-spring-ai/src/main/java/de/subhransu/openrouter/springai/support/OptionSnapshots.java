@@ -4,6 +4,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
 import org.springframework.lang.Contract;
 
@@ -14,6 +15,11 @@ import org.springframework.lang.Contract;
  * @author OpenRouter Spring AI contributors
  */
 public final class OptionSnapshots {
+
+	private static final Map<@Nullable Object, @Nullable Object> EMPTY_MAP = Collections
+		.unmodifiableMap(new LinkedHashMap<>());
+
+	private static final List<?> EMPTY_LIST = Stream.empty().toList();
 
 	private OptionSnapshots() {
 	}
@@ -28,7 +34,12 @@ public final class OptionSnapshots {
 		if (values == null) {
 			return null;
 		}
-		Map<K, @Nullable Object> copy = new LinkedHashMap<>();
+		if (values.isEmpty()) {
+			@SuppressWarnings("unchecked")
+			Map<K, @Nullable Object> empty = (Map<K, @Nullable Object>) EMPTY_MAP;
+			return empty;
+		}
+		Map<K, @Nullable Object> copy = new LinkedHashMap<>(Math.min(values.size(), 8) * 2);
 		values.forEach((key, value) -> copy.put(key, value(value)));
 		return Collections.unmodifiableMap(copy);
 	}
@@ -39,7 +50,7 @@ public final class OptionSnapshots {
 			return map(map);
 		}
 		if (value instanceof List<?> list) {
-			return list.stream().map(OptionSnapshots::value).toList();
+			return list.isEmpty() ? EMPTY_LIST : list.stream().map(OptionSnapshots::value).toList();
 		}
 		return value;
 	}

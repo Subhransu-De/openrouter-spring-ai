@@ -14,19 +14,30 @@ import de.subhransu.openrouter.springai.api.dto.Delta;
 import de.subhransu.openrouter.springai.api.dto.FunctionCall;
 import de.subhransu.openrouter.springai.api.dto.ToolCall;
 import de.subhransu.openrouter.springai.api.dto.Usage;
+import de.subhransu.openrouter.springai.chat.mapper.OpenRouterStreamingToolCallAggregator;
+import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException;
+import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException.Limit;
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationHandler;
+import io.micrometer.observation.ObservationRegistry;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.observation.ChatModelObservationContext;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.function.FunctionToolCallback;
 import reactor.core.publisher.Flux;
+import reactor.test.StepVerifier;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Streamed tool-call fragments (split by the wire {@code index} across chunks) must be
@@ -39,6 +50,8 @@ class OpenRouterStreamingToolCallAggregationTests {
 	private static final String MODEL = "openai/gpt-5.4-mini";
 
 	private static final String WEATHER_TOOL = "get_weather";
+
+	private static final ObjectMapper JSON = new ObjectMapper();
 
 	private ChatCompletionChunk chunk(Choice... choices) {
 		return new ChatCompletionChunk("gen-1", "chat.completion.chunk", 123L, MODEL, "openai", List.of(choices), null,
@@ -186,6 +199,205 @@ class OpenRouterStreamingToolCallAggregationTests {
 		assertThat(toolInvoked).isTrue();
 		assertThat(streamedText).isEqualTo("It is sunny.");
 		verify(api, times(2)).chatCompletionStream(any());
+	}
+
+	@Test
+	void defaultLimitsAssembleSixKilobyteArgumentsStreamedInFourCharacterFragments() {
+		String arguments = noteArguments(6_000);
+		OpenRouterApi api = mock(OpenRouterApi.class);
+		when(api.chatCompletionStream(any())).thenReturn(fragmentedToolCall(arguments, 4));
+
+		StepVerifier.create(model(api).stream(prompt())).assertNext(response -> {
+			AssistantMessage.ToolCall toolCall = response.getResult().getOutput().getToolCalls().get(0);
+			assertThat(toolCall.name()).isEqualTo(WEATHER_TOOL);
+			assertThat(toolCall.arguments()).isEqualTo(arguments);
+		}).verifyComplete();
+	}
+
+	@Test
+	void chatClientRunsTheToolOnceForSixKilobyteStreamedArguments() {
+		String arguments = noteArguments(6_000);
+		List<Map<String, Object>> invocations = new CopyOnWriteArrayList<>();
+		ToolCallback noteTool = FunctionToolCallback.builder(WEATHER_TOOL, (Map<String, Object> in) -> {
+			invocations.add(in);
+			return "stored";
+		}).description("Store a note").inputType(Map.class).build();
+		OpenRouterApi api = mock(OpenRouterApi.class);
+		when(api.chatCompletionStream(any())).thenReturn(fragmentedToolCall(arguments, 4),
+				Flux.just(chunk(textChoice("Stored.")), chunk(finishChoice("stop"))));
+		ChatClient client = ChatClient.builder(model(api)).build();
+		Prompt prompt = new Prompt(List.of(new UserMessage("store this note")),
+				OpenRouterChatOptions.builder().model(MODEL).toolCallbacks(List.of(noteTool)).build());
+
+		String streamedText = String.join("",
+				client.prompt(prompt).stream().content().collectList().block(Duration.ofSeconds(10)));
+
+		assertThat(invocations).singleElement()
+			.satisfies(
+					input -> assertThat(input.get("note")).isEqualTo(arguments.substring(9, arguments.length() - 2)));
+		assertThat(streamedText).isEqualTo("Stored.");
+		verify(api, times(2)).chatCompletionStream(any());
+	}
+
+	@Test
+	void defaultByteLimitStillBoundsArgumentsBelowTheChunkLimit() {
+		OpenRouterApi api = mock(OpenRouterApi.class);
+		when(api.chatCompletionStream(any())).thenReturn(fragmentedToolCall(noteArguments(1_200_000), 4_000));
+
+		StepVerifier.create(model(api).stream(prompt()))
+			.expectErrorSatisfies(error -> assertThat(error)
+				.isInstanceOfSatisfying(OpenRouterLimitExceededException.class, failure -> {
+					assertThat(failure.getLimit()).isEqualTo(Limit.STREAMING_TOOL_CALL_BYTES);
+					assertThat(failure.getConfiguredLimit())
+						.isEqualTo(OpenRouterStreamingToolCallAggregator.DEFAULT_MAX_BYTES);
+				}))
+			.verify(Duration.ofSeconds(10));
+	}
+
+	@Test
+	void defaultChunkLimitStillRejectsOneFragmentMoreThanItAllows() {
+		int fragments = OpenRouterStreamingToolCallAggregator.DEFAULT_MAX_CHUNKS + 1;
+		OpenRouterApi api = mock(OpenRouterApi.class);
+		when(api.chatCompletionStream(any())).thenReturn(Flux.range(0, fragments)
+			.map(fragment -> new ChatCompletionChunk(null, null, null, null, null,
+					List.of(toolFragmentChoice(0, fragment == 0 ? "call-1" : null, fragment == 0 ? WEATHER_TOOL : null,
+							"x")),
+					null, null))
+			.concatWith(Flux.just(chunk(finishChoice("tool_calls")))));
+
+		StepVerifier.create(model(api).stream(prompt()))
+			.expectErrorSatisfies(error -> assertThat(error)
+				.isInstanceOfSatisfying(OpenRouterLimitExceededException.class, failure -> {
+					assertThat(failure.getLimit()).isEqualTo(Limit.STREAMING_TOOL_CALL_CHUNKS);
+					assertThat(failure.getConfiguredLimit())
+						.isEqualTo(OpenRouterStreamingToolCallAggregator.DEFAULT_MAX_CHUNKS);
+					assertThat(failure.getObservedValue()).isEqualTo(fragments);
+				}))
+			.verify(Duration.ofSeconds(10));
+	}
+
+	@Test
+	void newestUsageAndExtensionsWinWhenAUsageOnlyChunkPrecedesTheToolCallFinish() {
+		OpenRouterApi api = mock(OpenRouterApi.class);
+		when(api.chatCompletionStream(any()))
+			.thenReturn(Flux.just(chunk(toolFragmentChoice(0, "call-1", WEATHER_TOOL, "{}")),
+					wireChunk("{\"choices\":[],\"usage\":{\"total_tokens\":12,\"cost\":0.1},\"marker\":\"older\"}"),
+					wireChunk("{\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}],"
+							+ "\"usage\":{\"total_tokens\":15,\"cost\":0.2},\"marker\":\"newer\"}")));
+
+		StepVerifier.create(model(api).stream(prompt())).assertNext(response -> {
+			assertThat(response.hasToolCalls()).isTrue();
+			assertUsage(response, 15, 0.2);
+			assertThat(responseExtensions(response)).containsEntry("marker", "newer");
+		}).verifyComplete();
+	}
+
+	@Test
+	void usageOnlyChunkStillReplacesOlderUsageFromABufferedToolFragment() {
+		OpenRouterApi api = mock(OpenRouterApi.class);
+		when(api.chatCompletionStream(any())).thenReturn(Flux.just(wireChunk(
+				"{\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call-1\",\"type\":\"function\","
+						+ "\"function\":{\"name\":\"get_weather\",\"arguments\":\"{}\"}}]}}],"
+						+ "\"usage\":{\"total_tokens\":10,\"cost\":0.05},\"marker\":\"oldest\"}"),
+				wireChunk("{\"choices\":[],\"usage\":{\"total_tokens\":12,\"cost\":0.1},\"marker\":\"newer\"}"),
+				chunk(finishChoice("tool_calls"))));
+
+		StepVerifier.create(model(api).stream(prompt())).assertNext(response -> {
+			assertThat(response.hasToolCalls()).isTrue();
+			assertUsage(response, 12, 0.1);
+			assertThat(responseExtensions(response)).containsEntry("marker", "newer");
+		}).verifyComplete();
+	}
+
+	@Test
+	void newestUsageWinsWhenAUsageOnlyChunkPrecedesThePlainTextFinish() {
+		OpenRouterApi api = mock(OpenRouterApi.class);
+		when(api.chatCompletionStream(any())).thenReturn(Flux.just(chunk(textChoice("Sunny.")),
+				wireChunk("{\"choices\":[],\"usage\":{\"total_tokens\":12,\"cost\":0.1}}"),
+				wireChunk("{\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],"
+						+ "\"usage\":{\"total_tokens\":15,\"cost\":0.2}}")));
+
+		List<ChatResponse> responses = model(api).stream(prompt()).collectList().block(Duration.ofSeconds(5));
+
+		assertThat(responses).filteredOn(response -> response.getMetadata().getUsage() instanceof OpenRouterUsage)
+			.last()
+			.satisfies(response -> assertUsage(response, 15, 0.2));
+	}
+
+	@Test
+	void olderSharedUsageIsNotReportedAfterANewerToolChoiceFinish() {
+		List<ChatResponse> observed = new ArrayList<>();
+		ObservationRegistry observationRegistry = ObservationRegistry.create();
+		observationRegistry.observationConfig()
+			.observationHandler(new ObservationHandler<ChatModelObservationContext>() {
+				@Override
+				public boolean supportsContext(Observation.Context context) {
+					return context instanceof ChatModelObservationContext;
+				}
+
+				@Override
+				public void onStop(ChatModelObservationContext context) {
+					observed.add(context.getResponse());
+				}
+			});
+		OpenRouterApi api = mock(OpenRouterApi.class);
+		when(api.chatCompletionStream(any())).thenReturn(Flux.just(wireChunk(
+				"{\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call-0\",\"type\":\"function\","
+						+ "\"function\":{\"name\":\"get_weather\",\"arguments\":\"{}\"}}]}},"
+						+ "{\"index\":1,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call-1\",\"type\":\"function\","
+						+ "\"function\":{\"name\":\"get_weather\",\"arguments\":\"{}\"}}]}}]}"),
+				wireChunk("{\"choices\":[],\"usage\":{\"total_tokens\":12,\"cost\":0.1},\"revision\":\"old\"}"),
+				wireChunk("{\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}],"
+						+ "\"usage\":{\"total_tokens\":15,\"cost\":0.2},\"revision\":\"new\"}"),
+				wireChunk("{\"choices\":[{\"index\":1,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}")));
+		OpenRouterChatModel model = OpenRouterChatModel.builder()
+			.openRouterApi(api)
+			.observationRegistry(observationRegistry)
+			.build();
+
+		List<ChatResponse> responses = model.stream(prompt()).collectList().block(Duration.ofSeconds(5));
+
+		assertThat(responses).flatExtracting(ChatResponse::getResults)
+			.extracting(generation -> generation.getMetadata().<Integer>get("openrouter.choice_index"))
+			.containsExactly(0, 1);
+		assertThat(responses).filteredOn(response -> response.getMetadata().getUsage() instanceof OpenRouterUsage)
+			.last()
+			.satisfies(response -> assertUsage(response, 15, 0.2));
+		assertThat(responseExtensions(responses.get(responses.size() - 1))).containsEntry("revision", "new");
+		assertThat(observed).singleElement().satisfies(response -> {
+			assertUsage(response, 15, 0.2);
+			assertThat(responseExtensions(response)).containsEntry("revision", "new");
+		});
+	}
+
+	private static Map<String, Object> responseExtensions(ChatResponse response) {
+		return response.getMetadata().get("openrouter.response.extensions");
+	}
+
+	private static void assertUsage(ChatResponse response, int totalTokens, double cost) {
+		assertThat(response.getMetadata().getUsage()).isInstanceOfSatisfying(OpenRouterUsage.class, usage -> {
+			assertThat(usage.getTotalTokens()).isEqualTo(totalTokens);
+			assertThat(usage.getCost()).isEqualTo(cost);
+		});
+	}
+
+	private static ChatCompletionChunk wireChunk(String json) {
+		return JSON.readValue(json, ChatCompletionChunk.class);
+	}
+
+	private Flux<ChatCompletionChunk> fragmentedToolCall(String arguments, int fragmentLength) {
+		List<ChatCompletionChunk> chunks = new ArrayList<>();
+		for (int start = 0; start < arguments.length(); start += fragmentLength) {
+			String fragment = arguments.substring(start, Math.min(arguments.length(), start + fragmentLength));
+			chunks.add(chunk(start == 0 ? toolFragmentChoice(0, "call-1", WEATHER_TOOL, fragment)
+					: toolFragmentChoice(0, null, null, fragment)));
+		}
+		chunks.add(chunk(finishChoice("tool_calls")));
+		return Flux.fromIterable(chunks);
+	}
+
+	private static String noteArguments(int length) {
+		return "{\"note\":\"" + "x".repeat(length - 11) + "\"}";
 	}
 
 }

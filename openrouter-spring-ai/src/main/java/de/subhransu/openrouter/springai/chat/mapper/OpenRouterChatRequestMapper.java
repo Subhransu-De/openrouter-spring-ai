@@ -80,7 +80,7 @@ public final class OpenRouterChatRequestMapper {
 	}
 
 	private List<ChatMessage> mapMessages(List<Message> messages) {
-		List<ChatMessage> mapped = new ArrayList<>();
+		List<ChatMessage> mapped = new ArrayList<>(messages.size());
 		for (Message message : messages) {
 			if (message instanceof ToolResponseMessage toolResponseMessage) {
 				for (ToolResponseMessage.ToolResponse response : toolResponseMessage.getResponses()) {

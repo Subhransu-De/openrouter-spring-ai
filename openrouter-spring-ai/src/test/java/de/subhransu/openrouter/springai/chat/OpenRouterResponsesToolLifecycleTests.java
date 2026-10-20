@@ -17,6 +17,7 @@ import de.subhransu.openrouter.springai.api.dto.ResponsesOutputItem;
 import de.subhransu.openrouter.springai.api.dto.ResponsesRequest;
 import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
 import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
+import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import java.util.List;
 import java.util.Map;
@@ -26,6 +27,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.ai.chat.client.ChatClient;
@@ -36,6 +38,8 @@ import reactor.core.publisher.Flux;
 class OpenRouterResponsesToolLifecycleTests {
 
 	private static final String OUTPUT_ITEM_DONE = "response.output_item.done";
+
+	private static final String RESPONSE_COMPLETED = "response.completed";
 
 	private static final String FIRST_CALL_ID = "synthetic_call_1";
 
@@ -113,10 +117,27 @@ class OpenRouterResponsesToolLifecycleTests {
 		ResponsesResult terminal = result("completed",
 				List.of(call(FIRST_CALL_ID, invalidDoneItem ? "completed" : "incomplete", "{}")));
 		when(this.api.responsesStream(any()))
-			.thenReturn(Flux.just(event(OUTPUT_ITEM_DONE, done, null), event("response.completed", null, terminal)));
+			.thenReturn(Flux.just(event(OUTPUT_ITEM_DONE, done, null), event(RESPONSE_COMPLETED, null, terminal)));
 
 		assertThatThrownBy(() -> invoke(true)).isInstanceOf(OpenRouterTruncatedResponseException.class)
 			.hasMessageContaining("item status=incomplete");
+		assertThat(this.executions).hasValue(0);
+		verifyRequests(true, 1);
+	}
+
+	@ParameterizedTest
+	@NullAndEmptySource
+	@ValueSource(strings = " ")
+	void typelessIncompleteItemCannotReleaseCompletedCalls(String type) {
+		ResponsesResult answer = result("completed", List.of(new ResponsesOutputItem("synthetic_message", "message",
+				"completed", "assistant", List.of(new ResponsesContent("output_text", "done")))));
+		when(this.api.responsesStream(any())).thenReturn(
+				Flux.just(event(OUTPUT_ITEM_DONE, call(FIRST_CALL_ID, "completed", "{}"), null),
+						event(type, call("synthetic_hidden_call", "incomplete", "{}"), null),
+						event(RESPONSE_COMPLETED, null, result("completed", List.of()))),
+				Flux.just(event(RESPONSE_COMPLETED, null, answer)));
+
+		assertThatThrownBy(() -> invoke(true)).isInstanceOf(OpenRouterProtocolException.class);
 		assertThat(this.executions).hasValue(0);
 		verifyRequests(true, 1);
 	}
@@ -184,13 +205,13 @@ class OpenRouterResponsesToolLifecycleTests {
 		ResponsesResult answer = result("completed", List.of(new ResponsesOutputItem("synthetic_message", "message",
 				"completed", "assistant", List.of(new ResponsesContent("output_text", "done")))));
 		when(this.api.responses(any())).thenReturn(first, answer);
-		String terminalType = "incomplete".equals(first.status()) ? "response.incomplete" : "response.completed";
+		String terminalType = "incomplete".equals(first.status()) ? "response.incomplete" : RESPONSE_COMPLETED;
 		Flux<ResponsesStreamEvent> firstStream = Flux.fromIterable(first.output())
 			.map(item -> event(OUTPUT_ITEM_DONE, item, null))
 			.concatWithValues(event(terminalType, null, first));
 		when(this.api.responsesStream(any())).thenReturn(firstStream,
 				Flux.just(new ResponsesStreamEvent("response.output_text.delta", "done", null, null, null),
-						event("response.completed", null, answer)));
+						event(RESPONSE_COMPLETED, null, answer)));
 	}
 
 	private void verifyRequests(boolean streaming, int count) {

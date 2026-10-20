@@ -66,10 +66,16 @@ final class AudioOutputMapper {
 		}
 		for (Message message : messages) {
 			if (message instanceof AssistantMessage assistant) {
-				Assert.isTrue(
-						!assistant.getMetadata().containsKey(METADATA) && assistant.getMedia()
-							.stream()
-							.noneMatch(media -> "audio".equals(media.getMimeType().getType())),
+				boolean audio = assistant.getMetadata().containsKey(METADATA);
+				if (!audio) {
+					for (Media media : assistant.getMedia()) {
+						if ("audio".equals(media.getMimeType().getType())) {
+							audio = true;
+							break;
+						}
+					}
+				}
+				Assert.isTrue(!audio,
 						"Assistant audio replay is unsupported; create a text-only message explicitly to continue with the transcript");
 			}
 		}

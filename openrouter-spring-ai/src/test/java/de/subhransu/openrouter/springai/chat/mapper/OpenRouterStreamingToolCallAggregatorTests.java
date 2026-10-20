@@ -19,12 +19,16 @@ import de.subhransu.openrouter.springai.chat.errors.OpenRouterTransientChoiceExc
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import tools.jackson.databind.ObjectMapper;
+import java.lang.reflect.Constructor;
+import java.util.Arrays;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
@@ -34,17 +38,86 @@ import org.reactivestreams.Subscription;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.content.Media;
 import org.springframework.util.MimeTypeUtils;
+import org.springframework.test.util.ReflectionTestUtils;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 import reactor.test.publisher.TestPublisher;
 
 class OpenRouterStreamingToolCallAggregatorTests {
 
+	private static final String DELIVERED_EXTENSIONS = "deliveredExtensionSequences";
+
 	private static final String CHUNK_OBJECT = "chat.completion.chunk";
 
 	private static final String MODEL = "openai/gpt-5.4-mini";
 
 	private final OpenRouterStreamingToolCallAggregator aggregator = new OpenRouterStreamingToolCallAggregator();
+
+	@Test
+	void terminalTextPreservesNullEmptyAndUnicodeFieldsIndependently() {
+		for (String first : java.util.Arrays.asList(null, "", "first-😀")) {
+			for (String second : java.util.Arrays.asList(null, "", "second-漢")) {
+				for (String third : java.util.Arrays.asList(null, "", "third-ह")) {
+					Choice tool = toolFragment(0, 0, "call-0", "lookup", "{}");
+					Flux<ChatCompletionChunk> source = Flux.just(
+							chunk(new Choice(0, null,
+									new Delta("assistant", first, second, tool.delta().toolCalls(), null, null, third),
+									null, null)),
+							chunk(new Choice(0, null, new Delta(null, second, third, null, null, null, first), null,
+									null)),
+							chunk(new Choice(0, null, new Delta(null, third, first, null, null, null, second), null,
+									null)),
+							chunk(finishChoice(0)));
+					StepVerifier.create(this.aggregator.aggregate(source)).assertNext(merged -> {
+						Delta delta = merged.choices().get(0).delta();
+						assertThat(delta.content()).isEqualTo(expectedText(first, second, third));
+						assertThat(delta.reasoning()).isEqualTo(expectedText(second, third, first));
+						assertThat(delta.refusal()).isEqualTo(expectedText(third, first, second));
+					}).verifyComplete();
+				}
+			}
+		}
+	}
+
+	private static Map<String, Object> nullValue(String key) {
+		Map<String, Object> value = new java.util.HashMap<>();
+		value.put(key, null);
+		return value;
+	}
+
+	private static String expectedText(String... values) {
+		return java.util.Arrays.stream(values).allMatch(java.util.Objects::isNull) ? null
+				: java.util.Arrays.stream(values)
+					.filter(java.util.Objects::nonNull)
+					.collect(java.util.stream.Collectors.joining());
+	}
+
+	@Test
+	void terminalLogprobsMatchIncrementalMergingAcrossOpaqueAndNullValues() {
+		List<Map<String, Object>> extensions = List.of(Map.of(), nullValue("logprobs"), Map.of("logprobs", "opaque"),
+				Map.of("logprobs", Map.of()),
+				Map.of("logprobs", Map.of("content", List.of(Map.of("token", "first")), "revision", 1)),
+				Map.of("logprobs", Map.of("content", "opaque", "refusal", List.of(Map.of("token", "refused")))),
+				Map.of("logprobs", nullValue("content")),
+				Map.of("logprobs", Map.of("content", List.of(Map.of("token", "second")), "revision", 2)));
+		for (Map<String, Object> first : extensions) {
+			for (Map<String, Object> second : extensions) {
+				for (Map<String, Object> third : extensions) {
+					Map<String, Object> expected = ExtensionMetadata.mergeChoice(
+							ExtensionMetadata.mergeChoice(ExtensionMetadata.mergeChoice(first, second), third),
+							Map.of());
+					Choice start = toolFragment(0, 0, "call-0", "lookup", "{}");
+					Flux<ChatCompletionChunk> source = Flux.just(
+							chunk(new Choice(0, null, start.delta(), null, null, null, first)),
+							chunk(new Choice(0, null, null, null, null, null, second)),
+							chunk(new Choice(0, null, null, null, null, null, third)), chunk(finishChoice(0)));
+					StepVerifier.create(this.aggregator.aggregate(source))
+						.assertNext(merged -> assertThat(merged.choices().get(0).extensions()).isEqualTo(expected))
+						.verifyComplete();
+				}
+			}
+		}
+	}
 
 	@Test
 	void boundedDemandAfterSubscriptionStillCollectsEveryToolFragment() {
@@ -258,6 +331,172 @@ class OpenRouterStreamingToolCallAggregatorTests {
 				assertThat(value.usage()).isEqualTo(usage);
 			})
 			.verifyComplete();
+	}
+
+	@Test
+	void olderSharedUsageIsNotEmittedAfterANewerToolChoiceFinish() {
+		List<ChatCompletionChunk> aggregated = this.aggregator.aggregate(Flux.just(
+				chunk(toolFragment(0, 0, "call-0", "weather", "{}"), toolFragment(1, 0, "call-1", "weather", "{}")),
+				snapshot(12, Map.of("revision", "old")), snapshot(15, Map.of("revision", "new"), finishChoice(0)),
+				chunk(finishChoice(1))))
+			.collectList()
+			.block(Duration.ofSeconds(5));
+
+		assertThat(aggregated).flatExtracting(ChatCompletionChunk::choices)
+			.extracting(Choice::index)
+			.containsExactly(0, 1);
+		assertThat(totalTokens(aggregated)).containsExactly(15);
+		assertThat(revisions(aggregated)).containsExactly("new");
+	}
+
+	@Test
+	void newerSharedUsageStillReachesALaterToolChoiceFinish() {
+		List<ChatCompletionChunk> aggregated = this.aggregator.aggregate(Flux.just(
+				chunk(toolFragment(0, 0, "call-0", "weather", "{}"), toolFragment(1, 0, "call-1", "weather", "{}")),
+				snapshot(12, Map.of("revision", "old"), finishChoice(0)), snapshot(15, Map.of("revision", "new")),
+				chunk(finishChoice(1))))
+			.collectList()
+			.block(Duration.ofSeconds(5));
+
+		assertThat(aggregated).flatExtracting(ChatCompletionChunk::choices)
+			.extracting(Choice::index)
+			.containsExactly(0, 1);
+		assertThat(totalTokens(aggregated)).containsExactly(12, 15);
+		assertThat(revisions(aggregated)).containsExactly("old", "new");
+	}
+
+	@Test
+	void threeInterleavedToolChoicesEmitUsageAndExtensionsInArrivalOrder() {
+		List<ChatCompletionChunk> aggregated = this.aggregator
+			.aggregate(Flux.just(snapshot(9, Map.of("revision", "r1"), toolFragment(0, 0, "call-0", "weather", "{}"),
+					toolFragment(1, 0, "call-1", "weather", "{}"), toolFragment(2, 0, "call-2", "weather", "{")),
+					snapshot(11, Map.of("revision", "r2", "route", "b"), toolFragment(2, 0, null, null, "}")),
+					snapshot(13, Map.of("revision", "r3"), finishChoice(0)), chunk(finishChoice(1)),
+					snapshot(14, Map.of("revision", "r5")), chunk(finishChoice(2))))
+			.collectList()
+			.block(Duration.ofSeconds(5));
+
+		assertThat(aggregated).flatExtracting(ChatCompletionChunk::choices)
+			.extracting(Choice::index)
+			.containsExactly(0, 1, 2);
+		assertThat(aggregated.get(2).choices().get(0).delta().toolCalls().get(0).function().arguments())
+			.isEqualTo("{}");
+		assertThat(totalTokens(aggregated)).containsExactly(13, 14);
+		assertThat(revisions(aggregated)).containsExactly("r3", "r5");
+		assertThat(aggregated.get(2).extensions()).containsEntry("route", "b");
+	}
+
+	@Test
+	void olderToolChoiceUsageIsNotEmittedAfterANewerTextChoice() {
+		List<ChatCompletionChunk> aggregated = this.aggregator.aggregate(Flux.just(
+				snapshot(5, Map.of("revision", "old"), textChoice(0, "Sunny"),
+						toolFragment(1, 0, "call-1", "weather", "{}")),
+				snapshot(15, Map.of("revision", "new"),
+						new Choice(0, null, new Delta(null, ".", null, null), "stop", "stop")),
+				chunk(finishChoice(1))))
+			.collectList()
+			.block(Duration.ofSeconds(5));
+
+		assertThat(aggregated).flatExtracting(ChatCompletionChunk::choices)
+			.extracting(Choice::index)
+			.containsExactly(0, 0, 1);
+		assertThat(totalTokens(aggregated)).containsExactly(5, 15);
+		assertThat(revisions(aggregated)).containsExactly("old", "new");
+	}
+
+	@Test
+	void passedThroughExtensionsRetainOnlyKeysThatCanSupersedeBufferedValues() throws Exception {
+		var bounded = new OpenRouterStreamingToolCallAggregator(new ObjectMapper(), 1024, 2, Duration.ofHours(1));
+		Object state = aggregationState(bounded);
+		try {
+			ReflectionTestUtils.invokeMethod(state, "accept", chunk(toolFragment(0, 0, "call-0", "lookup", "{}")));
+			for (int index = 0; index < 10000; index++) {
+				ChatCompletionChunk text = snapshot(index, Map.of("key" + index + "x".repeat(1024), index),
+						textChoice(1, "text"));
+				List<ChatCompletionChunk> emitted = ReflectionTestUtils.invokeMethod(state, "accept", text);
+				assertThat(emitted).containsExactly(text);
+			}
+			assertThat(((Map<?, ?>) ReflectionTestUtils.getField(state, DELIVERED_EXTENSIONS)).size()).isZero();
+			assertThat(ReflectionTestUtils.getField(state, "retainedChunks")).isEqualTo(1);
+			assertThat((Long) ReflectionTestUtils.getField(state, "retainedBytes")).isLessThan(1024L);
+			List<ChatCompletionChunk> finished = ReflectionTestUtils.invokeMethod(state, "accept",
+					chunk(finishChoice(0)));
+			assertThat(finished).hasSize(1);
+			assertThat(finished.get(0).extensions()).isEmpty();
+		}
+		finally {
+			ReflectionTestUtils.invokeMethod(state, "clear");
+		}
+	}
+
+	private static Object aggregationState(OpenRouterStreamingToolCallAggregator aggregator) throws Exception {
+		Class<?> stateType = Arrays.stream(OpenRouterStreamingToolCallAggregator.class.getDeclaredClasses())
+			.filter(type -> type.getSimpleName().equals("AggregationState"))
+			.findFirst()
+			.orElseThrow();
+		Constructor<?> constructor = stateType.getDeclaredConstructors()[0];
+		constructor.setAccessible(true);
+		return constructor.newInstance(aggregator, (Consumer<Throwable>) failure -> {
+			throw new AssertionError(failure);
+		});
+	}
+
+	@Test
+	void extensionTrackingFollowsSharedAndNewlyBufferedChunksAndPrunesFinishedChoices() throws Exception {
+		Object state = aggregationState(this.aggregator);
+		try {
+			ReflectionTestUtils.invokeMethod(state, "accept",
+					snapshot(1, Map.of("first", "old"), toolFragment(0, 0, "call-0", "lookup", "{}")));
+			ReflectionTestUtils.invokeMethod(state, "accept", snapshot(2, Map.of("shared", "old")));
+			ReflectionTestUtils.invokeMethod(state, "accept",
+					snapshot(3, Map.of("first", "new", "unbuffered", 3), textChoice(2, "text")));
+			assertThat(((Map<?, ?>) ReflectionTestUtils.getField(state, DELIVERED_EXTENSIONS)).keySet())
+				.isEqualTo(java.util.Set.of("first", "shared"));
+			ReflectionTestUtils.invokeMethod(state, "accept",
+					snapshot(4, Map.of("second", "old"), toolFragment(1, 0, "call-1", "lookup", "{}")));
+			ReflectionTestUtils.invokeMethod(state, "accept", snapshot(5, Map.of("shared", "latest")));
+			ReflectionTestUtils.invokeMethod(state, "accept", snapshot(6, Map.of("second", "new"), textChoice(2, ".")));
+			List<ChatCompletionChunk> first = ReflectionTestUtils.invokeMethod(state, "accept", chunk(finishChoice(0)));
+			assertThat(first).hasSize(1);
+			assertThat(first.get(0).extensions()).containsExactlyEntriesOf(Map.of("shared", "latest"));
+			assertThat(((Map<?, ?>) ReflectionTestUtils.getField(state, DELIVERED_EXTENSIONS)).keySet())
+				.isEqualTo(java.util.Set.of("second", "shared"));
+			List<ChatCompletionChunk> second = ReflectionTestUtils.invokeMethod(state, "accept",
+					chunk(finishChoice(1)));
+			assertThat(second).hasSize(1);
+			assertThat(second.get(0).extensions()).containsExactlyEntriesOf(Map.of("shared", "latest"));
+			assertThat((Map<?, ?>) ReflectionTestUtils.getField(state, DELIVERED_EXTENSIONS)).isEmpty();
+			ReflectionTestUtils.invokeMethod(state, "accept",
+					snapshot(7, Map.of("second", "fresh"), toolFragment(0, 0, "call-2", "lookup", "{}")));
+			ReflectionTestUtils.invokeMethod(state, "accept",
+					snapshot(8, Map.of("second", "newer"), textChoice(2, ".")));
+			ReflectionTestUtils.invokeMethod(state, "clear");
+			assertThat((Map<?, ?>) ReflectionTestUtils.getField(state, DELIVERED_EXTENSIONS)).isEmpty();
+			ReflectionTestUtils.invokeMethod(state, "accept",
+					snapshot(9, Map.of("second", "fresh"), toolFragment(0, 0, "call-3", "lookup", "{}")));
+			List<ChatCompletionChunk> fresh = ReflectionTestUtils.invokeMethod(state, "accept", chunk(finishChoice(0)));
+			assertThat(fresh.get(0).extensions()).containsExactlyEntriesOf(Map.of("second", "fresh"));
+		}
+		finally {
+			ReflectionTestUtils.invokeMethod(state, "clear");
+		}
+	}
+
+	private ChatCompletionChunk snapshot(int totalTokens, Map<String, Object> extensions, Choice... choices) {
+		return new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, MODEL, "openai", List.of(choices),
+				new Usage(null, null, totalTokens, null, null, null, null, null, null), null, extensions);
+	}
+
+	private static List<Integer> totalTokens(List<ChatCompletionChunk> chunks) {
+		return chunks.stream()
+			.map(ChatCompletionChunk::usage)
+			.filter(Objects::nonNull)
+			.map(Usage::totalTokens)
+			.toList();
+	}
+
+	private static List<Object> revisions(List<ChatCompletionChunk> chunks) {
+		return chunks.stream().map(chunk -> chunk.extensions().get("revision")).filter(Objects::nonNull).toList();
 	}
 
 	@Test

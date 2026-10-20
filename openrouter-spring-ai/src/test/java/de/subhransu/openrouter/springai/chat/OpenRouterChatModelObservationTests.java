@@ -23,12 +23,22 @@ import io.micrometer.observation.tck.TestObservationRegistry;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.metadata.ChatGenerationMetadata;
+import org.springframework.ai.chat.metadata.ChatResponseMetadata;
+import org.springframework.ai.chat.metadata.PromptMetadata;
+import org.springframework.ai.chat.metadata.RateLimit;
 import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.model.Generation;
+import org.springframework.ai.chat.model.MessageAggregator;
 import org.springframework.ai.chat.observation.ChatModelObservationContext;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.http.HttpStatus;
@@ -112,6 +122,182 @@ class OpenRouterChatModelObservationTests {
 			.hasBeenStopped()
 			.thenError()
 			.isInstanceOf(OpenRouterApiException.class);
+	}
+
+	@ParameterizedTest
+	@ValueSource(booleans = { true, false })
+	void streamObservationKeepsChoicesSeparate(boolean packed) {
+		List<ChatResponse> observed = observedResponses();
+		OpenRouterApi api = mock(OpenRouterApi.class);
+		Flux<ChatCompletionChunk> chunks = packed
+				? chunks("""
+						{"choices":[{"index":0,"delta":{"content":"A"}},{"index":1,"delta":{"content":"B"}}]}
+						""",
+						"""
+								{"choices":[{"index":1,"delta":{"content":"Y"},"finish_reason":"length"},{"index":0,"delta":{"content":"X"},"finish_reason":"stop"}]}
+								""")
+				: chunks("""
+						{"choices":[{"index":0,"delta":{"content":"A"}}]}
+						""", """
+						{"choices":[{"index":1,"delta":{"content":"B"}}]}
+						""", """
+						{"choices":[{"index":1,"delta":{"content":"Y"},"finish_reason":"length"}]}
+						""", """
+						{"choices":[{"index":0,"delta":{"content":"X"},"finish_reason":"stop"}]}
+						""");
+		when(api.chatCompletionStream(any())).thenReturn(chunks);
+		Flux<ChatResponse> stream = model(api).stream(prompt());
+		for (int subscription = 0; subscription < 2; subscription++) {
+			StepVerifier.create(stream)
+				.recordWith(ArrayList::new)
+				.expectNextCount(packed ? 2 : 4)
+				.consumeRecordedWith(responses -> assertThat(responses.stream()
+					.flatMap(response -> response.getResults().stream())
+					.map(generation -> generation.getOutput().getText()))
+					.containsExactly("A", "B", packed ? "X" : "Y", packed ? "Y" : "X"))
+				.verifyComplete();
+		}
+		assertThat(observed).hasSize(2);
+		for (ChatResponse response : observed) {
+			assertThat(response.getResults()).hasSize(2);
+			assertThat(response.getResults()).extracting(generation -> generation.getOutput().getText())
+				.containsExactly("AX", "BY");
+			assertThat(response.getResults()).extracting(generation -> generation.getMetadata().getFinishReason())
+				.containsExactly("STOP", "LENGTH");
+			assertThat(response.getResults())
+				.extracting(generation -> generation.getMetadata().get("openrouter.choice_index"))
+				.containsExactly(0, 1);
+		}
+	}
+
+	@Test
+	void streamObservationRetainsProviderAndResponseExtensions() {
+		List<ChatResponse> observed = observedResponses();
+		OpenRouterApi api = mock(OpenRouterApi.class);
+		when(api.chatCompletionStream(any())).thenReturn(chunks("""
+				{"id":"synthetic","model":"test-model","provider":"synthetic-provider","created":123,
+				 "object":"chat.completion.chunk","routing":{"region":"synthetic"},
+				 "choices":[{"index":0,"delta":{"content":"A"}}]}
+				""", """
+				{"choices":[{"index":0,"delta":{"content":"X"},"finish_reason":"stop"}]}
+				""", """
+				{"choices":[],"usage":{"prompt_tokens":12,"completion_tokens":7,"total_tokens":19,"cost":0.003,
+				 "prompt_tokens_details":{"cached_tokens":3,"cache_write_tokens":7}}}
+				"""));
+		StepVerifier.create(model(api).stream(prompt())).expectNextCount(3).verifyComplete();
+		assertThat(observed).hasSize(1);
+		var metadata = observed.get(0).getMetadata();
+		assertThat(metadata.getId()).isEqualTo("synthetic");
+		assertThat(metadata.getModel()).isEqualTo("test-model");
+		assertThat((Object) metadata.get("openrouter.provider")).isEqualTo("synthetic-provider");
+		assertThat((Object) metadata.get("openrouter.created")).isEqualTo(123L);
+		assertThat((Object) metadata.get("openrouter.object")).isEqualTo("chat.completion.chunk");
+		assertThat((Object) metadata.get("openrouter.response.extensions"))
+			.isEqualTo(java.util.Map.of("routing", java.util.Map.of("region", "synthetic")));
+		assertThat(metadata.getUsage()).isInstanceOfSatisfying(OpenRouterUsage.class, usage -> {
+			assertThat(usage.getCost()).isEqualTo(0.003);
+			assertThat(usage.getCacheReadInputTokens()).isEqualTo(3L);
+			assertThat(usage.getCacheWriteInputTokens()).isEqualTo(7L);
+		});
+	}
+
+	@Test
+	void singleChoiceObservationRetainsTextToolsAndReasoning() {
+		List<ChatResponse> observed = observedResponses();
+		OpenRouterApi api = mock(OpenRouterApi.class);
+		when(api.chatCompletionStream(any())).thenReturn(chunks("""
+				{"choices":[{"delta":{"content":"A","reasoning":"thinking"}}]}
+				""", """
+				{"choices":[{"delta":{"content":"X","tool_calls":[{"index":0,"id":"synthetic-tool","type":"function",
+				 "function":{"name":"lookup","arguments":"{}"}}]},"finish_reason":"tool_calls"}]}
+				"""));
+		StepVerifier.create(model(api).stream(prompt())).expectNextCount(2).verifyComplete();
+		assertThat(observed).hasSize(1);
+		assertThat(observed.get(0).getResults()).hasSize(1);
+		var result = observed.get(0).getResult();
+		assertThat(result.getOutput().getText()).isEqualTo("AX");
+		assertThat(result.getMetadata().getFinishReason()).isEqualTo("TOOL_CALLS");
+		assertThat(result.getOutput().getMetadata()).containsEntry("openrouter.reasoning", "thinking");
+		assertThat(result.getOutput().getToolCalls()).hasSize(1);
+		assertThat(result.getOutput().getToolCalls().get(0).name()).isEqualTo("lookup");
+	}
+
+	@Test
+	void disabledObservationLeavesChoiceDeltasUnchanged() {
+		List<ChatResponse> observed = observedResponses();
+		this.observationRegistry.observationConfig().observationPredicate((name, context) -> false);
+		OpenRouterApi api = mock(OpenRouterApi.class);
+		when(api.chatCompletionStream(any())).thenReturn(chunks("""
+				{"choices":[{"index":0,"delta":{"content":"A"}},{"index":1,"delta":{"content":"B"}}]}
+				"""));
+		StepVerifier.create(model(api).stream(prompt())).assertNext(response -> {
+			assertThat(response.getResults()).extracting(generation -> generation.getOutput().getText())
+				.containsExactly("A", "B");
+		}).verifyComplete();
+		assertThat(observed).isEmpty();
+	}
+
+	@Test
+	void singleChoiceAggregationMatchesSpringForThoughtsAndTools() {
+		RateLimit rateLimit = mock(RateLimit.class);
+		PromptMetadata promptMetadata = PromptMetadata.of(PromptMetadata.PromptFilterMetadata.from(0, "synthetic"));
+		List<ChatResponse> chunks = List
+			.of(new ChatResponse(
+					List.of(new Generation(AssistantMessage.builder()
+						.content("thinking")
+						.properties(Map.of("isThought", true, "synthetic", "retained"))
+						.build()))),
+					new ChatResponse(
+							List.of(new Generation(AssistantMessage.builder()
+								.content("answer")
+								.properties(Map.of("isThought", false, "synthetic", "retained"))
+								.toolCalls(
+										List.of(new AssistantMessage.ToolCall("synthetic", "function", "lookup", "{}")))
+								.build(), ChatGenerationMetadata.builder().finishReason("TOOL_CALLS").build())),
+							ChatResponseMetadata.builder()
+								.id("synthetic")
+								.model("test-model")
+								.rateLimit(rateLimit)
+								.promptMetadata(promptMetadata)
+								.build()));
+		AtomicReference<ChatResponse> expected = new AtomicReference<>();
+		StepVerifier.create(new MessageAggregator().aggregate(Flux.fromIterable(chunks), expected::set))
+			.expectNextCount(2)
+			.verifyComplete();
+		OpenRouterChatObservationAggregator aggregator = new OpenRouterChatObservationAggregator();
+		chunks.forEach(aggregator::add);
+		ChatResponse actual = aggregator.response();
+		assertThat(actual.getResults()).isEqualTo(expected.get().getResults());
+		assertThat(actual.getMetadata().getId()).isEqualTo(expected.get().getMetadata().getId());
+		assertThat(actual.getMetadata().getModel()).isEqualTo(expected.get().getMetadata().getModel());
+		assertThat(actual.getMetadata().getRateLimit()).isSameAs(expected.get().getMetadata().getRateLimit());
+		assertThat(actual.getMetadata().getPromptMetadata()).isSameAs(expected.get().getMetadata().getPromptMetadata());
+		assertThat(actual.getMetadata().getUsage().getTotalTokens()).isZero();
+		assertThat(actual.getMetadata().getUsage()).isEqualTo(expected.get().getMetadata().getUsage());
+		assertThat(actual.getMetadata().getUsage().getNativeUsage())
+			.isEqualTo(expected.get().getMetadata().getUsage().getNativeUsage());
+	}
+
+	private Flux<ChatCompletionChunk> chunks(String... json) {
+		ObjectMapper mapper = new ObjectMapper();
+		return Flux.fromArray(json).map(value -> mapper.readValue(value, ChatCompletionChunk.class));
+	}
+
+	private List<ChatResponse> observedResponses() {
+		List<ChatResponse> observed = new ArrayList<>();
+		this.observationRegistry.observationConfig()
+			.observationHandler(new ObservationHandler<ChatModelObservationContext>() {
+				@Override
+				public boolean supportsContext(Observation.Context context) {
+					return context instanceof ChatModelObservationContext;
+				}
+
+				@Override
+				public void onStop(ChatModelObservationContext context) {
+					observed.add(context.getResponse());
+				}
+			});
+		return observed;
 	}
 
 	@ParameterizedTest

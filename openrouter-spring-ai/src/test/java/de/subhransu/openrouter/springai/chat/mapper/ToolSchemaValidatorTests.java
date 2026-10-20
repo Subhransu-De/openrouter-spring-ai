@@ -13,6 +13,35 @@ class ToolSchemaValidatorTests {
 
 	private final ObjectMapper mapper = new ObjectMapper();
 
+	@ParameterizedTest
+	@ValueSource(strings = { "allOf", "oneOf", "not", "if", "then", "else", "dependentRequired", "dependentSchemas",
+			"patternProperties", "unevaluatedProperties", "prefixItems", "$dynamicRef" })
+	void preservesUnsupportedKeywordMessageAndCause(String keyword) {
+		String schema = """
+				{"type":"object","properties":{},"required":[],"additionalProperties":false,"%s":null}
+				""".formatted(keyword);
+		assertThatThrownBy(() -> ToolSchemaValidator.read(this.mapper, tool(schema), true))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("Invalid strict schema for tool 'synthetic': unsupported strict schema keyword: " + keyword)
+			.cause()
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("unsupported strict schema keyword: " + keyword);
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "$defs", "definitions" })
+	void preservesInvalidContainerMessageAndCause(String keyword) {
+		String schema = """
+				{"type":"object","properties":{},"required":[],"additionalProperties":false,"%s":[]}
+				""".formatted(keyword);
+		assertThatThrownBy(() -> ToolSchemaValidator.read(this.mapper, tool(schema), true))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("Invalid strict schema for tool 'synthetic': " + keyword + " must be an object")
+			.cause()
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessage(keyword + " must be an object");
+	}
+
 	@Test
 	void validatesRecursiveReferencesWithoutRewritingSchemasOrInstanceData() {
 		String schema = """

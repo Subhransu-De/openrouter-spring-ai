@@ -6,6 +6,7 @@ import de.subhransu.openrouter.springai.api.dto.StreamError;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorClassifier;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorDetails;
+import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.util.StringUtils;
 
@@ -17,6 +18,16 @@ import org.springframework.util.StringUtils;
 public final class OpenRouterApiExceptionFactory {
 
 	private OpenRouterApiExceptionFactory() {
+	}
+
+	public static RuntimeException createRetryable(String message, @Nullable String responseBody,
+			@Nullable StreamError error, @Nullable String errorType, String endpoint) {
+		OpenRouterApiException failure = create(message, responseBody, error, errorType);
+		if (OpenRouterErrorClassifier.isTransient(failure.getCategory())) {
+			return new OpenRouterTransientApiException(message, failure.getStatusCode(), failure.getResponseBody(),
+					failure.getErrorDetails(), null, endpoint);
+		}
+		return failure;
 	}
 
 	public static OpenRouterApiException create(String fallbackMessage, @Nullable String responseBody,

@@ -93,8 +93,10 @@ public class OpenRouterChatProperties {
 
 	private @Nullable Map<String, @Nullable Object> metadata;
 
+	@NestedConfigurationProperty
 	private @Nullable OpenRouterProviderPreferences provider;
 
+	@NestedConfigurationProperty
 	private @Nullable OpenRouterReasoningOptions reasoning;
 
 	private StreamingState streamingState = new StreamingState();
@@ -453,7 +455,7 @@ public class OpenRouterChatProperties {
 
 		private DataSize maxSize = DataSize.ofMegabytes(1);
 
-		private int maxChunks = 1024;
+		private int maxChunks = 8192;
 
 		private Duration maxDuration = Duration.ofMinutes(2);
 

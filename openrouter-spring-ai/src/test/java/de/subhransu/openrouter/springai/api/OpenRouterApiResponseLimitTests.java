@@ -15,6 +15,10 @@ import de.subhransu.openrouter.springai.api.dto.ImagesRequest;
 import de.subhransu.openrouter.springai.api.dto.ResponsesRequest;
 import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException;
 import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
+import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
+import de.subhransu.openrouter.springai.api.dto.ChatCompletionResponse;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.function.Consumer;
@@ -27,6 +31,7 @@ import org.springframework.core.io.buffer.DefaultDataBufferFactory;
 import org.springframework.mock.http.client.reactive.MockClientHttpResponse;
 import org.springframework.mock.http.client.reactive.MockClientHttpRequest;
 import org.springframework.web.reactive.function.client.WebClient;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.web.reactive.function.client.ClientResponse;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -38,7 +43,12 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
+import tools.jackson.core.StreamReadConstraints;
+import tools.jackson.core.StreamReadFeature;
+import tools.jackson.core.json.JsonFactory;
+import tools.jackson.databind.json.JsonMapper;
 
 class OpenRouterApiResponseLimitTests {
 
@@ -99,6 +109,98 @@ class OpenRouterApiResponseLimitTests {
 
 	static Stream<Arguments> acceptedErrorBoundaries() {
 		return Stream.of(Arguments.of(Named.of("just below", LIMIT - 1)), Arguments.of(Named.of("exact", LIMIT)));
+	}
+
+	@ParameterizedTest
+	@ValueSource(ints = { 8191, 8192, 8193, 16384 })
+	void blockingBodiesRetainLimitAndDecodeSemanticsAcrossReadChunks(int size) {
+		Fixture fixture = fixture(size, size);
+		fixture.server()
+			.expect(once(), requestTo(BASE_URL + Endpoint.CHAT.path))
+			.andRespond(withSuccess(paddedJson("{}", size), MediaType.APPLICATION_JSON));
+		fixture.server()
+			.expect(once(), requestTo(BASE_URL + Endpoint.CHAT.path))
+			.andRespond(withSuccess("{" + "x".repeat(size), MediaType.APPLICATION_JSON));
+		assertThatCode(() -> Endpoint.CHAT.invoke(fixture.api())).doesNotThrowAnyException();
+		assertThatThrownBy(() -> Endpoint.CHAT.invoke(fixture.api()))
+			.isInstanceOf(OpenRouterLimitExceededException.class)
+			.hasNoCause();
+		fixture.server().verify();
+	}
+
+	@ParameterizedTest
+	@ValueSource(booleans = { false, true })
+	void limitAndTransportFailuresOutrankAnEarlierCompleteValue(boolean transportFailure) throws IOException {
+		try (InputStream body = new InputStream() {
+
+			private int position;
+
+			@Override
+			public int read() throws IOException {
+				if (this.position < 2) {
+					return "{}".charAt(this.position++);
+				}
+				if (transportFailure) {
+					throw new IOException("synthetic transport failure");
+				}
+				return this.position++ <= LIMIT ? ' ' : -1;
+			}
+		}) {
+			RestClient.Builder rest = RestClient.builder().requestFactory((uri, method) -> {
+				var request = new org.springframework.mock.http.client.MockClientHttpRequest(method, uri);
+				request
+					.setResponse(new org.springframework.mock.http.client.MockClientHttpResponse(body, HttpStatus.OK));
+				return request;
+			});
+			OpenRouterApi api = OpenRouterApi.builder()
+				.apiKey("test-key")
+				.baseUrl(BASE_URL)
+				.restClientBuilder(rest)
+				.maxResponseBodyBytes(LIMIT)
+				.build();
+
+			if (transportFailure) {
+				assertThatThrownBy(() -> Endpoint.CHAT.invoke(api)).isInstanceOf(ResourceAccessException.class)
+					.rootCause()
+					.hasMessage("synthetic transport failure");
+			}
+			else {
+				assertThatThrownBy(() -> Endpoint.CHAT.invoke(api))
+					.isInstanceOf(OpenRouterLimitExceededException.class);
+			}
+		}
+	}
+
+	@ParameterizedTest
+	@ValueSource(booleans = { false, true })
+	void configuredJacksonDiagnosticsMatchByteArrayDecoding(boolean includeSource) {
+		var factory = JsonFactory.builder()
+			.configure(StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION, includeSource)
+			.streamReadConstraints(StreamReadConstraints.builder().maxDocumentLength(includeSource ? -1 : 128).build())
+			.build();
+		var mapper = JsonMapper.builder(factory).build();
+		byte[] body = (includeSource ? "{\"unknown\":\"" + "x".repeat(9000) + "\""
+				: "{\"unknown\":\"" + "x".repeat(9000) + "\"}")
+			.getBytes(StandardCharsets.UTF_8);
+		Throwable expected = org.assertj.core.api.Assertions
+			.catchThrowable(() -> mapper.readValue(body, ChatCompletionResponse.class));
+		RestClient.Builder rest = RestClient.builder();
+		MockRestServiceServer server = MockRestServiceServer.bindTo(rest).build();
+		OpenRouterApi api = OpenRouterApi.builder()
+			.apiKey("test-key")
+			.baseUrl(BASE_URL)
+			.restClientBuilder(rest)
+			.objectMapper(mapper)
+			.build();
+		server.expect(once(), requestTo(BASE_URL + Endpoint.CHAT.path))
+			.andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
+		assertThat(expected).isNotNull();
+		assertThatThrownBy(() -> Endpoint.CHAT.invoke(api)).isInstanceOf(OpenRouterProtocolException.class)
+			.satisfies(error -> {
+				assertThat(error.getCause()).isInstanceOf(expected.getClass());
+				assertThat(error.getCause().getMessage()).isEqualTo(expected.getMessage());
+			});
+		server.verify();
 	}
 
 	@ParameterizedTest(name = "{0} error body remains a normal HTTP failure")
@@ -177,7 +279,11 @@ class OpenRouterApiResponseLimitTests {
 	}
 
 	private OpenRouterApi streamingSuccess(String body, MediaType contentType, int limit) {
-		return OpenRouterApi.builder()
+		return streamingSuccess(body, contentType, limit, false);
+	}
+
+	private OpenRouterApi streamingSuccess(String body, MediaType contentType, int limit, boolean suppliedMapper) {
+		var builder = OpenRouterApi.builder()
 			.apiKey("test-key")
 			.maxResponseBodyBytes(limit)
 			.webClientBuilder(WebClient.builder().clientConnector((method, uri, callback) -> {
@@ -185,8 +291,8 @@ class OpenRouterApiResponseLimitTests {
 				response.getHeaders().setContentType(contentType);
 				response.setBody(body);
 				return callback.apply(new MockClientHttpRequest(method, uri)).thenReturn(response);
-			}))
-			.build();
+			}));
+		return (suppliedMapper ? builder.objectMapper(new ObjectMapper()) : builder).build();
 	}
 
 	@Test
@@ -213,12 +319,14 @@ class OpenRouterApiResponseLimitTests {
 		MediaType contentType = sse ? MediaType.TEXT_EVENT_STREAM : MediaType.APPLICATION_JSON;
 		ImagesRequest request = new ImagesRequest("test-image", "hello", null, null, null, null, null, null, null, null,
 				null, null, null, null);
-		StepVerifier.create(streamingSuccess(body, contentType, 400_000).imagesStream(request))
-			.assertNext(event -> assertThat(event.b64Json()).isEqualTo(image))
-			.verifyComplete();
-		StepVerifier.create(streamingSuccess(body, contentType, 1024).imagesStream(request))
-			.expectError(DataBufferLimitException.class)
-			.verify();
+		for (boolean suppliedMapper : List.of(false, true)) {
+			StepVerifier.create(streamingSuccess(body, contentType, 400_000, suppliedMapper).imagesStream(request))
+				.assertNext(event -> assertThat(event.b64Json()).isEqualTo(image))
+				.verifyComplete();
+			StepVerifier.create(streamingSuccess(body, contentType, 1024, suppliedMapper).imagesStream(request))
+				.expectError(DataBufferLimitException.class)
+				.verify();
+		}
 	}
 
 	private static String paddedJson(String json, int size) {

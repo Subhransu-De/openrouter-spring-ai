@@ -1,7 +1,6 @@
 package de.subhransu.openrouter.springai.embedding;
 
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
-import de.subhransu.openrouter.springai.api.dto.EmbeddingsResponse;
 import de.subhransu.openrouter.springai.embedding.mapper.OpenRouterEmbeddingRequestMapper;
 import de.subhransu.openrouter.springai.embedding.mapper.OpenRouterEmbeddingResponseMapper;
 import de.subhransu.openrouter.springai.internal.Retries;
@@ -72,10 +71,10 @@ public class OpenRouterEmbeddingModel implements EmbeddingModel {
 			.observation(this.observationConvention, DEFAULT_OBSERVATION_CONVENTION, () -> observationContext,
 					this.observationRegistry)
 			.observe(() -> {
-				EmbeddingsResponse embeddingsResponse = Retries.invoke(this.retryTemplate, () -> this.openRouterApi
-					.embeddings(this.requestMapper.map(request.getInstructions(), options)));
-				EmbeddingResponse response = this.responseMapper.map(embeddingsResponse,
-						request.getInstructions().size(), options.getDimensions());
+				var embeddingsRequest = this.requestMapper.map(request.getInstructions(), options);
+				EmbeddingResponse response = Retries.invoke(this.retryTemplate,
+						() -> this.responseMapper.map(this.openRouterApi.embeddings(embeddingsRequest),
+								request.getInstructions().size(), options.getDimensions()));
 				observationContext.setResponse(response);
 				return response;
 			});

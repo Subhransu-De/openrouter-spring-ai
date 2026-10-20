@@ -304,14 +304,7 @@ spring:
             {"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"],"additionalProperties":false}
 ```
 
-`response-format.type` also accepts `text` and `json-object`. For a portable
-schema, set `spring.ai.openrouter.chat.output-schema` to the JSON document instead;
-it uses the schema name `response` and leaves strict unset. An explicit
-`response-format` wins when both are configured. Omit `strict` to leave it unset,
-or set it to `true` or `false` explicitly. With neither option configured, no
-format is sent. JSON-schema formats require a schema; malformed JSON fails before
-the request is sent. These properties use the same mapping as Java options for
-calls and streams in both request modes.
+`response-format.type` also accepts `text` and `json-object`. For a portable schema, set `spring.ai.openrouter.chat.output-schema` to the JSON document instead; it uses the schema name `response` and leaves strict unset. An explicit `response-format` wins when both are configured. Omit `strict` to leave it unset, or set it to `true` or `false` explicitly. With neither option configured, no format is sent. JSON-schema formats require a nonblank schema; blank schemas and malformed JSON fail with `IllegalArgumentException` before the request is sent. These properties use the same mapping as Java options for calls and streams in both request modes.
 
 Responses rejects explicitly set `stopSequences`, `seed`, `repetitionPenalty`, `minP`,
 `topA`, and `includeUsage` with `IllegalArgumentException` before sending a request.
@@ -321,11 +314,7 @@ maps to `max_output_tokens`. Other sampling, routing, metadata, image, and tool 
 map to their corresponding wire fields. `requestMode` selects the endpoint;
 `toolCallbacks` supply tool definitions and `toolContext` stays on the client.
 
-`toolChoice` accepts `"auto"`, `"none"`, `"required"`, or a named function object:
-`{type: "function", function: {name: "lookup"}}` or
-`{type: "function", name: "lookup"}`. Both named shapes are converted to the selected
-endpoint's form. Legacy `{type: "auto"}`, `{type: "none"}`, and
-`{type: "required"}` objects are normalized to strings. Other shapes are rejected. These rules apply to calls and streams.
+`toolChoice` accepts `"auto"`, `"none"`, `"required"`, or a named function object: `{type: "function", function: {name: "lookup"}}` or `{type: "function", name: "lookup"}`. Both named shapes are converted to the selected endpoint's form, with `type` serialized first for deterministic named-choice JSON. Legacy `{type: "auto"}`, `{type: "none"}`, and `{type: "required"}` objects are normalized to strings. Other shapes are rejected. These rules apply to calls and streams.
 
 ### Optional request and response extensions
 
@@ -424,16 +413,11 @@ is unaffected.
 
 ### Retries and Responses failures
 
-Synchronous Responses failures carried over HTTP 200 use
-`OpenRouterTransientApiException` or `OpenRouterNonTransientApiException`, replacing
-the legacy `OpenRouterApiException` for this request mode. Inspect their shared
-`OpenRouterHttpException` contract for sanitized error details and category;
-the status is derived from the in-band error, and the endpoint is `/responses`.
-Transient provider, rate-limit, and timeout failures qualify for Spring AI's
-default retry policy. Authentication, billing, invalid requests, refusals, and
-unknown failures do not.
+Synchronous Chat Completions, embedding, and image failures carried over HTTP 200 use `OpenRouterTransientApiException` for transient provider, rate-limit, and timeout failures, matching Responses mode and qualifying for Spring AI's default retry policy. Inspect its `OpenRouterHttpException` contract for sanitized error details and category; the status is derived from the in-band error and the endpoint identifies the request. Non-transient in-band failures retain `OpenRouterApiException` in Chat Completions, embeddings, and images, while Responses uses `OpenRouterNonTransientApiException`. Authentication, billing, invalid requests, refusals, and unknown failures do not qualify for the default retry policy. Image and embedding response mapping runs inside the blocking retry boundary.
 
-A response that breaks the wire contract the library enforces raises `OpenRouterProtocolException`, a `NonTransientAiException`, in every request mode, whether the call is synchronous or streaming. This covers undecodable JSON, missing required fields, blank tool names, conflicting stream fragments, embedding count, index, or dimension mismatches, and invalid audio. Earlier releases raised `IllegalStateException` or `IllegalArgumentException` for some of these, so catch `OpenRouterProtocolException` instead. Invalid request options still raise `IllegalArgumentException` before the request is sent.
+Retained HTTP error bodies and diagnostic fields redact the configured API key in plain text, percent-encoded form, JSON Unicode escapes, and mixtures of those forms. Hexadecimal escape digits are matched in either case; unrelated encoded text is preserved.
+
+A response that breaks the wire contract the library enforces raises `OpenRouterProtocolException`, a `NonTransientAiException`, in every request mode, whether the call is synchronous or streaming. This covers undecodable JSON, missing required fields, blank tool names, conflicting stream fragments, embedding count, index, or dimension mismatches, and invalid audio. Earlier releases raised `IllegalStateException` or `IllegalArgumentException` for some of these, so catch `OpenRouterProtocolException` instead. Invalid request options still raise `IllegalArgumentException` before the request is sent; chat `stream()` returns a Flux that reports the error on subscription.
 
 Chat Completions, Responses, and image model streams retry only actual HTTP 429
 responses classified as rate-limit rejections, and only when the model's configured
@@ -461,6 +445,8 @@ configured template uses two retries with a 200 ms delay; the stricter HTTP 429
 streaming eligibility rule still applies.
 
 ### HTTP customization and timeout ownership
+
+`OpenRouterApi.Builder.objectMapper(...)` controls request serialization and response decoding for every endpoint, including streamed images answered with JSON. Boot passes the application's mapper to the API in both servlet and reactive applications. Requests are fully serialized with this mapper before any body bytes are sent, bypassing even custom JSON converters and codecs registered on the supplied builders. The image-stream JSON fallback also uses this mapper regardless of builder codecs. Without a supplied mapper, the transport's existing request-serialization defaults and builder customizations are preserved.
 
 The supported transport extension points are Spring's `RestClient.Builder` request
 interceptors and `WebClient.Builder` filters, supplied to `OpenRouterApi.builder()`.
@@ -623,6 +609,8 @@ completed calls without a usable name fail with `OpenRouterProtocolException` be
 call is emitted. JSON argument fragments are still concatenated by tool index, and
 calls require a tool-call finish reason before they can be emitted.
 
+Buffered fragments count against the [Chat Completions streamed tool-call limits](#chat-completions-streamed-tool-call-limits), which bound the argument size a streamed tool call can carry.
+
 A synchronous Chat Completions tool call, or any Responses tool call, with a blank function name fails with `OpenRouterProtocolException` before a callback is selected. A blank Responses `call_id` fails the same way. Missing Chat Completions tool-call IDs remain accepted, and malformed JSON arguments still reach the tool, which reports them as a tool failure.
 
 Option builders, copies, and model defaults own detached collection snapshots. Provider
@@ -702,6 +690,8 @@ Either way, the processor must be an application-declared bean or an
 `OpenRouterToolExecutionExceptionProcessor`. To keep Spring AI's throwing behavior in a
 custom manager, declare `DefaultToolExecutionExceptionProcessor.builder().alwaysThrow(true).build()`
 as a bean and pass that bean to the manager; an inline instance fails validation.
+
+Validation also covers managers inherited from a parent application context, and a singleton processor bean declared in a parent context counts as application-declared. Validation never creates a bean to check a processor. A processor produced by a `FactoryBean` counts only if validation saw it being created, so declare processors as regular beans; a parent context's `FactoryBean` product created before the child context started fails validation. A manager created after startup, such as a prototype, scoped, or lazily initialized bean, is validated when it is created. If a parent context has no validation of its own, a validating child context adds validation to the parent when the child starts. The parent keeps this validation after the child closes, so it also applies to managers that the parent creates later for itself or for another child context, even if that context uses the opt-out below.
 
 Managers without a verifiable policy fail validation. The existing
 `spring.ai.openrouter.chat.allow-unsafe-tool-failure-results=true` opt-out skips manager
@@ -805,6 +795,20 @@ cancels upstream with `OpenRouterLimitExceededException`, using `CHAT_STATE_BYTE
 `CHAT_STATE_CHOICES`; replay metadata is never silently truncated. Earlier emitted
 snapshots retained by the caller are outside this budget.
 
+### Chat Completions streamed tool-call limits
+
+Chat Completions streams split a tool call's JSON arguments across many chunks. The model buffers each choice from its first tool-call delta through its tool-call finish chunk and then emits one merged tool call, so `ToolCallingAdvisor` never receives a partial call. When several choices buffer tool calls, a merged tool call omits usage and response extension values that are older than values the stream already emitted, so its response can report no usage. Three per-subscription limits bound this buffer. Configure them with the `OpenRouterChatModel.Builder` methods `toolCallAggregationMaxBytes`, `toolCallAggregationMaxChunks`, and `toolCallAggregationMaxDuration`, or with the Boot properties under `spring.ai.openrouter.chat.tool-call-aggregation`:
+
+| Property       | Default                 | Chat Completions scope                                                                                                          |
+| -------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `max-size`     | `1MB` (1,048,576 bytes) | Serialized UTF-8 JSON bytes of the buffered chunks, including each chunk's envelope, across all buffered choices                |
+| `max-chunks`   | `8192`                  | Buffered chunks across all buffered choices, including usage-only and other choice-less chunks that arrive while a call is open |
+| `max-duration` | `2m`                    | Absolute time from a choice's first tool-call delta to its finish chunk                                                         |
+
+The upstream provider decides how finely it splits the arguments, so the argument size that fits depends on the provider. A call fails at whichever limit it reaches first. A chunk that carries OpenRouter's usual id, model, and provider fields serializes to about 250 to 300 bytes, so the 1 MB byte limit usually applies after roughly 3,500 to 4,200 chunks; the chunk limit applies first only when chunks average less than 128 bytes. For example, a 6,000-character argument sent in four-character fragments needs about 1,500 chunks and fits both defaults.
+
+Exceeding a limit cancels the upstream request and fails the stream with `OpenRouterLimitExceededException`, using `STREAMING_TOOL_CALL_BYTES`, `STREAMING_TOOL_CALL_CHUNKS`, or `STREAMING_TOOL_CALL_DURATION` and the `/chat/completions` endpoint. No partial tool call is emitted, so `ToolCallingAdvisor` runs no tool. If your tools expect larger arguments, raise `max-chunks` and `max-size` together, for example `spring.ai.openrouter.chat.tool-call-aggregation.max-chunks=32768` with `spring.ai.openrouter.chat.tool-call-aggregation.max-size=4MB`. All three values must be positive. These are model-level settings, not per-request options. Text-only streams and synchronous calls do not use them. Responses streaming shares these settings with a different scope, described in the next section.
+
 ### Responses stream state limits
 
 Responses streaming reuses the model builder's `toolCallAggregationMaxBytes`,
@@ -814,7 +818,7 @@ properties under `spring.ai.openrouter.chat.tool-call-aggregation`:
 | Property       | Default                 | Responses scope                                                                                               |
 | -------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `max-size`     | `1MB` (1,048,576 bytes) | Cumulative serialized UTF-8 JSON bytes admitted from the first state-bearing event through the terminal event |
-| `max-chunks`   | `1024`                  | Events in that interval, and separately the number of retained output items or items in a response snapshot   |
+| `max-chunks`   | `8192`                  | Events in that interval, and separately the number of retained output items or items in a response snapshot   |
 | `max-duration` | `2m`                    | Absolute elapsed time from the first state-bearing event; activity and keepalives do not reset it             |
 
 State-bearing events include output items, text and function-argument fragments, reasoning, refusals,
@@ -868,6 +872,8 @@ even for an empty or text-only stream. The legacy `response.done` shape shown in
 is explicitly unsupported and raises `OpenRouterProtocolException`; it does not map final
 metadata. Chat Completions and image streams continue to accept `[DONE]`.
 
+Unknown Responses event types are ignored for forward compatibility. An event with a missing, null, or blank `type` raises `OpenRouterProtocolException`, even if a successful terminal event follows, so its text is never dropped silently and buffered tool calls are not released. A typeless event that carries an error envelope still raises the typed provider exception.
+
 Responses calls require a final `completed` or `incomplete` status and an `output` array,
 which may be empty. Streaming terminal events also require a response snapshot whose
 status matches the event. Missing or contradictory terminal structure fails before
@@ -902,6 +908,10 @@ float[] vector = embeddingModel.embed("The quick brown fox");
 
 Provider routing (`spring.ai.openrouter.embedding.provider.*`) works the same way as for
 chat. Only `float` embeddings are decoded; requesting `encoding_format: base64` fails fast.
+
+Embedding error envelopes take precedence over any vectors in the same HTTP 200 body. Their code, message, provider metadata, and category remain available in structured exception diagnostics; transient failures qualify for the configured blocking retry policy. Low-level callers can inspect the nullable `EmbeddingsResponse.error()` component; the existing four-argument constructor remains available.
+
+Embedding indexes must be integral and within the input range. Fractional indexes raise `OpenRouterProtocolException` before a vector is returned; integral numeric indexes retain the configured Jackson mapper's coercion behavior.
 
 Document embedding keeps raw text by default (`metadata-mode: none`). To include metadata,
 set `spring.ai.openrouter.embedding.metadata-mode: embed`, or use
@@ -1032,16 +1042,7 @@ providers may return fewer images, and support for multiple images and native st
 depends on the endpoint. Check the [OpenRouter image API capabilities](https://openrouter.ai/docs/guides/overview/multimodal/image-generation)
 before combining them.
 
-Image JSON responses must contain a `data` array. An empty array remains a valid
-empty result for blocking calls. The streaming JSON fallback requires at least one
-image and raises `OpenRouterTruncatedResponseException` for an empty array. Each
-entry and each completed SSE event must contain nonblank `b64_json` or `url`. The
-JSON streaming fallback preserves both forms. Missing required content raises
-`OpenRouterProtocolException`; HTTP 200 error envelopes raise structured
-`OpenRouterApiException` errors before success conversion.
-Synchronous Chat Completions choices require a `message` object, but its text may be
-empty (including tool, refusal, and media messages). Usage-only chat stream chunks
-and image partial previews remain supported.
+Image JSON responses must contain a `data` array. An empty array remains a valid empty result for blocking calls. The streaming JSON fallback requires at least one image and raises `OpenRouterTruncatedResponseException` for an empty array. Each entry and each completed SSE event must contain nonblank `b64_json` or `url`. The JSON streaming fallback preserves both forms. Missing required content raises `OpenRouterProtocolException`; HTTP 200 error envelopes take precedence over image data and raise `OpenRouterTransientApiException` for transient failures or `OpenRouterApiException` otherwise, before success conversion. Errors in an accepted stream, including its JSON fallback, remain single-attempt. Synchronous Chat Completions choices require a `message` object, but its text may be empty (including tool, refusal, and media messages). Usage-only chat stream chunks and image partial previews remain supported.
 
 Image-capable _chat_ models work too: set
 `OpenRouterChatOptions.builder().modalities(List.of("image", "text"))` (optionally with
@@ -1131,16 +1132,9 @@ observations with the `openrouter` provider, operation, request model, response 
 where available, and token-usage context. When a `MeterRegistry` is present, chat and
 embedding usage is also recorded as `gen_ai.client.token.usage`.
 
-Chat and embedding response usage is available as `OpenRouterUsage`; image responses
-expose it in metadata under `openrouter.usage`. It retains provider cost, cached and
-reasoning token counts, and the native usage DTO. Cached tokens are also available
-through Spring AI's portable `Usage.getCacheReadInputTokens()`. Missing detail counts
-remain `null`, distinct from an explicit zero; unavailable cache-write counts remain
-`null`. Streaming chat model observations retain the latest provider usage snapshot
-in both request modes, including cost and detailed counts.
+Chat and embedding response usage is available as `OpenRouterUsage`; image responses expose it in metadata under `openrouter.usage`. It retains provider cost, cached and reasoning token counts, and the native usage DTO. Cached reads and cache writes are available through Spring AI's portable `Usage.getCacheReadInputTokens()` and `Usage.getCacheWriteInputTokens()` when supplied, including nested `prompt_tokens_details.cache_write_tokens` in Chat Completions and `input_tokens_details.cache_write_tokens` in Responses. Missing detail counts remain `null`, distinct from an explicit zero. Streaming chat model observations retain the latest provider usage snapshot in both request modes, including cost and detailed counts. Completed streaming observations also retain response metadata and aggregate each returned choice separately, preserving its index and finish reason. Aggregation is skipped when the model's observation registry is a no-op.
 
-Chat and image streams record request-mapping and transport errors on their observation.
-Each subscription stops its observation on completion, error, or cancellation.
+Chat calls and streams record option-conversion, request-mapping, and transport errors on their observation. Image streams record request-mapping and transport errors. Each stream subscription stops its observation on completion, error, or cancellation.
 
 The starter provides the Spring AI handlers, but it does not choose monitoring backends
 for the application:

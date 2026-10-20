@@ -1,6 +1,7 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
 import java.util.Base64;
+import java.nio.charset.StandardCharsets;
 import org.springframework.ai.content.Media;
 import org.springframework.util.MimeType;
 
@@ -28,7 +29,26 @@ final class MediaUrlMapper {
 		if (data instanceof java.net.URI || data instanceof java.net.URL) {
 			return data.toString();
 		}
-		return "data:" + mimeType + ";base64," + Base64.getEncoder().encodeToString(media.getDataAsByteArray());
+		return dataUrl("data:" + mimeType + ";base64,", media.getDataAsByteArray());
+	}
+
+	static String dataUrl(String prefix, byte[] data) {
+		long encodedLength = 4L * ((data.length + 2L) / 3);
+		if (encodedLength > Integer.MAX_VALUE - prefix.length()) {
+			return prefix + Base64.getEncoder().encodeToString(data);
+		}
+		for (int i = 0; i < prefix.length(); i++) {
+			if (prefix.charAt(i) > 255) {
+				return prefix + Base64.getEncoder().encodeToString(data);
+			}
+		}
+		byte[] encoded = new byte[(int) encodedLength + prefix.length()];
+		int length = Base64.getEncoder().encode(data, encoded);
+		System.arraycopy(encoded, 0, encoded, prefix.length(), length);
+		for (int i = 0; i < prefix.length(); i++) {
+			encoded[i] = (byte) prefix.charAt(i);
+		}
+		return new String(encoded, StandardCharsets.ISO_8859_1);
 	}
 
 }
