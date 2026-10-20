@@ -19,6 +19,8 @@ import de.subhransu.openrouter.springai.chat.errors.OpenRouterTransientChoiceExc
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import tools.jackson.databind.ObjectMapper;
+import java.lang.reflect.Constructor;
+import java.util.Arrays;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -26,6 +28,7 @@ import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
@@ -35,11 +38,14 @@ import org.reactivestreams.Subscription;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.content.Media;
 import org.springframework.util.MimeTypeUtils;
+import org.springframework.test.util.ReflectionTestUtils;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 import reactor.test.publisher.TestPublisher;
 
 class OpenRouterStreamingToolCallAggregatorTests {
+
+	private static final String DELIVERED_EXTENSIONS = "deliveredExtensionSequences";
 
 	private static final String CHUNK_OBJECT = "chat.completion.chunk";
 
@@ -396,6 +402,84 @@ class OpenRouterStreamingToolCallAggregatorTests {
 			.containsExactly(0, 0, 1);
 		assertThat(totalTokens(aggregated)).containsExactly(5, 15);
 		assertThat(revisions(aggregated)).containsExactly("old", "new");
+	}
+
+	@Test
+	void passedThroughExtensionsRetainOnlyKeysThatCanSupersedeBufferedValues() throws Exception {
+		var bounded = new OpenRouterStreamingToolCallAggregator(new ObjectMapper(), 1024, 2, Duration.ofHours(1));
+		Object state = aggregationState(bounded);
+		try {
+			ReflectionTestUtils.invokeMethod(state, "accept", chunk(toolFragment(0, 0, "call-0", "lookup", "{}")));
+			for (int index = 0; index < 10000; index++) {
+				ChatCompletionChunk text = snapshot(index, Map.of("key" + index + "x".repeat(1024), index),
+						textChoice(1, "text"));
+				List<ChatCompletionChunk> emitted = ReflectionTestUtils.invokeMethod(state, "accept", text);
+				assertThat(emitted).containsExactly(text);
+			}
+			assertThat(((Map<?, ?>) ReflectionTestUtils.getField(state, DELIVERED_EXTENSIONS)).size()).isZero();
+			assertThat(ReflectionTestUtils.getField(state, "retainedChunks")).isEqualTo(1);
+			assertThat((Long) ReflectionTestUtils.getField(state, "retainedBytes")).isLessThan(1024L);
+			List<ChatCompletionChunk> finished = ReflectionTestUtils.invokeMethod(state, "accept",
+					chunk(finishChoice(0)));
+			assertThat(finished).hasSize(1);
+			assertThat(finished.get(0).extensions()).isEmpty();
+		}
+		finally {
+			ReflectionTestUtils.invokeMethod(state, "clear");
+		}
+	}
+
+	private static Object aggregationState(OpenRouterStreamingToolCallAggregator aggregator) throws Exception {
+		Class<?> stateType = Arrays.stream(OpenRouterStreamingToolCallAggregator.class.getDeclaredClasses())
+			.filter(type -> type.getSimpleName().equals("AggregationState"))
+			.findFirst()
+			.orElseThrow();
+		Constructor<?> constructor = stateType.getDeclaredConstructors()[0];
+		constructor.setAccessible(true);
+		return constructor.newInstance(aggregator, (Consumer<Throwable>) failure -> {
+			throw new AssertionError(failure);
+		});
+	}
+
+	@Test
+	void extensionTrackingFollowsSharedAndNewlyBufferedChunksAndPrunesFinishedChoices() throws Exception {
+		Object state = aggregationState(this.aggregator);
+		try {
+			ReflectionTestUtils.invokeMethod(state, "accept",
+					snapshot(1, Map.of("first", "old"), toolFragment(0, 0, "call-0", "lookup", "{}")));
+			ReflectionTestUtils.invokeMethod(state, "accept", snapshot(2, Map.of("shared", "old")));
+			ReflectionTestUtils.invokeMethod(state, "accept",
+					snapshot(3, Map.of("first", "new", "unbuffered", 3), textChoice(2, "text")));
+			assertThat(((Map<?, ?>) ReflectionTestUtils.getField(state, DELIVERED_EXTENSIONS)).keySet())
+				.isEqualTo(java.util.Set.of("first", "shared"));
+			ReflectionTestUtils.invokeMethod(state, "accept",
+					snapshot(4, Map.of("second", "old"), toolFragment(1, 0, "call-1", "lookup", "{}")));
+			ReflectionTestUtils.invokeMethod(state, "accept", snapshot(5, Map.of("shared", "latest")));
+			ReflectionTestUtils.invokeMethod(state, "accept", snapshot(6, Map.of("second", "new"), textChoice(2, ".")));
+			List<ChatCompletionChunk> first = ReflectionTestUtils.invokeMethod(state, "accept", chunk(finishChoice(0)));
+			assertThat(first).hasSize(1);
+			assertThat(first.get(0).extensions()).containsExactlyEntriesOf(Map.of("shared", "latest"));
+			assertThat(((Map<?, ?>) ReflectionTestUtils.getField(state, DELIVERED_EXTENSIONS)).keySet())
+				.isEqualTo(java.util.Set.of("second", "shared"));
+			List<ChatCompletionChunk> second = ReflectionTestUtils.invokeMethod(state, "accept",
+					chunk(finishChoice(1)));
+			assertThat(second).hasSize(1);
+			assertThat(second.get(0).extensions()).containsExactlyEntriesOf(Map.of("shared", "latest"));
+			assertThat((Map<?, ?>) ReflectionTestUtils.getField(state, DELIVERED_EXTENSIONS)).isEmpty();
+			ReflectionTestUtils.invokeMethod(state, "accept",
+					snapshot(7, Map.of("second", "fresh"), toolFragment(0, 0, "call-2", "lookup", "{}")));
+			ReflectionTestUtils.invokeMethod(state, "accept",
+					snapshot(8, Map.of("second", "newer"), textChoice(2, ".")));
+			ReflectionTestUtils.invokeMethod(state, "clear");
+			assertThat((Map<?, ?>) ReflectionTestUtils.getField(state, DELIVERED_EXTENSIONS)).isEmpty();
+			ReflectionTestUtils.invokeMethod(state, "accept",
+					snapshot(9, Map.of("second", "fresh"), toolFragment(0, 0, "call-3", "lookup", "{}")));
+			List<ChatCompletionChunk> fresh = ReflectionTestUtils.invokeMethod(state, "accept", chunk(finishChoice(0)));
+			assertThat(fresh.get(0).extensions()).containsExactlyEntriesOf(Map.of("second", "fresh"));
+		}
+		finally {
+			ReflectionTestUtils.invokeMethod(state, "clear");
+		}
 	}
 
 	private ChatCompletionChunk snapshot(int totalTokens, Map<String, Object> extensions, Choice... choices) {

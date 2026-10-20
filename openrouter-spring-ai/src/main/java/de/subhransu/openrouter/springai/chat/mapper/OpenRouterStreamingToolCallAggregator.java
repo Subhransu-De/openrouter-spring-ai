@@ -601,7 +601,9 @@ public final class OpenRouterStreamingToolCallAggregator {
 
 		private long deliveredUsageSequence;
 
-		private final Map<String, Long> deliveredExtensionSequences = new HashMap<>();
+		private final Map<String, ExtensionDelivery> deliveredExtensionSequences = new HashMap<>();
+
+		private boolean trackingExtensions;
 
 		private final Consumer<Throwable> timeoutHandler;
 
@@ -631,6 +633,9 @@ public final class OpenRouterStreamingToolCallAggregator {
 					long chunkBytes = serializedBytes(chunk);
 					this.bufferedByChoice.values().forEach(buffer -> buffer.share(chunk, chunkBytes));
 					retain(chunkBytes);
+					if (this.trackingExtensions) {
+						retainExtensions(chunk, this.bufferedByChoice.size());
+					}
 					this.bufferedChoiceLessChunks++;
 					this.bufferedChoiceLessBytes = addSaturated(this.bufferedChoiceLessBytes, chunkBytes);
 					return List.of();
@@ -654,6 +659,7 @@ public final class OpenRouterStreamingToolCallAggregator {
 				this.bufferedChoiceLessBytes = 0;
 				this.deliveredUsageSequence = 0;
 				this.deliveredExtensionSequences.clear();
+				this.trackingExtensions = false;
 			}
 			return combine(ready);
 		}
@@ -707,6 +713,9 @@ public final class OpenRouterStreamingToolCallAggregator {
 				}
 			}
 			ready.add(withoutSupersededSnapshots(merged, buffered));
+			if (this.trackingExtensions) {
+				buffered.chunks.forEach(this::releaseExtensions);
+			}
 			release(buffered.retainedChunks, buffered.retainedBytes);
 		}
 
@@ -714,6 +723,10 @@ public final class OpenRouterStreamingToolCallAggregator {
 			if (this.bufferedByChoice.isEmpty() && this.deliveredUsageSequence == 0
 					&& this.deliveredExtensionSequences.isEmpty()) {
 				return merged;
+			}
+			if (!this.trackingExtensions && !merged.extensions().isEmpty()) {
+				trackExtensions();
+				buffered.chunks.forEach(this::retainExtensions);
 			}
 			Usage usage = null;
 			Map<String, @Nullable Object> extensions = new LinkedHashMap<>();
@@ -726,10 +739,11 @@ public final class OpenRouterStreamingToolCallAggregator {
 					this.deliveredUsageSequence = chunkSequence;
 				}
 				for (Map.Entry<String, @Nullable Object> entry : chunk.extensions().entrySet()) {
-					Long delivered = this.deliveredExtensionSequences.get(entry.getKey());
-					if (delivered == null || chunkSequence >= delivered) {
+					ExtensionDelivery delivered = Objects
+						.requireNonNull(this.deliveredExtensionSequences.get(entry.getKey()));
+					if (chunkSequence >= delivered.sequence) {
 						extensions.put(entry.getKey(), entry.getValue());
-						this.deliveredExtensionSequences.put(entry.getKey(), chunkSequence);
+						delivered.sequence = chunkSequence;
 					}
 				}
 			}
@@ -744,8 +758,39 @@ public final class OpenRouterStreamingToolCallAggregator {
 			if (chunk.usage() != null) {
 				this.deliveredUsageSequence = this.sequence;
 			}
+			if (!this.trackingExtensions && !chunk.extensions().isEmpty()) {
+				trackExtensions();
+			}
 			for (String key : chunk.extensions().keySet()) {
-				this.deliveredExtensionSequences.put(key, this.sequence);
+				ExtensionDelivery delivered = this.deliveredExtensionSequences.get(key);
+				if (delivered != null) {
+					delivered.sequence = this.sequence;
+				}
+			}
+		}
+
+		private void trackExtensions() {
+			this.trackingExtensions = true;
+			this.bufferedByChoice.values().forEach(buffer -> buffer.chunks.forEach(this::retainExtensions));
+		}
+
+		private void retainExtensions(ChatCompletionChunk chunk) {
+			retainExtensions(chunk, 1);
+		}
+
+		private void retainExtensions(ChatCompletionChunk chunk, long references) {
+			for (String key : chunk.extensions().keySet()) {
+				this.deliveredExtensionSequences.computeIfAbsent(key,
+						ignored -> new ExtensionDelivery()).references += references;
+			}
+		}
+
+		private void releaseExtensions(ChatCompletionChunk chunk) {
+			for (String key : chunk.extensions().keySet()) {
+				ExtensionDelivery delivered = this.deliveredExtensionSequences.get(key);
+				if (delivered != null && --delivered.references == 0) {
+					this.deliveredExtensionSequences.remove(key);
+				}
 			}
 		}
 
@@ -777,6 +822,7 @@ public final class OpenRouterStreamingToolCallAggregator {
 			this.bufferedChoiceLessBytes = 0;
 			this.deliveredUsageSequence = 0;
 			this.deliveredExtensionSequences.clear();
+			this.trackingExtensions = false;
 		}
 
 		private void retain(long chunkBytes) {
@@ -829,6 +875,9 @@ public final class OpenRouterStreamingToolCallAggregator {
 
 			private void add(ChatCompletionChunk chunk, long chunkBytes) {
 				share(chunk, chunkBytes);
+				if (AggregationState.this.trackingExtensions) {
+					retainExtensions(chunk);
+				}
 				this.retainedChunks++;
 				this.retainedBytes = addSaturated(this.retainedBytes, chunkBytes);
 			}
@@ -862,6 +911,14 @@ public final class OpenRouterStreamingToolCallAggregator {
 			}
 
 		}
+
+	}
+
+	private static final class ExtensionDelivery {
+
+		private long references;
+
+		private long sequence;
 
 	}
 
