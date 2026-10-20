@@ -11,6 +11,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import de.subhransu.openrouter.springai.errors.OpenRouterHttpException;
 import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
+import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingModel;
@@ -138,6 +139,77 @@ class OpenRouterModelHttpRetryTests {
 		return """
 				{"status":"failed","error":{"code":"%s","message":"synthetic failure"}}
 				""".formatted(code);
+	}
+
+	@ParameterizedTest
+	@ValueSource(ints = { 429, 502, 503 })
+	void defaultPolicyRetriesTransientInBandChatCompletionFailure(int code) {
+		Fixture fixture = fixture();
+		fixture.server()
+			.expect(once(), requestTo(CHAT_COMPLETIONS))
+			.andRespond(withSuccess(error(code, code == 429 ? "rate_limit_exceeded" : "provider_unavailable"),
+					MediaType.APPLICATION_JSON));
+		fixture.server()
+			.expect(once(), requestTo(CHAT_COMPLETIONS))
+			.andRespond(withSuccess(CHAT_SUCCESS, MediaType.APPLICATION_JSON));
+		OpenRouterChatModel model = OpenRouterChatModel.builder().openRouterApi(fixture.api()).build();
+
+		assertThat(
+				model.call(chatPrompt(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS)).getResult().getOutput().getText())
+			.isEqualTo("recovered");
+		fixture.server().verify();
+	}
+
+	@ParameterizedTest
+	@ValueSource(ints = { 400, 401, 402 })
+	void defaultPolicyDoesNotRetryPermanentInBandChatCompletionFailure(int code) {
+		Fixture fixture = fixture();
+		fixture.server()
+			.expect(once(), requestTo(CHAT_COMPLETIONS))
+			.andRespond(withSuccess(error(code, code == 402 ? "payment_required" : "invalid_request"),
+					MediaType.APPLICATION_JSON));
+		OpenRouterChatModel model = OpenRouterChatModel.builder().openRouterApi(fixture.api()).build();
+
+		assertThatThrownBy(() -> model.call(chatPrompt(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS)))
+			.isInstanceOf(OpenRouterApiException.class);
+		fixture.server().verify();
+	}
+
+	@ParameterizedTest
+	@ValueSource(ints = { 429, 502, 503 })
+	void defaultPolicyRetriesTransientInBandImageFailure(int code) {
+		Fixture fixture = fixture();
+		fixture.server()
+			.expect(once(), requestTo(BASE_URL + "/images"))
+			.andRespond(withSuccess(error(code, code == 429 ? "rate_limit_exceeded" : "provider_unavailable"),
+					MediaType.APPLICATION_JSON));
+		fixture.server()
+			.expect(once(), requestTo(BASE_URL + "/images"))
+			.andRespond(withSuccess(IMAGES_SUCCESS, MediaType.APPLICATION_JSON));
+		OpenRouterImageModel model = OpenRouterImageModel.builder()
+			.openRouterApi(fixture.api())
+			.defaultOptions(OpenRouterImageOptions.builder().model("test-image-model").build())
+			.build();
+
+		assertThat(model.call(new ImagePrompt("draw a circle")).getResult().getOutput().getB64Json())
+			.isEqualTo("aW1hZ2U=");
+		fixture.server().verify();
+	}
+
+	@Test
+	void defaultPolicyDoesNotRetryPermanentInBandImageFailure() {
+		Fixture fixture = fixture();
+		fixture.server()
+			.expect(once(), requestTo(BASE_URL + "/images"))
+			.andRespond(withSuccess(error(401, "invalid_api_key"), MediaType.APPLICATION_JSON));
+		OpenRouterImageModel model = OpenRouterImageModel.builder()
+			.openRouterApi(fixture.api())
+			.defaultOptions(OpenRouterImageOptions.builder().model("test-image-model").build())
+			.build();
+
+		assertThatThrownBy(() -> model.call(new ImagePrompt("draw a circle")))
+			.isInstanceOf(OpenRouterApiException.class);
+		fixture.server().verify();
 	}
 
 	@Test

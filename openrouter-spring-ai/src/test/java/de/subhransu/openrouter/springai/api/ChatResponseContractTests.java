@@ -14,6 +14,7 @@ import org.springframework.ai.chat.prompt.Prompt;
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterChatResponseMapper;
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterStreamingResponseMapper;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
+import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -70,8 +71,15 @@ class ChatResponseContractTests {
 		String body = "{\"error\":{\"code\":" + code + ",\"message\":\"synthetic failure\"},"
 				+ "\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"ignored\"}}]}";
 		assertThatThrownBy(() -> new OpenRouterChatResponseMapper()
-			.map(blocking(body, HttpStatus.OK).chatCompletion(this.request)))
-			.isInstanceOfSatisfying(OpenRouterApiException.class, ex -> {
+			.map(blocking(body, HttpStatus.OK).chatCompletion(this.request))).satisfies(failure -> {
+				if ("null".equals(code)) {
+					assertThat(failure).isInstanceOf(OpenRouterApiException.class);
+					assertThat(((OpenRouterApiException) failure).getErrorDetails().message())
+						.isEqualTo("synthetic failure");
+					return;
+				}
+				assertThat(failure).isInstanceOf(OpenRouterTransientApiException.class);
+				OpenRouterTransientApiException ex = (OpenRouterTransientApiException) failure;
 				assertThat(ex.getErrorDetails().message()).isEqualTo("synthetic failure");
 				assertThat(ex.getStatusCode().value())
 					.isEqualTo(code.contains("503") ? 503 : code.contains("rate_limit") ? 429 : 500);
@@ -87,7 +95,7 @@ class ChatResponseContractTests {
 		String body = "{\"error\":{\"code\":503,\"message\":\"synthetic failure\"}}";
 		assertThatThrownBy(() -> new OpenRouterChatResponseMapper()
 			.map(blocking(body, HttpStatus.OK).chatCompletion(this.request)))
-			.isInstanceOf(OpenRouterApiException.class);
+			.isInstanceOf(OpenRouterTransientApiException.class);
 		StepVerifier
 			.create(new OpenRouterStreamingResponseMapper().map(streaming(body).chatCompletionStream(this.request)))
 			.expectError(OpenRouterApiException.class)

@@ -170,6 +170,29 @@ class StreamRetriesTests {
 		fixture.assertObservation(1);
 	}
 
+	@ParameterizedTest
+	@EnumSource(value = Mode.class, names = { "CHAT", "IMAGE" })
+	void inBandRateLimitInAcceptedStreamDoesNotRetry(Mode mode) {
+		Fixture fixture = new Fixture(attempt -> Mono
+			.just(sse(Flux.just(buffer("data: {\"error\":{\"code\":429,\"message\":\"synthetic rate limit\"}}\n\n")))));
+		StepVerifier.create(fixture.stream(mode, policy(2, 0))).expectError().verify(Duration.ofSeconds(10));
+		assertThat(fixture.attempts).hasValue(1);
+		fixture.assertObservation(1);
+	}
+
+	@Test
+	void inBandRateLimitInImageJsonFallbackDoesNotRetry() {
+		Fixture fixture = new Fixture(attempt -> Mono.just(ClientResponse.create(HttpStatus.OK)
+			.header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+			.body("{\"error\":{\"code\":429,\"message\":\"synthetic rate limit\"}}")
+			.build()));
+		StepVerifier.create(fixture.stream(Mode.IMAGE, policy(2, 0)))
+			.expectError(OpenRouterTransientApiException.class)
+			.verify(Duration.ofSeconds(10));
+		assertThat(fixture.attempts).hasValue(1);
+		fixture.assertObservation(1);
+	}
+
 	@Test
 	void evenAnOtherwiseEligibleFailureCannotReplayAnEmittedMetadataElement() {
 		RuntimeException rejection = new OpenRouterHttpExceptionFactory(new ObjectMapper(), null).create("/responses",

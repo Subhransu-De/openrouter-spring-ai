@@ -2,7 +2,6 @@ package de.subhransu.openrouter.springai.image;
 
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.dto.ImagesRequest;
-import de.subhransu.openrouter.springai.api.dto.ImagesResponse;
 import de.subhransu.openrouter.springai.api.dto.ImagesStreamEvent;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import de.subhransu.openrouter.springai.image.mapper.OpenRouterImageRequestMapper;
@@ -82,9 +81,8 @@ public class OpenRouterImageModel implements ImageModel {
 					this.observationRegistry)
 			.observe(() -> {
 				ImagesRequest request = this.requestMapper.map(prompt, options, false);
-				ImagesResponse imagesResponse = Retries.invoke(this.retryTemplate,
-						() -> this.openRouterApi.images(request));
-				ImageResponse response = this.responseMapper.map(imagesResponse);
+				ImageResponse response = Retries.invoke(this.retryTemplate,
+						() -> this.responseMapper.map(this.openRouterApi.images(request)));
 				observationContext.setResponse(response);
 				return response;
 			});

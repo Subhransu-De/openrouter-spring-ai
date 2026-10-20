@@ -22,8 +22,8 @@ public final class OpenRouterImageResponseValidator {
 		}
 		var error = response.error();
 		if (error != null) {
-			throw OpenRouterApiExceptionFactory.create("OpenRouter image generation failed", error.toString(), error,
-					null);
+			throw OpenRouterApiExceptionFactory.createRetryable("OpenRouter image generation failed", error.toString(),
+					error, null, "/images");
 		}
 		var images = response.data();
 		if (images == null) {

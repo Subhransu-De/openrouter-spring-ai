@@ -424,14 +424,7 @@ is unaffected.
 
 ### Retries and Responses failures
 
-Synchronous Responses failures carried over HTTP 200 use
-`OpenRouterTransientApiException` or `OpenRouterNonTransientApiException`, replacing
-the legacy `OpenRouterApiException` for this request mode. Inspect their shared
-`OpenRouterHttpException` contract for sanitized error details and category;
-the status is derived from the in-band error, and the endpoint is `/responses`.
-Transient provider, rate-limit, and timeout failures qualify for Spring AI's
-default retry policy. Authentication, billing, invalid requests, refusals, and
-unknown failures do not.
+Synchronous Chat Completions and image failures carried over HTTP 200 use `OpenRouterTransientApiException` for transient provider, rate-limit, and timeout failures, matching Responses mode and qualifying for Spring AI's default retry policy. Inspect its `OpenRouterHttpException` contract for sanitized error details and category; the status is derived from the in-band error and the endpoint identifies the request. Non-transient in-band failures retain `OpenRouterApiException` in Chat Completions and images, while Responses uses `OpenRouterNonTransientApiException`. Authentication, billing, invalid requests, refusals, and unknown failures do not qualify for the default retry policy. Image and embedding response mapping runs inside the blocking retry boundary.
 
 A response that breaks the wire contract the library enforces raises `OpenRouterProtocolException`, a `NonTransientAiException`, in every request mode, whether the call is synchronous or streaming. This covers undecodable JSON, missing required fields, blank tool names, conflicting stream fragments, embedding count, index, or dimension mismatches, and invalid audio. Earlier releases raised `IllegalStateException` or `IllegalArgumentException` for some of these, so catch `OpenRouterProtocolException` instead. Invalid request options still raise `IllegalArgumentException` before the request is sent; chat `stream()` returns a Flux that reports the error on subscription.
 
@@ -1048,16 +1041,7 @@ providers may return fewer images, and support for multiple images and native st
 depends on the endpoint. Check the [OpenRouter image API capabilities](https://openrouter.ai/docs/guides/overview/multimodal/image-generation)
 before combining them.
 
-Image JSON responses must contain a `data` array. An empty array remains a valid
-empty result for blocking calls. The streaming JSON fallback requires at least one
-image and raises `OpenRouterTruncatedResponseException` for an empty array. Each
-entry and each completed SSE event must contain nonblank `b64_json` or `url`. The
-JSON streaming fallback preserves both forms. Missing required content raises
-`OpenRouterProtocolException`; HTTP 200 error envelopes raise structured
-`OpenRouterApiException` errors before success conversion.
-Synchronous Chat Completions choices require a `message` object, but its text may be
-empty (including tool, refusal, and media messages). Usage-only chat stream chunks
-and image partial previews remain supported.
+Image JSON responses must contain a `data` array. An empty array remains a valid empty result for blocking calls. The streaming JSON fallback requires at least one image and raises `OpenRouterTruncatedResponseException` for an empty array. Each entry and each completed SSE event must contain nonblank `b64_json` or `url`. The JSON streaming fallback preserves both forms. Missing required content raises `OpenRouterProtocolException`; HTTP 200 error envelopes take precedence over image data and raise `OpenRouterTransientApiException` for transient failures or `OpenRouterApiException` otherwise, before success conversion. Errors in an accepted stream, including its JSON fallback, remain single-attempt. Synchronous Chat Completions choices require a `message` object, but its text may be empty (including tool, refusal, and media messages). Usage-only chat stream chunks and image partial previews remain supported.
 
 Image-capable _chat_ models work too: set
 `OpenRouterChatOptions.builder().modalities(List.of("image", "text"))` (optionally with
