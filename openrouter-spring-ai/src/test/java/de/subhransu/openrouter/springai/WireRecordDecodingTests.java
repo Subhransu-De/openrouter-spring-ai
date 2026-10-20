@@ -28,6 +28,7 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.ValueDeserializer;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.module.SimpleModule;
+import tools.jackson.databind.node.NullNode;
 
 class WireRecordDecodingTests {
 
@@ -41,14 +42,40 @@ class WireRecordDecodingTests {
 			"{\"id\":\"first\",\"id\":\"last\",\"future\":1,\"future\":2,\"choices\":[{\"delta\":{\"content\":\"first\",\"content\":\"last\"}}]}",
 			"{\"extensions\":{\"explicit\":true},\"choices\":[{\"extensions\":null,\"delta\":{\"extensions\":{\"x\":null}}}]}",
 			"{\"choices\":{}}", "{\"choices\":[{\"index\":{}}]}", "{\"choices\":[{\"delta\":{\"content\":[]}}]}",
-			"{\"choices\":[{\"delta\":{\"tool_calls\":[{\"function\":{\"arguments\":{}}}]}}]}" })
+			"{\"choices\":[{\"delta\":{\"tool_calls\":[{\"function\":{\"arguments\":{}}}]}}]}",
+			"{\"created\":9223372036854775808,\"choices\":[]}", "{\"choices\":[{\"index\":2147483648,\"delta\":{}}]}",
+			"{\"choices\":[{\"delta\":{\"tool_calls\":[null,{\"index\":null,\"function\":null}]}}]}",
+			"{\"choices\":[{\"delta\":{\"tool_calls\":{}}}]}",
+			"{\"choices\":[{\"delta\":{\"tool_calls\":[{\"function\":{\"name\":\"first\",\"name\":\"last\",\"arguments\":\"{}\"}}]}}]}",
+			"{\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"index\":1,\"function\":{\"arguments\":\"{}\"}}]}}]}",
+			"{\"choices\":[{\"native_finish_reason\":{\"opaque\":[null,1.5]}}]}" })
 	void chatRecordsRetainTreeBindingValuesAndFailures(String json) {
 		assertThat(outcome(() -> api(json, null).chatCompletionStream(request()).collectList().block(WAIT))).isEqualTo(
 				outcome(() -> api(json, new ObjectMapper()).chatCompletionStream(request()).collectList().block(WAIT)));
 	}
 
+	@Test
+	void commonToolChunksRetainTheDecodedContainerTypes() {
+		String json = "{\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,"
+				+ "\"function\":{\"name\":\"f\",\"arguments\":\"{}\"}}]}}]}";
+		ChatCompletionChunk direct = api(json, null).chatCompletionStream(request()).blockFirst(WAIT);
+		ChatCompletionChunk tree = api(json, new ObjectMapper()).chatCompletionStream(request()).blockFirst(WAIT);
+
+		assertThat(direct).isEqualTo(tree);
+		assertThat(direct.extensions()).isExactlyInstanceOf(tree.extensions().getClass());
+		assertThat(direct.choices()).isExactlyInstanceOf(tree.choices().getClass());
+		var directChoice = direct.choices().get(0);
+		var treeChoice = tree.choices().get(0);
+		assertThat(directChoice.extensions()).isExactlyInstanceOf(treeChoice.extensions().getClass());
+		assertThat(directChoice.delta().extensions()).isExactlyInstanceOf(treeChoice.delta().extensions().getClass());
+		assertThat(directChoice.delta().toolCalls()).isExactlyInstanceOf(treeChoice.delta().toolCalls().getClass());
+		assertThat(directChoice.delta().toolCalls().get(0).extensions())
+			.isExactlyInstanceOf(treeChoice.delta().toolCalls().get(0).extensions().getClass());
+	}
+
 	@ParameterizedTest
 	@ValueSource(strings = { "{\"type\":\"response.output_text.delta\",\"delta\":\"x\",\"future\":true}",
+			"{\"type\":\"response.output_text.delta\",\"delta\":\"x\",\"metadata\":null}",
 			"{\"type\":\"response.output_text.delta\",\"delta\":null,\"output_index\":null}",
 			"{\"type\":\"response.output_item.added\",\"item\":{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"x\",\"future\":{\"x\":1}}],\"opaque\":[null,1]}}",
 			"{\"type\":\"response.output_text.delta\",\"code\":{\"x\":1},\"message\":[1,null],\"error_type\":2}",
@@ -60,6 +87,17 @@ class WireRecordDecodingTests {
 		var request = ResponsesRequest.builder().model("synthetic").input("hello").build();
 		assertThat(outcome(() -> api(json, null).responsesStream(request).collectList().block(WAIT)))
 			.isEqualTo(outcome(() -> api(json, new ObjectMapper()).responsesStream(request).collectList().block(WAIT)));
+	}
+
+	@Test
+	void responsesDistinguishMissingMetadataFromAnExplicitJsonNull() {
+		var request = ResponsesRequest.builder().model("synthetic").input("hello").build();
+		var missing = api("{\"type\":\"response.output_text.delta\"}", null).responsesStream(request).blockFirst(WAIT);
+		var explicit = api("{\"type\":\"response.output_text.delta\",\"metadata\":null}", null).responsesStream(request)
+			.blockFirst(WAIT);
+
+		assertThat(missing.metadata()).isNull();
+		assertThat(explicit.metadata()).isSameAs(NullNode.getInstance());
 	}
 
 	@Test

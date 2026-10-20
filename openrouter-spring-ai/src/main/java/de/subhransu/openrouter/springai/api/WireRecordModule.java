@@ -31,6 +31,10 @@ final class WireRecordModule extends SimpleModule {
 
 	private static final Map<Class<?>, Function<@Nullable Object[], Object>> CONSTRUCTORS = constructors();
 
+	static @Nullable Function<@Nullable Object[], Object> constructor(Class<?> type) {
+		return CONSTRUCTORS.get(type);
+	}
+
 	@SuppressWarnings("unchecked")
 	private static Map<Class<?>, Function<@Nullable Object[], Object>> constructors() {
 		return Map.of(ChatCompletionChunk.class,
