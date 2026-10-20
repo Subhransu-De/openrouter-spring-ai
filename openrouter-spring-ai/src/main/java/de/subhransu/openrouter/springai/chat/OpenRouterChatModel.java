@@ -22,11 +22,8 @@ import io.micrometer.observation.contextpropagation.ObservationThreadLocalAccess
 import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicReference;
-import org.springframework.ai.chat.metadata.ChatResponseMetadata;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.chat.model.MessageAggregator;
 import org.springframework.ai.chat.observation.ChatModelObservationContext;
 import org.springframework.ai.chat.observation.ChatModelObservationConvention;
 import org.springframework.ai.chat.observation.ChatModelObservationDocumentation;
@@ -168,34 +165,15 @@ public class OpenRouterChatModel implements ChatModel {
 					}
 				};
 			});
-			AtomicReference<OpenRouterUsage> usage = new AtomicReference<>();
-			Flux<ChatResponse> observed = responses.doOnNext(response -> {
-				if (response.getMetadata().getUsage() instanceof OpenRouterUsage current) {
-					usage.set(current);
-				}
-			})
-				.doOnError(observation::error)
+			Flux<ChatResponse> observed = responses.doOnError(observation::error)
 				.doFinally(signal -> observation.stop())
 				.contextWrite(ctx -> ctx.put(ObservationThreadLocalAccessor.KEY, observation));
 			if (observation.isNoop() && this.observationRegistry.isNoop()) {
 				return observed;
 			}
-			return new MessageAggregator().aggregate(observed, response -> {
-				// Spring AI's aggregator replaces provider usage with token totals only.
-				// OpenRouter usage is a cumulative snapshot, not a per-chunk delta.
-				if (usage.get() != null) {
-					ChatResponseMetadata original = response.getMetadata();
-					ChatResponseMetadata.Builder metadata = ChatResponseMetadata.builder()
-						.id(original.getId())
-						.model(original.getModel())
-						.rateLimit(original.getRateLimit())
-						.promptMetadata(original.getPromptMetadata())
-						.usage(usage.get());
-					original.entrySet().forEach(entry -> metadata.keyValue(entry.getKey(), entry.getValue()));
-					response = new ChatResponse(response.getResults(), metadata.build());
-				}
-				observationContext.setResponse(response);
-			});
+			OpenRouterChatObservationAggregator aggregator = new OpenRouterChatObservationAggregator();
+			return observed.doOnNext(aggregator::add)
+				.doOnComplete(() -> observationContext.setResponse(aggregator.response()));
 		});
 	}
 
