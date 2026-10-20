@@ -37,6 +37,9 @@ final class OutputFormatMapper {
 	}
 
 	private ObjectNode jsonSchemaFormat(String name, @Nullable Boolean strict, @Nullable String schema) {
+		if (!StringUtils.hasText(schema)) {
+			throw new IllegalArgumentException("Invalid JSON schema: schema must not be blank");
+		}
 		ObjectNode jsonSchema = this.objectMapper.createObjectNode().put("name", name);
 		if (strict != null) {
 			jsonSchema.put("strict", strict);

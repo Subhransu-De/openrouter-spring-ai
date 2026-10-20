@@ -304,14 +304,7 @@ spring:
             {"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"],"additionalProperties":false}
 ```
 
-`response-format.type` also accepts `text` and `json-object`. For a portable
-schema, set `spring.ai.openrouter.chat.output-schema` to the JSON document instead;
-it uses the schema name `response` and leaves strict unset. An explicit
-`response-format` wins when both are configured. Omit `strict` to leave it unset,
-or set it to `true` or `false` explicitly. With neither option configured, no
-format is sent. JSON-schema formats require a schema; malformed JSON fails before
-the request is sent. These properties use the same mapping as Java options for
-calls and streams in both request modes.
+`response-format.type` also accepts `text` and `json-object`. For a portable schema, set `spring.ai.openrouter.chat.output-schema` to the JSON document instead; it uses the schema name `response` and leaves strict unset. An explicit `response-format` wins when both are configured. Omit `strict` to leave it unset, or set it to `true` or `false` explicitly. With neither option configured, no format is sent. JSON-schema formats require a nonblank schema; blank schemas and malformed JSON fail with `IllegalArgumentException` before the request is sent. These properties use the same mapping as Java options for calls and streams in both request modes.
 
 Responses rejects explicitly set `stopSequences`, `seed`, `repetitionPenalty`, `minP`,
 `topA`, and `includeUsage` with `IllegalArgumentException` before sending a request.
