@@ -32,8 +32,10 @@ import org.springframework.ai.tool.execution.ToolExecutionException;
 import org.springframework.ai.tool.execution.ToolExecutionExceptionProcessor;
 import org.springframework.ai.tool.function.FunctionToolCallback;
 import org.springframework.aop.scope.ScopedObject;
+import org.springframework.beans.factory.FactoryBean;
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
+import org.springframework.boot.LazyInitializationBeanFactoryPostProcessor;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
@@ -50,6 +52,8 @@ class OpenRouterToolCallingAutoConfigurationTests {
 	private static final String UNDECLARED_PROCESSOR = "is not an application-declared bean";
 
 	private static final String OPT_OUT = "allow-unsafe-tool-failure-results=true";
+
+	private static final String CUSTOM_MANAGER = "customToolCallingManager";
 
 	private static final String REVIEWED_FAILURE = "reviewed failure";
 
@@ -210,7 +214,7 @@ class OpenRouterToolCallingAutoConfigurationTests {
 	@Test
 	void inactiveScopedManagerDoesNotPreventApplicationStartup() {
 		this.contextRunner.withUserConfiguration(InactiveScopedManagerConfiguration.class)
-			.run(context -> assertThat(context).hasNotFailed().hasBean("customToolCallingManager"));
+			.run(context -> assertThat(context).hasNotFailed().hasBean(CUSTOM_MANAGER));
 	}
 
 	@Test
@@ -220,7 +224,7 @@ class OpenRouterToolCallingAutoConfigurationTests {
 			.withUserConfiguration(InactiveScopedManagerConfiguration.class)
 			.run(context -> {
 				assertThat(context).hasNotFailed();
-				ScopedObject proxy = context.getBean("customToolCallingManager", ScopedObject.class);
+				ScopedObject proxy = context.getBean(CUSTOM_MANAGER, ScopedObject.class);
 				assertThatThrownBy(proxy::getTargetObject).hasRootCauseInstanceOf(IllegalStateException.class)
 					.hasStackTraceContaining(MISSING_POLICY);
 			});
@@ -268,6 +272,78 @@ class OpenRouterToolCallingAutoConfigurationTests {
 		this.contextRunner.withUserConfiguration(EarlyProcessorConfiguration.class).run(context -> {
 			assertThat(context).hasNotFailed().hasSingleBean(ToolCallingManager.class);
 			assertThat(failingToolResult(context.getBean(ToolCallingManager.class))).isEqualTo(REVIEWED_FAILURE);
+		});
+	}
+
+	@Test
+	void plainManagerInheritedFromAParentContextFailsValidation() {
+		new ApplicationContextRunner().withUserConfiguration(CustomManagerConfiguration.class)
+			.run(parent -> this.contextRunner.withParent(parent).run(context -> {
+				assertThat(context).hasFailed();
+				assertThat(context.getStartupFailure()).isInstanceOf(IllegalStateException.class)
+					.hasStackTraceContaining(MISSING_POLICY);
+			}));
+	}
+
+	@Test
+	void processorDeclaredInAParentContextCanBeInstalledByAChildManager() {
+		ToolExecutionExceptionProcessor processor = exception -> REVIEWED_FAILURE;
+		new ApplicationContextRunner().withBean(ToolExecutionExceptionProcessor.class, () -> processor).run(parent -> {
+			this.contextRunner.withParent(parent)
+				.withUserConfiguration(CustomManagerUsingAutoProcessorConfiguration.class)
+				.run(context -> {
+					assertThat(context).hasNotFailed().doesNotHaveBean(OpenRouterToolExecutionExceptionProcessor.class);
+					assertThat(failingToolResult(context.getBean(ToolCallingManager.class)))
+						.isEqualTo(REVIEWED_FAILURE);
+				});
+			this.contextRunner.withParent(parent)
+				.withBean(ToolCallingManager.class, () -> OpenRouterToolCallingManagers
+					.withFailurePolicy(exception -> exception.getMessage(), builder -> {
+					}))
+				.run(context -> {
+					assertThat(context).hasFailed();
+					assertThat(context.getStartupFailure()).hasStackTraceContaining(UNDECLARED_PROCESSOR);
+				});
+		});
+	}
+
+	@Test
+	void autoConfiguredParentManagerKeepsTheParentProcessor() {
+		new ApplicationContextRunner().withConfiguration(AutoConfigurations.of(ToolCallingAutoConfiguration.class))
+			.withBean(ToolExecutionExceptionProcessor.class, () -> exception -> REVIEWED_FAILURE)
+			.run(parent -> this.contextRunner.withParent(parent).run(context -> {
+				assertThat(context).hasNotFailed().doesNotHaveBean(OpenRouterToolExecutionExceptionProcessor.class);
+				assertThat(failingToolResult(context.getBean(ToolCallingManager.class))).isEqualTo(REVIEWED_FAILURE);
+			}));
+	}
+
+	@Test
+	void parentWithItsOwnGuardRemainsResponsibleForItsManagers() {
+		this.contextRunner.withUserConfiguration(CustomManagerAndPrototypeProcessorConfiguration.class)
+			.run(parent -> this.contextRunner.withParent(parent).run(context -> {
+				assertThat(context).hasNotFailed();
+				assertThat(failingToolResult(context.getBean(ToolCallingManager.class))).isEqualTo(REVIEWED_FAILURE);
+			}));
+	}
+
+	@Test
+	void runtimeTypedManagerIsValidatedWhenGlobalLazyInitializationCreatesIt() {
+		this.contextRunner.withUserConfiguration(RuntimeTypedPlainManagerConfiguration.class).run(context -> {
+			assertThat(context).hasFailed();
+			assertThat(context.getStartupFailure()).hasStackTraceContaining(MISSING_POLICY);
+		});
+		ApplicationContextRunner lazyRunner = this.contextRunner.withInitializer(
+				context -> context.addBeanFactoryPostProcessor(new LazyInitializationBeanFactoryPostProcessor()));
+		lazyRunner.withUserConfiguration(RuntimeTypedPlainManagerConfiguration.class).run(context -> {
+			assertThat(context).hasNotFailed();
+			assertThatThrownBy(() -> context.getBean(CUSTOM_MANAGER))
+				.hasRootCauseInstanceOf(IllegalStateException.class)
+				.hasStackTraceContaining(MISSING_POLICY);
+		});
+		lazyRunner.withUserConfiguration(RuntimeTypedPolicyManagerConfiguration.class).run(context -> {
+			assertThat(context).hasNotFailed();
+			assertThat(failingToolResult(context.getBean(CUSTOM_MANAGER, ToolCallingManager.class)))
+				.isEqualTo(REVIEWED_FAILURE);
 		});
 	}
 
@@ -480,6 +556,52 @@ class OpenRouterToolCallingAutoConfigurationTests {
 		ToolCallingManager customToolCallingManager(ToolExecutionExceptionProcessor processor) {
 			return OpenRouterToolCallingManagers.withFailurePolicy(processor, builder -> {
 			});
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	static class RuntimeTypedPlainManagerConfiguration {
+
+		@Bean
+		FactoryBean<?> customToolCallingManager() {
+			return new RuntimeTypedFactoryBean(ToolCallingManager.builder().build());
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	static class RuntimeTypedPolicyManagerConfiguration {
+
+		@Bean
+		ToolExecutionExceptionProcessor customProcessor() {
+			return exception -> REVIEWED_FAILURE;
+		}
+
+		@Bean
+		FactoryBean<?> customToolCallingManager(ToolExecutionExceptionProcessor processor) {
+			return new RuntimeTypedFactoryBean(OpenRouterToolCallingManagers.withFailurePolicy(processor, builder -> {
+			}));
+		}
+
+	}
+
+	private static final class RuntimeTypedFactoryBean implements FactoryBean<Object> {
+
+		private final Object object;
+
+		RuntimeTypedFactoryBean(Object object) {
+			this.object = object;
+		}
+
+		@Override
+		public Object getObject() {
+			return this.object;
+		}
+
+		@Override
+		public Class<?> getObjectType() {
+			return this.object.getClass();
 		}
 
 	}

@@ -6,14 +6,17 @@ import de.subhransu.openrouter.springai.chat.OpenRouterToolFailurePolicy;
 import java.lang.ref.Reference;
 import java.lang.ref.ReferenceQueue;
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Set;
 import org.springframework.aop.scope.ScopedObject;
 import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.tool.execution.ToolExecutionExceptionProcessor;
+import org.springframework.beans.factory.BeanFactory;
 import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
@@ -32,6 +35,8 @@ final class OpenRouterToolCallingManagerGuard implements BeanPostProcessor, Smar
 
 	private final Set<IdentityWeakReference<ToolExecutionExceptionProcessor>> transientDeclaredProcessors = new HashSet<>();
 
+	private volatile boolean singletonsValidated;
+
 	OpenRouterToolCallingManagerGuard(ConfigurableListableBeanFactory beanFactory) {
 		this.beanFactory = beanFactory;
 		Arrays.stream(beanFactory.getSingletonNames())
@@ -47,7 +52,8 @@ final class OpenRouterToolCallingManagerGuard implements BeanPostProcessor, Smar
 			rememberProcessor(beanName, processor);
 		}
 		if (bean instanceof ToolCallingManager manager && !(bean instanceof ScopedObject)
-				&& !this.beanFactory.isSingleton(beanName) && isCustomManager(beanName)) {
+				&& (this.singletonsValidated || !this.beanFactory.isSingleton(beanName))
+				&& isCustomManager(this.beanFactory, beanName)) {
 			validate(manager);
 		}
 		return bean;
@@ -57,14 +63,32 @@ final class OpenRouterToolCallingManagerGuard implements BeanPostProcessor, Smar
 	public void afterSingletonsInstantiated() {
 		this.singletonDeclaredProcessors
 			.addAll(this.beanFactory.getBeansOfType(ToolExecutionExceptionProcessor.class, false, false).values());
-		this.beanFactory.getBeansOfType(ToolCallingManager.class, false, false)
-			.forEach((name, manager) -> validateIfCustom(name, manager));
+		validateCustomManagers(this.beanFactory);
+		for (ConfigurableListableBeanFactory ancestor : ancestors()) {
+			if (ancestor.getBeanNamesForType(OpenRouterToolCallingManagerGuard.class, false, false).length > 0) {
+				break;
+			}
+			validateCustomManagers(ancestor);
+		}
+		this.singletonsValidated = true;
 	}
 
-	private void validateIfCustom(String beanName, ToolCallingManager manager) {
-		if (!(manager instanceof ScopedObject) && isCustomManager(beanName)) {
-			validate(manager);
+	private void validateCustomManagers(ConfigurableListableBeanFactory factory) {
+		factory.getBeansOfType(ToolCallingManager.class, false, false).forEach((name, manager) -> {
+			if (!(manager instanceof ScopedObject) && isCustomManager(factory, name)) {
+				validate(manager);
+			}
+		});
+	}
+
+	private List<ConfigurableListableBeanFactory> ancestors() {
+		List<ConfigurableListableBeanFactory> ancestors = new ArrayList<>();
+		BeanFactory parent = this.beanFactory.getParentBeanFactory();
+		while (parent instanceof ConfigurableListableBeanFactory ancestor) {
+			ancestors.add(ancestor);
+			parent = ancestor.getParentBeanFactory();
 		}
+		return ancestors;
 	}
 
 	private void rememberProcessor(String beanName, ToolExecutionExceptionProcessor processor) {
@@ -78,11 +102,11 @@ final class OpenRouterToolCallingManagerGuard implements BeanPostProcessor, Smar
 		}
 	}
 
-	private boolean isCustomManager(String beanName) {
-		if (!this.beanFactory.containsBeanDefinition(beanName)) {
+	private static boolean isCustomManager(ConfigurableListableBeanFactory factory, String beanName) {
+		if (!factory.containsBeanDefinition(beanName)) {
 			return true;
 		}
-		BeanDefinition definition = this.beanFactory.getBeanDefinition(beanName);
+		BeanDefinition definition = factory.getBeanDefinition(beanName);
 		return !SPRING_TOOL_CALLING_AUTO_CONFIGURATION.equals(definition.getFactoryBeanName());
 	}
 
@@ -103,8 +127,22 @@ final class OpenRouterToolCallingManagerGuard implements BeanPostProcessor, Smar
 		}
 		synchronized (this.transientDeclaredProcessors) {
 			purgeCollectedProcessors();
-			return this.transientDeclaredProcessors.contains(new IdentityWeakReference<>(processor));
+			if (this.transientDeclaredProcessors.contains(new IdentityWeakReference<>(processor))) {
+				return true;
+			}
 		}
+		return isAncestorSingleton(processor);
+	}
+
+	private boolean isAncestorSingleton(ToolExecutionExceptionProcessor processor) {
+		for (ConfigurableListableBeanFactory ancestor : ancestors()) {
+			for (String name : ancestor.getBeanNamesForType(ToolExecutionExceptionProcessor.class, false, false)) {
+				if (ancestor.containsSingleton(name) && ancestor.getBean(name) == processor) {
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	private void purgeCollectedProcessors() {
