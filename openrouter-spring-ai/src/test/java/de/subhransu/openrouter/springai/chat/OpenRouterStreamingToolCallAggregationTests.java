@@ -33,6 +33,7 @@ import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.function.FunctionToolCallback;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Streamed tool-call fragments (split by the wire {@code index} across chunks) must be
@@ -45,6 +46,8 @@ class OpenRouterStreamingToolCallAggregationTests {
 	private static final String MODEL = "openai/gpt-5.4-mini";
 
 	private static final String WEATHER_TOOL = "get_weather";
+
+	private static final ObjectMapper JSON = new ObjectMapper();
 
 	private ChatCompletionChunk chunk(Choice... choices) {
 		return new ChatCompletionChunk("gen-1", "chat.completion.chunk", 123L, MODEL, "openai", List.of(choices), null,
@@ -267,6 +270,67 @@ class OpenRouterStreamingToolCallAggregationTests {
 					assertThat(failure.getObservedValue()).isEqualTo(fragments);
 				}))
 			.verify(Duration.ofSeconds(10));
+	}
+
+	@Test
+	void newestUsageAndExtensionsWinWhenAUsageOnlyChunkPrecedesTheToolCallFinish() {
+		OpenRouterApi api = mock(OpenRouterApi.class);
+		when(api.chatCompletionStream(any()))
+			.thenReturn(Flux.just(chunk(toolFragmentChoice(0, "call-1", WEATHER_TOOL, "{}")),
+					wireChunk("{\"choices\":[],\"usage\":{\"total_tokens\":12,\"cost\":0.1},\"marker\":\"older\"}"),
+					wireChunk("{\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}],"
+							+ "\"usage\":{\"total_tokens\":15,\"cost\":0.2},\"marker\":\"newer\"}")));
+
+		StepVerifier.create(model(api).stream(prompt())).assertNext(response -> {
+			assertThat(response.hasToolCalls()).isTrue();
+			assertUsage(response, 15, 0.2);
+			assertThat(response.getMetadata().<Map<String, Object>>get("openrouter.response.extensions"))
+				.containsEntry("marker", "newer");
+		}).verifyComplete();
+	}
+
+	@Test
+	void usageOnlyChunkStillReplacesOlderUsageFromABufferedToolFragment() {
+		OpenRouterApi api = mock(OpenRouterApi.class);
+		when(api.chatCompletionStream(any())).thenReturn(Flux.just(wireChunk(
+				"{\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call-1\",\"type\":\"function\","
+						+ "\"function\":{\"name\":\"get_weather\",\"arguments\":\"{}\"}}]}}],"
+						+ "\"usage\":{\"total_tokens\":10,\"cost\":0.05},\"marker\":\"oldest\"}"),
+				wireChunk("{\"choices\":[],\"usage\":{\"total_tokens\":12,\"cost\":0.1},\"marker\":\"newer\"}"),
+				chunk(finishChoice("tool_calls"))));
+
+		StepVerifier.create(model(api).stream(prompt())).assertNext(response -> {
+			assertThat(response.hasToolCalls()).isTrue();
+			assertUsage(response, 12, 0.1);
+			assertThat(response.getMetadata().<Map<String, Object>>get("openrouter.response.extensions"))
+				.containsEntry("marker", "newer");
+		}).verifyComplete();
+	}
+
+	@Test
+	void newestUsageWinsWhenAUsageOnlyChunkPrecedesThePlainTextFinish() {
+		OpenRouterApi api = mock(OpenRouterApi.class);
+		when(api.chatCompletionStream(any())).thenReturn(Flux.just(chunk(textChoice("Sunny.")),
+				wireChunk("{\"choices\":[],\"usage\":{\"total_tokens\":12,\"cost\":0.1}}"),
+				wireChunk("{\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],"
+						+ "\"usage\":{\"total_tokens\":15,\"cost\":0.2}}")));
+
+		List<ChatResponse> responses = model(api).stream(prompt()).collectList().block(Duration.ofSeconds(5));
+
+		assertThat(responses).filteredOn(response -> response.getMetadata().getUsage() instanceof OpenRouterUsage)
+			.last()
+			.satisfies(response -> assertUsage(response, 15, 0.2));
+	}
+
+	private static void assertUsage(ChatResponse response, int totalTokens, double cost) {
+		assertThat(response.getMetadata().getUsage()).isInstanceOfSatisfying(OpenRouterUsage.class, usage -> {
+			assertThat(usage.getTotalTokens()).isEqualTo(totalTokens);
+			assertThat(usage.getCost()).isEqualTo(cost);
+		});
+	}
+
+	private static ChatCompletionChunk wireChunk(String json) {
+		return JSON.readValue(json, ChatCompletionChunk.class);
 	}
 
 	private Flux<ChatCompletionChunk> fragmentedToolCall(String arguments, int fragmentLength) {

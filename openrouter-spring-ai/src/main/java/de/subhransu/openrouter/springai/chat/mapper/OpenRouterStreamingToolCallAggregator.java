@@ -586,7 +586,7 @@ public final class OpenRouterStreamingToolCallAggregator {
 
 		private final Map<Integer, ToolCallBuffer> bufferedByChoice = new TreeMap<>();
 
-		private final List<ChatCompletionChunk> bufferedChoiceLessChunks = new ArrayList<>();
+		private int bufferedChoiceLessChunks;
 
 		private int retainedChunks;
 
@@ -619,9 +619,9 @@ public final class OpenRouterStreamingToolCallAggregator {
 			if (choices == null || choices.isEmpty()) {
 				if (!this.bufferedByChoice.isEmpty()) {
 					long chunkBytes = serializedBytes(chunk);
-					this.bufferedByChoice.values().forEach(buffer -> buffer.measure(chunkBytes));
+					this.bufferedByChoice.values().forEach(buffer -> buffer.share(chunk, chunkBytes));
 					retain(chunkBytes);
-					this.bufferedChoiceLessChunks.add(chunk);
+					this.bufferedChoiceLessChunks++;
 					this.bufferedChoiceLessBytes = addSaturated(this.bufferedChoiceLessBytes, chunkBytes);
 					return List.of();
 				}
@@ -639,9 +639,8 @@ public final class OpenRouterStreamingToolCallAggregator {
 					.forEach(choice -> acceptChoice(chunk, choice, ready));
 			}
 			if (this.bufferedByChoice.isEmpty()) {
-				ready.addAll(this.bufferedChoiceLessChunks);
-				release(this.bufferedChoiceLessChunks.size(), this.bufferedChoiceLessBytes);
-				this.bufferedChoiceLessChunks.clear();
+				release(this.bufferedChoiceLessChunks, this.bufferedChoiceLessBytes);
+				this.bufferedChoiceLessChunks = 0;
 				this.bufferedChoiceLessBytes = 0;
 			}
 			return combine(ready);
@@ -693,7 +692,7 @@ public final class OpenRouterStreamingToolCallAggregator {
 				}
 			}
 			ready.add(merged);
-			release(buffered.chunks.size(), buffered.retainedBytes);
+			release(buffered.retainedChunks, buffered.retainedBytes);
 		}
 
 		private synchronized void complete() {
@@ -718,7 +717,7 @@ public final class OpenRouterStreamingToolCallAggregator {
 		private synchronized void clear() {
 			this.bufferedByChoice.values().forEach(ToolCallBuffer::close);
 			this.bufferedByChoice.clear();
-			this.bufferedChoiceLessChunks.clear();
+			this.bufferedChoiceLessChunks = 0;
 			this.retainedChunks = 0;
 			this.retainedBytes = 0;
 			this.bufferedChoiceLessBytes = 0;
@@ -760,6 +759,8 @@ public final class OpenRouterStreamingToolCallAggregator {
 
 			private long bytes;
 
+			private int retainedChunks;
+
 			private long retainedBytes;
 
 			private final Disposable timeout;
@@ -769,9 +770,14 @@ public final class OpenRouterStreamingToolCallAggregator {
 			}
 
 			private void add(ChatCompletionChunk chunk, long chunkBytes) {
+				share(chunk, chunkBytes);
+				this.retainedChunks++;
+				this.retainedBytes = addSaturated(this.retainedBytes, chunkBytes);
+			}
+
+			private void share(ChatCompletionChunk chunk, long chunkBytes) {
 				measure(chunkBytes);
 				this.chunks.add(chunk);
-				this.retainedBytes = addSaturated(this.retainedBytes, chunkBytes);
 			}
 
 			private void measure(long chunkBytes) {
