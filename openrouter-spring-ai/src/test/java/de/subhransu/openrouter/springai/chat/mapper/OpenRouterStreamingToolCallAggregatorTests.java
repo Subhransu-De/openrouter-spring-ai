@@ -72,6 +72,12 @@ class OpenRouterStreamingToolCallAggregatorTests {
 		}
 	}
 
+	private static Map<String, Object> nullValue(String key) {
+		Map<String, Object> value = new java.util.HashMap<>();
+		value.put(key, null);
+		return value;
+	}
+
 	private static String expectedText(String... values) {
 		return java.util.Arrays.stream(values).allMatch(java.util.Objects::isNull) ? null
 				: java.util.Arrays.stream(values)
@@ -81,11 +87,11 @@ class OpenRouterStreamingToolCallAggregatorTests {
 
 	@Test
 	void terminalLogprobsMatchIncrementalMergingAcrossOpaqueAndNullValues() {
-		List<Map<String, Object>> extensions = List.of(Map.of(), java.util.Collections.singletonMap("logprobs", null),
-				Map.of("logprobs", "opaque"), Map.of("logprobs", Map.of()),
+		List<Map<String, Object>> extensions = List.of(Map.of(), nullValue("logprobs"), Map.of("logprobs", "opaque"),
+				Map.of("logprobs", Map.of()),
 				Map.of("logprobs", Map.of("content", List.of(Map.of("token", "first")), "revision", 1)),
 				Map.of("logprobs", Map.of("content", "opaque", "refusal", List.of(Map.of("token", "refused")))),
-				Map.of("logprobs", java.util.Collections.singletonMap("content", null)),
+				Map.of("logprobs", nullValue("content")),
 				Map.of("logprobs", Map.of("content", List.of(Map.of("token", "second")), "revision", 2)));
 		for (Map<String, Object> first : extensions) {
 			for (Map<String, Object> second : extensions) {

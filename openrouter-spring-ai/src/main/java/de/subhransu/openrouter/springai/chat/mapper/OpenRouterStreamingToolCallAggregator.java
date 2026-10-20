@@ -555,15 +555,17 @@ public final class OpenRouterStreamingToolCallAggregator {
 			this.name = mergeFunctionNames(this.name, later.name());
 			if (!this.functionMerged) {
 				this.functionMerged = true;
-				if (earlier.arguments() != null) {
-					this.arguments = new StringBuilder(earlier.arguments());
+				String earlierArguments = earlier.arguments();
+				if (earlierArguments != null) {
+					this.arguments = new StringBuilder(earlierArguments);
 				}
 			}
-			if (later.arguments() != null) {
+			String laterArguments = later.arguments();
+			if (laterArguments != null) {
 				if (this.arguments == null) {
 					this.arguments = new StringBuilder();
 				}
-				this.arguments.append(later.arguments());
+				this.arguments.append(laterArguments);
 			}
 		}
 
@@ -613,7 +615,8 @@ public final class OpenRouterStreamingToolCallAggregator {
 				clear();
 				return List.of(chunk);
 			}
-			if (CollectionUtils.isEmpty(chunk.choices())) {
+			List<@Nullable Choice> choices = chunk.choices();
+			if (choices == null || choices.isEmpty()) {
 				if (!this.bufferedByChoice.isEmpty()) {
 					long chunkBytes = serializedBytes(chunk);
 					this.bufferedByChoice.values().forEach(buffer -> buffer.measure(chunkBytes));
@@ -626,11 +629,11 @@ public final class OpenRouterStreamingToolCallAggregator {
 			}
 
 			List<ChatCompletionChunk> ready = new ArrayList<>();
-			if (chunk.choices().size() == 1) {
-				acceptChoice(chunk, ResponseValues.required(chunk.choices().get(0), "choice"), ready);
+			if (choices.size() == 1) {
+				acceptChoice(chunk, ResponseValues.required(choices.get(0), "choice"), ready);
 			}
 			else {
-				ResponseValues.items(chunk.choices(), "choice")
+				ResponseValues.items(choices, "choice")
 					.stream()
 					.sorted(Comparator.comparingInt(this::choiceIndex))
 					.forEach(choice -> acceptChoice(chunk, choice, ready));
