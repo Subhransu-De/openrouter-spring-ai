@@ -321,11 +321,7 @@ maps to `max_output_tokens`. Other sampling, routing, metadata, image, and tool 
 map to their corresponding wire fields. `requestMode` selects the endpoint;
 `toolCallbacks` supply tool definitions and `toolContext` stays on the client.
 
-`toolChoice` accepts `"auto"`, `"none"`, `"required"`, or a named function object:
-`{type: "function", function: {name: "lookup"}}` or
-`{type: "function", name: "lookup"}`. Both named shapes are converted to the selected
-endpoint's form. Legacy `{type: "auto"}`, `{type: "none"}`, and
-`{type: "required"}` objects are normalized to strings. Other shapes are rejected. These rules apply to calls and streams.
+`toolChoice` accepts `"auto"`, `"none"`, `"required"`, or a named function object: `{type: "function", function: {name: "lookup"}}` or `{type: "function", name: "lookup"}`. Both named shapes are converted to the selected endpoint's form, with `type` serialized first for deterministic named-choice JSON. Legacy `{type: "auto"}`, `{type: "none"}`, and `{type: "required"}` objects are normalized to strings. Other shapes are rejected. These rules apply to calls and streams.
 
 ### Optional request and response extensions
 

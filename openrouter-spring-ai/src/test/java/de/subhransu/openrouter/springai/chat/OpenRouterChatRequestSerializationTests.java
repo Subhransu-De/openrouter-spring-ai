@@ -563,6 +563,21 @@ class OpenRouterChatRequestSerializationTests {
 	}
 
 	@ParameterizedTest
+	@ValueSource(strings = { "{\"type\":\"function\",\"name\":\"get_weather\"}",
+			"{\"type\":\"function\",\"function\":{\"name\":\"get_weather\"}}" })
+	void namedToolChoicesSerializeTypeFirst(String choice) {
+		var options = base().toolChoice(this.objectMapper.readTree(choice)).build();
+		var messages = List.<Message>of(new UserMessage("hi"));
+		for (boolean stream : List.of(false, true)) {
+			assertThat(this.objectMapper.writeValueAsString(this.chatMapper.map(messages, options, stream, List.of())))
+				.contains("\"tool_choice\":{\"type\":\"function\",\"function\":{\"name\":\"get_weather\"}}");
+			assertThat(this.objectMapper
+				.writeValueAsString(this.responsesMapper.map(messages, options, stream, List.of())))
+				.contains("\"tool_choice\":{\"type\":\"function\",\"name\":\"get_weather\"}");
+		}
+	}
+
+	@ParameterizedTest
 	@ValueSource(strings = { "auto", "none", "required", "{\"type\":\"auto\"}", "{\"type\":\"none\"}",
 			"{\"type\":\"required\"}", "{\"type\":\"function\",\"name\":\"get_weather\"}",
 			"{\"type\":\"function\",\"function\":{\"name\":\"get_weather\"}}" })
