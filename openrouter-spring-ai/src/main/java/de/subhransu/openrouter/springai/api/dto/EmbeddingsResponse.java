@@ -11,7 +11,12 @@ import java.util.Objects;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonInclude(Include.NON_NULL)
 public record EmbeddingsResponse(@Nullable String object, @Nullable List<@Nullable EmbeddingData> data,
-		@Nullable String model, @Nullable Usage usage) {
+		@Nullable String model, @Nullable Usage usage, @Nullable StreamError error) {
+
+	public EmbeddingsResponse(@Nullable String object, @Nullable List<@Nullable EmbeddingData> data,
+			@Nullable String model, @Nullable Usage usage) {
+		this(object, data, model, usage, null);
+	}
 
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(Include.NON_NULL)

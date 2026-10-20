@@ -11,6 +11,10 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.chat.OpenRouterUsage;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
+import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
+import de.subhransu.openrouter.springai.errors.OpenRouterHttpException;
+import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
+import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +32,8 @@ import org.springframework.ai.document.Document;
 import org.springframework.ai.document.MetadataMode;
 import org.springframework.ai.embedding.EmbeddingRequest;
 import org.springframework.ai.embedding.EmbeddingResponse;
+import org.springframework.core.retry.RetryPolicy;
+import org.springframework.core.retry.RetryTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
@@ -93,6 +99,54 @@ class OpenRouterEmbeddingModelTests {
 		assertThat(response.getMetadata().getModel()).isEqualTo(MODEL);
 		assertThat(response.getMetadata().getUsage()).isInstanceOf(OpenRouterUsage.class);
 		assertThat(response.getMetadata().getUsage().getPromptTokens()).isEqualTo(4);
+		fixture.server().verify();
+	}
+
+	@ParameterizedTest
+	@CsvSource({ "401,false", "401,true", "429,false", "429,true", "503,false", "503,true" })
+	void inBandErrorsPreserveDiagnosticsAndTakePrecedenceOverData(int code, boolean withData) {
+		RestClient.Builder restClientBuilder = RestClient.builder();
+		MockRestServiceServer server = MockRestServiceServer.bindTo(restClientBuilder).build();
+		String body = """
+				{"error":{"code":%d,"message":"synthetic embedding failure",
+				 "metadata":{"provider_code":"synthetic_code"}},"future_field":true%s}
+				""".formatted(code, withData ? ",\"data\":[{\"index\":0,\"embedding\":[1,2]}]" : "");
+		server.expect(once(), requestTo(BASE_URL + "/embeddings"))
+			.andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
+		OpenRouterEmbeddingModel model = OpenRouterEmbeddingModel.builder()
+			.openRouterApi(OpenRouterApi.builder()
+				.apiKey("test-key")
+				.baseUrl(BASE_URL)
+				.restClientBuilder(restClientBuilder)
+				.build())
+			.defaultOptions(OpenRouterEmbeddingOptions.builder().model(MODEL).build())
+			.retryTemplate(new RetryTemplate(RetryPolicy.builder().maxRetries(0).build()))
+			.build();
+
+		assertThatThrownBy(() -> model.embed("hello"))
+			.isInstanceOf(code == 401 ? OpenRouterApiException.class : OpenRouterTransientApiException.class)
+			.satisfies(failure -> {
+				var details = failure instanceof OpenRouterApiException legacy ? legacy.getErrorDetails()
+						: ((OpenRouterHttpException) failure).getErrorDetails();
+				assertThat(details.code()).isEqualTo(Integer.toString(code));
+				assertThat(details.message()).isEqualTo("synthetic embedding failure");
+				assertThat(details.providerCode()).isEqualTo("synthetic_code");
+				assertThat(details.category())
+					.isEqualTo(code == 401 ? OpenRouterErrorCategory.AUTHENTICATION : code == 429
+							? OpenRouterErrorCategory.RATE_LIMIT : OpenRouterErrorCategory.PROVIDER_UNAVAILABLE);
+			});
+		server.verify();
+	}
+
+	@Test
+	void permanentInBandErrorIsNotRetried() {
+		Fixture fixture = fixture(OpenRouterEmbeddingOptions.builder().model(MODEL).build());
+		fixture.server()
+			.expect(once(), requestTo(BASE_URL + "/embeddings"))
+			.andRespond(withSuccess("{\"error\":{\"code\":401,\"message\":\"synthetic authentication failure\"}}",
+					MediaType.APPLICATION_JSON));
+
+		assertThatThrownBy(() -> fixture.model().embed("hello")).isInstanceOf(OpenRouterApiException.class);
 		fixture.server().verify();
 	}
 

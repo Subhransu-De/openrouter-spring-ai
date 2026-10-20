@@ -234,6 +234,29 @@ class OpenRouterModelHttpRetryTests {
 		fixture.server().verify();
 	}
 
+	@ParameterizedTest
+	@ValueSource(ints = { 429, 502, 503 })
+	void defaultPolicyRetriesTransientInBandEmbeddingFailure(int code) {
+		Fixture fixture = fixture();
+		String body = """
+				{"error":{"code":%d,"message":"synthetic embedding failure"},
+				 "data":[{"index":0,"embedding":[9,9]}],"future_field":true}
+				""".formatted(code);
+		fixture.server()
+			.expect(once(), requestTo(BASE_URL + "/embeddings"))
+			.andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
+		fixture.server()
+			.expect(once(), requestTo(BASE_URL + "/embeddings"))
+			.andRespond(withSuccess(EMBEDDINGS_SUCCESS, MediaType.APPLICATION_JSON));
+		OpenRouterEmbeddingModel model = OpenRouterEmbeddingModel.builder()
+			.openRouterApi(fixture.api())
+			.defaultOptions(OpenRouterEmbeddingOptions.builder().model("test-embedding-model").build())
+			.build();
+
+		assertThat(model.embed("hello")).containsExactly(0.25f, -0.5f);
+		fixture.server().verify();
+	}
+
 	@Test
 	void retriesImageAfter503AndReturnsSuccess() {
 		Fixture fixture = fixture();

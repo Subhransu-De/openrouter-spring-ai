@@ -424,7 +424,7 @@ is unaffected.
 
 ### Retries and Responses failures
 
-Synchronous Chat Completions and image failures carried over HTTP 200 use `OpenRouterTransientApiException` for transient provider, rate-limit, and timeout failures, matching Responses mode and qualifying for Spring AI's default retry policy. Inspect its `OpenRouterHttpException` contract for sanitized error details and category; the status is derived from the in-band error and the endpoint identifies the request. Non-transient in-band failures retain `OpenRouterApiException` in Chat Completions and images, while Responses uses `OpenRouterNonTransientApiException`. Authentication, billing, invalid requests, refusals, and unknown failures do not qualify for the default retry policy. Image and embedding response mapping runs inside the blocking retry boundary.
+Synchronous Chat Completions, embedding, and image failures carried over HTTP 200 use `OpenRouterTransientApiException` for transient provider, rate-limit, and timeout failures, matching Responses mode and qualifying for Spring AI's default retry policy. Inspect its `OpenRouterHttpException` contract for sanitized error details and category; the status is derived from the in-band error and the endpoint identifies the request. Non-transient in-band failures retain `OpenRouterApiException` in Chat Completions, embeddings, and images, while Responses uses `OpenRouterNonTransientApiException`. Authentication, billing, invalid requests, refusals, and unknown failures do not qualify for the default retry policy. Image and embedding response mapping runs inside the blocking retry boundary.
 
 A response that breaks the wire contract the library enforces raises `OpenRouterProtocolException`, a `NonTransientAiException`, in every request mode, whether the call is synchronous or streaming. This covers undecodable JSON, missing required fields, blank tool names, conflicting stream fragments, embedding count, index, or dimension mismatches, and invalid audio. Earlier releases raised `IllegalStateException` or `IllegalArgumentException` for some of these, so catch `OpenRouterProtocolException` instead. Invalid request options still raise `IllegalArgumentException` before the request is sent; chat `stream()` returns a Flux that reports the error on subscription.
 
@@ -911,6 +911,8 @@ float[] vector = embeddingModel.embed("The quick brown fox");
 
 Provider routing (`spring.ai.openrouter.embedding.provider.*`) works the same way as for
 chat. Only `float` embeddings are decoded; requesting `encoding_format: base64` fails fast.
+
+Embedding error envelopes take precedence over any vectors in the same HTTP 200 body. Their code, message, provider metadata, and category remain available in structured exception diagnostics; transient failures qualify for the configured blocking retry policy. Low-level callers can inspect the nullable `EmbeddingsResponse.error()` component; the existing four-argument constructor remains available.
 
 Document embedding keeps raw text by default (`metadata-mode: none`). To include metadata,
 set `spring.ai.openrouter.embedding.metadata-mode: embed`, or use
