@@ -4,19 +4,9 @@ How runtime options combine with model defaults, and how option objects are copi
 
 ## Replacement and composition
 
-Raw `ChatModel.call(new Prompt(text, options))` and `stream(...)` replace the model's
-defaults whenever prompt options are supplied. With no prompt options, model defaults
-apply. A portable `ChatOptions` does not carry OpenRouter's request mode: supplying it
-to a Responses-configured raw model selects Chat Completions again. Supply complete
-`OpenRouterChatOptions` (including model and mode) or derive them from `getOptions()`.
+Raw `ChatModel.call(new Prompt(text, options))` and `stream(...)` replace the model's defaults whenever prompt options are supplied. With no prompt options, model defaults apply. A portable `ChatOptions` does not carry OpenRouter's request mode: supplying it to a Responses-configured raw model selects Chat Completions again. Supply complete `OpenRouterChatOptions` (including model and mode) or derive them from `getOptions()`.
 
-`ChatClient` instead composes model defaults with the effective options builder.
-Null means inherit; non-null scalar values override (builder composition appends
-stop/tool lists). In Spring AI 2.0.1, `.options(builder)` replaces the client-level
-`.defaultOptions(builder)` customizer; it does not erase the model defaults.
-`client.prompt(Prompt)` composes supplied prompt options with the client customizer.
-For example, given an injected `OpenRouterApi api`, this synthetic mode switch fails
-before HTTP because the model defaults retain `includeUsage=true`:
+`ChatClient` instead composes model defaults with the effective options builder. Null means inherit; non-null scalar values override (builder composition appends stop/tool lists). In Spring AI 2.0.1, `.options(builder)` replaces the client-level `.defaultOptions(builder)` customizer; it does not erase the model defaults. `client.prompt(Prompt)` composes supplied prompt options with the client customizer. For example, given an injected `OpenRouterApi api`, this synthetic mode switch fails before HTTP because the model defaults retain `includeUsage=true`:
 
 ```java
 var chatModel = OpenRouterChatModel.builder()
@@ -32,39 +22,16 @@ client.prompt().user("Say hello.")
     .call().content();
 ```
 
-Setting `includeUsage(false)` also fails: Responses rejects any non-null value.
-An inherited `seed` or stop sequence fails for the same reason. For clients that switch
-modes, leave Chat Completions-only options unset in **both model and client defaults**;
-set `includeUsage(true)` only on individual Chat Completions requests. Alternatively,
-create separate models/clients with mode-appropriate defaults. Mutating a request to
-null does not clear a value inherited during composition.
+Setting `includeUsage(false)` also fails: Responses rejects any non-null value. An inherited `seed` or stop sequence fails for the same reason. For clients that switch modes, leave Chat Completions-only options unset in **both model and client defaults**; set `includeUsage(true)` only on individual Chat Completions requests. Alternatively, create separate models/clients with mode-appropriate defaults. Mutating a request to null does not clear a value inherited during composition.
 
-Embedding and image models merge supplied options with their defaults directly;
-unset fields inherit. Their behavior is intentionally different from raw chat replacement.
-The implemented Spring AI interfaces are `ChatModel`/`StreamingChatModel`,
-`EmbeddingModel`, and `ImageModel`. `OpenRouterImageModel.stream()` is a provider
-extension, and accepting a `Document` for embedding does not implement `DocumentEmbeddingModel`.
+Embedding and image models merge supplied options with their defaults directly; unset fields inherit. Their behavior is intentionally different from raw chat replacement. The implemented Spring AI interfaces are `ChatModel`/`StreamingChatModel`, `EmbeddingModel`, and `ImageModel`. `OpenRouterImageModel.stream()` is a provider extension, and accepting a `Document` for embedding does not implement `DocumentEmbeddingModel`.
 
 ## Null means inherit
 
-A null runtime option means "inherit the configured default", not "clear it". For
-example, if defaults include `seed(7)`, merging a runtime option with
-`requestMode(OPENAI_RESPONSES).seed(null)` retains seed 7 and fails Responses validation.
-Use defaults without that Chat Completions-only option when switching modes. Calling
-`defaults.mutate().seed(null).build()` creates a separate defaults object with no seed;
-it does not clear a seed when that object is merged back into the original defaults.
+A null runtime option means "inherit the configured default", not "clear it". For example, if defaults include `seed(7)`, merging a runtime option with `requestMode(OPENAI_RESPONSES).seed(null)` retains seed 7 and fails Responses validation. Use defaults without that Chat Completions-only option when switching modes. Calling `defaults.mutate().seed(null).build()` creates a separate defaults object with no seed; it does not clear a seed when that object is merged back into the original defaults.
 
 ## Option snapshots
 
-Option builders, copies, and model defaults own detached collection snapshots. Provider
-routing lists, image input references, and nested JSON maps/lists (metadata, image
-configuration, provider options, and tool choice) are read-only through getters. Use
-`mutate()` to derive changed options. Tool-context maps/lists are also snapshotted;
-callbacks and other opaque application objects remain shared by identity. Use JSON
-maps/lists for container isolation; arbitrary mutable objects are not cloned. Null
-values and collection order are preserved. Embedding builders return independent
-results; explicit setters change only the option instance on which they are called.
+Option builders, copies, and model defaults own detached collection snapshots. Provider routing lists, image input references, and nested JSON maps/lists (metadata, image configuration, provider options, and tool choice) are read-only through getters. Use `mutate()` to derive changed options. Tool-context maps/lists are also snapshotted; callbacks and other opaque application objects remain shared by identity. Use JSON maps/lists for container isolation; arbitrary mutable objects are not cloned. Null values and collection order are preserved. Embedding builders return independent results; explicit setters change only the option instance on which they are called.
 
-JSON maps and lists are copied recursively. Snapshots do not promise arbitrary deep
-immutability or general thread safety. Existing option setters and Boot property beans
-remain mutable, so do not mutate shared options concurrently with calls.
+JSON maps and lists are copied recursively. Snapshots do not promise arbitrary deep immutability or general thread safety. Existing option setters and Boot property beans remain mutable, so do not mutate shared options concurrently with calls.

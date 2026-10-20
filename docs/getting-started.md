@@ -4,8 +4,7 @@ This page creates a new Spring Boot application that calls OpenRouter through Sp
 
 ## Install and make a first call
 
-Use the published `de.subhransu:openrouter-spring-ai-starter:0.1.0-RC3` from Maven
-Central. For a new application, create this `pom.xml`:
+Use the published `de.subhransu:openrouter-spring-ai-starter:0.1.0-RC3` from Maven Central. For a new application, create this `pom.xml`:
 
 ```xml
 <project xmlns="http://maven.apache.org/POM/4.0.0">
@@ -49,9 +48,7 @@ dependencies {
 }
 ```
 
-The starter includes Spring AI's ChatClient auto-configuration. Set these application
-properties in `src/main/resources/application.properties`, supply `OPENROUTER_API_KEY`
-and a suitable `OPENROUTER_MODEL` in the environment, and use the injected builder:
+The starter includes Spring AI's ChatClient auto-configuration. Set these application properties in `src/main/resources/application.properties`, supply `OPENROUTER_API_KEY` and a suitable `OPENROUTER_MODEL` in the environment, and use the injected builder:
 
 ```properties
 spring.ai.model.chat=openrouter
@@ -84,12 +81,9 @@ public class Application {
 }
 ```
 
-Save the class as `src/main/java/example/Application.java`. Run `mvn spring-boot:run`
-or `gradle bootRun` with JDK 17 or later. The first call uses the configured model and
-makes a billable OpenRouter request. No clone or local library installation is needed.
+Save the class as `src/main/java/example/Application.java`. Run `mvn spring-boot:run` or `gradle bootRun` with JDK 17 or later. The first call uses the configured model and makes a billable OpenRouter request. No clone or local library installation is needed.
 
-For incremental text, use `client.prompt().user("Say hello.").stream().content()`
-and subscribe to the returned `Flux<String>` for the application's lifetime.
+For incremental text, use `client.prompt().user("Say hello.").stream().content()` and subscribe to the returned `Flux<String>` for the application's lifetime.
 
 | Property                                                 | Default / meaning                                                        |
 | -------------------------------------------------------- | ------------------------------------------------------------------------ |
@@ -109,33 +103,14 @@ and subscribe to the returned `Flux<String>` for the application's lifetime.
 | [RC3: `e336517`](https://github.com/Subhransu-De/openrouter-spring-ai/tree/v0.1.0-RC3) | 17                  | 4.1.1       | 2.0.1     |
 | Unreleased main (`0.1.0-SNAPSHOT`)                                                     | 17                  | 4.1.1       | 2.0.1     |
 
-Baselines come from the tagged/root POMs and
-[published RC3 parent POM](https://repo.maven.apache.org/maven2/de/subhransu/openrouter-spring-ai-parent/0.1.0-RC3/openrouter-spring-ai-parent-0.1.0-RC3.pom).
-CI targets JDK 17, 21, and 25; this does not establish compatibility with arbitrary
-Boot or Spring AI versions. Use the matching BOM baseline in the consuming application.
-Earlier release candidates are listed in the [changelog](../CHANGELOG.md).
+Baselines come from the tagged/root POMs and [published RC3 parent POM](https://repo.maven.apache.org/maven2/de/subhransu/openrouter-spring-ai-parent/0.1.0-RC3/openrouter-spring-ai-parent-0.1.0-RC3.pom). CI targets JDK 17, 21, and 25; this does not establish compatibility with arbitrary Boot or Spring AI versions. Use the matching BOM baseline in the consuming application. Earlier release candidates are listed in the [changelog](../CHANGELOG.md).
 
 ## Model selection and replacement beans
 
-The starter intentionally backs off for any application-declared `ChatModel`,
-`EmbeddingModel`, or `ImageModel` of the corresponding modality. This includes another
-provider's model and a custom OpenRouter model. Setting `spring.ai.model.chat=openrouter`
-enables chat auto-configuration but does not override a replacement `ChatModel` bean.
-The same rule applies to `spring.ai.model.embedding` and `spring.ai.model.image`.
+The starter intentionally backs off for any application-declared `ChatModel`, `EmbeddingModel`, or `ImageModel` of the corresponding modality. This includes another provider's model and a custom OpenRouter model. Setting `spring.ai.model.chat=openrouter` enables chat auto-configuration but does not override a replacement `ChatModel` bean. The same rule applies to `spring.ai.model.embedding` and `spring.ai.model.image`.
 
-Each selector defaults independently to `openrouter`. Use `none` to disable a modality,
-or another provider's identifier to select its auto-configuration. Disabling chat alone
-leaves OpenRouter embeddings and images enabled and still requires an API key. Set all
-three selectors to `none` to disable the shared OpenRouter API as well. Replacement model
-beans alone do not disable that API.
+Each selector defaults independently to `openrouter`. Use `none` to disable a modality, or another provider's identifier to select its auto-configuration. Disabling chat alone leaves OpenRouter embeddings and images enabled and still requires an API key. Set all three selectors to `none` to disable the shared OpenRouter API as well. Replacement model beans alone do not disable that API.
 
-When several provider starters are installed, set each selector explicitly. This policy
-does not arbitrate between competing auto-configurations that match missing selectors;
-their ordering must not be used to choose a provider. For multiple models of one modality,
-declare the model beans yourself and inject them with `@Qualifier` using their bean names.
-The starter's default bean names are `openRouterChatModel`, `openRouterEmbeddingModel`,
-and `openRouterImageModel`. Selection properties do not remove application-declared beans.
+When several provider starters are installed, set each selector explicitly. This policy does not arbitrate between competing auto-configurations that match missing selectors; their ordering must not be used to choose a provider. For multiple models of one modality, declare the model beans yourself and inject them with `@Qualifier` using their bean names. The starter's default bean names are `openRouterChatModel`, `openRouterEmbeddingModel`, and `openRouterImageModel`. Selection properties do not remove application-declared beans.
 
-A replacement `ChatModel` also disables OpenRouter's automatic tool-failure processor
-and manager guard. Applications that declare their own chat models own the shared tool
-failure policy described in [Tool failure policy](tool-calling.md#tool-failure-policy).
+A replacement `ChatModel` also disables OpenRouter's automatic tool-failure processor and manager guard. Applications that declare their own chat models own the shared tool failure policy described in [Tool failure policy](tool-calling.md#tool-failure-policy).
