@@ -31,6 +31,7 @@ import org.springframework.core.io.buffer.DefaultDataBufferFactory;
 import org.springframework.mock.http.client.reactive.MockClientHttpResponse;
 import org.springframework.mock.http.client.reactive.MockClientHttpRequest;
 import org.springframework.web.reactive.function.client.WebClient;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.web.reactive.function.client.ClientResponse;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -278,7 +279,11 @@ class OpenRouterApiResponseLimitTests {
 	}
 
 	private OpenRouterApi streamingSuccess(String body, MediaType contentType, int limit) {
-		return OpenRouterApi.builder()
+		return streamingSuccess(body, contentType, limit, false);
+	}
+
+	private OpenRouterApi streamingSuccess(String body, MediaType contentType, int limit, boolean suppliedMapper) {
+		var builder = OpenRouterApi.builder()
 			.apiKey("test-key")
 			.maxResponseBodyBytes(limit)
 			.webClientBuilder(WebClient.builder().clientConnector((method, uri, callback) -> {
@@ -286,8 +291,8 @@ class OpenRouterApiResponseLimitTests {
 				response.getHeaders().setContentType(contentType);
 				response.setBody(body);
 				return callback.apply(new MockClientHttpRequest(method, uri)).thenReturn(response);
-			}))
-			.build();
+			}));
+		return (suppliedMapper ? builder.objectMapper(new ObjectMapper()) : builder).build();
 	}
 
 	@Test
@@ -314,12 +319,14 @@ class OpenRouterApiResponseLimitTests {
 		MediaType contentType = sse ? MediaType.TEXT_EVENT_STREAM : MediaType.APPLICATION_JSON;
 		ImagesRequest request = new ImagesRequest("test-image", "hello", null, null, null, null, null, null, null, null,
 				null, null, null, null);
-		StepVerifier.create(streamingSuccess(body, contentType, 400_000).imagesStream(request))
-			.assertNext(event -> assertThat(event.b64Json()).isEqualTo(image))
-			.verifyComplete();
-		StepVerifier.create(streamingSuccess(body, contentType, 1024).imagesStream(request))
-			.expectError(DataBufferLimitException.class)
-			.verify();
+		for (boolean suppliedMapper : List.of(false, true)) {
+			StepVerifier.create(streamingSuccess(body, contentType, 400_000, suppliedMapper).imagesStream(request))
+				.assertNext(event -> assertThat(event.b64Json()).isEqualTo(image))
+				.verifyComplete();
+			StepVerifier.create(streamingSuccess(body, contentType, 1024, suppliedMapper).imagesStream(request))
+				.expectError(DataBufferLimitException.class)
+				.verify();
+		}
 	}
 
 	private static String paddedJson(String json, int size) {

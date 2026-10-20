@@ -39,6 +39,9 @@ import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.http.codec.ServerSentEvent;
+import org.springframework.http.codec.AbstractJacksonEncoder;
+import org.springframework.http.codec.AbstractJacksonDecoder;
+import org.springframework.http.converter.AbstractJacksonHttpMessageConverter;
 import org.springframework.util.Assert;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
@@ -110,6 +113,12 @@ public class OpenRouterApi {
 		// supply their factory. This timeout field only guards streaming idle gaps.
 		RestClient.Builder restClientBuilder = builder.restClientBuilder != null ? builder.restClientBuilder.clone()
 				: RestClient.builder();
+		if (this.customObjectMapper) {
+			restClientBuilder.configureMessageConverters(
+					converters -> converters.withJsonConverter(new AbstractJacksonHttpMessageConverter<>(
+							this.objectMapper, MediaType.APPLICATION_JSON, new MediaType("application", "*+json")) {
+					}));
+		}
 		restClientBuilder.requestInterceptor(new OpenRouterAttributionInterceptor(builder.httpReferer,
 				builder.applicationTitle, builder.applicationCategories));
 		this.restClient = restClientBuilder.baseUrl(baseUrl)
@@ -120,8 +129,19 @@ public class OpenRouterApi {
 
 		WebClient.Builder webClientBuilder = builder.webClientBuilder != null ? builder.webClientBuilder.clone()
 				: WebClient.builder();
-		this.webClient = webClientBuilder.baseUrl(baseUrl)
-			.codecs((codecs) -> codecs.defaultCodecs().maxInMemorySize(this.maxResponseBodyBytes))
+		this.webClient = webClientBuilder.baseUrl(baseUrl).codecs(codecs -> {
+			codecs.defaultCodecs().maxInMemorySize(this.maxResponseBodyBytes);
+			if (this.customObjectMapper) {
+				codecs.defaultCodecs()
+					.jacksonJsonEncoder(new AbstractJacksonEncoder<>(this.objectMapper, MediaType.APPLICATION_JSON,
+							new MediaType("application", "*+json"), MediaType.APPLICATION_NDJSON) {
+					});
+				codecs.defaultCodecs()
+					.jacksonJsonDecoder(new AbstractJacksonDecoder<>(this.objectMapper, MediaType.APPLICATION_JSON,
+							new MediaType("application", "*+json"), MediaType.APPLICATION_NDJSON) {
+					});
+			}
+		})
 			.defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + builder.apiKey)
 			.defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
 			.defaultHeader(HttpHeaders.ACCEPT, MediaType.TEXT_EVENT_STREAM_VALUE)
