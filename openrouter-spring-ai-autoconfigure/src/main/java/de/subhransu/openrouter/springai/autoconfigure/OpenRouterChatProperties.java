@@ -93,8 +93,10 @@ public class OpenRouterChatProperties {
 
 	private @Nullable Map<String, @Nullable Object> metadata;
 
+	@NestedConfigurationProperty
 	private @Nullable OpenRouterProviderPreferences provider;
 
+	@NestedConfigurationProperty
 	private @Nullable OpenRouterReasoningOptions reasoning;
 
 	private StreamingState streamingState = new StreamingState();
