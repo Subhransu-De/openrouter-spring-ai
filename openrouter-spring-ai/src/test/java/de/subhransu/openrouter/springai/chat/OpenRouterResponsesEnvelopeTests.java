@@ -73,6 +73,27 @@ class OpenRouterResponsesEnvelopeTests {
 		}
 	}
 
+	static Stream<Arguments> nonObjectOutputItems() {
+		return Stream.of("call", "completed", "item")
+			.flatMap(mode -> Stream.of("123", "[]", "\"synthetic\"", "true").map(item -> Arguments.of(mode, item)));
+	}
+
+	@ParameterizedTest
+	@MethodSource("nonObjectOutputItems")
+	void nonObjectOutputItemsFailAsMalformed(String mode, String item) {
+		String output = "{\"status\":\"completed\",\"output\":[" + item + "]}";
+		String body = switch (mode) {
+			case "call" -> output;
+			case "completed" -> wire(mode, output);
+			default -> "data: {\"type\":\"response.output_item.done\",\"output_index\":0,\"item\":" + item + "}\n\n"
+					+ wire("completed", "{\"status\":\"completed\",\"output\":[]}");
+		};
+		boolean streaming = !"call".equals(mode);
+		assertThatThrownBy(() -> invoke(model(streaming, body), streaming))
+			.isInstanceOf(OpenRouterProtocolException.class);
+		assertFailure(OpenRouterProtocolException.class);
+	}
+
 	@ParameterizedTest
 	@ValueSource(strings = { "call", "completed", "incomplete" })
 	void errorEnvelopeOverridesStatusAndPreservesBoundedTypedDiagnostics(String mode) {
