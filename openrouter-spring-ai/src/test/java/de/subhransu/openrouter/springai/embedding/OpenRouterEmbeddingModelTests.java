@@ -231,6 +231,32 @@ class OpenRouterEmbeddingModelTests {
 	}
 
 	@ParameterizedTest
+	@ValueSource(strings = { "-0.5", "0.5", "0.9999999999999999999999" })
+	void rejectsFractionalEmbeddingIndexes(String index) {
+		Fixture fixture = fixture(OpenRouterEmbeddingOptions.builder().model(MODEL).build());
+		fixture.server()
+			.expect(once(), requestTo(BASE_URL + "/embeddings"))
+			.andRespond(withSuccess("{\"data\":[{\"index\":" + index + ",\"embedding\":[1,2]}]}",
+					MediaType.APPLICATION_JSON));
+
+		assertThatThrownBy(() -> fixture.model().embed("hello")).isInstanceOf(OpenRouterProtocolException.class);
+		fixture.server().verify();
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "0", "0.0", "0e0", "\"0\"" })
+	void preservesIntegralEmbeddingIndexes(String index) {
+		Fixture fixture = fixture(OpenRouterEmbeddingOptions.builder().model(MODEL).build());
+		fixture.server()
+			.expect(once(), requestTo(BASE_URL + "/embeddings"))
+			.andRespond(withSuccess("{\"data\":[{\"index\":" + index + ",\"embedding\":[1,2]}]}",
+					MediaType.APPLICATION_JSON));
+
+		assertThat(fixture.model().embed("hello")).containsExactly(1, 2);
+		fixture.server().verify();
+	}
+
+	@ParameterizedTest
 	@CsvSource({ "2, , true", "3, , false", "3, 2, true", "2, 3, false" })
 	void validatesMergedDimensions(int defaultDimensions, Integer runtimeDimensions, boolean valid) {
 		Fixture fixture = fixture(

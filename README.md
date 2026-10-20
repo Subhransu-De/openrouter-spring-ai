@@ -914,6 +914,8 @@ chat. Only `float` embeddings are decoded; requesting `encoding_format: base64` 
 
 Embedding error envelopes take precedence over any vectors in the same HTTP 200 body. Their code, message, provider metadata, and category remain available in structured exception diagnostics; transient failures qualify for the configured blocking retry policy. Low-level callers can inspect the nullable `EmbeddingsResponse.error()` component; the existing four-argument constructor remains available.
 
+Embedding indexes must be integral and within the input range. Fractional indexes raise `OpenRouterProtocolException` before a vector is returned; integral numeric indexes retain the configured Jackson mapper's coercion behavior.
+
 Document embedding keeps raw text by default (`metadata-mode: none`). To include metadata,
 set `spring.ai.openrouter.embedding.metadata-mode: embed`, or use
 `OpenRouterEmbeddingModel.builder().metadataMode(MetadataMode.EMBED)` in Java. Both
