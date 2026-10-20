@@ -16,8 +16,7 @@ import org.springframework.aop.scope.ScopedObject;
 import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.tool.execution.ToolExecutionExceptionProcessor;
 import org.springframework.beans.factory.BeanFactory;
-import org.springframework.beans.factory.FactoryBean;
-import org.springframework.beans.factory.SmartFactoryBean;
+import org.springframework.beans.factory.BeanFactoryUtils;
 import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
@@ -53,7 +52,7 @@ final class OpenRouterToolCallingManagerGuard implements BeanPostProcessor, Smar
 		if (bean instanceof ToolCallingManager manager && !(bean instanceof ScopedObject)
 				&& (this.singletonsValidated || !this.beanFactory.isSingleton(beanName))
 				&& isCustomManager(this.beanFactory, beanName)) {
-			validate(this.beanFactory, beanName, manager);
+			validate(manager);
 		}
 		return bean;
 	}
@@ -87,7 +86,7 @@ final class OpenRouterToolCallingManagerGuard implements BeanPostProcessor, Smar
 	private void validateCustomManagers(ConfigurableListableBeanFactory factory) {
 		factory.getBeansOfType(ToolCallingManager.class, false, false).forEach((name, manager) -> {
 			if (!(manager instanceof ScopedObject) && isCustomManager(factory, name)) {
-				validate(factory, name, manager);
+				validate(manager);
 			}
 		});
 	}
@@ -122,14 +121,13 @@ final class OpenRouterToolCallingManagerGuard implements BeanPostProcessor, Smar
 		return !SPRING_TOOL_CALLING_AUTO_CONFIGURATION.equals(definition.getFactoryBeanName());
 	}
 
-	private void validate(ConfigurableListableBeanFactory owner, String managerName, ToolCallingManager manager) {
+	private void validate(ToolCallingManager manager) {
 		if (!(manager instanceof OpenRouterToolFailurePolicy policy)) {
 			throw missingPolicy(manager);
 		}
 		ToolExecutionExceptionProcessor actualProcessor = policy.toolExecutionExceptionProcessor();
-		if (actualProcessor == null || !(isDeclaredProcessor(actualProcessor)
-				|| isInjectedFactoryProduct(owner, managerName, actualProcessor)
-				|| actualProcessor instanceof OpenRouterToolExecutionExceptionProcessor)) {
+		if (actualProcessor == null || !(actualProcessor instanceof OpenRouterToolExecutionExceptionProcessor
+				|| isDeclaredProcessor(actualProcessor))) {
 			throw undeclaredProcessor(manager);
 		}
 	}
@@ -152,31 +150,13 @@ final class OpenRouterToolCallingManagerGuard implements BeanPostProcessor, Smar
 		while (factory instanceof ConfigurableListableBeanFactory listableFactory) {
 			for (String name : listableFactory.getBeanNamesForType(ToolExecutionExceptionProcessor.class, false,
 					false)) {
-				if (listableFactory.containsSingleton(name) && listableFactory.getSingleton(name) == processor) {
+				String singletonName = BeanFactoryUtils.transformedBeanName(name);
+				if (listableFactory.containsSingleton(singletonName)
+						&& listableFactory.getSingleton(singletonName) == processor) {
 					return true;
 				}
 			}
 			factory = listableFactory.getParentBeanFactory();
-		}
-		return false;
-	}
-
-	private static boolean isInjectedFactoryProduct(ConfigurableListableBeanFactory owner, String managerName,
-			ToolExecutionExceptionProcessor processor) {
-		for (String dependency : owner.getDependenciesForBean(managerName)) {
-			BeanFactory factory = owner;
-			while (factory instanceof ConfigurableListableBeanFactory listableFactory
-					&& !listableFactory.containsLocalBean(dependency)) {
-				factory = listableFactory.getParentBeanFactory();
-			}
-			if (factory instanceof ConfigurableListableBeanFactory definingFactory
-					&& definingFactory.containsSingleton(dependency)
-					&& definingFactory.getSingleton(dependency) instanceof FactoryBean<?> factoryBean
-					&& factoryBean.isSingleton() && !(factoryBean instanceof SmartFactoryBean<?>)
-					&& definingFactory.isTypeMatch(dependency, ToolExecutionExceptionProcessor.class)
-					&& definingFactory.getBean(dependency) == processor) {
-				return true;
-			}
 		}
 		return false;
 	}
