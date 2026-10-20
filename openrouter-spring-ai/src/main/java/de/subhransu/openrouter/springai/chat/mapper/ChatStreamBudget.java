@@ -10,7 +10,7 @@ import tools.jackson.databind.ObjectMapper;
 // Conservative metadata admission charges are released when a choice finishes.
 final class ChatStreamBudget {
 
-	private final ObjectMapper objectMapper = new ObjectMapper();
+	private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
 	private final long maxBytes;
 
@@ -59,7 +59,7 @@ final class ChatStreamBudget {
 			return 0;
 		}
 		Counter counter = new Counter();
-		this.objectMapper.writeValue(counter, value);
+		OBJECT_MAPPER.writeValue(counter, value);
 		return counter.bytes;
 	}
 

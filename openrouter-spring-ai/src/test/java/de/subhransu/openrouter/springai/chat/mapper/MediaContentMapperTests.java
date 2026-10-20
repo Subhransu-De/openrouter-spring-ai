@@ -2,12 +2,15 @@ package de.subhransu.openrouter.springai.chat.mapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
 import de.subhransu.openrouter.springai.api.dto.ContentPart;
 import de.subhransu.openrouter.springai.api.dto.ResponsesContent;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
+import java.util.Base64;
+import java.util.Random;
 import de.subhransu.openrouter.springai.chat.OpenRouterCacheBreakpoint;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import org.springframework.ai.chat.messages.UserMessage;
@@ -21,7 +24,23 @@ import tools.jackson.databind.ObjectMapper;
 
 class MediaContentMapperTests {
 
+	private static final String INVALID_BASE64 = "Invalid base64 media content";
+
 	private static final String PDF_URL = "https://example.test/report.pdf";
+
+	@ParameterizedTest
+	@ValueSource(strings = { "", "data:image/png;base64,", "data:image/png;name=é;base64,",
+			"data:image/png;name=λ;base64," })
+	void prefixedBase64MatchesStandardEncodingWithoutChangingInput(String prefix) {
+		for (int size : new int[] { 0, 1, 2, 3, 4, 7, 8, 1023, 1024, 1_048_576 }) {
+			byte[] data = new byte[size];
+			new Random(42).nextBytes(data);
+			byte[] original = data.clone();
+			assertThat(MediaUrlMapper.dataUrl(prefix, data))
+				.isEqualTo(prefix + Base64.getEncoder().encodeToString(original));
+			assertThat(data).isEqualTo(original);
+		}
+	}
 
 	@ParameterizedTest
 	@CsvSource({ "application/pdf,file,input_file", "audio/wav,input_audio,input_audio",
@@ -59,6 +78,33 @@ class MediaContentMapperTests {
 	}
 
 	@ParameterizedTest
+	@ValueSource(strings = { "AQ==", "AQ", "AQI=", "AQI", "AQID" })
+	void preservesPaddedAndUnpaddedAudioPayloads(String payload) {
+		Media inline = media("audio/wav", "data:audio/wav;base64," + payload);
+		assertThat(MediaContentMapper.chat(inline).inputAudio().data()).isEqualTo(payload);
+		assertThat(MediaContentMapper.responses(inline).inputAudio().data()).isEqualTo(payload);
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "AQ===", "AQ==tail", "\u0100", "\uD83D\uDE00" })
+	void preservesMalformedPayloadDiagnostics(String payload) {
+		Throwable expected = catchThrowable(() -> java.util.Base64.getDecoder().decode(payload));
+		Media inline = Media.builder()
+			.mimeType(MimeTypeUtils.parseMimeType("application/pdf"))
+			.name("synthetic.pdf")
+			.data("data:application/pdf;base64," + payload)
+			.build();
+		assertThatThrownBy(() -> MediaContentMapper.chat(inline)).isInstanceOf(IllegalArgumentException.class)
+			.hasMessage(INVALID_BASE64)
+			.hasCauseInstanceOf(IllegalArgumentException.class)
+			.hasRootCauseMessage(expected.getMessage());
+		assertThatThrownBy(() -> MediaContentMapper.responses(inline)).isInstanceOf(IllegalArgumentException.class)
+			.hasMessage(INVALID_BASE64)
+			.hasCauseInstanceOf(IllegalArgumentException.class)
+			.hasRootCauseMessage(expected.getMessage());
+	}
+
+	@ParameterizedTest
 	@CsvSource({ "application/pdf,data:application/pdf;base64,", "application/pdf,data:application/pdf;base64,!!!",
 			"application/pdf,data:audio/wav;base64,AQID", "application/pdf,data:application/pdf,AQID" })
 	void rejectsMalformedDataUrls(String mime, String prefix, String payload) {
@@ -70,10 +116,10 @@ class MediaContentMapperTests {
 	void preservesBase64DecodingCauseInBothRequestModes(String mime) {
 		Media invalid = media(mime, "data:" + mime + ";base64,!!!");
 		assertThatThrownBy(() -> MediaContentMapper.chat(invalid)).isInstanceOf(IllegalArgumentException.class)
-			.hasMessage("Invalid base64 media content")
+			.hasMessage(INVALID_BASE64)
 			.hasCauseInstanceOf(IllegalArgumentException.class);
 		assertThatThrownBy(() -> MediaContentMapper.responses(invalid)).isInstanceOf(IllegalArgumentException.class)
-			.hasMessage("Invalid base64 media content")
+			.hasMessage(INVALID_BASE64)
 			.hasCauseInstanceOf(IllegalArgumentException.class);
 	}
 

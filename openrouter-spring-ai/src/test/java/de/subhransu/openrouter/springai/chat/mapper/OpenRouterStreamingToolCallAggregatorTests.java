@@ -47,6 +47,66 @@ class OpenRouterStreamingToolCallAggregatorTests {
 	private final OpenRouterStreamingToolCallAggregator aggregator = new OpenRouterStreamingToolCallAggregator();
 
 	@Test
+	void terminalTextPreservesNullEmptyAndUnicodeFieldsIndependently() {
+		for (String first : java.util.Arrays.asList(null, "", "first-😀")) {
+			for (String second : java.util.Arrays.asList(null, "", "second-漢")) {
+				for (String third : java.util.Arrays.asList(null, "", "third-ह")) {
+					Choice tool = toolFragment(0, 0, "call-0", "lookup", "{}");
+					Flux<ChatCompletionChunk> source = Flux.just(
+							chunk(new Choice(0, null,
+									new Delta("assistant", first, second, tool.delta().toolCalls(), null, null, third),
+									null, null)),
+							chunk(new Choice(0, null, new Delta(null, second, third, null, null, null, first), null,
+									null)),
+							chunk(new Choice(0, null, new Delta(null, third, first, null, null, null, second), null,
+									null)),
+							chunk(finishChoice(0)));
+					StepVerifier.create(this.aggregator.aggregate(source)).assertNext(merged -> {
+						Delta delta = merged.choices().get(0).delta();
+						assertThat(delta.content()).isEqualTo(expectedText(first, second, third));
+						assertThat(delta.reasoning()).isEqualTo(expectedText(second, third, first));
+						assertThat(delta.refusal()).isEqualTo(expectedText(third, first, second));
+					}).verifyComplete();
+				}
+			}
+		}
+	}
+
+	private static String expectedText(String... values) {
+		return java.util.Arrays.stream(values).allMatch(java.util.Objects::isNull) ? null
+				: java.util.Arrays.stream(values)
+					.filter(java.util.Objects::nonNull)
+					.collect(java.util.stream.Collectors.joining());
+	}
+
+	@Test
+	void terminalLogprobsMatchIncrementalMergingAcrossOpaqueAndNullValues() {
+		List<Map<String, Object>> extensions = List.of(Map.of(), java.util.Collections.singletonMap("logprobs", null),
+				Map.of("logprobs", "opaque"), Map.of("logprobs", Map.of()),
+				Map.of("logprobs", Map.of("content", List.of(Map.of("token", "first")), "revision", 1)),
+				Map.of("logprobs", Map.of("content", "opaque", "refusal", List.of(Map.of("token", "refused")))),
+				Map.of("logprobs", java.util.Collections.singletonMap("content", null)),
+				Map.of("logprobs", Map.of("content", List.of(Map.of("token", "second")), "revision", 2)));
+		for (Map<String, Object> first : extensions) {
+			for (Map<String, Object> second : extensions) {
+				for (Map<String, Object> third : extensions) {
+					Map<String, Object> expected = ExtensionMetadata.mergeChoice(
+							ExtensionMetadata.mergeChoice(ExtensionMetadata.mergeChoice(first, second), third),
+							Map.of());
+					Choice start = toolFragment(0, 0, "call-0", "lookup", "{}");
+					Flux<ChatCompletionChunk> source = Flux.just(
+							chunk(new Choice(0, null, start.delta(), null, null, null, first)),
+							chunk(new Choice(0, null, null, null, null, null, second)),
+							chunk(new Choice(0, null, null, null, null, null, third)), chunk(finishChoice(0)));
+					StepVerifier.create(this.aggregator.aggregate(source))
+						.assertNext(merged -> assertThat(merged.choices().get(0).extensions()).isEqualTo(expected))
+						.verifyComplete();
+				}
+			}
+		}
+	}
+
+	@Test
 	void boundedDemandAfterSubscriptionStillCollectsEveryToolFragment() {
 		Flux<ChatCompletionChunk> source = Flux.just(chunk(textChoice(0, "Checking")),
 				chunk(toolFragment(0, 0, "call-0", "lookup", "{")), chunk(toolFragment(0, 0, null, null, "}")),

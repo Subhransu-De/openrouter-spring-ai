@@ -2,7 +2,10 @@ package de.subhransu.openrouter.springai.chat.mapper;
 
 import java.util.Objects;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionChunk;
+import de.subhransu.openrouter.springai.api.dto.ChatMessage;
 import de.subhransu.openrouter.springai.api.dto.Choice;
+import de.subhransu.openrouter.springai.api.dto.ChoiceError;
+import de.subhransu.openrouter.springai.api.dto.ContentPart;
 import de.subhransu.openrouter.springai.api.dto.Delta;
 import de.subhransu.openrouter.springai.api.dto.FunctionCall;
 import de.subhransu.openrouter.springai.api.dto.ToolCall;
@@ -14,6 +17,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -32,7 +36,13 @@ import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.Mono;
 import reactor.util.context.Context;
 import tools.jackson.core.JacksonException;
+import tools.jackson.core.JsonGenerator;
+import tools.jackson.core.StreamWriteFeature;
+import tools.jackson.core.json.JsonFactory;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectWriter;
+import tools.jackson.databind.SerializationFeature;
 
 /**
  * Merges streamed tool-call fragments in chat-completions mode. Providers split a tool
@@ -57,6 +67,8 @@ public final class OpenRouterStreamingToolCallAggregator {
 
 	private final ObjectMapper objectMapper;
 
+	private final @Nullable ObjectWriter generatorWriter;
+
 	private final long maxBytes;
 
 	private final int maxChunks;
@@ -76,9 +88,21 @@ public final class OpenRouterStreamingToolCallAggregator {
 		Assert.isTrue(!maxDuration.isZero() && !maxDuration.isNegative(),
 				"Maximum streamed tool-call duration must be greater than zero");
 		this.objectMapper = objectMapper;
+		this.generatorWriter = generatorWriter(objectMapper);
 		this.maxBytes = maxBytes;
 		this.maxChunks = maxChunks;
 		this.maxDuration = maxDuration;
+	}
+
+	private static @Nullable ObjectWriter generatorWriter(ObjectMapper objectMapper) {
+		if (objectMapper.tokenStreamFactory() instanceof JsonFactory factory && factory.getOutputDecorator() == null
+				&& CollectionUtils.isEmpty(factory.getGeneratorDecorators())
+				&& !objectMapper.serializationConfig().isEnabled(SerializationFeature.INDENT_OUTPUT)) {
+			return objectMapper.writer()
+				.withRootValueSeparator((String) null)
+				.without(StreamWriteFeature.AUTO_CLOSE_CONTENT);
+		}
+		return null;
 	}
 
 	public Flux<ChatCompletionChunk> aggregate(Flux<ChatCompletionChunk> chunks) {
@@ -184,16 +208,6 @@ public final class OpenRouterStreamingToolCallAggregator {
 		return delta != null && !CollectionUtils.isEmpty(delta.toolCalls());
 	}
 
-	private long serializedBytes(ChatCompletionChunk chunk) {
-		try (ByteCountingOutputStream output = new ByteCountingOutputStream()) {
-			this.objectMapper.writeValue(output, chunk);
-			return output.count();
-		}
-		catch (JacksonException ex) {
-			throw new IllegalStateException("Failed to measure an OpenRouter stream chunk", ex);
-		}
-	}
-
 	private long addSaturated(long left, long right) {
 		return Long.MAX_VALUE - left < right ? Long.MAX_VALUE : left + right;
 	}
@@ -221,98 +235,31 @@ public final class OpenRouterStreamingToolCallAggregator {
 		}
 		ChatCompletionChunk first = buffered.get(0);
 		ChatCompletionChunk last = buffered.get(buffered.size() - 1);
-		Map<Integer, Choice> choices = new TreeMap<>();
+		Map<Integer, ChoiceBuffer> buffersByChoice = new TreeMap<>();
+		Map<String, @Nullable Object> extensions = new LinkedHashMap<>();
 		var usage = first.usage();
 		for (ChatCompletionChunk chunk : buffered) {
 			if (chunk.usage() != null) {
 				usage = chunk.usage();
 			}
+			extensions.putAll(chunk.extensions());
 			if (chunk.choices() == null) {
 				continue;
 			}
-			for (Choice choice : ResponseValues.items(chunk.choices(), "choice")) {
-				Integer index = Objects.requireNonNullElse(choice.index(), 0);
-				choices.merge(index, choice, this::mergeChoices);
+			for (Choice choice : items(chunk.choices(), "choice")) {
+				buffersByChoice
+					.computeIfAbsent(Objects.requireNonNullElse(choice.index(), 0), ignored -> new ChoiceBuffer())
+					.append(choice);
 			}
 		}
+		List<@Nullable Choice> choices = new ArrayList<>(buffersByChoice.size());
+		buffersByChoice.values().forEach(buffer -> choices.add(buffer.finish()));
 		return new ChatCompletionChunk(value(first.id(), last.id()), value(first.object(), last.object()),
 				value(first.created(), last.created()), value(first.model(), last.model()),
-				value(first.provider(), last.provider()), new ArrayList<>(choices.values()), usage, null,
-				buffered.stream().map(ChatCompletionChunk::extensions).reduce(Map.of(), ExtensionMetadata::merge));
+				value(first.provider(), last.provider()), choices, usage, null, extensions);
 	}
 
-	private Choice mergeChoices(Choice earlier, Choice later) {
-		return new Choice(value(earlier.index(), later.index()), value(earlier.message(), later.message()),
-				mergeDeltas(earlier.delta(), later.delta()), value(later.finishReason(), earlier.finishReason()),
-				value(later.nativeFinishReason(), earlier.nativeFinishReason()), value(later.error(), earlier.error()),
-				ExtensionMetadata.mergeChoice(earlier.extensions(), later.extensions()));
-	}
-
-	private @Nullable Delta mergeDeltas(@Nullable Delta earlier, @Nullable Delta later) {
-		if (earlier == null) {
-			return later;
-		}
-		if (later == null) {
-			return earlier;
-		}
-		return new Delta(value(earlier.role(), later.role()), concat(earlier.content(), later.content()),
-				concat(earlier.reasoning(), later.reasoning()), mergeToolCalls(earlier.toolCalls(), later.toolCalls()),
-				ReasoningMetadata.concat(earlier.images(), later.images()),
-				ReasoningMetadata.concat(earlier.reasoningDetails(), later.reasoningDetails()),
-				concat(earlier.refusal(), later.refusal()),
-				ExtensionMetadata.mergeMessage(earlier.extensions(), later.extensions()));
-	}
-
-	private @Nullable List<@Nullable ToolCall> mergeToolCalls(@Nullable List<@Nullable ToolCall> earlier,
-			@Nullable List<@Nullable ToolCall> later) {
-		if (CollectionUtils.isEmpty(later)) {
-			return earlier;
-		}
-		Map<Integer, ToolCall> merged = new TreeMap<>();
-		int nextSyntheticKey = 0;
-		Integer lastKey = null;
-		if (earlier != null) {
-			for (ToolCall toolCall : ResponseValues.items(earlier, "tool call")) {
-				int key = Objects.requireNonNullElse(toolCall.index(), nextSyntheticKey);
-				nextSyntheticKey = Math.max(nextSyntheticKey, key + 1);
-				merged.merge(key, toolCall, this::mergeToolCallFragments);
-				lastKey = key;
-			}
-		}
-		for (ToolCall fragment : ResponseValues.items(later, "tool call fragment")) {
-			// Fragments are correlated by the wire index. Without one, a fragment
-			// carrying an id starts a new call; otherwise it continues the last call.
-			Integer key = fragment.index();
-			if (key == null) {
-				key = fragment.id() != null || lastKey == null ? nextSyntheticKey : lastKey;
-			}
-			nextSyntheticKey = Math.max(nextSyntheticKey, key + 1);
-			merged.merge(key, fragment, this::mergeToolCallFragments);
-			lastKey = key;
-		}
-		return new ArrayList<>(merged.values());
-	}
-
-	private ToolCall mergeToolCallFragments(ToolCall earlier, ToolCall later) {
-		FunctionCall earlierFunction = earlier.function();
-		FunctionCall laterFunction = later.function();
-		FunctionCall function;
-		if (earlierFunction == null) {
-			function = laterFunction;
-		}
-		else if (laterFunction == null) {
-			function = earlierFunction;
-		}
-		else {
-			function = new FunctionCall(mergeFunctionNames(earlierFunction.name(), laterFunction.name()),
-					concat(earlierFunction.arguments(), laterFunction.arguments()));
-		}
-		return new ToolCall(value(earlier.id(), later.id()), value(earlier.type(), later.type()), function,
-				value(earlier.index(), later.index()),
-				ExtensionMetadata.merge(earlier.extensions(), later.extensions()));
-	}
-
-	private @Nullable String mergeFunctionNames(@Nullable String earlier, @Nullable String later) {
+	private static @Nullable String mergeFunctionNames(@Nullable String earlier, @Nullable String later) {
 		if (!StringUtils.hasText(earlier)) {
 			return later;
 		}
@@ -328,11 +275,328 @@ public final class OpenRouterStreamingToolCallAggregator {
 		return preferred != null ? preferred : fallback;
 	}
 
-	private static @Nullable String concat(@Nullable String earlier, @Nullable String later) {
-		if (earlier == null) {
-			return later;
+	private static <T> List<T> items(@Nullable List<? extends @Nullable T> values, String field) {
+		return values != null && values.size() == 1 ? List.of(ResponseValues.required(values.get(0), field))
+				: ResponseValues.items(values, field);
+	}
+
+	private static final class ChoiceBuffer {
+
+		private final Map<String, @Nullable Object> values = new LinkedHashMap<>();
+
+		private @Nullable Integer index;
+
+		private @Nullable ChatMessage message;
+
+		private @Nullable String finishReason;
+
+		private @Nullable Object nativeFinishReason;
+
+		private @Nullable ChoiceError error;
+
+		private @Nullable Delta first;
+
+		private boolean merged;
+
+		private @Nullable String role;
+
+		private @Nullable StringBuilder content;
+
+		private @Nullable StringBuilder reasoning;
+
+		private @Nullable StringBuilder refusal;
+
+		private final ListBuffer<@Nullable ContentPart> images = new ListBuffer<@Nullable ContentPart>();
+
+		private final ListBuffer<@Nullable JsonNode> reasoningDetails = new ListBuffer<@Nullable JsonNode>();
+
+		private @Nullable Map<String, @Nullable Object> messageExtensions;
+
+		private @Nullable List<@Nullable Object> annotations;
+
+		private @Nullable List<@Nullable ToolCall> toolCalls;
+
+		private @Nullable TreeMap<Integer, ToolCallFragments> fragmentsByCall;
+
+		private int nextCallKey;
+
+		private void append(Choice choice) {
+			appendExtensions(choice.extensions());
+			this.index = value(this.index, choice.index());
+			this.message = value(this.message, choice.message());
+			this.finishReason = value(choice.finishReason(), this.finishReason);
+			this.nativeFinishReason = value(choice.nativeFinishReason(), this.nativeFinishReason);
+			this.error = value(choice.error(), this.error);
+			Delta delta = choice.delta();
+			if (delta != null) {
+				appendDelta(delta);
+			}
 		}
-		return later == null ? earlier : earlier + later;
+
+		private void appendDelta(Delta delta) {
+			this.content = appendText(this.content, delta.content());
+			this.reasoning = appendText(this.reasoning, delta.reasoning());
+			this.refusal = appendText(this.refusal, delta.refusal());
+			this.images.append(delta.images());
+			this.reasoningDetails.append(delta.reasoningDetails());
+			Delta earlier = this.first;
+			if (earlier == null) {
+				this.first = delta;
+				this.role = delta.role();
+				this.toolCalls = delta.toolCalls();
+				return;
+			}
+			this.merged = true;
+			this.role = value(this.role, delta.role());
+			appendToolCalls(delta.toolCalls());
+			appendMessageExtensions(earlier, delta.extensions());
+		}
+
+		private void appendToolCalls(@Nullable List<@Nullable ToolCall> later) {
+			if (CollectionUtils.isEmpty(later)) {
+				return;
+			}
+			TreeMap<Integer, ToolCallFragments> calls = this.fragmentsByCall;
+			Integer lastKey = null;
+			if (calls == null) {
+				calls = new TreeMap<>();
+				this.fragmentsByCall = calls;
+				for (ToolCall toolCall : ResponseValues.items(this.toolCalls, "tool call")) {
+					lastKey = correlate(calls, Objects.requireNonNullElse(toolCall.index(), this.nextCallKey),
+							toolCall);
+				}
+			}
+			else if (!calls.isEmpty()) {
+				lastKey = calls.lastKey();
+			}
+			for (ToolCall fragment : items(later, "tool call fragment")) {
+				// Fragments are correlated by the wire index. Without one, a fragment
+				// carrying an id starts a new call; otherwise it continues the last call.
+				Integer key = fragment.index();
+				if (key == null) {
+					key = fragment.id() != null || lastKey == null ? this.nextCallKey : lastKey;
+				}
+				lastKey = correlate(calls, key, fragment);
+			}
+		}
+
+		private int correlate(Map<Integer, ToolCallFragments> calls, int key, ToolCall fragment) {
+			this.nextCallKey = Math.max(this.nextCallKey, key + 1);
+			ToolCallFragments call = calls.get(key);
+			if (call == null) {
+				calls.put(key, new ToolCallFragments(fragment));
+			}
+			else {
+				call.append(fragment);
+			}
+			return key;
+		}
+
+		private void appendMessageExtensions(Delta first, Map<String, @Nullable Object> later) {
+			if (later.isEmpty()) {
+				return;
+			}
+			Map<String, @Nullable Object> extensions = this.messageExtensions;
+			if (extensions == null) {
+				extensions = new LinkedHashMap<>(first.extensions());
+				this.messageExtensions = extensions;
+			}
+			Object previous = extensions.get("annotations");
+			Object incoming = later.get("annotations");
+			extensions.putAll(later);
+			if (previous instanceof List<?> earlier && incoming instanceof List<?> additional) {
+				List<@Nullable Object> combined = earlier == this.annotations ? this.annotations
+						: new ArrayList<>(earlier);
+				combined.addAll(additional);
+				this.annotations = combined;
+				extensions.put("annotations", combined);
+			}
+		}
+
+		private static @Nullable StringBuilder appendText(@Nullable StringBuilder earlier, @Nullable String later) {
+			if (later == null) {
+				return earlier;
+			}
+			return earlier == null ? new StringBuilder(later) : earlier.append(later);
+		}
+
+		private Choice finish() {
+			return new Choice(this.index, this.message, finishDelta(), this.finishReason, this.nativeFinishReason,
+					this.error, this.values);
+		}
+
+		private @Nullable Delta finishDelta() {
+			Delta delta = this.first;
+			if (delta == null) {
+				return null;
+			}
+			return new Delta(this.role, text(this.content), text(this.reasoning), finishToolCalls(), this.images.items,
+					this.reasoningDetails.items, text(this.refusal), this.merged ? null : delta.audio(),
+					this.messageExtensions != null ? this.messageExtensions : delta.extensions());
+		}
+
+		private @Nullable List<@Nullable ToolCall> finishToolCalls() {
+			if (this.fragmentsByCall == null) {
+				return this.toolCalls;
+			}
+			List<@Nullable ToolCall> calls = new ArrayList<>(this.fragmentsByCall.size());
+			this.fragmentsByCall.values().forEach(call -> calls.add(call.finish()));
+			return calls;
+		}
+
+		private static @Nullable String text(@Nullable StringBuilder value) {
+			return value == null ? null : value.toString();
+		}
+
+		@SuppressWarnings("unchecked")
+		private void appendExtensions(Map<String, @Nullable Object> later) {
+			Object previous = this.values.get("logprobs");
+			Object incoming = later.get("logprobs");
+			this.values.putAll(later);
+			if (previous instanceof Map<?, ?> first && incoming == null) {
+				this.values.put("logprobs", first);
+			}
+			else if (incoming instanceof Map<?, ?> second) {
+				Map<String, @Nullable Object> logprobs;
+				if (previous instanceof Map<?, ?> first) {
+					logprobs = (Map<String, @Nullable Object>) first;
+					Object content = logprobs.get("content");
+					Object refusal = logprobs.get("refusal");
+					logprobs.putAll((Map<String, @Nullable Object>) second);
+					appendEntries(logprobs, "content", content, second.get("content"));
+					appendEntries(logprobs, "refusal", refusal, second.get("refusal"));
+				}
+				else {
+					logprobs = new LinkedHashMap<>((Map<String, @Nullable Object>) second);
+					appendEntries(logprobs, "content", null, second.get("content"));
+					appendEntries(logprobs, "refusal", null, second.get("refusal"));
+				}
+				this.values.put("logprobs", logprobs);
+			}
+		}
+
+		@SuppressWarnings("unchecked")
+		private void appendEntries(Map<String, @Nullable Object> logprobs, String key, @Nullable Object previous,
+				@Nullable Object incoming) {
+			if (previous instanceof List<?> first) {
+				List<@Nullable Object> entries = (List<@Nullable Object>) first;
+				if (incoming instanceof List<?> second) {
+					entries.addAll(second);
+				}
+				logprobs.put(key, entries);
+			}
+			else if (incoming instanceof List<?> second) {
+				logprobs.put(key, new ArrayList<>(second));
+			}
+		}
+
+	}
+
+	private static final class ListBuffer<T extends @Nullable Object> {
+
+		private @Nullable List<T> items;
+
+		private boolean copied;
+
+		private void append(@Nullable List<T> later) {
+			if (later == null) {
+				return;
+			}
+			List<T> earlier = this.items;
+			if (earlier == null) {
+				this.items = later;
+				return;
+			}
+			if (!this.copied) {
+				earlier = new ArrayList<>(earlier);
+				this.items = earlier;
+				this.copied = true;
+			}
+			earlier.addAll(later);
+		}
+
+	}
+
+	private static final class ToolCallFragments {
+
+		private final ToolCall first;
+
+		private boolean merged;
+
+		private @Nullable String id;
+
+		private @Nullable String type;
+
+		private @Nullable Integer index;
+
+		private @Nullable FunctionCall function;
+
+		private boolean functionMerged;
+
+		private @Nullable String name;
+
+		private @Nullable StringBuilder arguments;
+
+		private @Nullable Map<String, @Nullable Object> extensions;
+
+		private ToolCallFragments(ToolCall first) {
+			this.first = first;
+			this.id = first.id();
+			this.type = first.type();
+			this.index = first.index();
+			appendFunction(first.function());
+		}
+
+		private void append(ToolCall later) {
+			this.merged = true;
+			this.id = value(this.id, later.id());
+			this.type = value(this.type, later.type());
+			this.index = value(this.index, later.index());
+			appendFunction(later.function());
+			if (!later.extensions().isEmpty()) {
+				if (this.extensions == null) {
+					this.extensions = new LinkedHashMap<>(this.first.extensions());
+				}
+				this.extensions.putAll(later.extensions());
+			}
+		}
+
+		private void appendFunction(@Nullable FunctionCall later) {
+			if (later == null) {
+				return;
+			}
+			FunctionCall earlier = this.function;
+			if (earlier == null) {
+				this.function = later;
+				this.name = later.name();
+				return;
+			}
+			this.name = mergeFunctionNames(this.name, later.name());
+			if (!this.functionMerged) {
+				this.functionMerged = true;
+				if (earlier.arguments() != null) {
+					this.arguments = new StringBuilder(earlier.arguments());
+				}
+			}
+			if (later.arguments() != null) {
+				if (this.arguments == null) {
+					this.arguments = new StringBuilder();
+				}
+				this.arguments.append(later.arguments());
+			}
+		}
+
+		private ToolCall finish() {
+			if (!this.merged) {
+				return this.first;
+			}
+			FunctionCall merged = this.functionMerged
+					? new FunctionCall(this.name, this.arguments != null ? this.arguments.toString() : null)
+					: this.function;
+			return new ToolCall(this.id, this.type, merged, this.index,
+					this.extensions != null ? this.extensions : this.first.extensions());
+		}
+
 	}
 
 	private final class AggregationState {
@@ -349,8 +613,32 @@ public final class OpenRouterStreamingToolCallAggregator {
 
 		private final Consumer<Throwable> timeoutHandler;
 
+		private final ByteCountingOutputStream output = new ByteCountingOutputStream();
+
+		private @Nullable JsonGenerator generator;
+
 		private AggregationState(Consumer<Throwable> timeoutHandler) {
 			this.timeoutHandler = timeoutHandler;
+		}
+
+		private long serializedBytes(ChatCompletionChunk chunk) {
+			this.output.reset();
+			try {
+				if (this.generator == null && generatorWriter != null) {
+					this.generator = generatorWriter.createGenerator(this.output);
+				}
+				if (this.generator == null) {
+					objectMapper.writeValue(this.output, chunk);
+				}
+				else {
+					objectMapper.writeValue(this.generator, chunk);
+					this.generator.flush();
+				}
+				return this.output.count();
+			}
+			catch (JacksonException ex) {
+				throw new IllegalStateException("Failed to measure an OpenRouter stream chunk", ex);
+			}
 		}
 
 		private synchronized List<ChatCompletionChunk> accept(ChatCompletionChunk chunk) {
@@ -371,10 +659,15 @@ public final class OpenRouterStreamingToolCallAggregator {
 			}
 
 			List<ChatCompletionChunk> ready = new ArrayList<>();
-			ResponseValues.items(chunk.choices(), "choice")
-				.stream()
-				.sorted(Comparator.comparingInt(this::choiceIndex))
-				.forEach(choice -> acceptChoice(chunk, choice, ready));
+			if (chunk.choices().size() == 1) {
+				acceptChoice(chunk, ResponseValues.required(chunk.choices().get(0), "choice"), ready);
+			}
+			else {
+				ResponseValues.items(chunk.choices(), "choice")
+					.stream()
+					.sorted(Comparator.comparingInt(this::choiceIndex))
+					.forEach(choice -> acceptChoice(chunk, choice, ready));
+			}
 			if (this.bufferedByChoice.isEmpty()) {
 				ready.addAll(this.bufferedChoiceLessChunks);
 				release(this.bufferedChoiceLessChunks.size(), this.bufferedChoiceLessBytes);
@@ -453,6 +746,10 @@ public final class OpenRouterStreamingToolCallAggregator {
 		}
 
 		private synchronized void clear() {
+			if (this.generator != null) {
+				this.generator.close();
+				this.generator = null;
+			}
 			this.bufferedByChoice.values().forEach(ToolCallBuffer::close);
 			this.bufferedByChoice.clear();
 			this.bufferedChoiceLessChunks.clear();
@@ -549,6 +846,10 @@ public final class OpenRouterStreamingToolCallAggregator {
 
 		@Override
 		public void close() {
+		}
+
+		void reset() {
+			this.count = 0;
 		}
 
 		long count() {

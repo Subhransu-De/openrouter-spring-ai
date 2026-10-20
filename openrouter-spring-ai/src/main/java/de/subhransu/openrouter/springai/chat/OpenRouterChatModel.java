@@ -172,6 +172,9 @@ public class OpenRouterChatModel implements ChatModel {
 				.doOnError(observation::error)
 				.doFinally(signal -> observation.stop())
 				.contextWrite(ctx -> ctx.put(ObservationThreadLocalAccessor.KEY, observation));
+			if (observation.isNoop()) {
+				return observed;
+			}
 			return new MessageAggregator().aggregate(observed, response -> {
 				// Spring AI's aggregator replaces provider usage with token totals only.
 				// OpenRouter usage is a cumulative snapshot, not a per-chunk delta.

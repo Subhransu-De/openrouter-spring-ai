@@ -126,7 +126,7 @@ public final class OpenRouterResponsesRequestMapper {
 	}
 
 	private List<Object> mapInput(List<Message> messages) {
-		List<Object> mapped = new ArrayList<>();
+		List<Object> mapped = new ArrayList<>(messages.size());
 		for (Message message : messages) {
 			if (message.getMessageType() == MessageType.SYSTEM) {
 				continue;
@@ -141,22 +141,25 @@ public final class OpenRouterResponsesRequestMapper {
 				}
 				continue;
 			}
-			mapped.addAll(mapMessage(message));
+			mapMessage(message, mapped);
 		}
 		return mapped;
 	}
 
-	private List<Object> mapMessage(Message message) {
+	private void mapMessage(Message message, List<Object> items) {
 		if (message instanceof AssistantMessage assistant && !CollectionUtils.isEmpty(assistant.getMedia())) {
 			throw new IllegalArgumentException("OPENAI_RESPONSES does not support assistant media history; "
 					+ "attach the media to a UserMessage or use OPENAI_CHAT_COMPLETIONS");
 		}
-		return message.getMessageType() == MessageType.ASSISTANT ? assistant(message)
-				: List.of(inputMessage(mapRole(message.getMessageType()), message));
+		if (message.getMessageType() == MessageType.ASSISTANT) {
+			assistant(message, items);
+		}
+		else {
+			items.add(inputMessage(mapRole(message.getMessageType()), message));
+		}
 	}
 
-	private List<Object> assistant(Message message) {
-		List<Object> items = new ArrayList<>();
+	private void assistant(Message message, List<Object> items) {
 		Object reasoning = message.getMetadata().get(ReasoningMetadata.RESPONSES_ITEMS);
 		if (reasoning instanceof List<?> reasoningItems && !reasoningItems.isEmpty()) {
 			Object output = message.getMetadata().get(ReasoningMetadata.RESPONSES_OUTPUT_ITEMS);
@@ -164,12 +167,13 @@ public final class OpenRouterResponsesRequestMapper {
 				validateSnapshot(message, outputItems);
 				// Reasoning must retain its position relative to messages and calls.
 				// Rebuilding these separately changes the provider's continuation.
-				return new ArrayList<>(outputItems);
+				items.addAll(outputItems);
+				return;
 			}
 			throw new IllegalArgumentException("OPENAI_RESPONSES cannot replay reasoning without an output snapshot; "
 					+ "retain the original assistant message or start a new conversation without its reasoning state");
 		}
-		List<ResponsesContent> content = new ArrayList<>();
+		List<@Nullable ResponsesContent> content = new ArrayList<>();
 		if (StringUtils.hasLength(message.getText())) {
 			content.add(new ResponsesContent("output_text", message.getText()));
 		}
@@ -177,7 +181,7 @@ public final class OpenRouterResponsesRequestMapper {
 			content.add(new ResponsesContent("refusal", null, null, refusal));
 		}
 		if (!content.isEmpty()) {
-			items.add(new ResponsesOutputItem(null, MESSAGE_TYPE, "completed", "assistant", new ArrayList<>(content)));
+			items.add(new ResponsesOutputItem(null, MESSAGE_TYPE, "completed", "assistant", content));
 		}
 		if (message instanceof AssistantMessage assistantMessage) {
 			for (AssistantMessage.ToolCall toolCall : assistantMessage.getToolCalls()) {
@@ -185,7 +189,6 @@ public final class OpenRouterResponsesRequestMapper {
 						toolCall.arguments()));
 			}
 		}
-		return items;
 	}
 
 	private void validateSnapshot(Message message, List<?> outputItems) {

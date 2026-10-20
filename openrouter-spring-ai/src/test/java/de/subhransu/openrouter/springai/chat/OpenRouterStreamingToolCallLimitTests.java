@@ -7,7 +7,12 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.spy;
 
+import tools.jackson.core.io.IOContext;
+import tools.jackson.core.io.OutputDecorator;
+import tools.jackson.core.json.JsonFactory;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.SerializationFeature;
+import tools.jackson.databind.json.JsonMapper;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionChunk;
 import de.subhransu.openrouter.springai.api.dto.Choice;
 import de.subhransu.openrouter.springai.api.dto.Delta;
@@ -15,6 +20,10 @@ import de.subhransu.openrouter.springai.api.dto.FunctionCall;
 import de.subhransu.openrouter.springai.api.dto.ToolCall;
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterStreamingToolCallAggregator;
 import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException;
+import java.io.FilterOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.Writer;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -143,6 +152,56 @@ class OpenRouterStreamingToolCallLimitTests {
 			.assertNext(merged -> assertThat(merged.choices().get(0).delta().toolCalls().get(0).function().arguments())
 				.isEqualTo("{\"city\":\"Berlin\"}"))
 			.verifyComplete();
+	}
+
+	@ParameterizedTest(name = "{0} mapper")
+	@MethodSource("byteCountingMappers")
+	void byteBudgetChargesTheSerializedSizeOfEveryChunk(ObjectMapper mapper) {
+		List<ChatCompletionChunk> chunks = List.of(toolChunk("{\"city\":"), toolChunk("\"Berlin\"}"), finishChunk());
+		long bytes = chunks.stream().mapToLong(chunk -> mapper.writeValueAsBytes(chunk).length).sum();
+
+		StepVerifier
+			.create(new OpenRouterStreamingToolCallAggregator(mapper, bytes, 3, TEST_DURATION)
+				.aggregate(Flux.fromIterable(chunks)))
+			.expectNextCount(1)
+			.verifyComplete();
+		StepVerifier
+			.create(new OpenRouterStreamingToolCallAggregator(mapper, bytes - 1, 3, TEST_DURATION)
+				.aggregate(Flux.fromIterable(chunks)))
+			.expectErrorSatisfies(thrown -> assertThat(((OpenRouterLimitExceededException) thrown).getObservedValue())
+				.isEqualTo(bytes))
+			.verify();
+	}
+
+	static Stream<Arguments> byteCountingMappers() {
+		OutputDecorator closingMarker = new OutputDecorator() {
+
+			@Override
+			public OutputStream decorate(IOContext context, OutputStream output) {
+				return new FilterOutputStream(output) {
+
+					@Override
+					public void close() throws IOException {
+						write('#');
+						super.close();
+					}
+
+				};
+			}
+
+			@Override
+			public Writer decorate(IOContext context, Writer writer) {
+				return writer;
+			}
+
+		};
+		return Stream.of(Arguments.of(Named.of("default", OBJECT_MAPPER)),
+				Arguments
+					.of(Named.of("indenting", JsonMapper.builder().enable(SerializationFeature.INDENT_OUTPUT).build())),
+				Arguments.of(Named.of("root-separated",
+						JsonMapper.builder(JsonFactory.builder().rootValueSeparator("<|>").build()).build())),
+				Arguments.of(Named.of("output-decorated",
+						JsonMapper.builder(JsonFactory.builder().outputDecorator(closingMarker).build()).build())));
 	}
 
 	@ParameterizedTest(name = "assembled chunk count is {0} the limit")

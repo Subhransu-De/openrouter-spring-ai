@@ -17,6 +17,9 @@ import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseExcept
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import de.subhransu.openrouter.springai.internal.StreamRetries;
 import java.io.ByteArrayOutputStream;
+import java.io.ByteArrayInputStream;
+import java.io.SequenceInputStream;
+import java.util.Collections;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -45,6 +48,7 @@ import org.springframework.web.reactive.function.client.ClientResponse;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Flux;
 import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectReader;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.DeserializationFeature;
 
@@ -65,6 +69,10 @@ public class OpenRouterApi {
 
 	private final ObjectMapper objectMapper;
 
+	private final StreamEventBinder eventBinder;
+
+	private final @Nullable BlockingResponseDecoder responseDecoder;
+
 	private final OpenRouterHttpExceptionFactory httpExceptionFactory;
 
 	private final @Nullable Duration timeout;
@@ -79,6 +87,7 @@ public class OpenRouterApi {
 
 		String baseUrl = StringUtils.hasText(builder.baseUrl) ? builder.baseUrl : DEFAULT_BASE_URL;
 		this.objectMapper = builder.objectMapper;
+		this.eventBinder = new StreamEventBinder(this.objectMapper, !builder.customObjectMapper);
 		this.httpExceptionFactory = new OpenRouterHttpExceptionFactory(this.objectMapper, builder.apiKey);
 		this.timeout = builder.timeout;
 		Assert.isTrue(builder.maxResponseBodyBytes > 0, "Maximum response body size must be greater than zero");
@@ -89,18 +98,20 @@ public class OpenRouterApi {
 				"Maximum error body size must be less than Integer.MAX_VALUE");
 		this.maxResponseBodyBytes = builder.maxResponseBodyBytes;
 		this.maxErrorBodyBytes = builder.maxErrorBodyBytes;
+		this.responseDecoder = BlockingResponseDecoder.supports(this.objectMapper)
+				? new BlockingResponseDecoder(this.objectMapper, this.maxResponseBodyBytes) : null;
 
 		// Blocking timeouts belong to the request factory. Auto-configuration installs
 		// a timeout-configured factory on its own builder clone; programmatic callers
 		// supply their factory. This timeout field only guards streaming idle gaps.
 		RestClient.Builder restClientBuilder = builder.restClientBuilder != null ? builder.restClientBuilder.clone()
 				: RestClient.builder();
+		restClientBuilder.requestInterceptor(new OpenRouterAttributionInterceptor(builder.httpReferer,
+				builder.applicationTitle, builder.applicationCategories));
 		this.restClient = restClientBuilder.baseUrl(baseUrl)
 			.defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + builder.apiKey)
 			.defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
 			.defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
-			.requestInterceptor(new OpenRouterAttributionInterceptor(builder.httpReferer, builder.applicationTitle,
-					builder.applicationCategories))
 			.build();
 
 		WebClient.Builder webClientBuilder = builder.webClientBuilder != null ? builder.webClientBuilder.clone()
@@ -148,7 +159,15 @@ public class OpenRouterApi {
 		return this.restClient.post()
 			.uri(uri)
 			.body(request)
-			.exchange((httpRequest, response) -> readBlockingResponse(uri, response, responseType));
+			.exchange((httpRequest, response) -> readResponse(uri, response, responseType));
+	}
+
+	private <T> T readResponse(String uri, ClientHttpResponse response, Class<T> responseType) throws IOException {
+		HttpStatusCode statusCode = response.getStatusCode();
+		if (this.responseDecoder != null && !statusCode.isError()) {
+			return this.responseDecoder.decode(uri, statusCode, response.getBody(), responseType);
+		}
+		return readBlockingResponse(uri, response, responseType);
 	}
 
 	private <T> T readBlockingResponse(String uri, ClientHttpResponse response, Class<T> responseType)
@@ -169,11 +188,11 @@ public class OpenRouterApi {
 			String errorBody = new String(body.bytes(), StandardCharsets.UTF_8);
 			throw this.httpExceptionFactory.create(uri, statusCode, response.getHeaders(), errorBody);
 		}
-		if (body.bytes().length == 0) {
+		if (body.size() == 0) {
 			throw new OpenRouterProtocolException("Empty OpenRouter " + uri + " response");
 		}
 		try {
-			T decoded = this.objectMapper.readValue(body.bytes(), responseType);
+			T decoded = body.decode(this.objectMapper, responseType);
 			if (decoded == null) {
 				throw new OpenRouterProtocolException("Null OpenRouter " + uri + " response");
 			}
@@ -185,9 +204,20 @@ public class OpenRouterApi {
 	}
 
 	private BoundedBody readBounded(InputStream input, int limit) throws IOException {
-		byte[] bytes = input.readNBytes(limit + 1);
-		return bytes.length > limit ? new BoundedBody(Arrays.copyOf(bytes, limit), true)
-				: new BoundedBody(bytes, false);
+		List<byte[]> chunks = new ArrayList<>();
+		int size = 0;
+		while (size <= limit) {
+			int requested = Math.min(chunks.isEmpty() ? 1024 : 8192, limit + 1 - size);
+			byte[] chunk = input.readNBytes(requested);
+			if (chunk.length > 0) {
+				chunks.add(chunk);
+				size += chunk.length;
+			}
+			if (chunk.length < requested) {
+				break;
+			}
+		}
+		return new BoundedBody(chunks, size, size > limit);
 	}
 
 	public Flux<ChatCompletionChunk> chatCompletionStream(ChatCompletionRequest request) {
@@ -317,6 +347,9 @@ public class OpenRouterApi {
 			return List.of(data);
 		}
 		String firstLine = data.substring(0, newline).trim();
+		if ("{".equals(firstLine)) {
+			return List.of(data);
+		}
 		if (!firstLine.startsWith("data:") && !"[DONE]".equals(firstLine)) {
 			try {
 				if (!this.objectMapper.reader()
@@ -336,6 +369,7 @@ public class OpenRouterApi {
 	private <T> Flux<T> decodeStream(Flux<ServerSentEvent<String>> events, Class<T> eventType) {
 		return Flux.defer(() -> {
 			AtomicBoolean protocolTerminated = new AtomicBoolean();
+			ObjectReader reader = this.eventBinder.reader(eventType);
 			return eventData(events).concatMapIterable(this::streamPayloads)
 				.map(String::trim)
 				.map(line -> line.startsWith("data:") ? line.substring(5).trim() : line)
@@ -352,7 +386,7 @@ public class OpenRouterApi {
 					}
 					return true;
 				})
-				.map(line -> readEvent(line, eventType))
+				.map(line -> readEvent(line, reader, eventType))
 				.doOnNext(event -> {
 					if (isTerminalEvent(event) || event instanceof ChatCompletionChunk chunk && chunk.error() != null) {
 						protocolTerminated.set(true);
@@ -381,13 +415,9 @@ public class OpenRouterApi {
 		return false;
 	}
 
-	private <T> T readEvent(String line, Class<T> eventType) {
+	private <T> T readEvent(String line, @Nullable ObjectReader reader, Class<T> eventType) {
 		try {
-			var tree = this.objectMapper.reader().with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS).readTree(line);
-			if (tree == null || !tree.isObject()) {
-				throw new OpenRouterProtocolException("OpenRouter stream chunk must be a JSON object");
-			}
-			T event = this.objectMapper.treeToValue(tree, eventType);
+			T event = this.eventBinder.bind(line, reader, eventType);
 			if (event instanceof ResponsesStreamEvent response && "response.done".equals(response.type())) {
 				throw new OpenRouterProtocolException(
 						"Legacy response.done is unsupported; expected response.completed, "
@@ -406,7 +436,7 @@ public class OpenRouterApi {
 	private void validateChunk(ChatCompletionChunk chunk) {
 		var choices = chunk.choices();
 		if (chunk.error() == null && ((CollectionUtils.isEmpty(choices) && chunk.usage() == null)
-				|| (choices != null && choices.stream().anyMatch(Objects::isNull)))) {
+				|| (choices != null && CollectionUtils.containsInstance(choices, null)))) {
 			throw new OpenRouterProtocolException("OpenRouter chat chunk requires non-null choices or usage");
 		}
 	}
@@ -414,7 +444,17 @@ public class OpenRouterApi {
 	private record ImageStreamBody(@Nullable ServerSentEvent<String> event, @Nullable ImagesResponse images) {
 	}
 
-	private record BoundedBody(byte[] bytes, boolean exceeded) {
+	private record BoundedBody(List<byte[]> chunks, int size, boolean exceeded) {
+
+		private <T> T decode(ObjectMapper objectMapper, Class<T> responseType) throws IOException {
+			return objectMapper.readValue(chunks.size() == 1 ? chunks.get(0) : bytes(), responseType);
+		}
+
+		private byte[] bytes() throws IOException {
+			return new SequenceInputStream(
+					Collections.enumeration(chunks.stream().map(ByteArrayInputStream::new).toList()))
+				.readNBytes(exceeded ? size - 1 : size);
+		}
 	}
 
 	public static final class Builder {
@@ -434,6 +474,8 @@ public class OpenRouterApi {
 		private WebClient.@Nullable Builder webClientBuilder;
 
 		private ObjectMapper objectMapper = new ObjectMapper();
+
+		private boolean customObjectMapper;
 
 		private @Nullable Duration timeout;
 
@@ -481,6 +523,7 @@ public class OpenRouterApi {
 
 		public Builder objectMapper(ObjectMapper objectMapper) {
 			this.objectMapper = objectMapper;
+			this.customObjectMapper = true;
 			return this;
 		}
 

@@ -60,12 +60,10 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 			@Nullable ResponsesOutputState outputState) {
 		validateEvent(event);
 		String type = event.type();
-		boolean incomplete = "response.incomplete".equals(type);
 		ResponsesResult result = terminalResult(event);
-		String nativeFinishReason = result != null ? FinishReasonMapper.responses(result, result.status()) : null;
+		String nativeFinishReason = FinishReasonMapper.responses(result, null);
 		String status = result != null ? result.status() : null;
-		List<AssistantMessage.ToolCall> toolCalls = toolCalls(event, result, pending,
-				incomplete ? "incomplete" : status);
+		List<AssistantMessage.ToolCall> toolCalls = toolCalls(event, result, pending, status);
 		String finishReason = toolCalls.isEmpty() ? nativeFinishReason : "tool_calls";
 		String reasoning = "response.reasoning_text.delta".equals(type)
 				|| "response.reasoning_summary_text.delta".equals(type) ? event.delta() : null;
@@ -85,18 +83,22 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 			.toolCalls(toolCalls)
 			.media(media)
 			.build();
-		ChatGenerationMetadata.Builder generationMetadataBuilder = ChatGenerationMetadata.builder();
-		generationMetadataBuilder.finishReason(FinishReasonMapper.map(finishReason));
-		ResponseValues.ifPresent(nativeFinishReason,
-				value -> generationMetadataBuilder.metadata("openrouter.native_finish_reason", value));
-		ResponseValues.ifPresent(status,
-				value -> generationMetadataBuilder.metadata("openrouter.responses.status", value));
-		ResponseValues.ifPresent(result != null ? result.incompleteDetails() : null,
-				value -> generationMetadataBuilder.metadata("openrouter.responses.incomplete_details", value));
-		ResponseValues.ifPresent(snapshot.get(RefusalMetadata.REFUSAL),
-				value -> generationMetadataBuilder.metadata(RefusalMetadata.REFUSAL, value));
-		ResponseValues.ifPresent(reasoning, value -> generationMetadataBuilder.metadata("openrouter.reasoning", value));
-		ChatGenerationMetadata generationMetadata = generationMetadataBuilder.build();
+		ChatGenerationMetadata generationMetadata = ChatGenerationMetadata.NULL;
+		if (outputState == null || result != null || !snapshot.isEmpty()) {
+			ChatGenerationMetadata.Builder generationMetadataBuilder = ChatGenerationMetadata.builder();
+			generationMetadataBuilder.finishReason(FinishReasonMapper.map(finishReason));
+			ResponseValues.ifPresent(nativeFinishReason,
+					value -> generationMetadataBuilder.metadata("openrouter.native_finish_reason", value));
+			ResponseValues.ifPresent(status,
+					value -> generationMetadataBuilder.metadata("openrouter.responses.status", value));
+			ResponseValues.ifPresent(result, terminal -> ResponseValues.ifPresent(terminal.incompleteDetails(),
+					value -> generationMetadataBuilder.metadata("openrouter.responses.incomplete_details", value)));
+			ResponseValues.ifPresent(snapshot.get(RefusalMetadata.REFUSAL),
+					value -> generationMetadataBuilder.metadata(RefusalMetadata.REFUSAL, value));
+			ResponseValues.ifPresent(reasoning,
+					value -> generationMetadataBuilder.metadata("openrouter.reasoning", value));
+			generationMetadata = generationMetadataBuilder.build();
+		}
 		ChatResponseMetadata.Builder responseMetadata = ChatResponseMetadata.builder();
 		responseMetadata.keyValue("openrouter.object", type);
 		if (result != null) {

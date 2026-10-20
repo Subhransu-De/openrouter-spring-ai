@@ -20,10 +20,13 @@ import de.subhransu.openrouter.springai.api.dto.ResponsesTool;
 import de.subhransu.openrouter.springai.api.dto.ToolCall;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -48,6 +51,8 @@ import tools.jackson.databind.ObjectMapper;
  */
 class OpenRouterChatModelStreamingToolCallTests {
 
+	private static final String CHUNK_OBJECT = "chat.completion.chunk";
+
 	private static final ObjectMapper MAPPER = new ObjectMapper();
 
 	private final AtomicBoolean toolInvoked = new AtomicBoolean(false);
@@ -57,8 +62,45 @@ class OpenRouterChatModelStreamingToolCallTests {
 		return "sunny";
 	}).description("Look up the weather").inputType(Map.class).build();
 
+	@ParameterizedTest
+	@ValueSource(ints = { 1, 4 })
+	void finelyFragmentedParallelCallsRetainArgumentsAndBufferedUsage(int toolCount) {
+		String arguments = "{\"value\":\"" + "a".repeat(65524) + "\"}";
+		List<ChatCompletionChunk> chunks = new ArrayList<>();
+		for (int fragment = 0; fragment < 1000; fragment++) {
+			List<ToolCall> calls = new ArrayList<>();
+			for (int tool = 0; tool < toolCount; tool++) {
+				calls.add(new ToolCall(fragment == 0 ? "call-" + tool : null, fragment == 0 ? "function" : null,
+						new FunctionCall(fragment == 0 ? "lookup_" + tool : null, arguments.substring(
+								fragment * arguments.length() / 1000, (fragment + 1) * arguments.length() / 1000)),
+						tool));
+			}
+			chunks.add(new ChatCompletionChunk("synthetic", CHUNK_OBJECT, 123L, "synthetic/model", null,
+					List.of(new Choice(0, null, new Delta("assistant", null, null, calls), null, null)), null, null));
+			if (fragment % 4 == 3) {
+				chunks.add(MAPPER.readValue("{\"choices\":[],\"usage\":{\"total_tokens\":" + (fragment + 1) + "}}",
+						ChatCompletionChunk.class));
+			}
+		}
+		chunks.add(new ChatCompletionChunk("synthetic", CHUNK_OBJECT, 123L, "synthetic/model", null,
+				List.of(new Choice(0, null, null, "tool_calls", null)), null, null));
+		OpenRouterApi api = mock(OpenRouterApi.class);
+		when(api.chatCompletionStream(any())).thenReturn(Flux.fromIterable(chunks));
+		OpenRouterChatModel model = OpenRouterChatModel.builder()
+			.openRouterApi(api)
+			.toolCallAggregationMaxChunks(1300)
+			.build();
+		StepVerifier.create(model.stream(new Prompt("synthetic request"))).assertNext(response -> {
+			assertThat(response.getResult().getOutput().getToolCalls()).hasSize(toolCount).allSatisfy(call -> {
+				assertThat(call.arguments()).isEqualTo(arguments);
+				assertThat(call.name()).startsWith("lookup_");
+			});
+			assertThat(response.getMetadata().getUsage().getTotalTokens()).isEqualTo(1000);
+		}).verifyComplete();
+	}
+
 	private ChatCompletionChunk toolCallChunk() {
-		return new ChatCompletionChunk("gen-1", "chat.completion.chunk", 123L, "openai/gpt-5.4-mini", "openai",
+		return new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, "openai/gpt-5.4-mini", "openai",
 				List.of(new Choice(0, null,
 						new Delta("assistant", "", null,
 								List.of(new ToolCall("call-1", "function",
@@ -91,8 +133,7 @@ class OpenRouterChatModelStreamingToolCallTests {
 	void advisorNeverExecutesUnterminatedToolCallsOrReplaysTheStream() {
 		for (String arguments : List.of("", "{", "{}")) {
 			OpenRouterApi api = mock(OpenRouterApi.class);
-			ChatCompletionChunk incomplete = new ChatCompletionChunk("gen-1", "chat.completion.chunk", 123L, "model",
-					"provider",
+			ChatCompletionChunk incomplete = new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, "model", "provider",
 					List.of(new Choice(0, null,
 							new Delta("assistant", null, null, List
 								.of(new ToolCall("call-1", "function", new FunctionCall("get_weather", arguments)))),

@@ -12,9 +12,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.http.client.reactive.ClientHttpConnector;
 import org.springframework.mock.http.client.reactive.MockClientHttpRequest;
 import org.springframework.mock.http.client.reactive.MockClientHttpResponse;
@@ -26,12 +30,71 @@ import reactor.core.publisher.Mono;
 
 class OpenRouterApiBuilderIsolationTests {
 
+	private static final String APP_REFERER = "https://app.test";
+
 	private static final String CALLER_HEADER = "X-Caller";
 
 	private static final String INTERCEPTOR_HEADER = "X-Caller-Interceptor";
 
 	private static final List<String> PROVIDER_HEADERS = List.of(HttpHeaders.AUTHORIZATION, "HTTP-Referer",
 			"X-OpenRouter-Title", "X-OpenRouter-Categories");
+
+	private static final List<String> ATTRIBUTION_HEADERS = PROVIDER_HEADERS.subList(1, 4);
+
+	@Test
+	void attributionOverridesDefaultsAndRequestHeadersAfterUserInterceptors() {
+		RestClient.Builder supplied = RestClient.builder()
+			.defaultHeaders(headers -> ATTRIBUTION_HEADERS.forEach(name -> headers.set(name, "default")))
+			.defaultRequest(request -> request
+				.headers(headers -> ATTRIBUTION_HEADERS.forEach(name -> headers.set(name, "request"))))
+			.requestInterceptor((request, body, execution) -> {
+				ATTRIBUTION_HEADERS.forEach(name -> {
+					assertThat(request.getHeaders().getFirst(name)).isEqualTo("request");
+					request.getHeaders().set(name, "interceptor");
+				});
+				ClientHttpResponse response = execution.execute(request, body);
+				assertThat(request.getHeaders().getFirst(ATTRIBUTION_HEADERS.get(0))).isEqualTo(APP_REFERER);
+				return response;
+			});
+		MockRestServiceServer server = MockRestServiceServer.bindTo(supplied).build();
+		OpenRouterApi api = api(supplied, null);
+		server.expect(once(), requestTo("https://openrouter.test/api/v1/embeddings")).andExpect(request -> {
+			assertThat(request.getHeaders().get(ATTRIBUTION_HEADERS.get(0))).containsExactly(APP_REFERER);
+			assertThat(request.getHeaders().get(ATTRIBUTION_HEADERS.get(1))).containsExactly("Test App");
+			assertThat(request.getHeaders().get(ATTRIBUTION_HEADERS.get(2))).containsExactly("test");
+		}).andRespond(withSuccess("{\"data\":[]}", MediaType.APPLICATION_JSON));
+		api.embeddings(new EmbeddingsRequest("model", List.of("input"), null, null, null, null));
+		server.verify();
+	}
+
+	@ParameterizedTest
+	@NullAndEmptySource
+	@ValueSource(strings = " \t")
+	void blankAttributionPreservesUserInterceptorHeaders(String value) {
+		AtomicInteger calls = new AtomicInteger();
+		RestClient.Builder supplied = RestClient.builder()
+			.defaultHeaders(headers -> ATTRIBUTION_HEADERS.forEach(name -> headers.set(name, "default")))
+			.requestInterceptor((request, body, execution) -> {
+				calls.incrementAndGet();
+				ATTRIBUTION_HEADERS.forEach(name -> request.getHeaders().set(name, "caller"));
+				return execution.execute(request, body);
+			});
+		MockRestServiceServer server = MockRestServiceServer.bindTo(supplied).build();
+		OpenRouterApi api = OpenRouterApi.builder()
+			.apiKey("test-key")
+			.restClientBuilder(supplied)
+			.httpReferer(value)
+			.applicationTitle(value)
+			.applicationCategories(value)
+			.build();
+		server.expect(once(), requestTo(OpenRouterApi.DEFAULT_BASE_URL + "/embeddings"))
+			.andExpect(request -> ATTRIBUTION_HEADERS
+				.forEach(name -> assertThat(request.getHeaders().get(name)).containsExactly("caller")))
+			.andRespond(withSuccess("{\"data\":[]}", MediaType.APPLICATION_JSON));
+		api.embeddings(new EmbeddingsRequest("model", List.of("input"), null, null, null, null));
+		assertThat(calls).hasValue(1);
+		server.verify();
+	}
 
 	@Test
 	void isolatesAndPreservesSuppliedRestClientBuilder() {
@@ -50,7 +113,7 @@ class OpenRouterApiBuilderIsolationTests {
 		expectUnrelatedRestRequest(server);
 		server.expect(once(), requestTo("https://openrouter.test/api/v1/embeddings")).andExpect(request -> {
 			assertThat(request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION)).isEqualTo("Bearer test-key");
-			assertThat(request.getHeaders().getFirst("HTTP-Referer")).isEqualTo("https://app.test");
+			assertThat(request.getHeaders().getFirst("HTTP-Referer")).isEqualTo(APP_REFERER);
 			assertThat(request.getHeaders().getFirst(CALLER_HEADER)).isEqualTo("rest");
 			assertThat(request.getHeaders().getFirst(INTERCEPTOR_HEADER)).isEqualTo("rest");
 		}).andRespond(withSuccess("{\"data\":[]}", MediaType.APPLICATION_JSON));
@@ -96,7 +159,7 @@ class OpenRouterApiBuilderIsolationTests {
 		assertUnrelatedWebRequest(requests.get(2));
 		assertThat(requests.get(1).getURI().toString()).isEqualTo("https://openrouter.test/api/v1/images");
 		assertThat(requests.get(1).getHeaders().getFirst(HttpHeaders.AUTHORIZATION)).isEqualTo("Bearer test-key");
-		assertThat(requests.get(1).getHeaders().getFirst("HTTP-Referer")).isEqualTo("https://app.test");
+		assertThat(requests.get(1).getHeaders().getFirst("HTTP-Referer")).isEqualTo(APP_REFERER);
 		assertThat(requests.get(1).getHeaders().getFirst(CALLER_HEADER)).isEqualTo("web");
 		assertThat(requests.get(1).getHeaders().getFirst(INTERCEPTOR_HEADER)).isEqualTo("web");
 		assertThat(codecCustomizations).hasValue(3);
@@ -106,7 +169,7 @@ class OpenRouterApiBuilderIsolationTests {
 		return OpenRouterApi.builder()
 			.apiKey("test-key")
 			.baseUrl("https://openrouter.test/api/v1")
-			.httpReferer("https://app.test")
+			.httpReferer(APP_REFERER)
 			.applicationTitle("Test App")
 			.applicationCategories("test")
 			.restClientBuilder(restClientBuilder)
