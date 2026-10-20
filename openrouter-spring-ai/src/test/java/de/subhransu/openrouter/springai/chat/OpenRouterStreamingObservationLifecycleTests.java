@@ -18,9 +18,13 @@ import io.micrometer.observation.ObservationRegistry;
 import io.micrometer.observation.contextpropagation.ObservationThreadLocalAccessor;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.content.Media;
 import org.springframework.util.MimeType;
@@ -71,6 +75,39 @@ class OpenRouterStreamingObservationLifecycleTests {
 				}
 			}
 		});
+	}
+
+	@Test
+	void portableOptionValidationIsDeferredAndObservedPerSubscription() {
+		Flux<?> stream = chatModel().stream(invalidPortablePrompt());
+		assertThat(this.starts).isEmpty();
+		for (int subscription = 1; subscription <= 2; subscription++) {
+			StepVerifier.create(stream).expectError(IllegalArgumentException.class).verify();
+			assertThat(this.starts).hasSize(subscription).doesNotHaveDuplicates();
+			assertThat(this.stops).containsExactlyElementsOf(this.starts);
+			assertThat(this.errors).hasSize(subscription);
+			assertThat(this.starts.get(subscription - 1).getError()).isSameAs(this.errors.get(subscription - 1));
+		}
+		verifyNoInteractions(this.api);
+	}
+
+	@Test
+	void synchronousPortableOptionValidationIsObserved() {
+		assertThatThrownBy(() -> chatModel().call(invalidPortablePrompt()))
+			.isInstanceOf(IllegalArgumentException.class);
+		assertThat(this.starts).hasSize(1);
+		assertThat(this.stops).containsExactlyElementsOf(this.starts);
+		assertThat(this.errors).containsExactly(this.starts.get(0).getError());
+		verifyNoInteractions(this.api);
+	}
+
+	private Prompt invalidPortablePrompt() {
+		ToolCallingChatOptions options = mock(ToolCallingChatOptions.class);
+		Map<String, Object> context = new LinkedHashMap<>();
+		context.put(null, "synthetic");
+		when(options.getToolContext()).thenReturn(context);
+		when(options.getModel()).thenReturn("synthetic/model");
+		return new Prompt("synthetic prompt", options);
 	}
 
 	@ParameterizedTest

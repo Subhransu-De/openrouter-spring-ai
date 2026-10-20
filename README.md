@@ -433,7 +433,7 @@ Transient provider, rate-limit, and timeout failures qualify for Spring AI's
 default retry policy. Authentication, billing, invalid requests, refusals, and
 unknown failures do not.
 
-A response that breaks the wire contract the library enforces raises `OpenRouterProtocolException`, a `NonTransientAiException`, in every request mode, whether the call is synchronous or streaming. This covers undecodable JSON, missing required fields, blank tool names, conflicting stream fragments, embedding count, index, or dimension mismatches, and invalid audio. Earlier releases raised `IllegalStateException` or `IllegalArgumentException` for some of these, so catch `OpenRouterProtocolException` instead. Invalid request options still raise `IllegalArgumentException` before the request is sent.
+A response that breaks the wire contract the library enforces raises `OpenRouterProtocolException`, a `NonTransientAiException`, in every request mode, whether the call is synchronous or streaming. This covers undecodable JSON, missing required fields, blank tool names, conflicting stream fragments, embedding count, index, or dimension mismatches, and invalid audio. Earlier releases raised `IllegalStateException` or `IllegalArgumentException` for some of these, so catch `OpenRouterProtocolException` instead. Invalid request options still raise `IllegalArgumentException` before the request is sent; chat `stream()` returns a Flux that reports the error on subscription.
 
 Chat Completions, Responses, and image model streams retry only actual HTTP 429
 responses classified as rate-limit rejections, and only when the model's configured
@@ -1133,8 +1133,7 @@ embedding usage is also recorded as `gen_ai.client.token.usage`.
 
 Chat and embedding response usage is available as `OpenRouterUsage`; image responses expose it in metadata under `openrouter.usage`. It retains provider cost, cached and reasoning token counts, and the native usage DTO. Cached reads and cache writes are available through Spring AI's portable `Usage.getCacheReadInputTokens()` and `Usage.getCacheWriteInputTokens()` when supplied, including nested `prompt_tokens_details.cache_write_tokens` in Chat Completions and `input_tokens_details.cache_write_tokens` in Responses. Missing detail counts remain `null`, distinct from an explicit zero. Streaming chat model observations retain the latest provider usage snapshot in both request modes, including cost and detailed counts.
 
-Chat and image streams record request-mapping and transport errors on their observation.
-Each subscription stops its observation on completion, error, or cancellation.
+Chat calls and streams record option-conversion, request-mapping, and transport errors on their observation. Image streams record request-mapping and transport errors. Each stream subscription stops its observation on completion, error, or cancellation.
 
 The starter provides the Spring AI handlers, but it does not choose monitoring backends
 for the application:
