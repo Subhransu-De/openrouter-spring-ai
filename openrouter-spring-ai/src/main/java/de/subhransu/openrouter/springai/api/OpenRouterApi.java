@@ -69,6 +69,8 @@ public class OpenRouterApi {
 
 	private final ObjectMapper objectMapper;
 
+	private final boolean customObjectMapper;
+
 	private final StreamEventBinder eventBinder;
 
 	private final @Nullable BlockingResponseDecoder responseDecoder;
@@ -87,7 +89,8 @@ public class OpenRouterApi {
 
 		String baseUrl = StringUtils.hasText(builder.baseUrl) ? builder.baseUrl : DEFAULT_BASE_URL;
 		this.objectMapper = builder.objectMapper;
-		this.eventBinder = new StreamEventBinder(this.objectMapper, !builder.customObjectMapper);
+		this.customObjectMapper = builder.customObjectMapper;
+		this.eventBinder = new StreamEventBinder(this.objectMapper, !this.customObjectMapper);
 		this.httpExceptionFactory = new OpenRouterHttpExceptionFactory(this.objectMapper, builder.apiKey);
 		this.timeout = builder.timeout;
 		Assert.isTrue(builder.maxResponseBodyBytes > 0, "Maximum response body size must be greater than zero");
@@ -98,8 +101,8 @@ public class OpenRouterApi {
 				"Maximum error body size must be less than Integer.MAX_VALUE");
 		this.maxResponseBodyBytes = builder.maxResponseBodyBytes;
 		this.maxErrorBodyBytes = builder.maxErrorBodyBytes;
-		this.responseDecoder = BlockingResponseDecoder.supports(this.objectMapper)
-				? new BlockingResponseDecoder(this.objectMapper, this.maxResponseBodyBytes) : null;
+		this.responseDecoder = this.customObjectMapper ? null
+				: new BlockingResponseDecoder(this.objectMapper, this.maxResponseBodyBytes);
 
 		// Blocking timeouts belong to the request factory. Auto-configuration installs
 		// a timeout-configured factory on its own builder clone; programmatic callers
@@ -347,7 +350,7 @@ public class OpenRouterApi {
 			return List.of(data);
 		}
 		String firstLine = data.substring(0, newline).trim();
-		if ("{".equals(firstLine)) {
+		if (!this.customObjectMapper && "{".equals(firstLine)) {
 			return List.of(data);
 		}
 		if (!firstLine.startsWith("data:") && !"[DONE]".equals(firstLine)) {

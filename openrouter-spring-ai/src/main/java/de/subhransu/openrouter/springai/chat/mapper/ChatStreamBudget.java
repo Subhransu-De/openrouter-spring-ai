@@ -5,12 +5,13 @@ import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException.
 import java.io.OutputStream;
 import java.util.HashMap;
 import java.util.Map;
+import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.ObjectMapper;
 
 // Conservative metadata admission charges are released when a choice finishes.
 final class ChatStreamBudget {
 
-	private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+	private @Nullable ObjectMapper objectMapper;
 
 	private final long maxBytes;
 
@@ -58,8 +59,11 @@ final class ChatStreamBudget {
 		if (value.isEmpty()) {
 			return 0;
 		}
+		if (this.objectMapper == null) {
+			this.objectMapper = new ObjectMapper();
+		}
 		Counter counter = new Counter();
-		OBJECT_MAPPER.writeValue(counter, value);
+		this.objectMapper.writeValue(counter, value);
 		return counter.bytes;
 	}
 

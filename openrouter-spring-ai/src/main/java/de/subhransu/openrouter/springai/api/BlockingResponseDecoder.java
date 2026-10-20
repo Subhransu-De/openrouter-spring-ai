@@ -7,7 +7,6 @@ import java.io.InputStream;
 import org.jspecify.annotations.Nullable;
 import org.springframework.http.HttpStatusCode;
 import tools.jackson.core.JacksonException;
-import tools.jackson.core.StreamReadFeature;
 import tools.jackson.databind.ObjectMapper;
 
 final class BlockingResponseDecoder {
@@ -19,11 +18,6 @@ final class BlockingResponseDecoder {
 	BlockingResponseDecoder(ObjectMapper objectMapper, int limit) {
 		this.objectMapper = objectMapper;
 		this.limit = limit;
-	}
-
-	static boolean supports(ObjectMapper objectMapper) {
-		return !objectMapper.isEnabled(StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION)
-				&& !objectMapper.tokenStreamFactory().streamReadConstraints().hasMaxDocumentLength();
 	}
 
 	<T> T decode(String uri, HttpStatusCode statusCode, InputStream body, Class<T> responseType) throws IOException {

@@ -172,7 +172,7 @@ public class OpenRouterChatModel implements ChatModel {
 				.doOnError(observation::error)
 				.doFinally(signal -> observation.stop())
 				.contextWrite(ctx -> ctx.put(ObservationThreadLocalAccessor.KEY, observation));
-			if (observation.isNoop()) {
+			if (observation.isNoop() && this.observationRegistry.isNoop()) {
 				return observed;
 			}
 			return new MessageAggregator().aggregate(observed, response -> {

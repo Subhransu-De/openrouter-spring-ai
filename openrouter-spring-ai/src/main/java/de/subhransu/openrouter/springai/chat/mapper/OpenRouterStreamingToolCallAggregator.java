@@ -36,13 +36,8 @@ import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.Mono;
 import reactor.util.context.Context;
 import tools.jackson.core.JacksonException;
-import tools.jackson.core.JsonGenerator;
-import tools.jackson.core.StreamWriteFeature;
-import tools.jackson.core.json.JsonFactory;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.ObjectWriter;
-import tools.jackson.databind.SerializationFeature;
 
 /**
  * Merges streamed tool-call fragments in chat-completions mode. Providers split a tool
@@ -67,8 +62,6 @@ public final class OpenRouterStreamingToolCallAggregator {
 
 	private final ObjectMapper objectMapper;
 
-	private final @Nullable ObjectWriter generatorWriter;
-
 	private final long maxBytes;
 
 	private final int maxChunks;
@@ -88,21 +81,9 @@ public final class OpenRouterStreamingToolCallAggregator {
 		Assert.isTrue(!maxDuration.isZero() && !maxDuration.isNegative(),
 				"Maximum streamed tool-call duration must be greater than zero");
 		this.objectMapper = objectMapper;
-		this.generatorWriter = generatorWriter(objectMapper);
 		this.maxBytes = maxBytes;
 		this.maxChunks = maxChunks;
 		this.maxDuration = maxDuration;
-	}
-
-	private static @Nullable ObjectWriter generatorWriter(ObjectMapper objectMapper) {
-		if (objectMapper.tokenStreamFactory() instanceof JsonFactory factory && factory.getOutputDecorator() == null
-				&& CollectionUtils.isEmpty(factory.getGeneratorDecorators())
-				&& !objectMapper.serializationConfig().isEnabled(SerializationFeature.INDENT_OUTPUT)) {
-			return objectMapper.writer()
-				.withRootValueSeparator((String) null)
-				.without(StreamWriteFeature.AUTO_CLOSE_CONTENT);
-		}
-		return null;
 	}
 
 	public Flux<ChatCompletionChunk> aggregate(Flux<ChatCompletionChunk> chunks) {
@@ -613,28 +594,14 @@ public final class OpenRouterStreamingToolCallAggregator {
 
 		private final Consumer<Throwable> timeoutHandler;
 
-		private final ByteCountingOutputStream output = new ByteCountingOutputStream();
-
-		private @Nullable JsonGenerator generator;
-
 		private AggregationState(Consumer<Throwable> timeoutHandler) {
 			this.timeoutHandler = timeoutHandler;
 		}
 
 		private long serializedBytes(ChatCompletionChunk chunk) {
-			this.output.reset();
-			try {
-				if (this.generator == null && generatorWriter != null) {
-					this.generator = generatorWriter.createGenerator(this.output);
-				}
-				if (this.generator == null) {
-					objectMapper.writeValue(this.output, chunk);
-				}
-				else {
-					objectMapper.writeValue(this.generator, chunk);
-					this.generator.flush();
-				}
-				return this.output.count();
+			try (ByteCountingOutputStream output = new ByteCountingOutputStream()) {
+				objectMapper.writeValue(output, chunk);
+				return output.count();
 			}
 			catch (JacksonException ex) {
 				throw new IllegalStateException("Failed to measure an OpenRouter stream chunk", ex);
@@ -746,10 +713,6 @@ public final class OpenRouterStreamingToolCallAggregator {
 		}
 
 		private synchronized void clear() {
-			if (this.generator != null) {
-				this.generator.close();
-				this.generator = null;
-			}
 			this.bufferedByChoice.values().forEach(ToolCallBuffer::close);
 			this.bufferedByChoice.clear();
 			this.bufferedChoiceLessChunks.clear();
@@ -846,10 +809,6 @@ public final class OpenRouterStreamingToolCallAggregator {
 
 		@Override
 		public void close() {
-		}
-
-		void reset() {
-			this.count = 0;
 		}
 
 		long count() {

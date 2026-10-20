@@ -26,6 +26,8 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 
 	private static final String OUTPUT_ITEM_DONE = "response.output_item.done";
 
+	private static final ChatGenerationMetadata EMPTY_GENERATION_METADATA = ChatGenerationMetadata.builder().build();
+
 	private final ResponsesStreamBudget budget;
 
 	public OpenRouterResponsesStreamingResponseMapper() {
@@ -83,7 +85,7 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 			.toolCalls(toolCalls)
 			.media(media)
 			.build();
-		ChatGenerationMetadata generationMetadata = ChatGenerationMetadata.NULL;
+		ChatGenerationMetadata generationMetadata = EMPTY_GENERATION_METADATA;
 		if (outputState == null || result != null || !snapshot.isEmpty()) {
 			ChatGenerationMetadata.Builder generationMetadataBuilder = ChatGenerationMetadata.builder();
 			generationMetadataBuilder.finishReason(FinishReasonMapper.map(finishReason));
