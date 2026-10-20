@@ -1131,13 +1131,7 @@ observations with the `openrouter` provider, operation, request model, response 
 where available, and token-usage context. When a `MeterRegistry` is present, chat and
 embedding usage is also recorded as `gen_ai.client.token.usage`.
 
-Chat and embedding response usage is available as `OpenRouterUsage`; image responses
-expose it in metadata under `openrouter.usage`. It retains provider cost, cached and
-reasoning token counts, and the native usage DTO. Cached tokens are also available
-through Spring AI's portable `Usage.getCacheReadInputTokens()`. Missing detail counts
-remain `null`, distinct from an explicit zero; unavailable cache-write counts remain
-`null`. Streaming chat model observations retain the latest provider usage snapshot
-in both request modes, including cost and detailed counts.
+Chat and embedding response usage is available as `OpenRouterUsage`; image responses expose it in metadata under `openrouter.usage`. It retains provider cost, cached and reasoning token counts, and the native usage DTO. Cached reads and cache writes are available through Spring AI's portable `Usage.getCacheReadInputTokens()` and `Usage.getCacheWriteInputTokens()` when supplied, including nested `prompt_tokens_details.cache_write_tokens` in Chat Completions and `input_tokens_details.cache_write_tokens` in Responses. Missing detail counts remain `null`, distinct from an explicit zero. Streaming chat model observations retain the latest provider usage snapshot in both request modes, including cost and detailed counts.
 
 Chat and image streams record request-mapping and transport errors on their observation.
 Each subscription stops its observation on completion, error, or cancellation.

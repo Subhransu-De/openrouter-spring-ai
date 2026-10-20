@@ -2,6 +2,7 @@ package de.subhransu.openrouter.springai.chat;
 
 import org.jspecify.annotations.Nullable;
 import org.springframework.ai.chat.metadata.DefaultUsage;
+import de.subhransu.openrouter.springai.chat.mapper.UsageMapper;
 
 public class OpenRouterUsage extends DefaultUsage {
 
@@ -15,7 +16,7 @@ public class OpenRouterUsage extends DefaultUsage {
 			@Nullable Integer totalTokens, @Nullable Integer cachedTokens, @Nullable Integer reasoningTokens,
 			@Nullable Double cost, @Nullable Object nativeUsage) {
 		super(promptTokens, generationTokens, totalTokens, nativeUsage,
-				cachedTokens != null ? cachedTokens.longValue() : null, null);
+				cachedTokens != null ? cachedTokens.longValue() : null, UsageMapper.cacheWriteInputTokens(nativeUsage));
 		this.cachedTokens = cachedTokens;
 		this.reasoningTokens = reasoningTokens;
 		this.cost = cost;
