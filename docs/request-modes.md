@@ -2,9 +2,11 @@
 
 Chat Completions is the production default. The optional Responses request mode is experimental; applications should opt into it explicitly. Select the mode with `spring.ai.openrouter.chat.request-mode` (`openai-chat-completions` or `openai-responses`) or `OpenRouterChatOptions.builder().requestMode(...)`. To switch modes per request, read [Replacement and composition](chat-options.md#replacement-and-composition) first.
 
+![Chat Completions, the default, and Responses, experimental, side by side: the wire fields for structured output, strict tools and token limits; the options, extraBody keys, cache breakpoints and audio output that Responses rejects; and how each stream ends.](images/request-modes.svg)
+
 ## Option contract
 
-Both modes map `outputSchema` and `responseFormat`: Chat Completions uses `response_format`, and Responses uses `text.format`. An explicit `responseFormat` takes precedence over `outputSchema`. Portable schemas leave `strict` unset; `OpenRouterResponseFormat.jsonSchema(name, strict, schema)` preserves an explicit `true` or `false`. Schema enforcement depends on the selected provider. Function-tool strictness is controlled independently with [`toolStrict`](tool-calling.md#strict-function-tools).
+An explicit `responseFormat` takes precedence over `outputSchema`. Portable schemas leave `strict` unset; `OpenRouterResponseFormat.jsonSchema(name, strict, schema)` preserves an explicit `true` or `false`. Schema enforcement depends on the selected provider. Function-tool strictness is controlled independently with [`toolStrict`](tool-calling.md#strict-function-tools).
 
 Configure structured-output defaults under the flattened chat namespace (no `options` segment):
 
@@ -23,7 +25,7 @@ spring:
 
 `response-format.type` also accepts `text` and `json-object`. For a portable schema, set `spring.ai.openrouter.chat.output-schema` to the JSON document instead; it uses the schema name `response` and leaves strict unset. An explicit `response-format` wins when both are configured. Omit `strict` to leave it unset, or set it to `true` or `false` explicitly. With neither option configured, no format is sent. JSON-schema formats require a schema; malformed JSON fails before the request is sent. These properties use the same mapping as Java options for calls and streams in both request modes.
 
-Responses rejects explicitly set `stopSequences`, `seed`, `repetitionPenalty`, `minP`, `topA`, and `includeUsage` with `IllegalArgumentException` before sending a request. Unset these options or use Chat Completions. Responses usage is read from the response without an opt-in toggle. `maxCompletionTokens` takes precedence over `maxTokens` and maps to `max_output_tokens`. Other sampling, routing, metadata, image, and tool controls map to their corresponding wire fields. `requestMode` selects the endpoint; `toolCallbacks` supply tool definitions and `toolContext` stays on the client.
+Responses rejects the options marked in the diagram with `IllegalArgumentException` before sending a request; unset them or use Chat Completions. Other sampling, routing, metadata, image, and tool controls map to their corresponding wire fields. `requestMode` selects the endpoint; `toolCallbacks` supply tool definitions and `toolContext` stays on the client.
 
 `toolChoice` accepts `"auto"`, `"none"`, `"required"`, or a named function object: `{type: "function", function: {name: "lookup"}}` or `{type: "function", name: "lookup"}`. Both named shapes are converted to the selected endpoint's form. Legacy `{type: "auto"}`, `{type: "none"}`, and `{type: "required"}` objects are normalized to strings. Other shapes are rejected. These rules apply to calls and streams.
 
@@ -35,7 +37,7 @@ Responses normalizes `max_output_tokens` to `LENGTH` and `content_filter` to `CO
 
 Terminal snapshots also supply generated images that were not emitted by item-done events. Image IDs identify repeated items; absent IDs fall back to output indexes. An image event with neither an ID nor an index is rejected because identical bytes may belong to distinct images. Repeated identities must retain the same image result and format. Newly recovered images follow terminal output order after any images already emitted.
 
-Responses streams require `response.completed`, `response.incomplete`, `response.failed`, or a terminal error event. `[DONE]` or EOF alone raises `OpenRouterTruncatedResponseException`, even for an empty or text-only stream. The legacy `response.done` shape shown in the [OpenRouter basic-usage guide](https://openrouter.ai/docs/api_reference/responses/basic-usage) is explicitly unsupported and raises `OpenRouterProtocolException`; it does not map final metadata. Chat Completions and image streams continue to accept `[DONE]`.
+Responses streams require `response.completed`, `response.incomplete`, `response.failed`, or a terminal error event; without one, even an empty or text-only stream raises `OpenRouterTruncatedResponseException`. The legacy `response.done` shape shown in the [OpenRouter basic-usage guide](https://openrouter.ai/docs/api_reference/responses/basic-usage) is explicitly unsupported and raises `OpenRouterProtocolException`; it does not map final metadata.
 
 Responses calls require a final `completed` or `incomplete` status and an `output` array, which may be empty. Streaming terminal events also require a response snapshot whose status matches the event. Missing or contradictory terminal structure fails before buffered tool calls can execute. Non-null error envelopes raise typed provider exceptions even over HTTP 200 and without `status: failed`. Optional fields may be absent and unknown fields are ignored, but invalid typed fields fail decoding rather than discarding response status or output. Valid empty text, refusals, tool calls, media, and incomplete text remain supported.
 

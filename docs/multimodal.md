@@ -98,16 +98,13 @@ chatModel.stream(new Prompt("Say hello.", options))
         })));
 ```
 
-Boot equivalents are `spring.ai.openrouter.chat.modalities=text,audio`, `spring.ai.openrouter.chat.audio.voice=alloy`, and `spring.ai.openrouter.chat.audio.format=pcm16`. Formats are `wav`, `mp3`, `flac`, `opus`, and `pcm16`; PCM bytes are raw audio, not a WAV file. Sample rate and other playback parameters must match the selected provider. No transcoding is performed. `call()` and Responses mode reject output audio; there is no blocking adapter.
+Boot equivalents are `spring.ai.openrouter.chat.modalities=text,audio`, `spring.ai.openrouter.chat.audio.voice=alloy`, and `spring.ai.openrouter.chat.audio.format=pcm16`. Formats are `wav`, `mp3`, `flac`, `opus`, and `pcm16`; PCM bytes are raw audio, not a WAV file. Sample rate and other playback parameters must match the selected provider. No transcoding is performed.
 
-Each `delta.audio.data` value is decoded independently from base64, then its bytes are appended per choice. One complete Spring AI `Media` is emitted when the choice completes, and no partial media is emitted. A choice completes in one of two ways:
+The audio arrives as one complete Spring AI `Media` per choice, never as partial media:
 
-- It receives a `stop` finish reason. The media arrives with that event.
-- Its last audio delta contains only `expires_at` and no finish reason ever arrives. Some providers, including OpenAI audio models, end audio this way. The media then arrives in one extra response after the stream ends normally with `[DONE]`. That response has empty text, no usage, and no finish reason.
+![Streamed audio.data chunks are each decoded from base64 and appended per choice. Path A: a stop finish reason delivers one complete Media in that same response. Path B: the last delta has only expires_at and no finish reason, as with OpenAI audio models; the Media arrives in one extra response after [DONE] with empty text, no usage and no finish reason. A max_tokens cut-off looks the same, so leave enough room. The transcript goes once into the final assistant metadata as openrouter.audio, not into the text. call() and Responses mode reject output audio.](images/audio-output.svg)
 
-Without a finish reason, a response cut short by `max_tokens` cannot be told apart from a complete one. Set a limit large enough for the expected audio.
-
-Normal text remains incremental; the assembled transcript is exposed once in the final assistant metadata under `openrouter.audio`, alongside `format` and, when supplied, `id` and `expires_at`. The transcript is not appended to text, so simultaneous text and speech do not produce duplicate text. Repeated terminal events for completed audio choices do not emit a second transcript or media object. Wait for successful stream completion before treating the entire request as successful: a later transport/provider error still fails the stream.
+The `openrouter.audio` metadata also holds `format` and, when supplied, `id` and `expires_at`. Normal text remains incremental. Repeated terminal events for completed audio choices do not emit a second transcript or media object. Wait for successful stream completion before treating the request as successful: a later transport/provider error still fails the stream.
 
 Retained decoded audio plus transcript/identifier characters (counted as two bytes each) are limited to 16 MiB across unfinished choices per subscription, with at most 128 audio choices per stream. Buffer capacity and temporary decoding/final copies add bounded overhead. Buffers are released on finish, cancellation, or error. A stream that ends before `[DONE]`, a choice with neither completion signal, audio or text after the `expires_at` marker, invalid base64, conflicting identifiers/formats, and non-`stop` audio finishes fail explicitly. Each data value must encode a complete byte fragment; arbitrary splits inside a base64 value are unsupported. Audio mixed with tool calls in one choice and `message.audio` snapshots are unsupported. Except for truncation and size limits, these failures raise `OpenRouterProtocolException`.
 

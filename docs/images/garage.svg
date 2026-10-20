@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 586" width="1000" role="img" aria-labelledby="title">
+<title id="title">The Garage demo: the Foreman tool loop, the modality bays, the run API and the evidence levels</title>
+<style>
+:root{--bg:#FAFBF7;--ink:#1D2719;--muted:#5C6857;--line:#7C8876;--card:#FFFFFF;--lib:#E4F1D6;--libs:#3D7A18;--ext:#E9EDF7;--exts:#43558F;--spr:#EFF0EA;--sprs:#6B705F;--bad:#FBE6DF;--bads:#B23B1E;--warn:#FFF2CC;--warns:#946400}
+@media (prefers-color-scheme:dark){:root{--bg:#141A11;--ink:#E2E9DA;--muted:#A0AB9A;--line:#7F8A79;--card:#1C2418;--lib:#22351A;--libs:#82C64A;--ext:#1D2337;--exts:#93A3E0;--spr:#23281F;--sprs:#A3A894;--bad:#3A1D16;--bads:#EE8466;--warn:#352A0C;--warns:#E3B54A}}
+text{font-family:-apple-system,"Segoe UI","Helvetica Neue",Arial,sans-serif;fill:var(--ink)}
+.bg{fill:var(--bg)}
+.card{fill:var(--card);stroke:var(--line);stroke-width:1.2}
+.lib{fill:var(--lib);stroke:var(--libs);stroke-width:1.4}
+.ext{fill:var(--ext);stroke:var(--exts);stroke-width:1.4}
+.spr{fill:var(--spr);stroke:var(--sprs);stroke-width:1.4}
+.bad{fill:var(--bad);stroke:var(--bads);stroke-width:1.4}
+.warn{fill:var(--warn);stroke:var(--warns);stroke-width:1.4}
+.grp{fill:none;stroke:var(--libs);stroke-width:1.3;stroke-dasharray:5 4}
+.grpx{fill:none;stroke:var(--line);stroke-width:1.2;stroke-dasharray:5 4}
+.h{font-size:15px;font-weight:650}
+.t{font-size:14px}
+.s{font-size:12.5px;fill:var(--muted)}
+.m,.mb{font-family:ui-monospace,"SF Mono","Cascadia Mono",Consolas,"Liberation Mono",monospace;font-size:12.5px}
+.mb{font-weight:700}
+.tl{fill:var(--libs)}.tx{fill:var(--exts)}.tb{fill:var(--bads)}.tw{fill:var(--warns)}.tm{fill:var(--muted)}
+.arr{fill:none;stroke:var(--line);stroke-width:1.6}
+.arr.g{stroke:var(--libs)}.arr.r{stroke:var(--bads)}.arr.x{stroke:var(--exts)}
+.dash{stroke-dasharray:5 4}
+.ah{fill:var(--line)}.ahg{fill:var(--libs)}.ahr{fill:var(--bads)}.ahx{fill:var(--exts)}
+.rule{stroke:var(--line);stroke-width:1;opacity:.5}
+</style>
+<defs>
+<marker id="a" viewBox="0 0 10 10" refX="5.5" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="ah" d="M0,0.8 L9.5,5 L0,9.2 L2.6,5 z"/></marker>
+<marker id="ag" viewBox="0 0 10 10" refX="5.5" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="ahg" d="M0,0.8 L9.5,5 L0,9.2 L2.6,5 z"/></marker>
+<marker id="ar" viewBox="0 0 10 10" refX="5.5" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="ahr" d="M0,0.8 L9.5,5 L0,9.2 L2.6,5 z"/></marker>
+<marker id="ax" viewBox="0 0 10 10" refX="5.5" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="ahx" d="M0,0.8 L9.5,5 L0,9.2 L2.6,5 z"/></marker>
+</defs>
+<rect class="bg" width="1000" height="586" rx="14"/>
+<text class="s tl" x="20" y="40" font-weight="650">service-story scene: the Foreman model runs a tool loop through ChatClient</text>
+<rect class="spr" x="20" y="82" width="130" height="56" rx="8"/>
+<text class="h" x="85" y="106" text-anchor="middle">customer + car</text>
+<text class="m" x="85" y="125" text-anchor="middle" style="fill:var(--muted)">topic</text>
+<path class="arr" marker-end="url(#a)" d="M150 110 H176"/>
+<rect class="ext" x="180" y="70" width="150" height="80" rx="8"/>
+<text class="h" x="255" y="104" text-anchor="middle">Foreman</text>
+<text class="s" x="255" y="124" text-anchor="middle">model</text>
+<path class="arr g" d="M330 110 H356 M356 66 V174"/>
+<path class="arr g" marker-end="url(#ag)" d="M356 66 H376"/>
+<path class="arr g" marker-end="url(#ag)" d="M356 102 H376"/>
+<path class="arr g" marker-end="url(#ag)" d="M356 138 H376"/>
+<path class="arr g" marker-end="url(#ag)" d="M356 174 H376"/>
+<rect class="lib" x="380" y="52" width="210" height="28" rx="6"/><text class="m" x="485" y="70.5" text-anchor="middle">inspect_vehicle_profile</text>
+<rect class="lib" x="380" y="88" width="210" height="28" rx="6"/><text class="m" x="485" y="106.5" text-anchor="middle">hand_to_specialist</text>
+<rect class="lib" x="380" y="124" width="210" height="28" rx="6"/><text class="m" x="485" y="142.5" text-anchor="middle">score_repair_plan</text>
+<rect class="lib" x="380" y="160" width="210" height="28" rx="6"/><text class="m" x="485" y="178.5" text-anchor="middle">log_to_jobsheet</text>
+<text class="s" x="380" y="210">ToolCallingAdvisor runs each tool</text>
+<path class="arr x" marker-end="url(#ax)" d="M590 102 H646"/>
+<rect class="ext" x="650" y="80" width="150" height="44" rx="8"/>
+<text class="h" x="725" y="100" text-anchor="middle">Specialist</text>
+<text class="s" x="725" y="116" text-anchor="middle">second model, one job</text>
+<path class="arr g" marker-end="url(#ag)" d="M590 174 H646"/>
+<rect class="card" x="650" y="155" width="170" height="38" rx="8"/>
+<text class="m" x="735" y="178.5" text-anchor="middle">service-record.md</text>
+<text class="s" x="735" y="210" text-anchor="middle">written to disk</text>
+<line class="rule" x1="850" y1="56" x2="850" y2="196"/>
+<text class="s" x="864" y="66" style="fill:var(--ink)" font-weight="650">each run checks</text>
+<text class="s" x="864" y="90">record written</text>
+<text class="s" x="864" y="112">every tool invoked</text>
+<text class="s" x="864" y="134">usage present</text>
+<text class="s" x="864" y="156">non-empty answer</text>
+<text class="s" x="864" y="178">stream signals, if asked</text>
+<!-- bays -->
+<line class="rule" x1="20" y1="228" x2="980" y2="228"/>
+<text class="s tl" x="20" y="252" font-weight="650">modality bays</text>
+<rect class="lib" x="20" y="262" width="300" height="66" rx="8"/>
+<text class="h" x="36" y="286">Triage matcher</text>
+<text class="s" x="36" y="304">embeddings</text>
+<text class="s" x="36" y="320">matches the concern to a catalogue</text>
+<rect class="lib" x="350" y="262" width="300" height="66" rx="8"/>
+<text class="h" x="366" y="286">Digital inspection</text>
+<text class="s" x="366" y="304">image input, both request modes</text>
+<text class="s" x="366" y="320">reads a bundled dashboard photo</text>
+<rect class="lib" x="680" y="262" width="300" height="66" rx="8"/>
+<text class="h" x="696" y="286">Paint bay</text>
+<text class="s" x="696" y="304">image generation: Image API, sync and streaming</text>
+<text class="s" x="696" y="320">plus chat-completions image output</text>
+<!-- run API -->
+<line class="rule" x1="20" y1="348" x2="980" y2="348"/>
+<text class="s tl" x="20" y="372" font-weight="650">run API</text>
+<rect class="card" x="20" y="390" width="150" height="36" rx="8"/>
+<text class="m" x="95" y="412.5" text-anchor="middle">POST /api/runs</text>
+<path class="arr" marker-end="url(#a)" d="M170 408 H196"/>
+<rect class="card" x="200" y="390" width="190" height="36" rx="8"/>
+<text x="295" y="412.5" text-anchor="middle"><tspan class="mb">202</tspan><tspan class="s" dx="6" style="fill:var(--ink)">Accepted + Location</tspan></text>
+<path class="arr" marker-end="url(#a)" d="M390 408 H416"/>
+<rect class="card" x="420" y="380" width="220" height="56" rx="8"/>
+<text class="m" x="530" y="403" text-anchor="middle">GET /api/runs/{id}</text>
+<text class="s" x="530" y="423" text-anchor="middle">status · scene outcomes · cost</text>
+<path class="arr" marker-end="url(#a)" d="M640 408 C658 408 660 393 676 393"/>
+<path class="arr" marker-end="url(#a)" d="M640 408 C658 408 660 424 676 424"/>
+<rect class="card" x="680" y="380" width="300" height="26" rx="6"/>
+<text x="692" y="397.5"><tspan class="m">…/evidence</tspan><tspan class="s" dx="8">garage-run.json</tspan></text>
+<rect class="card" x="680" y="411" width="300" height="26" rx="6"/>
+<text x="692" y="428.5"><tspan class="m">…/report</tspan><tspan class="s" dx="8">capability-report.md</tspan></text>
+<text class="s" x="20" y="458">One run at a time: a second POST returns 409 Conflict with a link to the active run.</text>
+<!-- evidence -->
+<line class="rule" x1="20" y1="474" x2="980" y2="474"/>
+<text class="s tl" x="20" y="498" font-weight="650">evidence levels, weakest to strongest</text>
+<rect class="card" x="20" y="508" width="290" height="54" rx="8"/>
+<text class="h" x="36" y="531">configured</text>
+<text class="s" x="36" y="550">an option or scene is selected</text>
+<path class="arr" marker-end="url(#a)" d="M310 535 H336"/>
+<rect class="lib" x="340" y="508" width="300" height="54" rx="8"/>
+<text class="h" x="356" y="531">synthetic-tested</text>
+<text class="s" x="356" y="550">fixtures, including the mocked Garage run</text>
+<path class="arr g" marker-end="url(#ag)" d="M640 535 H666"/>
+<rect class="lib" x="670" y="508" width="310" height="54" rx="8" style="stroke-width:2.4"/>
+<text class="h" x="686" y="531">live-verified</text>
+<text class="s" x="686" y="550">a dated live run for the exact commit and mode</text>
+</svg>

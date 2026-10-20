@@ -2,6 +2,8 @@
 
 Reference pages for applications that use the starter. Start with [Getting started](getting-started.md).
 
+![A call goes from your app through Spring AI's ChatClient into this library's model and API client, then to OpenRouter, which routes it to an upstream provider.](images/architecture.svg)
+
 | Page                                                      | Covers                                                                                                        |
 | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | [Getting started](getting-started.md)                     | Install, first call, main properties, release compatibility, model selection and replacement beans.           |

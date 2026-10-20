@@ -15,7 +15,7 @@
   <a href="https://github.com/Subhransu-De/openrouter-spring-ai/actions/workflows/codeql.yml"><img src="https://img.shields.io/github/actions/workflow/status/Subhransu-De/openrouter-spring-ai/codeql.yml?branch=main&amp;label=CodeQL&amp;style=flat" alt="CodeQL status"></a>
 </p>
 
-A native [Spring AI](https://spring.io/projects/spring-ai) integration for [OpenRouter](https://openrouter.ai), with typed model fallbacks, provider routing, reasoning replay, cost accounting, and attribution headers under `spring.ai.openrouter.*`. Spring AI's OpenAI integration can also send OpenRouter-specific fields through [`extraBody`](https://github.com/spring-projects/spring-ai/blob/v2.0.1/models/spring-ai-openai/src/main/java/org/springframework/ai/openai/OpenAiChatOptions.java). This library adds typed routing and OpenRouter-specific response and reasoning handling; it does not promise universal provider parity. It owns its `RestClient`/`WebClient` transport and wire mapping, unlike the vendor SDK cores used by Spring AI 2.0.1's OpenAI and Anthropic integrations.
+A native [Spring AI](https://spring.io/projects/spring-ai) integration for [OpenRouter](https://openrouter.ai), with typed model fallbacks, provider routing, reasoning replay, cost accounting, and attribution headers under `spring.ai.openrouter.*`. Spring AI's OpenAI integration can also send OpenRouter-specific fields through [`extraBody`](https://github.com/spring-projects/spring-ai/blob/v2.0.1/models/spring-ai-openai/src/main/java/org/springframework/ai/openai/OpenAiChatOptions.java). This library adds typed routing and OpenRouter-specific response and reasoning handling; it does not promise universal provider parity.
 
 > **Community project:** This library is independently maintained and is not affiliated with, endorsed by, or an official project of OpenRouter or Spring AI.
 >
@@ -24,6 +24,8 @@ A native [Spring AI](https://spring.io/projects/spring-ai) integration for [Open
 Chat Completions is the production default. The optional Responses request mode is experimental; applications should opt into it explicitly.
 
 [Getting started](docs/getting-started.md) · [Documentation](docs/README.md) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md)
+
+![A call goes from your app through Spring AI's ChatClient into this library's model and API client, then to OpenRouter, which routes it to an upstream provider. The modules are the core library, its auto-configuration, and the starter that applications add.](docs/images/architecture.svg)
 
 ## What it does
 
@@ -93,14 +95,7 @@ Each call is a billable OpenRouter request.
 
 ## Modules
 
-| Module                               | What it is                                                                    |
-| ------------------------------------ | ----------------------------------------------------------------------------- |
-| `openrouter-spring-ai`               | Core: API client, wire DTOs, mappers, chat/embedding/image models and options |
-| `openrouter-spring-ai-autoconfigure` | Spring Boot auto-configuration and `spring.ai.openrouter.*` binding           |
-| `openrouter-spring-ai-starter`       | The starter — the one dependency applications add                             |
-| `openrouter-spring-ai-samples`       | The [Garage demo](docs/garage.md) application                                 |
-
-Module names, property prefixes, and layering deliberately mirror Spring AI's official providers.
+Applications add `openrouter-spring-ai-starter`. It brings the core library `openrouter-spring-ai` and its Spring Boot auto-configuration, as the diagram above shows. `openrouter-spring-ai-samples` is the [Garage demo](docs/garage.md). Module names, property prefixes, and layering deliberately mirror Spring AI's official providers.
 
 ## Contributing
 

@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 368" width="1000" role="img" aria-labelledby="title">
+<title id="title">Stream retries: only an HTTP 429 before the first decoded event is retried</title>
+<style>
+:root{--bg:#FAFBF7;--ink:#1D2719;--muted:#5C6857;--line:#7C8876;--card:#FFFFFF;--lib:#E4F1D6;--libs:#3D7A18;--ext:#E9EDF7;--exts:#43558F;--spr:#EFF0EA;--sprs:#6B705F;--bad:#FBE6DF;--bads:#B23B1E;--warn:#FFF2CC;--warns:#946400}
+@media (prefers-color-scheme:dark){:root{--bg:#141A11;--ink:#E2E9DA;--muted:#A0AB9A;--line:#7F8A79;--card:#1C2418;--lib:#22351A;--libs:#82C64A;--ext:#1D2337;--exts:#93A3E0;--spr:#23281F;--sprs:#A3A894;--bad:#3A1D16;--bads:#EE8466;--warn:#352A0C;--warns:#E3B54A}}
+text{font-family:-apple-system,"Segoe UI","Helvetica Neue",Arial,sans-serif;fill:var(--ink)}
+.bg{fill:var(--bg)}
+.card{fill:var(--card);stroke:var(--line);stroke-width:1.2}
+.lib{fill:var(--lib);stroke:var(--libs);stroke-width:1.4}
+.ext{fill:var(--ext);stroke:var(--exts);stroke-width:1.4}
+.spr{fill:var(--spr);stroke:var(--sprs);stroke-width:1.4}
+.bad{fill:var(--bad);stroke:var(--bads);stroke-width:1.4}
+.warn{fill:var(--warn);stroke:var(--warns);stroke-width:1.4}
+.grp{fill:none;stroke:var(--libs);stroke-width:1.3;stroke-dasharray:5 4}
+.grpx{fill:none;stroke:var(--line);stroke-width:1.2;stroke-dasharray:5 4}
+.h{font-size:15px;font-weight:650}
+.t{font-size:14px}
+.s{font-size:12.5px;fill:var(--muted)}
+.m,.mb{font-family:ui-monospace,"SF Mono","Cascadia Mono",Consolas,"Liberation Mono",monospace;font-size:12.5px}
+.mb{font-weight:700}
+.tl{fill:var(--libs)}.tx{fill:var(--exts)}.tb{fill:var(--bads)}.tw{fill:var(--warns)}.tm{fill:var(--muted)}
+.arr{fill:none;stroke:var(--line);stroke-width:1.6}
+.arr.g{stroke:var(--libs)}.arr.r{stroke:var(--bads)}.arr.x{stroke:var(--exts)}
+.dash{stroke-dasharray:5 4}
+.ah{fill:var(--line)}.ahg{fill:var(--libs)}.ahr{fill:var(--bads)}.ahx{fill:var(--exts)}
+.rule{stroke:var(--line);stroke-width:1;opacity:.5}
+</style>
+<defs>
+<marker id="a" viewBox="0 0 10 10" refX="5.5" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="ah" d="M0,0.8 L9.5,5 L0,9.2 L2.6,5 z"/></marker>
+<marker id="ag" viewBox="0 0 10 10" refX="5.5" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="ahg" d="M0,0.8 L9.5,5 L0,9.2 L2.6,5 z"/></marker>
+<marker id="ar" viewBox="0 0 10 10" refX="5.5" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="ahr" d="M0,0.8 L9.5,5 L0,9.2 L2.6,5 z"/></marker>
+<marker id="ax" viewBox="0 0 10 10" refX="5.5" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="ahx" d="M0,0.8 L9.5,5 L0,9.2 L2.6,5 z"/></marker>
+</defs>
+<rect class="bg" width="1000" height="368" rx="14"/>
+<g transform="translate(0,-32)">
+<!-- regions -->
+<rect x="30" y="62" width="660" height="200" rx="10" style="fill:var(--lib);opacity:.55"/>
+<rect x="690" y="62" width="280" height="200" rx="10" style="fill:var(--bad);opacity:.6"/>
+<line x1="690" y1="56" x2="690" y2="268" style="stroke:var(--libs);stroke-width:2"/>
+<text class="s tl" x="46" y="86" font-weight="650">retry window open: only an HTTP 429 that the RetryTemplate policy permits</text>
+<text class="s tb" x="704" y="86" font-weight="650">window closed: nothing is replayed</text>
+<!-- axis -->
+<path class="arr" marker-end="url(#a)" d="M40 170 H956" style="opacity:.55"/>
+<!-- attempt 1 -->
+<rect class="card" x="50" y="140" width="110" height="60" rx="8" style="stroke:var(--libs)"/>
+<text class="h" x="105" y="166" text-anchor="middle">attempt 1</text>
+<text class="s" x="105" y="186" text-anchor="middle">stream request</text>
+<path class="arr" marker-end="url(#a)" d="M160 170 H180"/>
+<rect class="warn" x="184" y="148" width="96" height="44" rx="8"/>
+<text class="mb" x="232" y="167" text-anchor="middle">HTTP 429</text>
+<text class="s" x="232" y="184" text-anchor="middle">rate limited</text>
+<!-- wait -->
+<path class="arr dash" marker-end="url(#a)" d="M280 170 H516"/>
+<text class="t" x="400" y="134" text-anchor="middle" font-weight="650">nonblocking wait</text>
+<text class="s" x="400" y="210" text-anchor="middle">backoff 2 s, ×5 each time, cap 3 min</text>
+<text class="s" x="400" y="228" text-anchor="middle"><tspan class="m" style="fill:var(--muted)">Retry-After</tspan> can stretch it to 5 min</text>
+<text class="s" x="400" y="246" text-anchor="middle">up to 10 retries (Spring AI default)</text>
+<!-- attempt 2 -->
+<rect class="card" x="520" y="140" width="110" height="60" rx="8" style="stroke:var(--libs)"/>
+<text class="h" x="575" y="166" text-anchor="middle">attempt 2</text>
+<text class="s" x="575" y="186" text-anchor="middle">stream accepted</text>
+<path class="arr g" marker-end="url(#ag)" d="M630 170 H700"/>
+<!-- events -->
+<rect class="lib" x="704" y="158" width="20" height="24" rx="4" style="stroke-width:2"/>
+<text class="s tl" x="704" y="140" font-weight="650">first decoded event</text>
+<rect class="lib" x="736" y="158" width="20" height="24" rx="4"/>
+<rect class="lib" x="768" y="158" width="20" height="24" rx="4"/>
+<rect class="lib" x="800" y="158" width="20" height="24" rx="4"/>
+<circle class="bad" cx="880" cy="170" r="14"/>
+<path d="M874 164 L886 176 M886 164 L874 176" style="stroke:var(--bads);stroke-width:2.2"/>
+<text class="s" x="880" y="206" text-anchor="middle" style="fill:var(--ink)">error: stream fails</text>
+<text class="s" x="704" y="234">counts even if it carries only usage</text>
+<text class="s" x="704" y="250">or a mapper filters it out</text>
+<!-- not retried -->
+<text class="s tb" x="40" y="305" font-weight="650">not retried</text>
+<rect class="bad" x="128" y="288" width="82" height="26" rx="6"/><text class="s" x="169" y="305" text-anchor="middle" style="fill:var(--ink)">HTTP 5xx</text>
+<rect class="bad" x="220" y="288" width="140" height="26" rx="6"/><text class="s" x="290" y="305" text-anchor="middle" style="fill:var(--ink)">connection failure</text>
+<rect class="bad" x="370" y="288" width="76" height="26" rx="6"/><text class="s" x="408" y="305" text-anchor="middle" style="fill:var(--ink)">timeout</text>
+<rect class="bad" x="456" y="288" width="160" height="26" rx="6"/><text class="s" x="536" y="305" text-anchor="middle" style="fill:var(--ink)">auth or validation error</text>
+<rect class="bad" x="626" y="288" width="228" height="26" rx="6"/><text class="s" x="740" y="305" text-anchor="middle" style="fill:var(--ink)">error inside an accepted stream</text>
+<line class="rule" x1="40" y1="334" x2="960" y2="334"/>
+<text class="t" x="40" y="360"><tspan font-weight="650">No output ≠ not billed.</tspan> An empty failed attempt may still have run upstream.</text>
+<text class="s" x="40" y="384">Direct <tspan class="m" style="fill:var(--muted)">OpenRouterApi</tspan> streams make one attempt. One observation covers the whole subscription.</text>
+</g>
+</svg>
