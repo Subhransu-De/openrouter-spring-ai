@@ -877,6 +877,8 @@ even for an empty or text-only stream. The legacy `response.done` shape shown in
 is explicitly unsupported and raises `OpenRouterProtocolException`; it does not map final
 metadata. Chat Completions and image streams continue to accept `[DONE]`.
 
+Unknown Responses event types are ignored for forward compatibility. An event with a missing, null, or blank `type` raises `OpenRouterProtocolException`, even if a successful terminal event follows, so its text is never dropped silently and buffered tool calls are not released. A typeless event that carries an error envelope still raises the typed provider exception.
+
 Responses calls require a final `completed` or `incomplete` status and an `output` array,
 which may be empty. Streaming terminal events also require a response snapshot whose
 status matches the event. Missing or contradictory terminal structure fails before
