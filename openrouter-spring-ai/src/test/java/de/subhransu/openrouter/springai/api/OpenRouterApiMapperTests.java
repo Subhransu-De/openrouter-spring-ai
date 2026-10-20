@@ -28,11 +28,15 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.ClientHttpResponse;
+import org.springframework.http.codec.json.JacksonJsonDecoder;
+import org.springframework.http.codec.json.JacksonJsonEncoder;
+import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
 import org.springframework.mock.http.client.MockClientHttpRequest;
 import org.springframework.mock.http.client.MockClientHttpResponse;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 import tools.jackson.core.JsonGenerator;
 import tools.jackson.core.JsonParser;
 import tools.jackson.databind.DeserializationContext;
@@ -41,6 +45,7 @@ import tools.jackson.databind.SerializationContext;
 import tools.jackson.databind.ValueDeserializer;
 import tools.jackson.databind.ValueSerializer;
 import tools.jackson.databind.annotation.JsonSerialize;
+import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.module.SimpleModule;
 
 class OpenRouterApiMapperTests {
@@ -64,6 +69,39 @@ class OpenRouterApiMapperTests {
 		assertThat(transport.headers.get().getFirst("HTTP-Referer")).isEqualTo("https://app.invalid");
 		assertThat(transport.headers.get().getFirst("X-OpenRouter-Title")).isEqualTo("synthetic-app");
 		assertThat(transport.headers.get().getFirst("X-OpenRouter-Categories")).isEqualTo("synthetic");
+	}
+
+	@ParameterizedTest
+	@EnumSource(Path.class)
+	void suppliedMapperOverridesBuilderJsonConvertersAndCodecs(Path path) {
+		var transport = new Transport(path, false);
+		transport.customizeBuilderJson();
+		String result = invoke(path, transport.api(customizedMapper()), request(path, false));
+		assertThat(new ObjectMapper().readTree(transport.body.get()).path("model").stringValue()).isEqualTo("encoded");
+		assertThat(result).isEqualTo("decoded");
+		assertThat(transport.headers.get().getContentType()).isEqualTo(MediaType.APPLICATION_JSON);
+		assertThat(transport.headers.get().getFirst("X-OpenRouter-Title")).isEqualTo("synthetic-app");
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "application/json", "application/vnd.synthetic+json", "application/x-ndjson" })
+	void suppliedMapperOverridesBuilderDecoderForImageFallback(String contentType) {
+		var transport = new Transport(Path.IMAGES_JSON, false, MediaType.parseMediaType(contentType));
+		transport.customizeBuilderJson();
+		StepVerifier
+			.create(transport.api(customizedMapper()).imagesStream((ImagesRequest) request(Path.IMAGES_JSON, false)))
+			.assertNext(event -> assertThat(event.b64Json()).isEqualTo("decoded"))
+			.verifyComplete();
+	}
+
+	@ParameterizedTest
+	@EnumSource(Path.class)
+	void defaultMapperPreservesBuilderJsonConvertersAndCodecs(Path path) {
+		var transport = new Transport(path, false);
+		transport.customizeBuilderJson();
+		String result = invoke(path, transport.api(null), request(path, false));
+		assertThat(new ObjectMapper().readTree(transport.body.get()).path("model").stringValue()).isEqualTo("builder");
+		assertThat(result).isEqualTo(path == Path.IMAGES_JSON ? "builder" : "wire");
 	}
 
 	@ParameterizedTest
@@ -112,6 +150,7 @@ class OpenRouterApiMapperTests {
 	void serializationFailuresSendNoBytes(Path path) {
 		for (ObjectMapper mapper : Arrays.asList(null, customizedMapper())) {
 			var transport = new Transport(path, true);
+			transport.customizeBuilderJson();
 			assertThatThrownBy(() -> invoke(path, transport.api(mapper), request(path, true)))
 				.hasStackTraceContaining("synthetic serialization failure");
 			assertThat(transport.sentBytes).hasValue(0);
@@ -119,21 +158,25 @@ class OpenRouterApiMapperTests {
 	}
 
 	private static ObjectMapper customizedMapper() {
+		return new ObjectMapper().rebuild().addModule(customizations("encoded", "decoded")).build();
+	}
+
+	private static SimpleModule customizations(String encoded, String decoded) {
 		SimpleModule module = new SimpleModule();
 		module.addSerializer(String.class, new ValueSerializer<String>() {
 			@Override
 			public void serialize(String value, JsonGenerator generator, SerializationContext context) {
-				generator.writeString("synthetic".equals(value) ? "encoded" : value);
+				generator.writeString("synthetic".equals(value) ? encoded : value);
 			}
 		});
 		module.addDeserializer(String.class, new ValueDeserializer<String>() {
 			@Override
 			public String deserialize(JsonParser parser, DeserializationContext context) {
 				String value = parser.getString();
-				return "wire".equals(value) ? "decoded" : value;
+				return "wire".equals(value) ? decoded : value;
 			}
 		});
-		return new ObjectMapper().rebuild().addModule(module).build();
+		return module;
 	}
 
 	private static Object request(Path path, boolean reject) {
@@ -143,6 +186,7 @@ class OpenRouterApiMapperTests {
 		metadata.put("first", null);
 		metadata.put("text", "quotes: \" and slash: \\ and Unicode: \u2603");
 		if (reject) {
+			metadata.put("padding", "x".repeat(64 * 1024));
 			metadata.put("reject", new Rejected());
 		}
 		var schema = mapper.readTree(SCHEMA);
@@ -247,6 +291,16 @@ class OpenRouterApiMapperTests {
 					body.set(value.getBytes(StandardCharsets.UTF_8));
 					headers.set(HttpHeaders.copyOf(outgoing.getHeaders()));
 				}).thenReturn(incoming);
+			});
+		}
+
+		private void customizeBuilderJson() {
+			JsonMapper mapper = JsonMapper.builder().addModule(customizations("builder", "builder")).build();
+			this.rest.configureMessageConverters(
+					converters -> converters.addCustomConverter(new JacksonJsonHttpMessageConverter(mapper)));
+			this.web.codecs(codecs -> {
+				codecs.customCodecs().register(new JacksonJsonEncoder(mapper));
+				codecs.customCodecs().register(new JacksonJsonDecoder(mapper));
 			});
 		}
 

@@ -446,7 +446,7 @@ streaming eligibility rule still applies.
 
 ### HTTP customization and timeout ownership
 
-`OpenRouterApi.Builder.objectMapper(...)` controls request serialization and response decoding for every endpoint, including streamed images answered with JSON. Boot passes the application's mapper to the API in both servlet and reactive applications. This mapper takes precedence over the supplied builders' JSON converters and codecs. Without a supplied mapper, the transport's existing request-serialization defaults are preserved.
+`OpenRouterApi.Builder.objectMapper(...)` controls request serialization and response decoding for every endpoint, including streamed images answered with JSON. Boot passes the application's mapper to the API in both servlet and reactive applications. Requests are fully serialized with this mapper before any body bytes are sent, bypassing even custom JSON converters and codecs registered on the supplied builders. The image-stream JSON fallback also uses this mapper regardless of builder codecs. Without a supplied mapper, the transport's existing request-serialization defaults and builder customizations are preserved.
 
 The supported transport extension points are Spring's `RestClient.Builder` request
 interceptors and `WebClient.Builder` filters, supplied to `OpenRouterApi.builder()`.

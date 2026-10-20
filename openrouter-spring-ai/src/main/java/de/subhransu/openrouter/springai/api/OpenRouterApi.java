@@ -39,9 +39,8 @@ import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.http.codec.ServerSentEvent;
-import org.springframework.http.codec.AbstractJacksonEncoder;
 import org.springframework.http.codec.AbstractJacksonDecoder;
-import org.springframework.http.converter.AbstractJacksonHttpMessageConverter;
+import org.springframework.http.codec.DecoderHttpMessageReader;
 import org.springframework.util.Assert;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
@@ -113,12 +112,6 @@ public class OpenRouterApi {
 		// supply their factory. This timeout field only guards streaming idle gaps.
 		RestClient.Builder restClientBuilder = builder.restClientBuilder != null ? builder.restClientBuilder.clone()
 				: RestClient.builder();
-		if (this.customObjectMapper) {
-			restClientBuilder.configureMessageConverters(
-					converters -> converters.withJsonConverter(new AbstractJacksonHttpMessageConverter<>(
-							this.objectMapper, MediaType.APPLICATION_JSON, new MediaType("application", "*+json")) {
-					}));
-		}
 		restClientBuilder.requestInterceptor(new OpenRouterAttributionInterceptor(builder.httpReferer,
 				builder.applicationTitle, builder.applicationCategories));
 		this.restClient = restClientBuilder.baseUrl(baseUrl)
@@ -129,19 +122,8 @@ public class OpenRouterApi {
 
 		WebClient.Builder webClientBuilder = builder.webClientBuilder != null ? builder.webClientBuilder.clone()
 				: WebClient.builder();
-		this.webClient = webClientBuilder.baseUrl(baseUrl).codecs(codecs -> {
-			codecs.defaultCodecs().maxInMemorySize(this.maxResponseBodyBytes);
-			if (this.customObjectMapper) {
-				codecs.defaultCodecs()
-					.jacksonJsonEncoder(new AbstractJacksonEncoder<>(this.objectMapper, MediaType.APPLICATION_JSON,
-							new MediaType("application", "*+json"), MediaType.APPLICATION_NDJSON) {
-					});
-				codecs.defaultCodecs()
-					.jacksonJsonDecoder(new AbstractJacksonDecoder<>(this.objectMapper, MediaType.APPLICATION_JSON,
-							new MediaType("application", "*+json"), MediaType.APPLICATION_NDJSON) {
-					});
-			}
-		})
+		this.webClient = webClientBuilder.baseUrl(baseUrl)
+			.codecs(codecs -> codecs.defaultCodecs().maxInMemorySize(this.maxResponseBodyBytes))
 			.defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + builder.apiKey)
 			.defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
 			.defaultHeader(HttpHeaders.ACCEPT, MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -180,10 +162,14 @@ public class OpenRouterApi {
 	}
 
 	private <T> T blockingPost(String uri, Object request, Class<T> responseType) {
-		return this.restClient.post()
-			.uri(uri)
-			.body(request)
-			.exchange((httpRequest, response) -> readResponse(uri, response, responseType));
+		var outgoing = this.restClient.post().uri(uri);
+		if (this.customObjectMapper) {
+			outgoing.body(output -> this.objectMapper.writeValue(output, request));
+		}
+		else {
+			outgoing.body(request);
+		}
+		return outgoing.exchange((httpRequest, response) -> readResponse(uri, response, responseType));
 	}
 
 	private <T> T readResponse(String uri, ClientHttpResponse response, Class<T> responseType) throws IOException {
@@ -253,25 +239,21 @@ public class OpenRouterApi {
 	// (found live by the Garage paint bay). Branching on the response content type turns
 	// that answer into completed events, so callers see one uniform contract.
 	public Flux<ImagesStreamEvent> imagesStream(ImagesRequest request) {
-		return this.webClient.post()
-			.uri("/images")
-			.accept(MediaType.TEXT_EVENT_STREAM)
-			.bodyValue(request)
-			.exchangeToFlux((response) -> {
-				if (response.statusCode().isError()) {
-					return streamingError("/images", response).flatMapMany(Flux::error);
-				}
-				MediaType contentType = response.headers().contentType().orElse(MediaType.APPLICATION_JSON);
-				if (MediaType.TEXT_EVENT_STREAM.isCompatibleWith(contentType)) {
-					return response.bodyToFlux(STRING_SSE_TYPE).map(event -> new ImageStreamBody(event, null));
-				}
-				return response.bodyToMono(ImagesResponse.class)
-					.onErrorMap(DecodingException.class,
-							ex -> new OpenRouterProtocolException("Invalid OpenRouter image response JSON"))
-					.switchIfEmpty(Mono.error(new OpenRouterProtocolException("Empty OpenRouter image response")))
-					.map(images -> new ImageStreamBody(null, images))
-					.flux();
-			})
+		return streamingPost("/images", request).exchangeToFlux((response) -> {
+			if (response.statusCode().isError()) {
+				return streamingError("/images", response).flatMapMany(Flux::error);
+			}
+			MediaType contentType = response.headers().contentType().orElse(MediaType.APPLICATION_JSON);
+			if (MediaType.TEXT_EVENT_STREAM.isCompatibleWith(contentType)) {
+				return response.bodyToFlux(STRING_SSE_TYPE).map(event -> new ImageStreamBody(event, null));
+			}
+			return readImagesResponse(response)
+				.onErrorMap(DecodingException.class,
+						ex -> new OpenRouterProtocolException("Invalid OpenRouter image response JSON"))
+				.switchIfEmpty(Mono.error(new OpenRouterProtocolException("Empty OpenRouter image response")))
+				.map(images -> new ImageStreamBody(null, images))
+				.flux();
+		})
 			// Include headers and error bodies, while letting SSE comments reset the
 			// guard.
 			.transform(this::applyTimeout)
@@ -282,6 +264,33 @@ public class OpenRouterApi {
 				}
 				return decodeStream(body.map(item -> Objects.requireNonNull(item.event())), ImagesStreamEvent.class);
 			});
+	}
+
+	private Mono<ImagesResponse> readImagesResponse(ClientResponse response) {
+		if (!this.customObjectMapper) {
+			return response.bodyToMono(ImagesResponse.class);
+		}
+		var decoder = new AbstractJacksonDecoder<>(this.objectMapper, MediaType.APPLICATION_JSON,
+				new MediaType("application", "*+json"), MediaType.APPLICATION_NDJSON) {
+		};
+		decoder.setMaxInMemorySize(this.maxResponseBodyBytes);
+		return ClientResponse.create(response.statusCode(), List.of(new DecoderHttpMessageReader<>(decoder)))
+			.headers(headers -> headers.addAll(response.headers().asHttpHeaders()))
+			.body(response.bodyToFlux(DataBuffer.class))
+			.build()
+			.bodyToMono(ImagesResponse.class);
+	}
+
+	private WebClient.RequestHeadersSpec<?> streamingPost(String uri, Object request) {
+		var outgoing = this.webClient.post().uri(uri).accept(MediaType.TEXT_EVENT_STREAM);
+		if (!this.customObjectMapper) {
+			return outgoing.bodyValue(request);
+		}
+		return outgoing.body((output, context) -> Mono.fromCallable(() -> this.objectMapper.writeValueAsBytes(request))
+			.flatMap(bytes -> {
+				output.getHeaders().setContentLength(bytes.length);
+				return output.writeWith(Mono.just(output.bufferFactory().wrap(bytes)));
+			}));
 	}
 
 	private List<ImagesStreamEvent> completedEvents(ImagesResponse images) {
@@ -302,11 +311,7 @@ public class OpenRouterApi {
 	}
 
 	private <T> Flux<T> stream(String uri, Object request, Class<T> eventType) {
-		return this.webClient.post()
-			.uri(uri)
-			.accept(MediaType.TEXT_EVENT_STREAM)
-			.bodyValue(request)
-			.retrieve()
+		return streamingPost(uri, request).retrieve()
 			.onStatus(HttpStatusCode::isError, response -> streamingError(uri, response))
 			.bodyToFlux(STRING_SSE_TYPE)
 			.transform(this::applyTimeout)
