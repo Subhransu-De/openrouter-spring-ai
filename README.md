@@ -691,7 +691,7 @@ Either way, the processor must be an application-declared bean or an
 custom manager, declare `DefaultToolExecutionExceptionProcessor.builder().alwaysThrow(true).build()`
 as a bean and pass that bean to the manager; an inline instance fails validation.
 
-Validation also covers managers inherited from a parent application context, and a singleton processor bean declared in a parent context counts as application-declared. A manager created after startup, such as a prototype, scoped, or lazily initialized bean, is validated when it is created.
+Validation also covers managers inherited from a parent application context, and a singleton processor bean declared in a parent context counts as application-declared. A manager created after startup, such as a prototype, scoped, or lazily initialized bean, is validated when it is created. If a parent context has no validation of its own, a validating child context adds validation to the parent when the child starts. The parent keeps this validation after the child closes, so it also applies to managers that the parent creates later for itself or for another child context, even if that context uses the opt-out below.
 
 Managers without a verifiable policy fail validation. The existing
 `spring.ai.openrouter.chat.allow-unsafe-tool-failure-results=true` opt-out skips manager

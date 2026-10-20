@@ -8,6 +8,7 @@ import de.subhransu.openrouter.springai.chat.OpenRouterToolExecutionExceptionPro
 import de.subhransu.openrouter.springai.chat.OpenRouterToolFailurePolicy;
 import io.micrometer.observation.ObservationRegistry;
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -35,9 +36,13 @@ import org.springframework.aop.scope.ScopedObject;
 import org.springframework.beans.factory.FactoryBean;
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
+import org.springframework.beans.factory.support.AbstractBeanFactory;
 import org.springframework.boot.LazyInitializationBeanFactoryPostProcessor;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.ApplicationContextInitializer;
+import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Scope;
@@ -58,6 +63,9 @@ class OpenRouterToolCallingAutoConfigurationTests {
 	private static final String REVIEWED_FAILURE = "reviewed failure";
 
 	private static final String SECRET = "jdbc:postgresql://db-internal.example:5432/orders";
+
+	private static final ApplicationContextInitializer<ConfigurableApplicationContext> GLOBAL_LAZY_INITIALIZATION = (
+			context) -> context.addBeanFactoryPostProcessor(new LazyInitializationBeanFactoryPostProcessor());
 
 	private final ApplicationContextRunner contextRunner = new ApplicationContextRunner().withConfiguration(
 			AutoConfigurations.of(OpenRouterToolCallingAutoConfiguration.class, ToolCallingAutoConfiguration.class));
@@ -277,11 +285,73 @@ class OpenRouterToolCallingAutoConfigurationTests {
 
 	@Test
 	void plainManagerInheritedFromAParentContextFailsValidation() {
-		new ApplicationContextRunner().withUserConfiguration(CustomManagerConfiguration.class)
-			.run(parent -> this.contextRunner.withParent(parent).run(context -> {
+		new ApplicationContextRunner().withUserConfiguration(CustomManagerConfiguration.class).run(parent -> {
+			this.contextRunner.withParent(parent).run(context -> {
 				assertThat(context).hasFailed();
 				assertThat(context.getStartupFailure()).isInstanceOf(IllegalStateException.class)
 					.hasStackTraceContaining(MISSING_POLICY);
+			});
+			assertThat(guards(parent)).isEmpty();
+		});
+	}
+
+	@Test
+	void prototypeManagerInAnUnguardedParentIsValidatedWhenCreated() {
+		new ApplicationContextRunner().withUserConfiguration(PrototypeCustomManagerConfiguration.class).run(parent -> {
+			this.contextRunner.withParent(parent).run(context -> {
+				assertThat(context).hasNotFailed();
+				assertThatThrownBy(() -> context.getBean(CUSTOM_MANAGER))
+					.hasRootCauseInstanceOf(IllegalStateException.class)
+					.hasStackTraceContaining(MISSING_POLICY);
+			});
+			assertThatThrownBy(() -> parent.getBean(CUSTOM_MANAGER)).hasRootCauseInstanceOf(IllegalStateException.class)
+				.hasStackTraceContaining(MISSING_POLICY);
+		});
+	}
+
+	@Test
+	void runtimeTypedManagerInALazyUnguardedParentIsValidatedWhenCreated() {
+		new ApplicationContextRunner().withInitializer(GLOBAL_LAZY_INITIALIZATION)
+			.withUserConfiguration(RuntimeTypedPlainManagerConfiguration.class)
+			.run(parent -> this.contextRunner.withParent(parent).run(context -> {
+				assertThat(context).hasNotFailed();
+				assertThatThrownBy(() -> context.getBean(CUSTOM_MANAGER))
+					.hasRootCauseInstanceOf(IllegalStateException.class)
+					.hasStackTraceContaining(MISSING_POLICY);
+			}));
+	}
+
+	@Test
+	void validManagersCreatedLaterInAnUnguardedParentAreAccepted() {
+		for (ApplicationContextRunner parentRunner : List.of(
+				new ApplicationContextRunner().withUserConfiguration(PrototypePolicyManagerConfiguration.class),
+				new ApplicationContextRunner().withUserConfiguration(InUseFactoryProcessorConfiguration.class),
+				new ApplicationContextRunner().withInitializer(GLOBAL_LAZY_INITIALIZATION)
+					.withUserConfiguration(RuntimeTypedPolicyManagerConfiguration.class))) {
+			parentRunner.run(parent -> this.contextRunner.withParent(parent).run(context -> {
+				assertThat(context).hasNotFailed();
+				assertThat(failingToolResult(context.getBean(CUSTOM_MANAGER, ToolCallingManager.class)))
+					.isEqualTo(REVIEWED_FAILURE);
+			}));
+		}
+	}
+
+	@Test
+	void eachUnguardedAncestorGetsOneGuardThatRetainsNoChild() {
+		new ApplicationContextRunner()
+			.run(grandparent -> new ApplicationContextRunner().withParent(grandparent).run(parent -> {
+				List<WeakReference<ApplicationContext>> children = new ArrayList<>();
+				for (int child = 0; child < 2; child++) {
+					this.contextRunner.withParent(parent).run(context -> {
+						assertThat(context).hasNotFailed();
+						children.add(new WeakReference<>(context.getSourceApplicationContext()));
+					});
+				}
+				assertThat(guards(parent)).hasSize(1);
+				assertThat(guards(grandparent)).hasSize(1);
+				for (WeakReference<ApplicationContext> child : children) {
+					assertCollected(child);
+				}
 			}));
 	}
 
@@ -319,11 +389,13 @@ class OpenRouterToolCallingAutoConfigurationTests {
 
 	@Test
 	void parentWithItsOwnGuardRemainsResponsibleForItsManagers() {
-		this.contextRunner.withUserConfiguration(CustomManagerAndPrototypeProcessorConfiguration.class)
-			.run(parent -> this.contextRunner.withParent(parent).run(context -> {
+		this.contextRunner.withUserConfiguration(CustomManagerAndPrototypeProcessorConfiguration.class).run(parent -> {
+			this.contextRunner.withParent(parent).run(context -> {
 				assertThat(context).hasNotFailed();
 				assertThat(failingToolResult(context.getBean(ToolCallingManager.class))).isEqualTo(REVIEWED_FAILURE);
-			}));
+			});
+			assertThat(guards(parent)).containsExactly(parent.getBean(OpenRouterToolCallingManagerGuard.class));
+		});
 	}
 
 	@Test
@@ -332,8 +404,7 @@ class OpenRouterToolCallingAutoConfigurationTests {
 			assertThat(context).hasFailed();
 			assertThat(context.getStartupFailure()).hasStackTraceContaining(MISSING_POLICY);
 		});
-		ApplicationContextRunner lazyRunner = this.contextRunner.withInitializer(
-				context -> context.addBeanFactoryPostProcessor(new LazyInitializationBeanFactoryPostProcessor()));
+		ApplicationContextRunner lazyRunner = this.contextRunner.withInitializer(GLOBAL_LAZY_INITIALIZATION);
 		lazyRunner.withUserConfiguration(RuntimeTypedPlainManagerConfiguration.class).run(context -> {
 			assertThat(context).hasNotFailed();
 			assertThatThrownBy(() -> context.getBean(CUSTOM_MANAGER))
@@ -383,6 +454,22 @@ class OpenRouterToolCallingAutoConfigurationTests {
 		List<Message> history = result.conversationHistory();
 		ToolResponseMessage response = (ToolResponseMessage) history.get(history.size() - 1);
 		return response.getResponses().get(0).responseData();
+	}
+
+	private static List<OpenRouterToolCallingManagerGuard> guards(ConfigurableApplicationContext context) {
+		return ((AbstractBeanFactory) context.getBeanFactory()).getBeanPostProcessors()
+			.stream()
+			.filter(OpenRouterToolCallingManagerGuard.class::isInstance)
+			.map(OpenRouterToolCallingManagerGuard.class::cast)
+			.toList();
+	}
+
+	private static void assertCollected(WeakReference<?> reference) throws InterruptedException {
+		for (int attempt = 0; attempt < 50 && reference.get() != null; attempt++) {
+			System.gc();
+			Thread.sleep(20);
+		}
+		assertThat(reference.get()).isNull();
 	}
 
 	private static final class PolicyManager implements ToolCallingManager, OpenRouterToolFailurePolicy {
@@ -522,6 +609,45 @@ class OpenRouterToolCallingAutoConfigurationTests {
 		@Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 		ToolCallingManager customToolCallingManager() {
 			return ToolCallingManager.builder().build();
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	static class PrototypePolicyManagerConfiguration {
+
+		@Bean
+		ToolExecutionExceptionProcessor customProcessor() {
+			return exception -> REVIEWED_FAILURE;
+		}
+
+		@Bean
+		@Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
+		ToolCallingManager customToolCallingManager(ToolExecutionExceptionProcessor processor) {
+			return OpenRouterToolCallingManagers.withFailurePolicy(processor, builder -> {
+			});
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	static class InUseFactoryProcessorConfiguration {
+
+		@Bean
+		FactoryBean<?> customProcessor() {
+			return new RuntimeTypedFactoryBean((ToolExecutionExceptionProcessor) exception -> REVIEWED_FAILURE);
+		}
+
+		@Bean
+		List<ToolExecutionExceptionProcessor> processorUsers(ToolExecutionExceptionProcessor processor) {
+			return List.of(processor);
+		}
+
+		@Bean
+		@Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
+		ToolCallingManager customToolCallingManager(ToolExecutionExceptionProcessor processor) {
+			return OpenRouterToolCallingManagers.withFailurePolicy(processor, builder -> {
+			});
 		}
 
 	}

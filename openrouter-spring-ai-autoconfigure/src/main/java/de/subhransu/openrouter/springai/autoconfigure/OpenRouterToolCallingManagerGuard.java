@@ -21,10 +21,13 @@ import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.beans.factory.config.BeanPostProcessor;
+import org.springframework.beans.factory.support.AbstractBeanFactory;
 
 final class OpenRouterToolCallingManagerGuard implements BeanPostProcessor, SmartInitializingSingleton {
 
 	private static final String SPRING_TOOL_CALLING_AUTO_CONFIGURATION = "org.springframework.ai.model.tool.autoconfigure.ToolCallingAutoConfiguration";
+
+	private static final Object ANCESTOR_GUARD_LOCK = new Object();
 
 	private final ConfigurableListableBeanFactory beanFactory;
 
@@ -64,13 +67,25 @@ final class OpenRouterToolCallingManagerGuard implements BeanPostProcessor, Smar
 		this.singletonDeclaredProcessors
 			.addAll(this.beanFactory.getBeansOfType(ToolExecutionExceptionProcessor.class, false, false).values());
 		validateCustomManagers(this.beanFactory);
-		for (ConfigurableListableBeanFactory ancestor : ancestors()) {
-			if (ancestor.getBeanNamesForType(OpenRouterToolCallingManagerGuard.class, false, false).length > 0) {
-				break;
-			}
-			validateCustomManagers(ancestor);
-		}
+		List<ConfigurableListableBeanFactory> unguardedAncestors = unguardedAncestors();
+		unguardedAncestors.forEach(this::validateCustomManagers);
+		unguardedAncestors.forEach(OpenRouterToolCallingManagerGuard::installIfAbsent);
 		this.singletonsValidated = true;
+	}
+
+	private static void installIfAbsent(ConfigurableListableBeanFactory ancestor) {
+		if (!(ancestor instanceof AbstractBeanFactory factory)) {
+			return;
+		}
+		synchronized (ANCESTOR_GUARD_LOCK) {
+			if (factory.getBeanPostProcessors()
+				.stream()
+				.noneMatch(OpenRouterToolCallingManagerGuard.class::isInstance)) {
+				OpenRouterToolCallingManagerGuard guard = new OpenRouterToolCallingManagerGuard(ancestor);
+				guard.singletonsValidated = true;
+				factory.addBeanPostProcessor(guard);
+			}
+		}
 	}
 
 	private void validateCustomManagers(ConfigurableListableBeanFactory factory) {
@@ -81,10 +96,11 @@ final class OpenRouterToolCallingManagerGuard implements BeanPostProcessor, Smar
 		});
 	}
 
-	private List<ConfigurableListableBeanFactory> ancestors() {
+	private List<ConfigurableListableBeanFactory> unguardedAncestors() {
 		List<ConfigurableListableBeanFactory> ancestors = new ArrayList<>();
 		BeanFactory parent = this.beanFactory.getParentBeanFactory();
-		while (parent instanceof ConfigurableListableBeanFactory ancestor) {
+		while (parent instanceof ConfigurableListableBeanFactory ancestor
+				&& ancestor.getBeanNamesForType(OpenRouterToolCallingManagerGuard.class, false, false).length == 0) {
 			ancestors.add(ancestor);
 			parent = ancestor.getParentBeanFactory();
 		}
@@ -131,16 +147,19 @@ final class OpenRouterToolCallingManagerGuard implements BeanPostProcessor, Smar
 				return true;
 			}
 		}
-		return isAncestorSingleton(processor);
+		return isHierarchySingleton(processor);
 	}
 
-	private boolean isAncestorSingleton(ToolExecutionExceptionProcessor processor) {
-		for (ConfigurableListableBeanFactory ancestor : ancestors()) {
-			for (String name : ancestor.getBeanNamesForType(ToolExecutionExceptionProcessor.class, false, false)) {
-				if (ancestor.containsSingleton(name) && ancestor.getBean(name) == processor) {
+	private boolean isHierarchySingleton(ToolExecutionExceptionProcessor processor) {
+		BeanFactory factory = this.beanFactory;
+		while (factory instanceof ConfigurableListableBeanFactory listableFactory) {
+			for (String name : listableFactory.getBeanNamesForType(ToolExecutionExceptionProcessor.class, false,
+					false)) {
+				if (listableFactory.containsSingleton(name) && listableFactory.getBean(name) == processor) {
 					return true;
 				}
 			}
+			factory = listableFactory.getParentBeanFactory();
 		}
 		return false;
 	}
