@@ -17,6 +17,9 @@ import de.subhransu.openrouter.springai.api.dto.Usage;
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterStreamingToolCallAggregator;
 import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException;
 import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException.Limit;
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationHandler;
+import io.micrometer.observation.ObservationRegistry;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -28,6 +31,7 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.observation.ChatModelObservationContext;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.function.FunctionToolCallback;
@@ -284,8 +288,7 @@ class OpenRouterStreamingToolCallAggregationTests {
 		StepVerifier.create(model(api).stream(prompt())).assertNext(response -> {
 			assertThat(response.hasToolCalls()).isTrue();
 			assertUsage(response, 15, 0.2);
-			assertThat(response.getMetadata().<Map<String, Object>>get("openrouter.response.extensions"))
-				.containsEntry("marker", "newer");
+			assertThat(responseExtensions(response)).containsEntry("marker", "newer");
 		}).verifyComplete();
 	}
 
@@ -302,8 +305,7 @@ class OpenRouterStreamingToolCallAggregationTests {
 		StepVerifier.create(model(api).stream(prompt())).assertNext(response -> {
 			assertThat(response.hasToolCalls()).isTrue();
 			assertUsage(response, 12, 0.1);
-			assertThat(response.getMetadata().<Map<String, Object>>get("openrouter.response.extensions"))
-				.containsEntry("marker", "newer");
+			assertThat(responseExtensions(response)).containsEntry("marker", "newer");
 		}).verifyComplete();
 	}
 
@@ -320,6 +322,56 @@ class OpenRouterStreamingToolCallAggregationTests {
 		assertThat(responses).filteredOn(response -> response.getMetadata().getUsage() instanceof OpenRouterUsage)
 			.last()
 			.satisfies(response -> assertUsage(response, 15, 0.2));
+	}
+
+	@Test
+	void olderSharedUsageIsNotReportedAfterANewerToolChoiceFinish() {
+		List<ChatResponse> observed = new ArrayList<>();
+		ObservationRegistry observationRegistry = ObservationRegistry.create();
+		observationRegistry.observationConfig()
+			.observationHandler(new ObservationHandler<ChatModelObservationContext>() {
+				@Override
+				public boolean supportsContext(Observation.Context context) {
+					return context instanceof ChatModelObservationContext;
+				}
+
+				@Override
+				public void onStop(ChatModelObservationContext context) {
+					observed.add(context.getResponse());
+				}
+			});
+		OpenRouterApi api = mock(OpenRouterApi.class);
+		when(api.chatCompletionStream(any())).thenReturn(Flux.just(wireChunk(
+				"{\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call-0\",\"type\":\"function\","
+						+ "\"function\":{\"name\":\"get_weather\",\"arguments\":\"{}\"}}]}},"
+						+ "{\"index\":1,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call-1\",\"type\":\"function\","
+						+ "\"function\":{\"name\":\"get_weather\",\"arguments\":\"{}\"}}]}}]}"),
+				wireChunk("{\"choices\":[],\"usage\":{\"total_tokens\":12,\"cost\":0.1},\"revision\":\"old\"}"),
+				wireChunk("{\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}],"
+						+ "\"usage\":{\"total_tokens\":15,\"cost\":0.2},\"revision\":\"new\"}"),
+				wireChunk("{\"choices\":[{\"index\":1,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}")));
+		OpenRouterChatModel model = OpenRouterChatModel.builder()
+			.openRouterApi(api)
+			.observationRegistry(observationRegistry)
+			.build();
+
+		List<ChatResponse> responses = model.stream(prompt()).collectList().block(Duration.ofSeconds(5));
+
+		assertThat(responses).flatExtracting(ChatResponse::getResults)
+			.extracting(generation -> generation.getMetadata().<Integer>get("openrouter.choice_index"))
+			.containsExactly(0, 1);
+		assertThat(responses).filteredOn(response -> response.getMetadata().getUsage() instanceof OpenRouterUsage)
+			.last()
+			.satisfies(response -> assertUsage(response, 15, 0.2));
+		assertThat(responseExtensions(responses.get(responses.size() - 1))).containsEntry("revision", "new");
+		assertThat(observed).singleElement().satisfies(response -> {
+			assertUsage(response, 15, 0.2);
+			assertThat(responseExtensions(response)).containsEntry("revision", "new");
+		});
+	}
+
+	private static Map<String, Object> responseExtensions(ChatResponse response) {
+		return response.getMetadata().get("openrouter.response.extensions");
 	}
 
 	private static void assertUsage(ChatResponse response, int totalTokens, double cost) {

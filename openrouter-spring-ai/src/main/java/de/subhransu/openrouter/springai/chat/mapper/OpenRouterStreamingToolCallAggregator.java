@@ -9,13 +9,16 @@ import de.subhransu.openrouter.springai.api.dto.ContentPart;
 import de.subhransu.openrouter.springai.api.dto.Delta;
 import de.subhransu.openrouter.springai.api.dto.FunctionCall;
 import de.subhransu.openrouter.springai.api.dto.ToolCall;
+import de.subhransu.openrouter.springai.api.dto.Usage;
 import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import java.io.OutputStream;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -594,6 +597,12 @@ public final class OpenRouterStreamingToolCallAggregator {
 
 		private long bufferedChoiceLessBytes;
 
+		private long sequence;
+
+		private long deliveredUsageSequence;
+
+		private final Map<String, Long> deliveredExtensionSequences = new HashMap<>();
+
 		private final Consumer<Throwable> timeoutHandler;
 
 		private AggregationState(Consumer<Throwable> timeoutHandler) {
@@ -615,6 +624,7 @@ public final class OpenRouterStreamingToolCallAggregator {
 				clear();
 				return List.of(chunk);
 			}
+			this.sequence++;
 			List<@Nullable Choice> choices = chunk.choices();
 			if (choices == null || choices.isEmpty()) {
 				if (!this.bufferedByChoice.isEmpty()) {
@@ -642,6 +652,8 @@ public final class OpenRouterStreamingToolCallAggregator {
 				release(this.bufferedChoiceLessChunks, this.bufferedChoiceLessBytes);
 				this.bufferedChoiceLessChunks = 0;
 				this.bufferedChoiceLessBytes = 0;
+				this.deliveredUsageSequence = 0;
+				this.deliveredExtensionSequences.clear();
 			}
 			return combine(ready);
 		}
@@ -657,6 +669,9 @@ public final class OpenRouterStreamingToolCallAggregator {
 			ChatCompletionChunk choiceChunk = withChoice(chunk, choice);
 			if (buffered == null) {
 				ready.add(choiceChunk);
+				if (!this.bufferedByChoice.isEmpty()) {
+					deliver(chunk);
+				}
 			}
 			else {
 				var choiceDelta = choice.delta();
@@ -691,8 +706,47 @@ public final class OpenRouterStreamingToolCallAggregator {
 					}
 				}
 			}
-			ready.add(merged);
+			ready.add(withoutSupersededSnapshots(merged, buffered));
 			release(buffered.retainedChunks, buffered.retainedBytes);
+		}
+
+		private ChatCompletionChunk withoutSupersededSnapshots(ChatCompletionChunk merged, ToolCallBuffer buffered) {
+			if (this.bufferedByChoice.isEmpty() && this.deliveredUsageSequence == 0
+					&& this.deliveredExtensionSequences.isEmpty()) {
+				return merged;
+			}
+			Usage usage = null;
+			Map<String, @Nullable Object> extensions = new LinkedHashMap<>();
+			for (int position = 0; position < buffered.chunks.size(); position++) {
+				ChatCompletionChunk chunk = buffered.chunks.get(position);
+				long chunkSequence = buffered.sequences[position];
+				Usage chunkUsage = chunk.usage();
+				if (chunkUsage != null && chunkSequence >= this.deliveredUsageSequence) {
+					usage = chunkUsage;
+					this.deliveredUsageSequence = chunkSequence;
+				}
+				for (Map.Entry<String, @Nullable Object> entry : chunk.extensions().entrySet()) {
+					Long delivered = this.deliveredExtensionSequences.get(entry.getKey());
+					if (delivered == null || chunkSequence >= delivered) {
+						extensions.put(entry.getKey(), entry.getValue());
+						this.deliveredExtensionSequences.put(entry.getKey(), chunkSequence);
+					}
+				}
+			}
+			if (usage == merged.usage() && extensions.equals(merged.extensions())) {
+				return merged;
+			}
+			return new ChatCompletionChunk(merged.id(), merged.object(), merged.created(), merged.model(),
+					merged.provider(), merged.choices(), usage, merged.error(), extensions);
+		}
+
+		private void deliver(ChatCompletionChunk chunk) {
+			if (chunk.usage() != null) {
+				this.deliveredUsageSequence = this.sequence;
+			}
+			for (String key : chunk.extensions().keySet()) {
+				this.deliveredExtensionSequences.put(key, this.sequence);
+			}
 		}
 
 		private synchronized void complete() {
@@ -721,6 +775,8 @@ public final class OpenRouterStreamingToolCallAggregator {
 			this.retainedChunks = 0;
 			this.retainedBytes = 0;
 			this.bufferedChoiceLessBytes = 0;
+			this.deliveredUsageSequence = 0;
+			this.deliveredExtensionSequences.clear();
 		}
 
 		private void retain(long chunkBytes) {
@@ -755,6 +811,8 @@ public final class OpenRouterStreamingToolCallAggregator {
 
 			private final List<ChatCompletionChunk> chunks = new ArrayList<>();
 
+			private long[] sequences = new long[16];
+
 			private int count;
 
 			private long bytes;
@@ -777,6 +835,11 @@ public final class OpenRouterStreamingToolCallAggregator {
 
 			private void share(ChatCompletionChunk chunk, long chunkBytes) {
 				measure(chunkBytes);
+				int position = this.chunks.size();
+				if (position == this.sequences.length) {
+					this.sequences = Arrays.copyOf(this.sequences, position * 2);
+				}
+				this.sequences[position] = AggregationState.this.sequence;
 				this.chunks.add(chunk);
 			}
 

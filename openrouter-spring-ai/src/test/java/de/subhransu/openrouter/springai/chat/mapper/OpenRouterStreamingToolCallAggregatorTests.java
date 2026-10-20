@@ -22,6 +22,7 @@ import tools.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -324,6 +325,94 @@ class OpenRouterStreamingToolCallAggregatorTests {
 				assertThat(value.usage()).isEqualTo(usage);
 			})
 			.verifyComplete();
+	}
+
+	@Test
+	void olderSharedUsageIsNotEmittedAfterANewerToolChoiceFinish() {
+		List<ChatCompletionChunk> aggregated = this.aggregator.aggregate(Flux.just(
+				chunk(toolFragment(0, 0, "call-0", "weather", "{}"), toolFragment(1, 0, "call-1", "weather", "{}")),
+				snapshot(12, Map.of("revision", "old")), snapshot(15, Map.of("revision", "new"), finishChoice(0)),
+				chunk(finishChoice(1))))
+			.collectList()
+			.block(Duration.ofSeconds(5));
+
+		assertThat(aggregated).flatExtracting(ChatCompletionChunk::choices)
+			.extracting(Choice::index)
+			.containsExactly(0, 1);
+		assertThat(totalTokens(aggregated)).containsExactly(15);
+		assertThat(revisions(aggregated)).containsExactly("new");
+	}
+
+	@Test
+	void newerSharedUsageStillReachesALaterToolChoiceFinish() {
+		List<ChatCompletionChunk> aggregated = this.aggregator.aggregate(Flux.just(
+				chunk(toolFragment(0, 0, "call-0", "weather", "{}"), toolFragment(1, 0, "call-1", "weather", "{}")),
+				snapshot(12, Map.of("revision", "old"), finishChoice(0)), snapshot(15, Map.of("revision", "new")),
+				chunk(finishChoice(1))))
+			.collectList()
+			.block(Duration.ofSeconds(5));
+
+		assertThat(aggregated).flatExtracting(ChatCompletionChunk::choices)
+			.extracting(Choice::index)
+			.containsExactly(0, 1);
+		assertThat(totalTokens(aggregated)).containsExactly(12, 15);
+		assertThat(revisions(aggregated)).containsExactly("old", "new");
+	}
+
+	@Test
+	void threeInterleavedToolChoicesEmitUsageAndExtensionsInArrivalOrder() {
+		List<ChatCompletionChunk> aggregated = this.aggregator
+			.aggregate(Flux.just(snapshot(9, Map.of("revision", "r1"), toolFragment(0, 0, "call-0", "weather", "{}"),
+					toolFragment(1, 0, "call-1", "weather", "{}"), toolFragment(2, 0, "call-2", "weather", "{")),
+					snapshot(11, Map.of("revision", "r2", "route", "b"), toolFragment(2, 0, null, null, "}")),
+					snapshot(13, Map.of("revision", "r3"), finishChoice(0)), chunk(finishChoice(1)),
+					snapshot(14, Map.of("revision", "r5")), chunk(finishChoice(2))))
+			.collectList()
+			.block(Duration.ofSeconds(5));
+
+		assertThat(aggregated).flatExtracting(ChatCompletionChunk::choices)
+			.extracting(Choice::index)
+			.containsExactly(0, 1, 2);
+		assertThat(aggregated.get(2).choices().get(0).delta().toolCalls().get(0).function().arguments())
+			.isEqualTo("{}");
+		assertThat(totalTokens(aggregated)).containsExactly(13, 14);
+		assertThat(revisions(aggregated)).containsExactly("r3", "r5");
+		assertThat(aggregated.get(2).extensions()).containsEntry("route", "b");
+	}
+
+	@Test
+	void olderToolChoiceUsageIsNotEmittedAfterANewerTextChoice() {
+		List<ChatCompletionChunk> aggregated = this.aggregator.aggregate(Flux.just(
+				snapshot(5, Map.of("revision", "old"), textChoice(0, "Sunny"),
+						toolFragment(1, 0, "call-1", "weather", "{}")),
+				snapshot(15, Map.of("revision", "new"),
+						new Choice(0, null, new Delta(null, ".", null, null), "stop", "stop")),
+				chunk(finishChoice(1))))
+			.collectList()
+			.block(Duration.ofSeconds(5));
+
+		assertThat(aggregated).flatExtracting(ChatCompletionChunk::choices)
+			.extracting(Choice::index)
+			.containsExactly(0, 0, 1);
+		assertThat(totalTokens(aggregated)).containsExactly(5, 15);
+		assertThat(revisions(aggregated)).containsExactly("old", "new");
+	}
+
+	private ChatCompletionChunk snapshot(int totalTokens, Map<String, Object> extensions, Choice... choices) {
+		return new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, MODEL, "openai", List.of(choices),
+				new Usage(null, null, totalTokens, null, null, null, null, null, null), null, extensions);
+	}
+
+	private static List<Integer> totalTokens(List<ChatCompletionChunk> chunks) {
+		return chunks.stream()
+			.map(ChatCompletionChunk::usage)
+			.filter(Objects::nonNull)
+			.map(Usage::totalTokens)
+			.toList();
+	}
+
+	private static List<Object> revisions(List<ChatCompletionChunk> chunks) {
+		return chunks.stream().map(chunk -> chunk.extensions().get("revision")).filter(Objects::nonNull).toList();
 	}
 
 	@Test
