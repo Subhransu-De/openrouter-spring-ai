@@ -6,7 +6,7 @@ How runtime options combine with model defaults, and how option objects are copi
 
 ![A raw ChatModel call replaces the model defaults with the prompt options and falls back to Chat Completions. ChatClient layers model defaults, client defaults and request options: a value overrides, null inherits, and stop and tool lists append, so a null seed inherits 7 and Responses rejects it before HTTP.](images/option-composition.svg)
 
-With a raw model, supply complete `OpenRouterChatOptions` (including model and mode) or derive them from `getOptions()`. In Spring AI 2.0.1, `.options(builder)` replaces the client-level `.defaultOptions(builder)` customizer; it does not erase the model defaults. `client.prompt(Prompt)` composes supplied prompt options with the client customizer. For example, given an injected `OpenRouterApi api`, this synthetic mode switch fails before HTTP because the model defaults retain `includeUsage=true`:
+With a raw model, supply complete `OpenRouterChatOptions` (including model and mode) or derive them from `getOptions()`. In Spring AI 2.0.2, `.options(builder)` replaces the client-level `.defaultOptions(builder)` customizer; it does not erase the model defaults. `client.prompt(Prompt)` composes supplied prompt options with the client customizer. For example, given an injected `OpenRouterApi api`, this synthetic mode switch fails before HTTP because the model defaults retain `includeUsage=true`:
 
 ```java
 var chatModel = OpenRouterChatModel.builder()

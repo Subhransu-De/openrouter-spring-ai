@@ -10,6 +10,7 @@ Notable changes in each release. The full notes for each release candidate are o
 - A synchronous Chat Completions tool call, or any Responses tool call, with a blank function name fails with `OpenRouterProtocolException` before a callback is selected. [#211](https://github.com/Subhransu-De/openrouter-spring-ai/pull/211)
 - `extraBody` accepts `transforms`. Send an empty list to turn off OpenRouter's middle-out transform. [#211](https://github.com/Subhransu-De/openrouter-spring-ai/pull/211)
 - The library is built and tested with the Jackson version that Spring Boot manages, instead of forcing Jackson 3.2.3. [#210](https://github.com/Subhransu-De/openrouter-spring-ai/pull/210)
+- The baseline is Spring Boot 4.1.2 and Spring AI 2.0.2. [#228](https://github.com/Subhransu-De/openrouter-spring-ai/pull/228), [#229](https://github.com/Subhransu-De/openrouter-spring-ai/pull/229)
 
 ### Documentation
 

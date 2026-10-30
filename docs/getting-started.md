@@ -12,7 +12,7 @@ Use the published `de.subhransu:openrouter-spring-ai-starter:0.1.0-RC3` from Mav
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.1.1</version>
+        <version>4.1.2</version>
         <relativePath/>
     </parent>
     <groupId>example</groupId>
@@ -38,12 +38,12 @@ Or create `build.gradle.kts`:
 ```kotlin
 plugins {
     java
-    id("org.springframework.boot") version "4.1.1"
+    id("org.springframework.boot") version "4.1.2"
 }
 repositories { mavenCentral() }
 java { sourceCompatibility = JavaVersion.VERSION_17 }
 dependencies {
-    implementation(platform("org.springframework.boot:spring-boot-dependencies:4.1.1"))
+    implementation(platform("org.springframework.boot:spring-boot-dependencies:4.1.2"))
     implementation("de.subhransu:openrouter-spring-ai-starter:0.1.0-RC3")
 }
 ```
@@ -101,7 +101,7 @@ For incremental text, use `client.prompt().user("Say hello.").stream().content()
 | Source / artifact                                                                      | Java release target | Spring Boot | Spring AI |
 | -------------------------------------------------------------------------------------- | ------------------- | ----------- | --------- |
 | [RC3: `e336517`](https://github.com/Subhransu-De/openrouter-spring-ai/tree/v0.1.0-RC3) | 17                  | 4.1.1       | 2.0.1     |
-| Unreleased main (`0.1.0-SNAPSHOT`)                                                     | 17                  | 4.1.1       | 2.0.1     |
+| Unreleased main (`0.1.0-SNAPSHOT`)                                                     | 17                  | 4.1.2       | 2.0.2     |
 
 Baselines come from the tagged/root POMs and [published RC3 parent POM](https://repo.maven.apache.org/maven2/de/subhransu/openrouter-spring-ai-parent/0.1.0-RC3/openrouter-spring-ai-parent-0.1.0-RC3.pom). CI targets JDK 17, 21, and 25; this does not establish compatibility with arbitrary Boot or Spring AI versions. Use the matching BOM baseline in the consuming application. Earlier release candidates are listed in the [changelog](../CHANGELOG.md).
 

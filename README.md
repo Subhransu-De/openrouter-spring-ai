@@ -15,7 +15,7 @@
   <a href="https://github.com/Subhransu-De/openrouter-spring-ai/actions/workflows/codeql.yml"><img src="https://img.shields.io/github/actions/workflow/status/Subhransu-De/openrouter-spring-ai/codeql.yml?branch=main&amp;label=CodeQL&amp;style=flat" alt="CodeQL status"></a>
 </p>
 
-A native [Spring AI](https://spring.io/projects/spring-ai) integration for [OpenRouter](https://openrouter.ai), with typed model fallbacks, provider routing, reasoning replay, cost accounting, and attribution headers under `spring.ai.openrouter.*`. Spring AI's OpenAI integration can also send OpenRouter-specific fields through [`extraBody`](https://github.com/spring-projects/spring-ai/blob/v2.0.1/models/spring-ai-openai/src/main/java/org/springframework/ai/openai/OpenAiChatOptions.java). This library adds typed routing and OpenRouter-specific response and reasoning handling; it does not promise universal provider parity.
+A native [Spring AI](https://spring.io/projects/spring-ai) integration for [OpenRouter](https://openrouter.ai), with typed model fallbacks, provider routing, reasoning replay, cost accounting, and attribution headers under `spring.ai.openrouter.*`. Spring AI's OpenAI integration can also send OpenRouter-specific fields through [`extraBody`](https://github.com/spring-projects/spring-ai/blob/v2.0.2/models/spring-ai-openai/src/main/java/org/springframework/ai/openai/OpenAiChatOptions.java). This library adds typed routing and OpenRouter-specific response and reasoning handling; it does not promise universal provider parity.
 
 > **Community project:** This library is independently maintained and is not affiliated with, endorsed by, or an official project of OpenRouter or Spring AI.
 >
@@ -56,7 +56,7 @@ Add the starter from Maven Central:
 implementation("de.subhransu:openrouter-spring-ai-starter:0.1.0-RC3")
 ```
 
-Use Java 17 or later with the Spring Boot 4.1.1 and Spring AI 2.0.1 baseline. [Getting started](docs/getting-started.md) has complete Maven and Gradle builds.
+Use Java 17 or later with the Spring Boot 4.1.2 and Spring AI 2.0.2 baseline. [Getting started](docs/getting-started.md) has complete Maven and Gradle builds.
 
 ## Make a first call
 
