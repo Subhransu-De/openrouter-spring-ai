@@ -16,6 +16,8 @@ The supported consumer API consists of the following types under `de.subhransu.o
 | `errors`, `chat.errors`, `api.errors.OpenRouterApiException`                                                               | Exception types, diagnostic records, category enums, and inspection interfaces. Missing diagnostics are nullable. `OpenRouterHttpException` is sealed; consumers cannot implement it.                              |
 | `autoconfigure.*Properties` and `spring.ai.openrouter.*`                                                                   | Boot property binding. Custom model, API, and tool beans use the existing auto-configuration backoff rules.                                                                                                        |
 
+The models implement the Spring AI interfaces `ChatModel` (which includes `StreamingChatModel`), `EmbeddingModel` and `ImageModel`. `OpenRouterImageModel.stream()` is a provider extension. The embedding model accepts a `Document` but does not implement `DocumentEmbeddingModel`.
+
 ## Build low-level requests
 
 Build low-level requests by naming the fields you set; unset fields are omitted from the JSON body. `build()` throws `NullPointerException` when the required `messages` (Chat Completions) or `input` (Responses) is missing:
@@ -30,7 +32,7 @@ ChatCompletionRequest request = ChatCompletionRequest.builder()
 ChatCompletionResponse response = api.chatCompletion(request);
 ```
 
-New OpenRouter request fields are added to the builders. The records' canonical constructors stay public because Java requires it, but their parameter lists grow with each new field, so code that calls them breaks when a field is added.
+New OpenRouter request fields are added to the builders. The records' canonical constructors stay public because Java requires it, but their parameter lists grow with each new field, so code that calls them breaks when a field is added. `ChatMessage` is the exception: it has no builder, so the example calls its short constructor.
 
 ## Implementation details
 
@@ -38,8 +40,14 @@ Mapper packages, `internal`, `support.OptionSnapshots`, error factories/classifi
 
 ## Nullability
 
-Consumer packages declare JSpecify `@NullMarked`; `@Nullable` marks optional values. A nullable list or map does not imply nullable elements. Request lists and Spring AI tool callback/context entries retain their non-null element contracts. JSON metadata maps allow null values, and response arrays can contain null entries. Handle missing response fields before dereferencing them, including usage, cost, and media metadata. All maintained production packages, including implementation helpers and samples, declare `@NullMarked`. Wire DTOs retain nullable fields and elements; model mappers reject null choices, Responses output/message-content entries, and missing required tool-call fields with a protocol exception before exposing them to Spring AI. Chat Completions tool calls without IDs still execute: the Spring AI ID is empty and the follow-up wire ID remains absent. Missing response IDs/models and usage retain Spring AI metadata defaults (`EmptyUsage` when usage is absent); absent optional generation metadata keys are omitted. The annotations themselves do not perform runtime validation.
+Consumer packages declare JSpecify `@NullMarked`, and `@Nullable` marks optional values. The annotations do not check anything at runtime. Kotlin with strict JSpecify checking and null-aware Java analyzers can reject unchecked use of nullable values, so use null checks or Kotlin safe calls.
 
-Kotlin with strict JSpecify checking and null-aware Java analyzers can reject unchecked dereferences of nullable values. Use null checks or Kotlin safe calls.
+What to null-check:
+
+- Response fields that the provider may omit: usage, cost, media metadata, and exception diagnostics. When usage is absent, Spring AI metadata reports `EmptyUsage`. Missing response IDs and models keep Spring AI's defaults. Absent optional generation metadata keys are left out.
+- Low-level `api.dto` records. Their fields can be absent, and response arrays can contain null entries.
+- JSON metadata maps. Their values can be null.
+
+A nullable list or map does not make its elements nullable. Request lists and Spring AI tool callback and context entries must not hold nulls. A Chat Completions tool call without an ID still runs: the Spring AI ID is empty and the follow-up request leaves the wire ID out.
 
 For how a null option interacts with defaults, see [Null means inherit](chat-options.md#null-means-inherit).

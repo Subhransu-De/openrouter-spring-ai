@@ -1,18 +1,12 @@
 # The Garage demo
 
-[`openrouter-spring-ai-samples`](../openrouter-spring-ai-samples) is a small story: a garage foreman model inspects a customer's car, delegates one job to a specialist model, and writes a service record. A normal run stays easy to read; a `full` run turns it into a capability tour across both Chat Completions and experimental Responses (with registry-declared limitations).
+[`openrouter-spring-ai-samples`](../openrouter-spring-ai-samples) is a small story. A garage foreman model inspects a customer's car, delegates one job to a specialist model, and writes a service record. A normal run stays easy to read. A `full` run is a capability tour across Chat Completions and experimental Responses.
 
-![The service-story scene: the Foreman model runs a tool loop through ChatClient with inspect_vehicle_profile, hand_to_specialist, score_repair_plan and log_to_jobsheet, hands one job to a Specialist model, and writes service-record.md to disk. Modality bays: a triage matcher using embeddings, a digital inspection bay with image input in both request modes, and a paint bay for image generation. The run API: POST /api/runs returns 202 Accepted with a Location; GET /api/runs/{id} shows status, scene outcomes and cost, with evidence and report files. Evidence levels, weakest to strongest: configured, synthetic-tested, live-verified.](images/garage.svg)
+Three terms recur:
 
-The modality bays correlate completed chat, embedding, and image observations with the scene operation. Evidence includes timing, errors, modality-specific counts and sizes, and available usage and cost, with the same sanitization applied to telemetry snapshots and persisted reports. Image streams publish observation evidence after completion, error, or cancellation. Calls and stream subscriptions must start inside the sample's operation scope.
-
-Every run asserts its own structural outcome, listed under "each run checks" in the diagram, and reports a failed run otherwise. These assertions check tool execution and response contracts independently of the model's prose. The service-story reasoning check accepts reasoning text or positive reasoning-token usage from any Foreman tool-loop round; the final answer need not repeat that evidence.
-
-## What a run proves
-
-The evidence levels at the bottom of the diagram build on each other. CI makes no OpenRouter calls and holds no OpenRouter key, so live verification is a manual Garage run with your own key; a workflow definition or badge is not that evidence. No current all-capabilities live success is asserted here. Unsupported, incomplete, failed and partial outcomes remain explicit.
-
-The sample tests run the Garage against a mock OpenRouter without an API key; see [Test the Garage without an API key](../CONTRIBUTING.md#test-the-garage-without-an-api-key).
+- A scene is one self-contained part of a run, such as `service-story` (the default).
+- The modality bays are one scene, `modality-bays`. It probes embeddings, image input and image generation.
+- The registry is the Garage's list of features. Each row names the scene that exercises it. `GET /api/scenes` and every report use it.
 
 ## Run the Garage
 
@@ -30,7 +24,9 @@ gradle --no-daemon :openrouter-spring-ai-samples:bootJar
 java -jar openrouter-spring-ai-samples/build/libs/openrouter-spring-ai-samples-0.1.0-SNAPSHOT.jar
 ```
 
-The filename follows the source POM revision, not the published starter version. The Garage listens on `127.0.0.1:8080`; set `GARAGE_ADDRESS` and `GARAGE_PORT` to change that. Anyone who can reach the port can start runs that make billable API calls, so keep it on the loopback address unless your own access control sits in front of it. Live scenes need `OPENROUTER_API_KEY` in the environment; offline contracts do not.
+The filename follows the source POM revision, not the published starter version. The Garage listens on `127.0.0.1:8080`; set `GARAGE_ADDRESS` and `GARAGE_PORT` to change that. Anyone who can reach the port can start runs that make billable API calls, so keep it on the loopback address unless your own access control sits in front of it. Live scenes need `OPENROUTER_API_KEY` in the environment. Offline contracts do not.
+
+The sample tests run the Garage against a mock OpenRouter without an API key; see [Test the Garage without an API key](../CONTRIBUTING.md#test-the-garage-without-an-api-key).
 
 ## Start a run and read its evidence
 
@@ -44,10 +40,6 @@ The filename follows the source POM revision, not the published starter version.
 | `POST /api/sweeps`                             | Starts a model compatibility sweep. Returns `202 Accepted` like a run.                                                                                                                                                                                                             |
 | `GET /api/runs/{id}/sweeps/{embedding\|image}` | Returns a sweep result document.                                                                                                                                                                                                                                                   |
 
-The Garage records how each model call ended. A failed scene takes its reason from the first call that raised an error, then from the failure itself, then from a call cut off at its token limit. Otherwise the scene failed its own check. Each modality bay takes its reason from its own call, and the scene reports the first failed bay.
-
-Runs execute in the background, one at a time, because a run's evidence collectors are shared. Starting a second run while one is active returns `409 Conflict` with a link to the active run. The evidence and report endpoints also return `409` until the run finishes. Run records last until the application stops; the files stay in the output directory.
-
 ```bash
 curl -si -X POST http://127.0.0.1:8080/api/runs \
   -H 'Content-Type: application/json' \
@@ -56,7 +48,17 @@ curl -s http://127.0.0.1:8080/api/runs/<id>
 curl -s http://127.0.0.1:8080/api/runs/<id>/report
 ```
 
+Runs execute in the background, one at a time, because a run's evidence collectors are shared. Starting a second run while one is active returns `409 Conflict` with a link to the active run. The evidence and report endpoints also return `409` until the run finishes. Run records last until the application stops; the files stay in the output directory.
+
 Invalid selections return `400 Bad Request` with a problem detail that names the conflict. Misspelled request fields are rejected rather than ignored. A live selection without an API key returns `422 Unprocessable Content`.
+
+A failed scene gets one failure reason. The Garage picks it in this order:
+
+1. A reason the scene recorded itself. A modality bay takes its reason from its own model call, and the scene reports the first failed bay.
+2. The first model call, in start order, that raised a classified error.
+3. The type of the failure that ended the scene.
+4. `truncated`, if a call was cut off at its token limit.
+5. `check-failed`: the scene's own check failed.
 
 ## Select what a run covers
 
@@ -68,7 +70,7 @@ Omit a request field to keep its `garage.*` default. An empty list clears a list
 | `scenes`           | Narrows a capability suite to these scene ids. Selected modalities require `modality-bays` in the list.                                                                   |
 | `full`             | `true` runs every scene, embeddings, vision, and all image surfaces. It cannot be narrowed with `scenes`.                                                                 |
 | `offlineContracts` | `true` runs only the local recovery and dyno contracts, without an API key.                                                                                               |
-| `requestModes`     | `chat`, `responses`, or `both`; overrides a suite's default modes.                                                                                                        |
+| `requestModes`     | A JSON array of `"chat"`, `"responses"`, or `"both"`, such as `["chat","responses"]`. It overrides a suite's default modes.                                               |
 | `topic`            | The customer and car request to inspect.                                                                                                                                  |
 | `models`           | `foreman`, `specialist`, `embedding`, `vision`, `image`, and a `fallbacks` list.                                                                                          |
 | `image`            | `surface` is `sync` (the default), `streaming`, `chat`, or `all`; `quality` is optional.                                                                                  |
@@ -89,16 +91,48 @@ Omit a request field to keep its `garage.*` default. An empty list clears a list
 | `{"capabilities":["vision"]}`                            | Both                                                   | Image input only; add `"requestModes":["chat"]` to narrow it         |
 | `{"capabilities":["image"]}`                             | Chat Completions selection; mode-independent Image API | Synchronous image generation only                                    |
 
-The Garage deliberately selects both modes for the `text` and `vision` capabilities and for `full`; the library and the plain service-story demo still default to Chat Completions. Explicit `requestModes` override suite defaults. `{"full":true,"requestModes":["responses"]}` is rejected because its chat-image surface requires Chat Completions; use individual capabilities instead. The current Garage registry does not verify Responses structured output, streamed tool aggregation or recovery contracts, even where the library has synthetic coverage. Embeddings and image generation are checked once per selection, not duplicated across modes. `GET /api/scenes` lists the same registry used by generated reports; report rows alone do not mean their features were executed.
+The Garage selects both modes for the `text` and `vision` capabilities and for `full`. The library and the plain service-story demo still default to Chat Completions. `{"full":true,"requestModes":["responses"]}` is rejected because its chat-image surface requires Chat Completions; use individual capabilities instead. The registry does not verify Responses structured output, streamed tool aggregation or recovery contracts, even where the library has synthetic coverage. Embeddings and image generation are checked once per selection, not once per mode.
 
-A sweep request takes `embeddingModels` entries as `model[@providerTag]` and `imageModels` entries as `model[@providerTag][?key=value&...]`, where the image keys are `resolution`, `quality`, `aspect-ratio`, and `output-format`. It also accepts `imageQuality` and `provider`. Sweep results preserve input order, so match each result to the corresponding request entry.
+A sweep checks which models work. It runs the same embedding check or image prompt against each model you list and writes one result per model. `embeddingModels` entries are `model[@providerTag]`. `imageModels` entries are `model[@providerTag][?key=value&...]`, where the image keys are `resolution`, `quality`, `aspect-ratio`, and `output-format`. A sweep also accepts `imageQuality` and `provider`. Results keep input order, so match each result to its request entry.
 
-`garage.*` properties bind once at startup, and unknown `garage.*` properties fail during binding. Request fields override those defaults for one run without changing them for the next. With no explicit selection, `garage.stream=true` adds `streaming-dispatch` to the service-story demo; explicit scene, capability, full, or offline selections take precedence over that default.
+## Defaults and models
 
-Model selection is independent of capabilities; a capability does not imply a free model. The Garage records what a run cost and reports it, but enforces no ceiling of its own. Cap spending with a credit limit on the OpenRouter API key instead, which is the only control that can stop a request before it is billed. Garage enables usage reporting per Chat Completions request rather than as a global chat default, so `ChatClient` can also use Responses mode. Structured-output probes require providers to support all requested parameters, including the JSON schema.
+The defaults live in `GarageProperties` and `openrouter-spring-ai-samples/src/main/resources/application.yml`. Each model has an environment variable, such as `GARAGE_FOREMAN_MODEL`.
+
+Default models: foreman `openai/gpt-oss-120b`; specialist and fallback `openai/gpt-oss-20b`; embedding `openai/text-embedding-3-small`; vision `google/gemini-2.5-flash`; image `google/gemini-2.5-flash-image`. An empty body runs `service-story` with the foreman and specialist. The other models apply when you select their capability. `garage.request-modes` takes the enum names `OPENAI_CHAT_COMPLETIONS` and `OPENAI_RESPONSES`. It defaults to Chat Completions only.
+
+`garage.*` properties bind once at startup, and unknown `garage.*` properties fail binding. Request fields override them for one run without changing the next. With no explicit selection, `garage.stream=true` adds `streaming-dispatch` to the service-story demo. Explicit scene, capability, full, or offline selections take precedence.
+
+A capability does not imply a free model. The Garage reports what a run cost but enforces no ceiling. To cap spending, set a credit limit on the OpenRouter API key; it is the only control that stops a request before it is billed. Structured-output probes need providers that support all requested parameters, including the JSON schema.
+
+## What a run does
+
+![The service-story scene: the Foreman model runs a tool loop through ChatClient with inspect_vehicle_profile, hand_to_specialist, score_repair_plan and log_to_jobsheet, hands one job to a Specialist model, and writes service-record.md to disk. The scene checks that the record is written, every tool is invoked, usage is present, the answer is not empty, and synchronous observations are recorded. Modality bays: a triage matcher using embeddings, a digital inspection bay with image input in both request modes, and a paint bay for image generation. The run API: POST /api/runs returns 202 Accepted with a Location; GET /api/runs/{id} shows status, scene outcomes and cost, with evidence and report files. Evidence per feature in garage-run.json, weakest to strongest: CONFIGURED, EXECUTED, OBSERVED, ASSERTED.](images/garage.svg)
+
+Each scene checks its own outcome, and the run fails if a check fails. The checks test tool execution and response contracts, not the model's prose. The synchronous `service-story` scene checks that:
+
+- all four tools ran and the service record was written;
+- the answer is not empty, and the response has an id, a served model, token usage, cost and cached-token counts;
+- the sync observations were retained;
+- reasoning text or reasoning-token usage appeared in any Foreman tool-loop round. The final answer need not repeat it.
+
+The modality bays correlate completed chat, embedding and image observations with the scene operation. Image streams publish their evidence after completion, error or cancellation.
+
+## Evidence levels
+
+Each feature collects evidence in four stages, from weakest to strongest:
+
+1. `CONFIGURED`: the scene selected the feature and recorded the options it uses.
+2. `EXECUTED`: the call or tool ran.
+3. `OBSERVED`: the outcome was recorded: response, usage, telemetry or wire details.
+4. `ASSERTED`: the scene's checks passed.
+
+A feature is complete for a run only when it reaches all four stages and has no recorded error. A feature is covered only when every selected, applicable request mode is complete. Mixed outcomes are `partial`. A failed, missing or incomplete required mode fails the run. Unsupported modes stay explicit as `unsupported-in-mode`.
+
+CI makes no OpenRouter calls and holds no OpenRouter key. Live verification is a manual Garage run with your own key; a workflow definition or badge is not that evidence. No current all-capabilities live success is asserted here.
 
 ## Evidence and privacy
 
-Each scene run writes `capability-report.md`, `garage-run.json`, and a bundle `README.md` to its own directory under `garage.output-dir`. Garage diagnostic JSON, Markdown, and sweep files retain only allowlisted fields and fixed labels, numeric measurements, booleans, and generated operation identifiers. Free-form text, model/provider names, paths, tool payloads, exception messages, and unknown objects are omitted or redacted; raw diagnostic payload retention is not supported. Authored service records and generated media are separate application outputs and may contain customer or model content. These report protections do not sanitize console logs.
+Each scene run writes `capability-report.md`, `garage-run.json`, and a bundle `README.md` to its own directory under `garage.output-dir`. Garage diagnostic JSON, Markdown, and sweep files retain only allowlisted fields and fixed labels, numeric measurements, booleans, and generated operation identifiers. Free-form text, model and provider names, paths, tool payloads, exception messages, and unknown objects are omitted or redacted. Raw diagnostic payload retention is not supported. Evidence also records timing, errors, counts, sizes, and available usage and cost, with the same sanitization for telemetry snapshots and persisted reports. Authored service records and generated media are separate outputs and may contain customer or model content. These protections do not sanitize console logs.
 
-Tool-loop evidence requires model-selected tools and correlated tool results sent in a follow-up request. The service story must complete inspection, specialist delegation, priority scoring, and service-record tools; a text-only answer cannot certify it. Structured-output probes test `responseFormat` and `outputSchema` independently. Feature reports retain each selected request mode's status. Mixed outcomes are `partial`, and a failed, missing, or incomplete required mode fails the run. Unsupported modes remain explicit; embeddings and image generation are checked once because those APIs are mode-independent.
+Tool-loop evidence requires model-selected tools and correlated tool results sent in a follow-up request. A text-only answer cannot certify the service story. Structured-output probes test `responseFormat` and `outputSchema` independently.

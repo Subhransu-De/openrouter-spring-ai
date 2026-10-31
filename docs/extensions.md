@@ -10,7 +10,7 @@ Send optional OpenRouter request fields that have no typed option, and read unkn
 | `top_logprobs`, `prompt_cache_key`                                   | Supported        | Supported | Integer / nullable string at request root                                    |
 | `verbosity`                                                          | Supported        | Rejected  | String at request root; Responses `text.verbosity` is not exposed            |
 | `transforms`                                                         | Supported        | Rejected  | List of transform names at request root; `[]` disables middle-out            |
-| Provider `only`, `zdr`, `max_price`                                  | Supported        | Supported | List / boolean / object inside `provider`; hard routing restrictions         |
+| Provider `only`, zero data retention (`zdr`), `max_price`            | Supported        | Supported | List / boolean / object inside `provider`; hard routing restrictions         |
 | Provider `sort`, `preferred_min_throughput`, `preferred_max_latency` | Supported        | Supported | String or structured sort / number or percentile object; routing preferences |
 
 The matrix follows the OpenRouter [parameter reference](https://openrouter.ai/docs/api_reference/parameters), [provider routing guide](https://openrouter.ai/docs/guides/routing/provider-selection), and [Responses schema](https://openrouter.ai/docs/api/api-reference/responses/create-a-response). Model/provider support still applies; `top_logprobs` on Chat Completions requires `logprobs=true`. The same mapping and validation apply to calls and streams.
@@ -28,7 +28,14 @@ spring.ai.openrouter.chat.provider-extra-body.[zdr]=true
 spring.ai.openrouter.chat.provider-extra-body.[sort].by=latency
 ```
 
-Root extension maps merge by key: runtime entries replace default entries, including explicit null values. Nested values replace whole objects; they do not merge recursively. Typed provider options replace the default typed provider object; `providerExtraBody` merges independently by key, retaining default routing restrictions unless explicitly overridden. Maps and lists are snapshotted recursively. Boolean false, numeric zero, and explicit nulls remain on the wire; a null map inherits defaults. Extensions do not enable `n`, `store`, cache breakpoints, web-search requests, or server-tool configuration.
+Merge rules:
+
+- Root extension maps merge by key. A runtime entry replaces the default entry, including an explicit null.
+- Nested values replace whole objects. They do not merge recursively.
+- Typed provider options replace the default typed provider object. `providerExtraBody` merges by key on its own, so default routing restrictions stay unless you override them.
+- Maps and lists are snapshotted recursively.
+- `false`, `0` and explicit nulls stay on the wire. A null map inherits the defaults.
+- Extensions do not enable `n`, `store`, cache breakpoints, web-search requests or server-tool configuration.
 
 Chat response DTOs retain unknown fields in `extensions()`, flattened on serialization. Spring AI assistant metadata exposes `openrouter.message.extensions`, `openrouter.choice.extensions` (including log probabilities), and `openrouter.tool_call.extensions` (keyed by call ID). Response metadata exposes `openrouter.response.extensions`. Streamed message annotations append in arrival order; Choice `logprobs.content` and `logprobs.refusal` token arrays also accumulate; other opaque fields use the latest value per key. Tool fields survive argument-fragment aggregation, and assistant extension metadata is cumulative per choice and subscription. These fields are inspection-only and are not automatically replayed as request fields.
 

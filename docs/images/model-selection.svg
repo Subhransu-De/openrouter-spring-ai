@@ -84,7 +84,7 @@ text{font-family:"Libron",Georgia,serif;fill:var(--ink)}
 <rect class="card" x="650" y="128" width="335" height="56" rx="8"/>
 <rect x="650" y="128" width="5" height="56" rx="2" style="fill:var(--libs)"/>
 <text class="t" x="668" y="151">Shared OpenRouterApi</text>
-<text class="s" x="668" y="170">turns off only when all three selectors are none</text>
+<text class="s" x="668" y="170">made while any selector is openrouter; yours wins</text>
 <rect class="card" x="650" y="196" width="335" height="56" rx="8"/>
 <rect x="650" y="196" width="5" height="56" rx="2" style="fill:var(--libs)"/>
 <text class="t" x="668" y="219">Several provider starters?</text>

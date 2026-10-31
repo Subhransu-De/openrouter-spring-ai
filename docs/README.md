@@ -4,20 +4,26 @@ Reference pages for applications that use the starter. Start with [Getting start
 
 ![A call goes from your app through Spring AI's ChatClient into this library's model and API client, then to OpenRouter, which routes it to an upstream provider.](images/architecture.svg)
 
-| Page                                                      | Covers                                                                                                        |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| [Getting started](getting-started.md)                     | Install, first call, main properties, release compatibility, model selection and replacement beans.           |
-| [Chat options](chat-options.md)                           | How runtime options replace or compose with defaults, null means inherit, option snapshots.                   |
-| [Request modes](request-modes.md)                         | Chat Completions and experimental Responses, structured output, `toolChoice`, refusals and incomplete output. |
-| [Supported API and nullability](api.md)                   | The types applications can depend on, request builders, implementation details, JSpecify null contracts.      |
-| [Optional request and response extensions](extensions.md) | `extraBody` and `providerExtraBody`, the middle-out transform, unknown response fields.                       |
-| [Tool calling](tool-calling.md)                           | Model and advisor roles, tool names and IDs, strict function tools, tool failure policy.                      |
-| [Reasoning and prompt caching](reasoning-and-caching.md)  | Reasoning replay across turns and tool rounds, explicit cache breakpoints.                                    |
-| [Errors and retries](errors-and-retries.md)               | Responses failures, protocol errors, stream retries and `Retry-After`.                                        |
-| [HTTP, timeouts and limits](http-and-limits.md)           | Transport customization, timeouts, per-request headers, response and stream state limits.                     |
-| [Images, documents and audio](multimodal.md)              | Image, PDF, audio and video inputs; image generation; streamed chat audio output.                             |
-| [Embeddings](embeddings.md)                               | Embedding configuration, metadata mode, dimension discovery.                                                  |
-| [Observability](observability.md)                         | Observations, usage and cost metadata, content logging.                                                       |
-| [The Garage demo](garage.md)                              | The sample application, its HTTP API, run selection and evidence.                                             |
+Pick a route:
+
+- **First app:** [Getting started](getting-started.md), then [Chat options](chat-options.md).
+- **Tools and conversations:** [Tool calling](tool-calling.md), [Reasoning and prompt caching](reasoning-and-caching.md), [Images, documents and audio](multimodal.md).
+- **Production:** [Errors and retries](errors-and-retries.md), [HTTP, timeouts and limits](http-and-limits.md), [Observability](observability.md).
+
+| Page                                                      | Answers                                                                        |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| [Getting started](getting-started.md)                     | How do I install it and make a first call?                                     |
+| [Chat options](chat-options.md)                           | How do request options combine with defaults? Where are fallbacks and routing? |
+| [Request modes](request-modes.md)                         | Chat Completions or Responses? How do structured output and tool choice work?  |
+| [Supported API and nullability](api.md)                   | Which types are supported? What can be null?                                   |
+| [Optional request and response extensions](extensions.md) | How do I send fields that have no typed option?                                |
+| [Tool calling](tool-calling.md)                           | How do tools and tool failures work?                                           |
+| [Reasoning and prompt caching](reasoning-and-caching.md)  | How do reasoning replay and cache breakpoints work?                            |
+| [Errors and retries](errors-and-retries.md)               | Which exceptions occur, and what is retried?                                   |
+| [HTTP, timeouts and limits](http-and-limits.md)           | How do I tune the transport, timeouts and limits?                              |
+| [Images, documents and audio](multimodal.md)              | How do I send or generate images, documents and audio?                         |
+| [Embeddings](embeddings.md)                               | How do I configure embeddings?                                                 |
+| [Observability](observability.md)                         | Where do usage, cost and observations appear?                                  |
+| [The Garage demo](garage.md)                              | How do I run the sample application?                                           |
 
 To build the project or change it, see [CONTRIBUTING.md](../CONTRIBUTING.md). Release history is in [CHANGELOG.md](../CHANGELOG.md).

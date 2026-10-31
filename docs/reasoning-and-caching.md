@@ -1,20 +1,33 @@
 # Reasoning and prompt caching
 
-How reasoning state is kept across turns, and how to mark prompt-cache breakpoints.
+Reasoning models can think before they answer. Turn it on with `reasoning(...)` on `OpenRouterChatOptions`, or with `spring.ai.openrouter.chat.reasoning.*` (`effort` or `max-tokens`, not both, plus `exclude` and `enabled`). Read the text from the `openrouter.reasoning` key in the generation metadata. Replay across turns needs no action if your history keeps the full `AssistantMessage`, not just its `.content()`.
+
+```java
+OpenRouterChatOptions options = OpenRouterChatOptions.builder()
+	.reasoning(new OpenRouterReasoningOptions("medium", null, null, null))
+	.build();
+UserMessage question = new UserMessage("Plan a three-step migration.");
+ChatResponse first = chatModel.call(new Prompt(question, options));
+String thinking = first.getResult().getMetadata().get("openrouter.reasoning");
+AssistantMessage reply = first.getResult().getOutput(); // keep this whole message
+chatModel.call(new Prompt(List.of(question, reply, new UserMessage("Shorten step two.")), options));
+```
+
+`openrouter.reasoning` holds the whole text for a synchronous call and the new delta for each chunk in a stream. The same key on the assistant message is cumulative in streams.
 
 ## Reasoning conversation state
 
-The assistant message carries the reasoning state in its metadata. Keep that message unchanged in conversation history, including when you add tool results, and the next request replays the reasoning in its original order.
+The assistant message also carries the reasoning state in its metadata. Keep that message unchanged in conversation history, including when you add tool results, and the next request replays the reasoning in its original order.
 
 ![Turn 1's assistant message carries openrouter.reasoning and openrouter.reasoning_details in Chat Completions, or openrouter.responses.reasoning_items and openrouter.responses.output_items in Responses. Kept unchanged in history, it is replayed in order with the next request and each tool round. Editing the text, tool calls or refusal while keeping the reasoning is rejected in Responses mode; to redact, start a new conversation without the old reasoning or output snapshots.](images/reasoning-replay.svg)
 
-Responses `reasoning_items` keep encrypted content and unknown fields. The assistant media history restriction also applies to generated images retained in output snapshots, even if the message's media list was cleared.
+Responses `reasoning_items` keep encrypted content and unknown fields. The [assistant media history restriction](multimodal.md#assistant-media-history) also applies to generated images retained in output snapshots, even if the message's media list was cleared.
 
-Streaming keeps encrypted and unknown detail types as opaque items, and assistant metadata holds cumulative snapshots per choice and subscription, so Spring AI message aggregation retains the complete reasoning state. Text content remains incremental. The generation metadata key `openrouter.reasoning` carries streamed reasoning deltas and synchronous reasoning text.
+Streaming keeps encrypted and unknown detail types as opaque items. Assistant metadata holds cumulative snapshots per choice and subscription, so Spring AI message aggregation retains the complete reasoning state. Text content stays incremental.
 
 ## Explicit prompt-cache breakpoints
 
-For Chat Completions, attach a `List<OpenRouterCacheBreakpoint>` to a system or user message's metadata. For example (synthetic content):
+A cache breakpoint marks the end of a stable prompt prefix, such as reference material, that the provider can cache and reuse in later requests. For Chat Completions, attach a `List<OpenRouterCacheBreakpoint>` to a system or user message's metadata. For example (synthetic content):
 
 ```java
 String reference = "Reference material to reuse.\n";
@@ -28,7 +41,7 @@ chatModel.call(new Prompt(message));
 
 ![The text splits at endIndex 29, the exclusive end of the reference text in String.length() units. The first content block carries cache_control type ephemeral; the rest of the text follows unchanged. Ttl.FIVE_MINUTES is the default; Ttl.ONE_HOUR adds ttl 1h. Rules checked before sending: at most 4 per request, 1-hour boundaries before 5-minute ones, system and user text only, increasing offsets that do not split a surrogate pair. Assistant messages, tool results, tool definitions and images are not targets, and Responses mode rejects this metadata.](images/cache-breakpoints.svg)
 
-Image media stay in their original order after the split. Both calls and streams use these boundaries. There are no cache model defaults or Boot properties: placement belongs to individual messages, so there is no option precedence. Keep the typed metadata and unchanged text in conversation history, including tool continuations. Custom history stores must restore the typed breakpoints; generic maps are rejected. Recompute offsets when editing text.
+Image media keep their original order after the split. Calls and streams use the same boundaries. There are no cache model defaults or Boot properties, because placement belongs to individual messages. Keep the typed metadata and unchanged text in conversation history, including tool continuations. A custom history store must restore the breakpoints as a `List<OpenRouterCacheBreakpoint>`. If it returns plain maps, for example after a JSON round trip, the request fails with `IllegalArgumentException`. Recompute offsets when you edit text.
 
 | Request protocol / provider                    | Supported placement and lifetime                                                                                                                                                                                   |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -38,4 +51,4 @@ Image media stay in their original order after the split. Both calls and streams
 | Chat Completions / other routes                | Provider-dependent; no guarantee of explicit caching or TTL preservation. Select a supporting route.                                                                                                               |
 | Responses                                      | This metadata is rejected. Its per-block `prompt_cache_breakpoint` has different semantics and is not implemented here.                                                                                            |
 
-Provider/model eligibility and minimum prompt sizes are enforced upstream; the library does not infer capabilities from model names or fallback routing. Consult [OpenRouter's prompt caching guide](https://openrouter.ai/docs/guides/best-practices/prompt-caching) for current restrictions. This explicit content API is narrower than Spring AI's Anthropic caching strategies: it does not automatically select message or tool boundaries. Provider implicit caching remains available without these markers. Request-level automatic caching, `prompt_cache_key`, and cache usage accounting are separate capabilities.
+Upstream providers enforce model eligibility and minimum prompt sizes; the library does not infer them from model names or fallback routing. See [OpenRouter's prompt caching guide](https://openrouter.ai/docs/guides/best-practices/prompt-caching) for current restrictions. This API is narrower than Spring AI's Anthropic caching strategies: it does not pick message or tool boundaries for you. Provider implicit caching still works without these markers. Request-level automatic caching, [`prompt_cache_key`](extensions.md), and cache usage accounting (cached token counts, see [Observability](observability.md)) are separate capabilities.

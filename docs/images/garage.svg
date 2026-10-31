@@ -59,12 +59,12 @@ text{font-family:"Libron",Georgia,serif;fill:var(--ink)}
 <text class="m" x="735" y="178.5" text-anchor="middle">service-record.md</text>
 <text class="s" x="735" y="210" text-anchor="middle">written to disk</text>
 <line class="rule" x1="850" y1="56" x2="850" y2="196"/>
-<text class="s" x="864" y="66" style="fill:var(--ink)" font-weight="650">each run checks</text>
+<text class="s" x="864" y="66" style="fill:var(--ink)" font-weight="650">scene checks</text>
 <text class="s" x="864" y="90">record written</text>
 <text class="s" x="864" y="112">every tool invoked</text>
 <text class="s" x="864" y="134">usage present</text>
 <text class="s" x="864" y="156">non-empty answer</text>
-<text class="s" x="864" y="178">stream signals</text>
+<text class="s" x="864" y="178">sync observations</text>
 <!-- bays -->
 <line class="rule" x1="20" y1="228" x2="980" y2="228"/>
 <text class="s tl" x="20" y="252" font-weight="650">modality bays</text>
@@ -101,16 +101,20 @@ text{font-family:"Libron",Georgia,serif;fill:var(--ink)}
 <text class="s" x="20" y="458">One run at a time: a second POST returns 409 Conflict with a link to the active run.</text>
 <!-- evidence -->
 <line class="rule" x1="20" y1="474" x2="980" y2="474"/>
-<text class="s tl" x="20" y="498" font-weight="650">evidence levels, weakest to strongest</text>
-<rect class="card" x="20" y="508" width="290" height="54" rx="8"/>
-<text class="h" x="36" y="531">configured</text>
-<text class="s" x="36" y="550">an option or scene is selected</text>
-<path class="arr" marker-end="url(#a)" d="M310 535 H336"/>
-<rect class="lib" x="340" y="508" width="300" height="54" rx="8"/>
-<text class="h" x="356" y="531">synthetic-tested</text>
-<text class="s" x="356" y="550">fixtures, including the mocked Garage run</text>
-<path class="arr g" marker-end="url(#ag)" d="M640 535 H666"/>
-<rect class="lib" x="670" y="508" width="310" height="54" rx="8" style="stroke-width:2.4"/>
-<text class="h" x="686" y="531">live-verified</text>
-<text class="s" x="686" y="550">a dated live run for the exact commit and mode</text>
+<text class="s tl" x="20" y="498" font-weight="650">evidence per feature in garage-run.json, weakest to strongest</text>
+<rect class="card" x="20" y="508" width="222" height="54" rx="8"/>
+<text class="mb" x="36" y="531">CONFIGURED</text>
+<text class="s" x="36" y="550">selected, options recorded</text>
+<path class="arr" marker-end="url(#a)" d="M242 535 H262"/>
+<rect class="lib" x="266" y="508" width="222" height="54" rx="8"/>
+<text class="mb" x="282" y="531">EXECUTED</text>
+<text class="s" x="282" y="550">the call or tool ran</text>
+<path class="arr g" marker-end="url(#ag)" d="M488 535 H508"/>
+<rect class="lib" x="512" y="508" width="222" height="54" rx="8"/>
+<text class="mb" x="528" y="531">OBSERVED</text>
+<text class="s" x="528" y="550">response and usage recorded</text>
+<path class="arr g" marker-end="url(#ag)" d="M734 535 H754"/>
+<rect class="lib" x="758" y="508" width="222" height="54" rx="8" style="stroke-width:2.4"/>
+<text class="mb" x="774" y="531">ASSERTED</text>
+<text class="s" x="774" y="550">the scene’s checks passed</text>
 </svg>

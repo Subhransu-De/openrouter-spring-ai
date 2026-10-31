@@ -48,7 +48,7 @@ dependencies {
 }
 ```
 
-The starter includes Spring AI's ChatClient auto-configuration. Set these application properties in `src/main/resources/application.properties`, supply `OPENROUTER_API_KEY` and a suitable `OPENROUTER_MODEL` in the environment, and use the injected builder:
+The starter includes Spring AI's ChatClient auto-configuration. Set these properties in `src/main/resources/application.properties`. Put your key in `OPENROUTER_API_KEY`. Put an [OpenRouter model id](https://openrouter.ai/models) in `OPENROUTER_MODEL`, in `vendor/model` form, such as `openai/gpt-oss-120b`. Then use the injected builder:
 
 ```properties
 spring.ai.model.chat=openrouter
@@ -83,18 +83,30 @@ public class Application {
 
 Save the class as `src/main/java/example/Application.java`. Run `mvn spring-boot:run` or `gradle bootRun` with JDK 17 or later. The first call uses the configured model and makes a billable OpenRouter request. No clone or local library installation is needed.
 
-For incremental text, use `client.prompt().user("Say hello.").stream().content()` and subscribe to the returned `Flux<String>` for the application's lifetime.
+`spring.ai.model.chat=openrouter` is already the default. Setting it keeps OpenRouter selected if you add another provider starter. The two `none` lines stop the starter from creating embedding and image models that have no model configured.
 
-| Property                                                 | Default / meaning                                                        |
-| -------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `spring.ai.model.chat`, `.embedding`, `.image`           | Each defaults to `openrouter`; the example disables unused modalities.   |
-| `spring.ai.openrouter.api-key`                           | Required while an OpenRouter modality is enabled; no default credential. |
-| `spring.ai.openrouter.base-url`                          | `https://openrouter.ai/api/v1`                                           |
-| `spring.ai.openrouter.chat.model`                        | Unset; select a model explicitly.                                        |
-| `spring.ai.openrouter.chat.request-mode`                 | `openai-chat-completions`; `openai-responses` is experimental.           |
-| `spring.ai.openrouter.chat.include-usage`                | Unset; do not configure it globally when composing Responses requests.   |
-| `spring.ai.openrouter.connection.timeout`                | `2m`                                                                     |
-| `spring.ai.openrouter.connection.max-response-body-size` | `64MB` per response / SSE event, not per stream.                         |
+For incremental text, stream the content. This prints each chunk and waits for the end:
+
+```java
+client.prompt().user("Say hello.").stream().content().doOnNext(System.out::print).blockLast();
+```
+
+In a web application, return the `Flux<String>` from the controller instead of blocking.
+
+## Main properties
+
+| Property                                                 | Default / meaning                                                                                                                       |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `spring.ai.model.chat`, `.embedding`, `.image`           | Each defaults to `openrouter`; the example disables unused modalities.                                                                  |
+| `spring.ai.openrouter.api-key`                           | Required while an OpenRouter modality is enabled; no default credential.                                                                |
+| `spring.ai.openrouter.base-url`                          | `https://openrouter.ai/api/v1`                                                                                                          |
+| `spring.ai.openrouter.chat.model`                        | Unset; select a model explicitly.                                                                                                       |
+| `spring.ai.openrouter.chat.request-mode`                 | `openai-chat-completions`; `openai-responses` is experimental.                                                                          |
+| `spring.ai.openrouter.chat.include-usage`                | Unset. `true` reports token usage and cost in Chat Completions streams. Leave it unset if any request uses Responses, which rejects it. |
+| `spring.ai.openrouter.connection.timeout`                | `2m`                                                                                                                                    |
+| `spring.ai.openrouter.connection.max-response-body-size` | `64MB` per response / SSE event, not per stream.                                                                                        |
+
+Fallback models, provider routing, service tier and attribution headers are in [Routing, fallbacks and attribution](chat-options.md#routing-fallbacks-and-attribution).
 
 ## Release compatibility
 
@@ -103,10 +115,10 @@ For incremental text, use `client.prompt().user("Say hello.").stream().content()
 | [RC3: `e336517`](https://github.com/Subhransu-De/openrouter-spring-ai/tree/v0.1.0-RC3) | 17                  | 4.1.1       | 2.0.1     |
 | Unreleased main (`0.1.0-SNAPSHOT`)                                                     | 17                  | 4.1.2       | 2.0.2     |
 
-Baselines come from the tagged/root POMs and [published RC3 parent POM](https://repo.maven.apache.org/maven2/de/subhransu/openrouter-spring-ai-parent/0.1.0-RC3/openrouter-spring-ai-parent-0.1.0-RC3.pom). CI targets JDK 17, 21, and 25; this does not establish compatibility with arbitrary Boot or Spring AI versions. Use the matching BOM baseline in the consuming application. Earlier release candidates are listed in the [changelog](../CHANGELOG.md).
+RC3 was built and tested with Spring Boot 4.1.1 and Spring AI 2.0.1, and its starter brings in Spring AI 2.0.1. The examples on this page pin Boot 4.1.2, the patch release that `main` is built and tested with. `main` also uses Spring AI 2.0.2. The baselines come from the tagged and root POMs and the [published RC3 parent POM](https://repo.maven.apache.org/maven2/de/subhransu/openrouter-spring-ai-parent/0.1.0-RC3/openrouter-spring-ai-parent-0.1.0-RC3.pom). CI targets JDK 17, 21 and 25. Other Boot and Spring AI versions are not covered. Earlier release candidates are listed in the [changelog](../CHANGELOG.md).
 
 ## Model selection and replacement beans
 
-![Each spring.ai.model selector picks none, another provider, or openrouter. With openrouter, a model bean that the application declares wins; otherwise the starter creates openRouterChatModel, openRouterEmbeddingModel or openRouterImageModel.](images/model-selection.svg)
+![Each spring.ai.model selector picks none, another provider, or openrouter. With openrouter, a model bean that the application declares wins; otherwise the starter creates openRouterChatModel, openRouterEmbeddingModel or openRouterImageModel. The shared OpenRouterApi is created while any selector is openrouter, unless the application declares its own.](images/model-selection.svg)
 
 To use several models of one modality, declare the model beans yourself and inject them with `@Qualifier`. The starter's default bean names are `openRouterChatModel`, `openRouterEmbeddingModel`, and `openRouterImageModel`. If you declare your own `ChatModel`, you also own the [tool failure policy](tool-calling.md#tool-failure-policy).

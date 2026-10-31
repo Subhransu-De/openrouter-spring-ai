@@ -15,7 +15,7 @@
   <a href="https://github.com/Subhransu-De/openrouter-spring-ai/actions/workflows/codeql.yml"><img src="https://img.shields.io/github/actions/workflow/status/Subhransu-De/openrouter-spring-ai/codeql.yml?branch=main&amp;label=CodeQL&amp;style=flat" alt="CodeQL status"></a>
 </p>
 
-A native [Spring AI](https://spring.io/projects/spring-ai) integration for [OpenRouter](https://openrouter.ai), with typed model fallbacks, provider routing, reasoning replay, cost accounting, and attribution headers under `spring.ai.openrouter.*`. Spring AI's OpenAI integration can also send OpenRouter-specific fields through [`extraBody`](https://github.com/spring-projects/spring-ai/blob/v2.0.2/models/spring-ai-openai/src/main/java/org/springframework/ai/openai/OpenAiChatOptions.java). This library adds typed routing and OpenRouter-specific response and reasoning handling; it does not promise universal provider parity.
+A native [Spring AI](https://spring.io/projects/spring-ai) integration for [OpenRouter](https://openrouter.ai), which routes each request to an upstream model provider. It adds typed model fallbacks, provider routing, reasoning replay, cost accounting and attribution headers under `spring.ai.openrouter.*`. Spring AI's OpenAI integration can also send OpenRouter fields through [`extraBody`](https://github.com/spring-projects/spring-ai/blob/v2.0.2/models/spring-ai-openai/src/main/java/org/springframework/ai/openai/OpenAiChatOptions.java). This library adds typed routing and OpenRouter-specific response and reasoning handling. It does not promise universal provider parity.
 
 > **Community project:** This library is independently maintained and is not affiliated with, endorsed by, or an official project of OpenRouter or Spring AI.
 >
@@ -31,8 +31,8 @@ Chat Completions is the production default. The optional Responses request mode 
 
 - Chat through OpenRouter's Chat Completions endpoint, with synchronous calls and SSE streaming. The Responses endpoint is an experimental opt-in.
 - Tool calling through Spring AI's `ToolCallingAdvisor`, including streamed argument fragments and [strict function tools](docs/tool-calling.md#strict-function-tools).
-- Reasoning options, with reasoning text and opaque reasoning state replayed across tool rounds.
-- Model fallback lists, provider routing preferences, service tiers and [optional OpenRouter fields](docs/extensions.md).
+- [Reasoning options](docs/reasoning-and-caching.md), with reasoning text and opaque reasoning state replayed across tool rounds.
+- [Model fallback lists, provider routing, service tiers and attribution headers](docs/chat-options.md#routing-fallbacks-and-attribution), plus [optional OpenRouter fields](docs/extensions.md).
 - Usage accounting with cost, cached and reasoning tokens, and Micrometer observations.
 - Embeddings behind Spring AI's `EmbeddingModel`.
 - Image, PDF, audio and video inputs, image generation, and streamed chat audio output. See [Images, documents and audio](docs/multimodal.md).
@@ -56,11 +56,11 @@ Add the starter from Maven Central:
 implementation("de.subhransu:openrouter-spring-ai-starter:0.1.0-RC3")
 ```
 
-Use Java 17 or later with the Spring Boot 4.1.2 and Spring AI 2.0.2 baseline. [Getting started](docs/getting-started.md) has complete Maven and Gradle builds.
+Use Java 17 or later. RC3 was built and tested with Spring Boot 4.1.1 and Spring AI 2.0.1. `main` uses Boot 4.1.2 and Spring AI 2.0.2. See [release compatibility](docs/getting-started.md#release-compatibility) and the complete builds in [Getting started](docs/getting-started.md).
 
 ## Make a first call
 
-Set the API key and model, and turn off the modalities you do not use:
+Set the API key and an [OpenRouter model id](https://openrouter.ai/models) in `vendor/model` form, such as `openai/gpt-oss-120b`. Turn off the modalities you do not use:
 
 ```properties
 spring.ai.model.chat=openrouter
@@ -87,7 +87,7 @@ Each call is a billable OpenRouter request.
 | Page                                         | Covers                                                                                                                          |
 | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | [Getting started](docs/getting-started.md)   | Install, first call, properties, compatibility, model selection.                                                                |
-| [Chat options](docs/chat-options.md)         | How runtime options combine with defaults.                                                                                      |
+| [Chat options](docs/chat-options.md)         | How runtime options combine with defaults; fallbacks, provider routing and attribution.                                         |
 | [Request modes](docs/request-modes.md)       | Chat Completions and experimental Responses.                                                                                    |
 | [Supported API and nullability](docs/api.md) | Types applications can depend on, null contracts.                                                                               |
 | [Tool calling](docs/tool-calling.md)         | Tools, strict schemas, failure policy.                                                                                          |
