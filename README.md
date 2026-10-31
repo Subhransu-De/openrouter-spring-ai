@@ -15,13 +15,11 @@
   <a href="https://github.com/Subhransu-De/openrouter-spring-ai/actions/workflows/codeql.yml"><img src="https://img.shields.io/github/actions/workflow/status/Subhransu-De/openrouter-spring-ai/codeql.yml?branch=main&amp;label=CodeQL&amp;style=flat" alt="CodeQL status"></a>
 </p>
 
-A native [Spring AI](https://spring.io/projects/spring-ai) integration for [OpenRouter](https://openrouter.ai), which routes each request to an upstream model provider. It adds typed model fallbacks, provider routing, reasoning replay, cost accounting and attribution headers under `spring.ai.openrouter.*`. Spring AI's OpenAI integration can also send OpenRouter fields through [`extraBody`](https://github.com/spring-projects/spring-ai/blob/v2.0.2/models/spring-ai-openai/src/main/java/org/springframework/ai/openai/OpenAiChatOptions.java). This library adds typed routing and OpenRouter-specific response and reasoning handling. It does not promise universal provider parity.
+A native [Spring AI](https://spring.io/projects/spring-ai) integration for [OpenRouter](https://openrouter.ai), which routes each request to an upstream model provider. It adds typed model fallbacks, provider routing, reasoning replay, cost accounting and attribution headers under `spring.ai.openrouter.*`. Spring AI's OpenAI integration can also send OpenRouter fields through [`extraBody`](https://github.com/spring-projects/spring-ai/blob/v2.0.2/models/spring-ai-openai/src/main/java/org/springframework/ai/openai/OpenAiChatOptions.java). This library adds typed support for them.
 
 > **Community project:** This library is independently maintained and is not affiliated with, endorsed by, or an official project of OpenRouter or Spring AI.
 >
 > Install only one OpenRouter Spring AI starter in an application. Combining this starter with another OpenRouter starter can make provider selection and bean creation order-dependent.
-
-Chat Completions is the production default. The optional Responses request mode is experimental; applications should opt into it explicitly.
 
 [Getting started](docs/getting-started.md) · [Documentation](docs/README.md) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md)
 
@@ -56,7 +54,7 @@ Add the starter from Maven Central:
 implementation("de.subhransu:openrouter-spring-ai-starter:0.1.0-RC3")
 ```
 
-Use Java 17 or later. RC3 was built and tested with Spring Boot 4.1.1 and Spring AI 2.0.1. `main` uses Boot 4.1.2 and Spring AI 2.0.2. See [release compatibility](docs/getting-started.md#release-compatibility) and the complete builds in [Getting started](docs/getting-started.md).
+Use Java 17 or later. See [release compatibility](docs/getting-started.md#release-compatibility) for Spring Boot and Spring AI versions.
 
 ## Make a first call
 
@@ -95,7 +93,7 @@ Each call is a billable OpenRouter request.
 
 ## Modules
 
-Applications add `openrouter-spring-ai-starter`. It brings the core library `openrouter-spring-ai` and its Spring Boot auto-configuration, as the diagram above shows. `openrouter-spring-ai-samples` is the [Garage demo](docs/garage.md). Module names, property prefixes, and layering deliberately mirror Spring AI's official providers.
+Applications add `openrouter-spring-ai-starter`, which brings in the core library `openrouter-spring-ai` and its auto-configuration. `openrouter-spring-ai-samples` is the [Garage demo](docs/garage.md).
 
 ## Contributing
 

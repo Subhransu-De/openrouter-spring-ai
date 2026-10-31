@@ -20,13 +20,13 @@ float[] vector = embeddingModel.embed("The quick brown fox");
 
 Provider routing (`spring.ai.openrouter.embedding.provider.*`) works the same way as for chat. Only `float` embeddings are decoded; requesting `encoding_format: base64` fails fast.
 
-Document embedding keeps raw text by default (`metadata-mode: none`). To include metadata, set `spring.ai.openrouter.embedding.metadata-mode: embed`, or call `OpenRouterEmbeddingModel.builder().metadataMode(MetadataMode.EMBED)` in Java. Both `embed(Document)` and batched document embedding use the document's content formatter. The modes are Spring AI's `MetadataMode`:
+Documents embed their raw text by default (`metadata-mode: none`). To include metadata, set `spring.ai.openrouter.embedding.metadata-mode: embed`, or use `OpenRouterEmbeddingModel.builder().metadataMode(MetadataMode.EMBED)`. Single and batched document embedding both apply the mode. The values are Spring AI's `MetadataMode`:
 
-- `NONE` embeds only the text and bypasses formatting.
-- `EMBED` embeds the text with its metadata, except keys in the document's excluded embedding keys.
-- `INFERENCE` does the same but excludes the document's excluded inference keys.
-- `ALL` embeds the text with all metadata.
+- `NONE`: the text only.
+- `EMBED`: the text and metadata, minus the document's excluded embedding keys.
+- `INFERENCE`: the text and metadata, minus the excluded inference keys.
+- `ALL`: the text and all metadata.
 
 Changing the mode changes the embedding input, so existing vector collections may need re-embedding.
 
-`dimensions()` returns positive configured dimensions without an API call. Otherwise it caches the first successful discovery per model instance, with concurrent callers sharing that discovery. Failed or invalid responses are not cached. The cache belongs to the model's copied default configuration (including model, dimensions and provider routing); per-request overrides never update it. Build a new model for a different default configuration; modifying the options originally supplied to the builder does not change an existing model or its cached dimensions.
+`dimensions()` returns the configured dimensions when they are positive, without an API call. Otherwise it discovers them once per model instance and caches the result. Failed or invalid responses are not cached, and per-request overrides never update the cache. Build a new model to change its defaults.

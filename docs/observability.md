@@ -15,15 +15,15 @@ if (response.getMetadata().getUsage() instanceof OpenRouterUsage usage) {
 }
 ```
 
-Missing cost and detail counts are `null`, which differs from an explicit zero. Unavailable cache-write counts are also `null`. To ask OpenRouter for usage on Chat Completions requests, set [`include-usage`](getting-started.md#main-properties). Responses requests reject that option.
+Missing cost and detail counts are `null`, which differs from an explicit zero. Unavailable cache-write counts are also `null`. To have OpenRouter report usage, see [`include-usage`](getting-started.md#main-properties).
 
 Chat and image streams record request-mapping and transport errors on their observation. Each subscription stops its observation on completion, error, or cancellation.
 
 The starter provides the Spring AI handlers, but it does not choose monitoring backends for the application:
 
-- Metrics require a `MeterRegistry`. Spring Boot Actuator supplies the Boot observation wiring and a registry; add the registry/exporter for your monitoring system to publish them externally.
+- Metrics require a `MeterRegistry`. Spring Boot Actuator supplies the observation wiring and a registry; add an exporter for your monitoring system.
 - Traces require a Micrometer `Tracer` bridge and tracing exporter.
-- Prompt, completion, image-prompt, and error logging are opt-in through Spring AI's standard properties. Content logging does not require an exporter; when a `Tracer` is present its handlers become tracing-aware, and error logging requires that tracer.
+- Prompt, completion, image-prompt and error logging are opt-in through Spring AI's standard properties. Error logging requires a `Tracer`.
 
 ```yaml
 # All four default to false. Logged prompts and completions may contain sensitive data.

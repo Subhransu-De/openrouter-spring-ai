@@ -4,7 +4,7 @@ This page lists the types applications can depend on, and the null contracts the
 
 ## Supported types
 
-The supported consumer API consists of the following types under `de.subhransu.openrouter.springai`.
+These types under `de.subhransu.openrouter.springai` are the supported API.
 
 | API                                                                                                                        | Supported use                                                                                                                                                                                                      |
 | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -32,7 +32,7 @@ ChatCompletionRequest request = ChatCompletionRequest.builder()
 ChatCompletionResponse response = api.chatCompletion(request);
 ```
 
-New OpenRouter request fields are added to the builders. The records' canonical constructors stay public because Java requires it, but their parameter lists grow with each new field, so code that calls them breaks when a field is added. `ChatMessage` is the exception: it has no builder, so the example calls its short constructor.
+New request fields are added to the builders. The records' canonical constructors are public but grow with each field, so code that calls them breaks. `ChatMessage` has no builder, so the example calls its short constructor.
 
 ## Implementation details
 
@@ -50,4 +50,4 @@ What to null-check:
 
 A nullable list or map does not make its elements nullable. Request lists and Spring AI tool callback and context entries must not hold nulls. A Chat Completions tool call without an ID still runs: the Spring AI ID is empty and the follow-up request leaves the wire ID out.
 
-For how a null option interacts with defaults, see [Null means inherit](chat-options.md#null-means-inherit).
+For how a null option interacts with defaults, see [Replacement and composition](chat-options.md#replacement-and-composition).

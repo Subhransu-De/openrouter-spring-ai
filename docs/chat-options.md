@@ -5,11 +5,11 @@ How per-request options combine with model defaults, how to set fallbacks, routi
 Two rules decide which options a request uses:
 
 - A raw `ChatModel.call(prompt)` uses the prompt's options and ignores the model defaults. Without prompt options, the defaults apply.
-- `ChatClient` layers model defaults, client defaults and request options, in that order.
+- `ChatClient` starts from the model defaults and adds the client's `.defaultOptions(...)`. A request's `.options(...)` replaces that client customizer, but the model defaults still apply.
 
 ## Replacement and composition
 
-![A raw ChatModel call replaces the model defaults with the prompt options and falls back to Chat Completions. ChatClient layers model defaults, client defaults and request options: a value overrides, null inherits, and stop and tool lists append, so a null seed inherits 7 and Responses rejects it before HTTP.](images/option-composition.svg)
+![A raw ChatModel call replaces the model defaults with the prompt options, and portable ChatOptions fall back to Chat Completions. ChatClient merges request options onto the model defaults: a value overrides, null inherits and stop lists append. A request's .options(…) replaces the client's .defaultOptions(…). So a null seed inherits 7, and Responses rejects it before HTTP.](images/option-composition.svg)
 
 With `ChatClient`, set only the fields that change. Unset fields inherit:
 
@@ -19,9 +19,7 @@ String text = client.prompt().user("Say hello.")
     .call().content();
 ```
 
-In Spring AI 2.0.2, `.options(builder)` replaces the client-level `.defaultOptions(builder)` customizer. It does not erase the model defaults. `client.prompt(Prompt)` composes the prompt's options with the client customizer.
-
-With a raw model, supply complete options or derive them from `getOptions()`:
+With a raw model, supply complete options or derive them from `getOptions()`. `OpenRouterChatModel` returns `OpenRouterChatOptions`, so `mutate()` keeps the OpenRouter type and fields:
 
 ```java
 ChatOptions options = chatModel.getOptions().mutate().temperature(0.0).build();
@@ -32,47 +30,29 @@ Portable Spring AI `ChatOptions` that are not `OpenRouterChatOptions` keep only 
 
 Embedding and image models merge supplied options with their defaults, and unset fields inherit. This differs from raw chat replacement.
 
+A null request option inherits the default; it cannot clear it, as the `seed` row in the diagram shows. To drop a default for one request, leave it out of the defaults or use a separate model or client.
+
 ### Pitfall: switching the request mode
 
-A mode switch fails before HTTP when the model defaults hold a value that Responses rejects. Here the defaults set `includeUsage=true`, and a null request value inherits it:
-
-```java
-var chatModel = OpenRouterChatModel.builder()
-    .openRouterApi(api)
-    .defaultOptions(OpenRouterChatOptions.builder()
-        .model("openai/gpt-oss-120b").includeUsage(true).build())
-    .build();
-ChatClient client = ChatClient.builder(chatModel).build();
-client.prompt().user("Say hello.")
-    .options(OpenRouterChatOptions.builder()
-        .requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
-        .includeUsage(null))
-    .call().content();
-```
-
-`includeUsage(false)` fails too, because Responses rejects any non-null value. The fix is to keep `includeUsage` out of the model defaults and set `includeUsage(true)` on each Chat Completions request.
-
-## Null means inherit
-
-In `ChatClient` composition, a null request option inherits the configured default. It does not clear it, as the `seed` row in the diagram shows. You cannot clear an inherited value for one request. Leave the value out of the defaults, or use a separate model or client.
-
-A copy such as `defaults.mutate().seed(null).build()` has no seed, but merging it back into the original defaults still inherits the original seed.
+A switch to Responses fails before HTTP when the model defaults hold a value that Responses rejects, such as `includeUsage=true`. A null request value inherits that default, and `includeUsage(false)` is rejected too. Keep such options out of the model defaults and set them on each Chat Completions request.
 
 ## Routing, fallbacks and attribution
 
-Set fallback models, provider preferences and a service tier as defaults or per request. A request value replaces the default value:
+Set fallback models, provider preferences and a service tier as defaults or per request. A request value replaces the default value. `models` lists alternative models; `allowFallbacks` controls fallback between upstream providers:
 
 ```java
 OpenRouterChatOptions options = OpenRouterChatOptions.builder()
     .model("openai/gpt-oss-120b")
-    .models(List.of("openai/gpt-oss-20b")) // fallback models
-    .provider(new OpenRouterProviderPreferences(true, null, null,
-        List.of("openai"), null, null, "throughput"))
+    .models(List.of("openai/gpt-oss-20b"))
+    .provider(new OpenRouterProviderPreferences(
+        true /* allowFallbacks */, null /* requireParameters */, null /* dataCollection */,
+        List.of("openai") /* order */, null /* ignore */, null /* quantizations */,
+        "throughput" /* sort */))
     .serviceTier(OpenRouterServiceTier.FLEX)
     .build();
 ```
 
-The `OpenRouterProviderPreferences` arguments are `allowFallbacks`, `requireParameters`, `dataCollection`, `order`, `ignore`, `quantizations` and `sort`. The service tier is `AUTO`, `DEFAULT`, `FLEX` or `PRIORITY`.
+The service tier is `AUTO`, `DEFAULT`, `FLEX` or `PRIORITY`.
 
 The same defaults as Boot properties, plus the attribution headers:
 

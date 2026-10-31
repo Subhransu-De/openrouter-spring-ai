@@ -74,8 +74,8 @@ text{font-family:"Libron",Georgia,serif;fill:var(--ink)}
 <path class="rule" d="M434 284 V292 H520 V284" style="fill:none;opacity:1"/>
 <text class="s" x="477" y="309" text-anchor="middle" style="fill:var(--ink)">idle gap ≤ 2m</text>
 <text class="m" x="477" y="325" text-anchor="middle" style="fill:var(--muted)">connection.timeout</text>
-<text class="s" x="860" y="260">no cap on the</text>
-<text class="s" x="860" y="276">total stream size</text>
+<text class="s" x="860" y="260">no total size cap;</text>
+<text class="s" x="860" y="276">state budgets apply</text>
 <!-- state budgets -->
 <text class="h" x="20" y="400">stream state</text>
 <text class="s" x="20" y="418">budget per</text>
@@ -92,7 +92,7 @@ text{font-family:"Libron",Georgia,serif;fill:var(--ink)}
 <text x="202" y="490"><tspan class="mb">chat audio</tspan><tspan class="s" dx="10" style="fill:var(--ink)">16 MiB audio + transcript · 128 audio choices</tspan></text>
 <text class="s" x="828" y="490" text-anchor="end">fixed</text>
 <line class="rule" x1="20" y1="518" x2="980" y2="518"/>
-<text x="20" y="544"><tspan class="s tb" font-weight="650">over a body cap or a state budget</tspan><tspan class="m" dx="8">OpenRouterLimitExceededException</tspan></text>
+<text x="20" y="544"><tspan class="s tb" font-weight="650">over a blocking-body or error-body cap, or a state budget</tspan><tspan class="m" dx="8">OpenRouterLimitExceededException</tspan></text>
 <text class="s" x="20" y="566">Chat audio raises <tspan class="m" style="fill:var(--muted)">NonTransientAiException</tspan>. An SSE event over 64MB raises <tspan class="m" style="fill:var(--muted)">DataBufferLimitException</tspan>. Nothing is truncated silently.</text>
 </g>
 </svg>

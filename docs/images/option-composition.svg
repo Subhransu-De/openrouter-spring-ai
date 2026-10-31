@@ -60,7 +60,7 @@ text{font-family:"Libron",Georgia,serif;fill:var(--ink)}
 <line class="rule" x1="20" y1="232" x2="980" y2="232"/>
 
 <!-- lane B: ChatClient -->
-<text x="20" y="266"><tspan class="mb">ChatClient</tspan><tspan class="s" dx="12">layers options: a value overrides, null inherits, stop and tool lists append</tspan></text>
+<text x="20" y="266"><tspan class="mb">ChatClient</tspan><tspan class="s" dx="12">merges onto the model defaults: a value overrides, null inherits, stop lists append</tspan></text>
 <text class="s" x="265" y="298" text-anchor="middle">model defaults</text>
 <text class="m" x="450" y="298" text-anchor="middle">.defaultOptions(…)</text>
 <text class="m" x="635" y="298" text-anchor="middle">.options(…)</text>
@@ -76,9 +76,9 @@ text{font-family:"Libron",Georgia,serif;fill:var(--ink)}
 <rect class="card" x="180" y="346" width="170" height="30" rx="6"/><text class="m" x="192" y="366">7</text>
 <rect class="card" x="180" y="382" width="170" height="30" rx="6"/><text class="m" x="192" y="402">["END"]</text>
 
-<rect class="card" x="375" y="310" width="150" height="30" rx="6"/><text class="m tm" x="387" y="330">—</text>
-<rect class="card" x="375" y="346" width="150" height="30" rx="6"/><text class="m tm" x="387" y="366">—</text>
-<rect class="card" x="375" y="382" width="150" height="30" rx="6"/><text class="m tm" x="387" y="402">—</text>
+<rect class="card" x="375" y="310" width="150" height="102" rx="6" style="stroke-dasharray:5 4;opacity:.7"/>
+<text class="s tb" x="450" y="352" text-anchor="middle">replaced when</text>
+<text class="s tb" x="450" y="369" text-anchor="middle">.options(…) is set</text>
 
 <rect class="card" x="550" y="310" width="170" height="30" rx="6"/><text class="m" x="562" y="330">OPENAI_RESPONSES</text>
 <rect class="card" x="550" y="346" width="170" height="30" rx="6"/><text class="m" x="562" y="366">null</text>

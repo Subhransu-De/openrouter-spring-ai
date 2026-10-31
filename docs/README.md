@@ -1,6 +1,6 @@
 # OpenRouter Spring AI documentation
 
-Reference pages for applications that use the starter. Start with [Getting started](getting-started.md).
+Start with [Getting started](getting-started.md).
 
 ![A call goes from your app through Spring AI's ChatClient into this library's model and API client, then to OpenRouter, which routes it to an upstream provider.](images/architecture.svg)
 
