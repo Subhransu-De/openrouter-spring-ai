@@ -85,7 +85,7 @@ PMD does not check declaration access; [Qodana does](#qodana-declaration-access)
 
 ### Coverage
 
-`mvn -B verify` and `gradle --no-daemon check` enforce JaCoCo coverage for each library module: at least 90% line and 80% branch. The root POM defines both floors, and Gradle reads them from it. The parent aggregator, the starter and the samples have no percentage gate.
+`mvn -B verify` and `gradle --no-daemon check` enforce JaCoCo coverage for each library module: at least 90% line and 80% branch. The root POM defines both floors, and Gradle reads them from it. The parent aggregator and the samples have no percentage gate. The starter has the gate, but today it contains only a package descriptor, so there is nothing to measure; any class you add to it must meet the same floors.
 
 Reports are in each module's `target/site/jacoco` (Maven) or `build/reports/jacoco/test` (Gradle). CI uploads them when verification fails. Any Maven `-DskipTests` run and `gradle --no-daemon assemble` skip coverage checks.
 
