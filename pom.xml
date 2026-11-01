@@ -88,7 +88,7 @@
     <spotbugs.correctness.skip>true</spotbugs.correctness.skip>
     <findsecbugs.version>1.14.0</findsecbugs.version>
     <findsecbugs.skip>true</findsecbugs.skip>
-    <pmd.version>7.28.0</pmd.version>
+    <pmd.version>7.29.0</pmd.version>
     <graalvm-buildtools.version>1.1.12</graalvm-buildtools.version>
     <maven-enforcer-plugin.version>3.6.3</maven-enforcer-plugin.version>
     <maven-compiler-plugin.version>3.16.0</maven-compiler-plugin.version>
