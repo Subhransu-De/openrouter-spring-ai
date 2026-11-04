@@ -84,6 +84,6 @@ A manager created after startup, such as a prototype, scoped or lazily initializ
 
 A child context also checks the managers it inherits from a parent context that has no validation of its own. It reads the parent and never changes it, so sibling contexts and the parent itself are unaffected. A singleton processor bean declared in a parent counts as application-declared.
 
-If such a parent declares a custom manager that is not a singleton, the child fails at startup, because it cannot check the instances the parent creates later. Make that manager a singleton, or set the opt-out below in the child. One case is not detected: in a parent with global lazy initialization, a `FactoryBean` manager whose product type is known only at runtime. Declare it as a regular eager bean.
+If such a parent declares a custom manager that is not a singleton, including a scoped proxy such as a `@RefreshScope` bean, the child fails at startup, because it cannot check the instances the parent creates later. Make that manager a singleton, or set the opt-out below in the child. One case is not detected: in a parent with global lazy initialization, a `FactoryBean` manager whose product type is known only at runtime. Declare it as a regular eager bean.
 
 The `spring.ai.openrouter.chat.allow-unsafe-tool-failure-results=true` opt-out skips manager validation in the context that sets it and makes the application responsible for redacting failure results. It does not disable the automatically supplied processor.
