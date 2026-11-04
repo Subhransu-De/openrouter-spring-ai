@@ -65,9 +65,9 @@ class GarageReportWriterTests {
     while (!Files.isRegularFile(root.resolve("README.md")) || !Files.isDirectory(root.resolve(".github"))) {
       root = root.getParent();
     }
-    String readme = Files.readString(root.resolve("README.md"));
+    String garageGuide = Files.readString(root.resolve("docs/garage.md"));
     String label = selection.isEmpty() ? "Empty body" : "`" + selection + "`";
-    String[] row = Arrays.stream(readme.split("\\R")).map(line -> line.split("\\|"))
+    String[] row = Arrays.stream(garageGuide.split("\\R")).map(line -> line.split("\\|"))
         .filter(cells -> cells.length > 2 && cells[1].strip().equals(label)).findFirst().orElseThrow();
     String expectedMode = command.requestModes().size() == 2 ? "Both"
         : command.requestModes().contains(OpenRouterRequestMode.OPENAI_RESPONSES) ? "Responses" : "Chat Completions";

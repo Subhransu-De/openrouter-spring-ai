@@ -6,6 +6,9 @@ on:
       - "**"
     paths:
       - "README.md"
+      - "CONTRIBUTING.md"
+      - "CHANGELOG.md"
+      - "docs/**"
       - ".prettierrc.json"
       - ".github/workflows/docs.yml"
   pull_request:
@@ -13,12 +16,15 @@ on:
       - "**"
     paths:
       - "README.md"
+      - "CONTRIBUTING.md"
+      - "CHANGELOG.md"
+      - "docs/**"
       - ".prettierrc.json"
       - ".github/workflows/docs.yml"
 
 jobs:
   format:
-    name: Check README formatting
+    name: Check Markdown formatting
     runs-on: ubuntu-latest
 
     steps:
@@ -31,4 +37,4 @@ jobs:
           node-version: "24"
 
       - name: Run Prettier check
-        run: npx --yes prettier@3.9.6 --check README.md
+        run: npx --yes prettier@3.9.6 --check README.md CONTRIBUTING.md CHANGELOG.md "docs/**/*.md"

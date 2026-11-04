@@ -4,7 +4,7 @@ name: openrouter.weaker-access
 inspections:
   - inspection: WeakerAccess
     enabled: true
-    # The supported consumer API listed in the README has callers outside this repository.
+    # The supported consumer API listed in docs/api.md has callers outside this repository.
     # A single `*` matches one package; `..*` also matches its subpackages.
     ignore:
       - "scope#src:de.subhransu.openrouter.springai.OpenRouterIdentifiers"
