@@ -77,18 +77,6 @@ final class ReasoningMetadata {
 		}
 	}
 
-	static <T extends @Nullable Object> @Nullable List<T> concat(@Nullable List<T> earlier, @Nullable List<T> later) {
-		if (earlier == null) {
-			return later;
-		}
-		if (later == null) {
-			return earlier;
-		}
-		List<T> result = new ArrayList<>(earlier);
-		result.addAll(later);
-		return result;
-	}
-
 	static final class Accumulator {
 
 		private final Map<String, Object> metadata = new LinkedHashMap<>();

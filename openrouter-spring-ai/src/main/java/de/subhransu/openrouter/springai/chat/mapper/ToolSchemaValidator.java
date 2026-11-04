@@ -14,6 +14,10 @@ import tools.jackson.databind.ObjectMapper;
 // Checks the common strict tool contract; provider-specific limits remain upstream.
 final class ToolSchemaValidator {
 
+	private static final List<String> UNSUPPORTED_KEYWORDS = List.of("allOf", "oneOf", "not", "if", "then", "else",
+			"dependentRequired", "dependentSchemas", "patternProperties", "unevaluatedProperties", "prefixItems",
+			"$dynamicRef");
+
 	private ToolSchemaValidator() {
 	}
 
@@ -47,9 +51,10 @@ final class ToolSchemaValidator {
 		if (!visited.add(schema)) {
 			return;
 		}
-		for (String keyword : List.of("allOf", "oneOf", "not", "if", "then", "else", "dependentRequired",
-				"dependentSchemas", "patternProperties", "unevaluatedProperties", "prefixItems", "$dynamicRef")) {
-			require(!schema.has(keyword), "unsupported strict schema keyword: " + keyword);
+		for (String keyword : UNSUPPORTED_KEYWORDS) {
+			if (schema.has(keyword)) {
+				throw new IllegalArgumentException("unsupported strict schema keyword: " + keyword);
+			}
 		}
 		if (schema.has("$ref")) {
 			require(schema.path("$ref").isString(), "$ref must be a string");
@@ -72,7 +77,9 @@ final class ToolSchemaValidator {
 		// Visit schema positions only: defaults, enums and examples are instance data.
 		for (String keyword : List.of("properties", "$defs", "definitions")) {
 			if (schema.has(keyword)) {
-				require(schema.path(keyword).isObject(), keyword + " must be an object");
+				if (!schema.path(keyword).isObject()) {
+					throw new IllegalArgumentException(keyword + " must be an object");
+				}
 				for (JsonNode child : schema.path(keyword)) {
 					validate(child, root, visited);
 				}

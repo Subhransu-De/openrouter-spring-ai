@@ -2,6 +2,7 @@ package de.subhransu.openrouter.springai.embedding.mapper;
 
 import de.subhransu.openrouter.springai.api.dto.EmbeddingsResponse;
 import de.subhransu.openrouter.springai.api.dto.Usage;
+import de.subhransu.openrouter.springai.api.errors.OpenRouterApiExceptionFactory;
 import de.subhransu.openrouter.springai.chat.mapper.UsageMapper;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import java.util.List;
@@ -19,6 +20,7 @@ public final class OpenRouterEmbeddingResponseMapper {
 	}
 
 	public EmbeddingResponse map(EmbeddingsResponse response, int inputCount, @Nullable Integer dimensions) {
+		throwIfError(response);
 		var items = response != null ? response.data() : null;
 		if (items == null || items.size() != inputCount) {
 			throw new OpenRouterProtocolException("Embedding response count must match input count");
@@ -42,6 +44,14 @@ public final class OpenRouterEmbeddingResponseMapper {
 			embeddings[index] = new Embedding(vector, index);
 		}
 		return new EmbeddingResponse(List.of(embeddings), mapMetadata(response));
+	}
+
+	private static void throwIfError(@Nullable EmbeddingsResponse response) {
+		var error = response != null ? response.error() : null;
+		if (error != null) {
+			throw OpenRouterApiExceptionFactory.createRetryable("OpenRouter embeddings request failed",
+					error.toString(), error, null, "/embeddings");
+		}
 	}
 
 	private float[] validatedVector(EmbeddingsResponse.EmbeddingData data) {

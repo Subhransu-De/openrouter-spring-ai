@@ -5,6 +5,7 @@ import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
 import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingOptions;
 import org.springframework.ai.document.MetadataMode;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.NestedConfigurationProperty;
 
 @ConfigurationProperties(OpenRouterEmbeddingProperties.CONFIG_PREFIX)
 public class OpenRouterEmbeddingProperties {
@@ -21,6 +22,7 @@ public class OpenRouterEmbeddingProperties {
 
 	private @Nullable String user;
 
+	@NestedConfigurationProperty
 	private @Nullable OpenRouterProviderPreferences provider;
 
 	public OpenRouterEmbeddingOptions toOptions() {

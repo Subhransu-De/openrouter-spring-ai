@@ -56,7 +56,12 @@ class OpenRouterResponsesTerminationTests {
 				+ "\",\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"hello\"}]}],"
 				+ "\"usage\":{\"input_tokens\":2,\"output_tokens\":3,\"total_tokens\":5}}}\n\n";
 		StepVerifier.create(model(TEXT + terminal + "data: {invalid}\n\n").stream(new Prompt("synthetic")))
-			.assertNext(response -> assertThat(response.getResult().getOutput().getText()).isEqualTo("hello"))
+			.assertNext(response -> {
+				assertThat(response.getResult().getOutput().getText()).isEqualTo("hello");
+				assertThat(response.getResult().getMetadata().isEmpty()).isTrue();
+				assertThat(response.getResult().getMetadata().getFinishReason()).isNull();
+				assertThat(response.getResult().getMetadata().getContentFilters()).isEmpty();
+			})
 			.assertNext(response -> {
 				assertThat(response.getResult().getMetadata().getFinishReason())
 					.isEqualTo("completed".equals(status) ? "STOP" : status);

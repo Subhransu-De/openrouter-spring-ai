@@ -185,8 +185,10 @@ class OpenRouterStructuredOutputPropertiesTests {
 	@ParameterizedTest
 	@EnumSource(OpenRouterRequestMode.class)
 	void malformedJsonFailsBeforeSendingRequests(OpenRouterRequestMode mode) {
-		for (String[] properties : List.of(new String[] { PREFIX + "output-schema={invalid" }, new String[] {
-				PREFIX + "response-format.type=json-schema", PREFIX + "response-format.schema={invalid" })) {
+		for (String[] properties : List.of(new String[] { PREFIX + "output-schema={invalid" },
+				new String[] { PREFIX + "response-format.type=json-schema",
+						PREFIX + "response-format.schema={invalid" },
+				new String[] { PREFIX + "response-format.type=json-schema", PREFIX + "response-format.schema=" })) {
 			OpenRouterApi api = mock(OpenRouterApi.class);
 			runner.withBean(OpenRouterApi.class, () -> api)
 				.withPropertyValues(PREFIX + "request-mode=" + mode)

@@ -6,10 +6,8 @@ import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
 import de.subhransu.openrouter.springai.api.dto.StreamError;
 import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
 import de.subhransu.openrouter.springai.api.errors.OpenRouterApiExceptionFactory;
-import de.subhransu.openrouter.springai.errors.OpenRouterErrorClassifier;
 import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
-import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
 import de.subhransu.openrouter.springai.errors.OpenRouterExceptionMessage;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import java.util.List;
@@ -86,13 +84,13 @@ public final class OpenRouterResponsesResponseMapper {
 
 	static RuntimeException failure(String message, @Nullable String responseBody, @Nullable StreamError error,
 			@Nullable String errorType) {
-		OpenRouterApiException failure = OpenRouterApiExceptionFactory.create(message, responseBody, error, errorType);
-		if (OpenRouterErrorClassifier.isTransient(failure.getCategory())) {
-			return new OpenRouterTransientApiException(message, failure.getStatusCode(), failure.getResponseBody(),
-					failure.getErrorDetails(), null, "/responses");
+		RuntimeException failure = OpenRouterApiExceptionFactory.createRetryable(message, responseBody, error,
+				errorType, "/responses");
+		if (failure instanceof OpenRouterApiException permanent) {
+			return new OpenRouterNonTransientApiException(message, permanent.getStatusCode(),
+					permanent.getResponseBody(), permanent.getErrorDetails(), null, "/responses");
 		}
-		return new OpenRouterNonTransientApiException(message, failure.getStatusCode(), failure.getResponseBody(),
-				failure.getErrorDetails(), null, "/responses");
+		return failure;
 	}
 
 	// Accept absent status for compatibility; reject every explicit non-final status.

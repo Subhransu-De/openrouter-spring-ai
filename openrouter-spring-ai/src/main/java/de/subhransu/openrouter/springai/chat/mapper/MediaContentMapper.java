@@ -3,6 +3,8 @@ package de.subhransu.openrouter.springai.chat.mapper;
 import de.subhransu.openrouter.springai.api.dto.ContentPart;
 import de.subhransu.openrouter.springai.api.dto.ResponsesContent;
 import java.net.URI;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Objects;
 import java.util.Set;
@@ -33,8 +35,8 @@ final class MediaContentMapper {
 		}
 		if ("audio/wav".equals(mime) || "audio/mpeg".equals(mime)) {
 			String data = dataUrl(media, true);
-			return new ContentPart("input_audio", null, null, null, null, new ContentPart.AudioInput(
-					data.substring(data.indexOf(',') + 1), "audio/wav".equals(mime) ? "wav" : "mp3"), null);
+			return new ContentPart("input_audio", null, null, null, null,
+					new ContentPart.AudioInput(data, "audio/wav".equals(mime) ? "wav" : "mp3"), null);
 		}
 		if (VIDEO_TYPES.contains(mime)) {
 			return new ContentPart("video_url", null, null, null, null, null,
@@ -68,12 +70,12 @@ final class MediaContentMapper {
 		Object data = media.getData();
 		if (data instanceof byte[] bytes) {
 			checkSize(bytes.length);
-			return prefix + Base64.getEncoder().encodeToString(bytes);
+			return audio ? Base64.getEncoder().encodeToString(bytes) : MediaUrlMapper.dataUrl(prefix, bytes);
 		}
 		String value = data.toString();
 		if (value.startsWith("data:")) {
 			validateInline(value, prefix);
-			return value;
+			return audio ? value.substring(prefix.length()) : value;
 		}
 		if (audio) {
 			throw new IllegalArgumentException(
@@ -95,14 +97,18 @@ final class MediaContentMapper {
 		if (length > 4 * ((MAX_INLINE_BYTES + 2) / 3)) {
 			throw new IllegalArgumentException("Inline media exceeds 20 MiB");
 		}
-		byte[] decoded;
+		ByteBuffer decoded;
 		try {
-			decoded = Base64.getDecoder().decode(value.substring(prefix.length()));
+			byte[] encoded = value.getBytes(StandardCharsets.ISO_8859_1);
+			int offset = prefix.length();
+			int encodedLength = encoded.length - offset;
+			System.arraycopy(encoded, offset, encoded, 0, encodedLength);
+			decoded = Base64.getDecoder().decode(ByteBuffer.wrap(encoded, 0, encodedLength));
 		}
 		catch (IllegalArgumentException ex) {
 			throw new IllegalArgumentException("Invalid base64 media content", ex);
 		}
-		checkSize(decoded.length);
+		checkSize(decoded.remaining());
 	}
 
 	private static void checkSize(int size) {

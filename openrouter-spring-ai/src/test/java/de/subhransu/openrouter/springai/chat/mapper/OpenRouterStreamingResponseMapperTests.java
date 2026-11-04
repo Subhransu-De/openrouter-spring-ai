@@ -16,6 +16,7 @@ import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
 import de.subhransu.openrouter.springai.chat.errors.OpenRouterNonTransientChoiceException;
 import de.subhransu.openrouter.springai.chat.errors.OpenRouterTransientChoiceException;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
+import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -28,6 +29,26 @@ class OpenRouterStreamingResponseMapperTests {
 	private static final String CHUNK_OBJECT = "chat.completion.chunk";
 
 	private static final String MODEL = "openai/gpt-5.4-mini";
+
+	@Test
+	void validatesEveryChoiceBeforeOpeningTheBudget() {
+		ChatCompletionChunk chunk = new ObjectMapper().readValue("""
+				{"choices":[{"index":0,"delta":{"content":"text"}},null]}
+				""", ChatCompletionChunk.class);
+		assertThatThrownBy(() -> new OpenRouterStreamingResponseMapper(1, 1).map(chunk))
+			.isInstanceOf(OpenRouterProtocolException.class)
+			.hasMessage("OpenRouter response requires choice");
+	}
+
+	@Test
+	void choiceFailureTakesPrecedenceOverANullSibling() {
+		ChatCompletionChunk chunk = new ObjectMapper().readValue("""
+				{"choices":[null,{"index":1,"error":{"code":"502","message":"synthetic"}}]}
+				""", ChatCompletionChunk.class);
+		assertThatThrownBy(() -> new OpenRouterStreamingResponseMapper(1, 1).map(chunk)).isInstanceOfSatisfying(
+				OpenRouterTransientChoiceException.class,
+				error -> assertThat(error.getErrorDetails().choiceIndex()).isEqualTo(1));
+	}
 
 	@Test
 	void mapsContentDeltaChunk() {
@@ -188,6 +209,33 @@ class OpenRouterStreamingResponseMapperTests {
 				assertThat(exception.getErrorDetails().partialOutputTruncated()).isTrue();
 			})
 			.verify();
+	}
+
+	@Test
+	void truncationPreservesWhitespaceAndSplitBoundaryDiagnostics() {
+		for (int size : List.of(0, 498, 499, 500, 501, 600, 4096)) {
+			for (String tail : List.of("", " \t\n", " \t\nnext", "é😀", "x".repeat(4096))) {
+				String earlier = "x".repeat(size) + " \t\r\n";
+				String normalized = (earlier + tail).replaceAll("\\s+", " ").trim();
+				boolean truncated = normalized.length() > OpenRouterChoiceErrorExceptionFactory.MAX_DIAGNOSTIC_LENGTH;
+				String expected = truncated ? normalized.substring(0, 500) + "..." : normalized;
+				var first = new ChatCompletionChunk(null, null, null, null, null,
+						List.of(new Choice(0, null, new Delta(null, earlier, null, null), null, null)), null, null);
+				var failure = new ChatCompletionChunk(null, null, null, null, null,
+						List.of(new Choice(0, null, new Delta(null, tail, null, null), "error", null,
+								new ChoiceError("502", "synthetic", Map.of()))),
+						null, null);
+				StepVerifier.create(new OpenRouterStreamingResponseMapper().map(Flux.just(first, failure)))
+					.expectNextCount(1)
+					.expectErrorSatisfies(error -> assertThat(error)
+						.isInstanceOfSatisfying(OpenRouterTransientChoiceException.class, exception -> {
+							assertThat(exception.getErrorDetails().partialOutput())
+								.isEqualTo(expected.isEmpty() ? null : expected);
+							assertThat(exception.getErrorDetails().partialOutputTruncated()).isEqualTo(truncated);
+						}))
+					.verify();
+			}
+		}
 	}
 
 	@Test

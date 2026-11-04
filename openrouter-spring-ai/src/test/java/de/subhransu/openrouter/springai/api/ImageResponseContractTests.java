@@ -8,6 +8,8 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
+import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
+import de.subhransu.openrouter.springai.errors.OpenRouterErrorDetails;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import de.subhransu.openrouter.springai.image.OpenRouterImageModel;
 import de.subhransu.openrouter.springai.image.OpenRouterImageOptions;
@@ -18,6 +20,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.ai.image.ImagePrompt;
 import org.springframework.ai.image.ImageResponse;
+import org.springframework.core.retry.RetryPolicy;
+import org.springframework.core.retry.RetryTemplate;
 import org.springframework.core.io.buffer.DefaultDataBufferFactory;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.http.HttpStatus;
@@ -63,11 +67,11 @@ class ImageResponseContractTests {
 				+ "\"error_type\":\"rate_limit_error\",\"metadata\":{\"provider_code\":\"synthetic_limit\"}}" + data
 				+ "}";
 		OpenRouterImageModel model = model(body, MediaType.APPLICATION_JSON);
-		assertThatThrownBy(() -> model.call(PROMPT)).satisfies(this::assertProviderError);
-		assertStoppedWithError(OpenRouterApiException.class);
+		assertThatThrownBy(() -> model.call(PROMPT)).satisfies(this::assertTransientProviderError);
+		assertStoppedWithError(OpenRouterTransientApiException.class);
 		this.registry.clear();
-		StepVerifier.create(model.stream(PROMPT)).expectErrorSatisfies(this::assertProviderError).verify();
-		assertStoppedWithError(OpenRouterApiException.class);
+		StepVerifier.create(model.stream(PROMPT)).expectErrorSatisfies(this::assertTransientProviderError).verify();
+		assertStoppedWithError(OpenRouterTransientApiException.class);
 	}
 
 	@ParameterizedTest
@@ -160,10 +164,23 @@ class ImageResponseContractTests {
 		assertThat(throwable).isInstanceOfSatisfying(OpenRouterApiException.class, error -> {
 			assertThat(error.getCategory()).isEqualTo(OpenRouterErrorCategory.RATE_LIMIT);
 			assertThat(error.getStatusCode().value()).isEqualTo(429);
-			assertThat(error.getErrorDetails().message()).isEqualTo("synthetic rate limit");
-			assertThat(error.getErrorDetails().errorType()).isEqualTo("rate_limit_error");
-			assertThat(error.getErrorDetails().providerCode()).isEqualTo("synthetic_limit");
+			assertProviderDetails(error.getErrorDetails());
 		});
+	}
+
+	private void assertTransientProviderError(Throwable throwable) {
+		assertThat(throwable).isInstanceOfSatisfying(OpenRouterTransientApiException.class, error -> {
+			assertThat(error.getCategory()).isEqualTo(OpenRouterErrorCategory.RATE_LIMIT);
+			assertThat(error.getStatusCode().value()).isEqualTo(429);
+			assertThat(error.getEndpoint()).isEqualTo("/images");
+			assertProviderDetails(error.getErrorDetails());
+		});
+	}
+
+	private void assertProviderDetails(OpenRouterErrorDetails details) {
+		assertThat(details.message()).isEqualTo("synthetic rate limit");
+		assertThat(details.errorType()).isEqualTo("rate_limit_error");
+		assertThat(details.providerCode()).isEqualTo("synthetic_limit");
 	}
 
 	private void assertStoppedWithError(Class<? extends Throwable> type) {
@@ -201,6 +218,7 @@ class ImageResponseContractTests {
 	private OpenRouterImageModel model(OpenRouterApi api) {
 		return OpenRouterImageModel.builder()
 			.openRouterApi(api)
+			.retryTemplate(new RetryTemplate(RetryPolicy.builder().maxRetries(0).build()))
 			.defaultOptions(OpenRouterImageOptions.builder().model("test-image-model").build())
 			.observationRegistry(this.registry)
 			.build();

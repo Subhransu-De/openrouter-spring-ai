@@ -29,8 +29,8 @@ public final class OpenRouterChatResponseMapper {
 		}
 		var error = response.error();
 		if (error != null) {
-			throw OpenRouterApiExceptionFactory.create("OpenRouter chat completion failed", error.toString(),
-					response.error(), null);
+			throw OpenRouterApiExceptionFactory.createRetryable("OpenRouter chat completion failed", error.toString(),
+					error, null, "/chat/completions");
 		}
 		var choices = response.choices();
 		if (CollectionUtils.isEmpty(choices) || choices.stream().anyMatch(Objects::isNull)) {

@@ -353,7 +353,7 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 	}
 
 	private static <T> @Nullable List<T> readOnlyList(@Nullable List<T> values) {
-		return values == null ? null : Collections.unmodifiableList(new ArrayList<>(values));
+		return values == null ? null : Collections.unmodifiableList(values);
 	}
 
 	@Contract("!null -> !null")
@@ -362,7 +362,7 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 	}
 
 	private static <V extends @Nullable Object> @Nullable Map<String, V> readOnlyMap(@Nullable Map<String, V> values) {
-		return values == null ? null : Collections.unmodifiableMap(new LinkedHashMap<>(values));
+		return values == null ? null : Collections.unmodifiableMap(values);
 	}
 
 	private static @Nullable Map<String, @Nullable Object> mergeMaps(@Nullable Map<String, @Nullable Object> defaults,
@@ -416,21 +416,22 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 			this.options.responseFormat = source.responseFormat;
 			this.options.parallelToolCalls = source.parallelToolCalls;
 			this.options.toolStrict = source.toolStrict;
-			this.options.toolChoice = OptionSnapshots.value(source.toolChoice);
+			this.options.toolChoice = source.toolChoice;
 			this.options.provider = source.provider;
 			this.options.reasoning = source.reasoning;
 			this.options.serviceTier = source.serviceTier;
-			this.options.metadata = copyMap(source.metadata);
+			this.options.metadata = source.metadata == null ? null : new LinkedHashMap<>(source.metadata);
 			this.options.route = source.route;
 			this.options.includeUsage = source.includeUsage;
 			this.options.modalities = copyList(source.modalities);
 			this.options.audio = source.audio;
-			this.options.imageConfig = copyMap(source.imageConfig);
-			this.options.extraBody = copyMap(source.extraBody);
-			this.options.providerExtraBody = copyMap(source.providerExtraBody);
+			this.options.imageConfig = source.imageConfig == null ? null : new LinkedHashMap<>(source.imageConfig);
+			this.options.extraBody = source.extraBody == null ? null : new LinkedHashMap<>(source.extraBody);
+			this.options.providerExtraBody = source.providerExtraBody == null ? null
+					: new LinkedHashMap<>(source.providerExtraBody);
 			this.options.outputSchema = source.outputSchema;
 			this.options.toolCallbacks = copyList(source.toolCallbacks);
-			this.options.toolContext = copyToolContext(source.toolContext);
+			this.options.toolContext = source.toolContext == null ? null : new LinkedHashMap<>(source.toolContext);
 		}
 
 		@Override

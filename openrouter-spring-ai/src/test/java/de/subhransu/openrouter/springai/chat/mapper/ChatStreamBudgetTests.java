@@ -9,6 +9,8 @@ import de.subhransu.openrouter.springai.chat.errors.OpenRouterTransientChoiceExc
 import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException;
 import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException.Limit;
 import java.util.Map;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -23,6 +25,30 @@ class ChatStreamBudgetTests {
 	private static final ObjectMapper JSON = new ObjectMapper();
 
 	private static final long DIAGNOSTIC = 4L * OpenRouterChoiceErrorExceptionFactory.MAX_DIAGNOSTIC_LENGTH;
+
+	@ParameterizedTest
+	@ValueSource(strings = { "{\"text\":\"é😀\\n\\t\\\"\",\"null\":null}",
+			"{\"nested\":[{},[],null,false,1,1.25,{\"unknown\":\"value\"}]}",
+			"{\"openrouter.reasoning_details\":[{\"type\":\"reasoning.encrypted\",\"data\":\"opaque\"}]}" })
+	void concurrentBudgetsChargeTheSameBytesAsFreshMappers(String value) {
+		Map<String, Object> metadata = JSON.readValue(value, new tools.jackson.core.type.TypeReference<>() {
+		});
+		long charge = new ObjectMapper().writeValueAsBytes(metadata).length;
+		List<CompletableFuture<Void>> checks = java.util.stream.IntStream.range(0, 32)
+			.mapToObj(index -> CompletableFuture.runAsync(() -> {
+				ChatStreamBudget budget = new ChatStreamBudget(charge * 2, 1);
+				budget.appendResponse(metadata);
+				budget.appendResponse(metadata);
+				assertThatThrownBy(() -> budget.appendResponse(metadata))
+					.isInstanceOfSatisfying(OpenRouterLimitExceededException.class, error -> {
+						assertThat(error.getLimit()).isEqualTo(Limit.CHAT_STATE_BYTES);
+						assertThat(error.getConfiguredLimit()).isEqualTo(charge * 2);
+						assertThat(error.getObservedValue()).isEqualTo(charge * 3);
+					});
+			}))
+			.toList();
+		checks.forEach(CompletableFuture::join);
+	}
 
 	@Test
 	void acceptsExactUtf8BoundaryAndCancelsBeforeNextSnapshot() {

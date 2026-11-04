@@ -6,6 +6,8 @@ How to customize the HTTP clients, which timeouts apply, and the size limits for
 
 The supported transport extension points are Spring's `RestClient.Builder` request interceptors (blocking calls) and `WebClient.Builder` filters (streams). Boot auto-configuration clones the `RestClient.Builder` and `WebClient.Builder` beans from your application before applying OpenRouter settings. Your builder beans are not modified.
 
+`OpenRouterApi.Builder.objectMapper(...)` serializes every request body and decodes every response, including the JSON fallback of streamed image requests. Boot passes the application's `ObjectMapper` in servlet and reactive applications. A supplied mapper bypasses any JSON converters or codecs registered on the supplied builders. Without one, the builders' request serialization is unchanged.
+
 To own the whole client, define an `OpenRouterApi` bean. API auto-configuration backs off, and the auto-configured chat, embedding and image models use your bean. Set the base URL, attribution, timeout and size limits on its builder, because `spring.ai.openrouter.connection.*` and `app.*` no longer apply:
 
 ```java
@@ -82,7 +84,7 @@ An interceptor or filter may read selected successful-response headers before it
 
 Each limit applies to one part of a request or its stream. Defaults are shown:
 
-![Limits on a request and its SSE stream. Each inline PDF, audio or video file holds 1 byte to 20 MiB; images are not checked. max-response-body-size, 64MB, caps one blocking response body or one SSE event, not the whole stream; the stream's state budgets still apply. max-error-body-size, 64KB, caps error bodies. connection.timeout, 2m, caps the idle gap between SSE events and sets the blocking connect and read timeouts in Boot. Chat Completions and image streams end with [DONE]; Responses streams end with their own terminal event. Stream state budgets per subscription: Chat Completions keeps 1MB of retained metadata and 128 active choices under chat.streaming-state; Chat Completions tool-call assembly and all Responses state get 1MB, 1024 chunks or events and 2 minutes under chat.tool-call-aggregation; chat audio gets 16 MiB and 128 audio choices. Exceeding a blocking-body or error-body cap, or a state budget, raises OpenRouterLimitExceededException. Chat audio raises NonTransientAiException, and an SSE event over 64MB raises DataBufferLimitException.](images/limits.svg)
+![Limits on a request and its SSE stream. Each inline PDF, audio or video file holds 1 byte to 20 MiB; images are not checked. max-response-body-size, 64MB, caps one blocking response body or one SSE event, not the whole stream; the stream's state budgets still apply. max-error-body-size, 64KB, caps error bodies. connection.timeout, 2m, caps the idle gap between SSE events and sets the blocking connect and read timeouts in Boot. Chat Completions and image streams end with [DONE]; Responses streams end with their own terminal event. Stream state budgets per subscription: Chat Completions keeps 1MB of retained metadata and 128 active choices under chat.streaming-state; Chat Completions tool-call assembly and all Responses state get 1MB, 8192 chunks or events and 2 minutes under chat.tool-call-aggregation; chat audio gets 16 MiB and 128 audio choices. Exceeding a blocking-body or error-body cap, or a state budget, raises OpenRouterLimitExceededException. Chat audio raises NonTransientAiException, and an SSE event over 64MB raises DataBufferLimitException.](images/limits.svg)
 
 ### Response buffering limits
 
@@ -104,13 +106,17 @@ The budget counts the UTF-8 JSON size of incoming metadata, such as reasoning, r
 
 Chat Completions streams buffer the fragments of each tool call until the call is complete. The `spring.ai.openrouter.chat.tool-call-aggregation.*` properties bound that buffer. On `OpenRouterChatModel.Builder` they are `toolCallAggregationMaxBytes`, `toolCallAggregationMaxChunks` and `toolCallAggregationMaxDuration`. Responses streams reuse the same settings for all the state they retain. The limits apply per subscription and are model-level settings, not per-request options.
 
-| Property       | Default                 | Chat Completions scope                                                      | Responses scope                                                                                               |
-| -------------- | ----------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `max-size`     | `1MB` (1,048,576 bytes) | Bytes of buffered tool-call chunks                                          | Cumulative serialized UTF-8 JSON bytes admitted from the first state-bearing event through the terminal event |
-| `max-chunks`   | `1024`                  | Number of buffered tool-call chunks                                         | Events in that interval, and separately the number of retained output items or items in a response snapshot   |
-| `max-duration` | `2m`                    | How long a tool call may stay incomplete, from its first tool-call fragment | Absolute elapsed time from the first state-bearing event; activity and keepalives do not reset it             |
+| Property       | Default                 | Chat Completions scope                                                                                                         | Responses scope                                                                                               |
+| -------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| `max-size`     | `1MB` (1,048,576 bytes) | Serialized JSON bytes of the buffered chunks, across all buffered choices                                                      | Cumulative serialized UTF-8 JSON bytes admitted from the first state-bearing event through the terminal event |
+| `max-chunks`   | `8192`                  | Buffered chunks across all buffered choices, including chunks without choices, such as usage, that arrive while a call is open | Events in that interval, and separately the number of retained output items or items in a response snapshot   |
+| `max-duration` | `2m`                    | How long a tool call may stay incomplete, from its first tool-call fragment                                                    | Absolute elapsed time from the first state-bearing event; activity and keepalives do not reset it             |
 
-Exceeding a Chat Completions limit raises `OpenRouterLimitExceededException` with a `STREAMING_TOOL_CALL_*` limit. Increase the settings explicitly if you expect larger tool calls.
+Exceeding a Chat Completions limit cancels the upstream request and raises `OpenRouterLimitExceededException` with a `STREAMING_TOOL_CALL_*` limit. No partial tool call is emitted, so `ToolCallingAdvisor` runs no tool.
+
+The provider decides how finely it splits the arguments, so the argument size that fits depends on the provider. A chunk with OpenRouter's usual id, model and provider fields serializes to about 250 to 300 bytes, so the byte limit usually applies after 3,500 to 4,200 chunks, before the chunk limit. If your tools expect larger arguments, raise both, for example `max-chunks=32768` with `max-size=4MB`.
+
+When several choices buffer tool calls at once, a merged tool call leaves out usage and extension values older than ones the stream already emitted, so its response can report no usage.
 
 ### Responses stream state limits
 

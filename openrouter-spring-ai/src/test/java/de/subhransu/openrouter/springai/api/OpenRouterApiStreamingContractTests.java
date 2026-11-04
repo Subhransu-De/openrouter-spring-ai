@@ -1,6 +1,7 @@
 package de.subhransu.openrouter.springai.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
@@ -41,6 +42,11 @@ import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.cfg.JsonNodeFeature;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Wire-contract tests for the streaming {@link OpenRouterApi} surface. They pin the
@@ -56,6 +62,10 @@ class OpenRouterApiStreamingContractTests {
 	 * can assert which URI the stream method targeted.
 	 */
 	private Capture capturingApi(HttpStatus status, String contentType, String body) {
+		return capturingApi(status, contentType, body, new ObjectMapper());
+	}
+
+	private Capture capturingApi(HttpStatus status, String contentType, String body, ObjectMapper objectMapper) {
 		AtomicReference<ClientRequest> captured = new AtomicReference<>();
 		ExchangeFunction exchange = request -> {
 			captured.set(request);
@@ -64,6 +74,7 @@ class OpenRouterApiStreamingContractTests {
 		OpenRouterApi api = OpenRouterApi.builder()
 			.apiKey("test-key")
 			.baseUrl("https://openrouter.test/api/v1")
+			.objectMapper(objectMapper)
 			.webClientBuilder(WebClient.builder().exchangeFunction(exchange))
 			.build();
 		return new Capture(api, captured);
@@ -103,6 +114,21 @@ class OpenRouterApiStreamingContractTests {
 
 		assertThat(capture.request().get().url().getPath()).endsWith("/chat/completions");
 		assertThat(capture.request().get().headers().getAccept()).contains(MediaType.TEXT_EVENT_STREAM);
+	}
+
+	@Test
+	void emptyStreamExtensionsRetainNullQueriesAndRejectMutation() {
+		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE,
+				"data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"synthetic\"}}]}\n\n" + DONE_ONLY_SSE);
+		StepVerifier.create(capture.api().chatCompletionStream(chatRequest())).assertNext(chunk -> {
+			var choice = chunk.choices().get(0);
+			for (var extensions : List.of(chunk.extensions(), choice.extensions(), choice.delta().extensions())) {
+				assertThat(extensions).isEmpty();
+				assertThat(extensions.containsKey(null)).isFalse();
+				assertThat(extensions.get(null)).isNull();
+				assertThatThrownBy(() -> extensions.remove("absent")).isInstanceOf(UnsupportedOperationException.class);
+			}
+		}).verifyComplete();
 	}
 
 	@Test
@@ -225,6 +251,90 @@ class OpenRouterApiStreamingContractTests {
 			assertThat(ex.getResponseBody()).contains("insufficient credits");
 			assertThat(ex.getCategory()).isEqualTo(OpenRouterErrorCategory.BILLING_CREDITS);
 		}).verify();
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "{}", "{\"choices\":null}", "{\"choices\":[]}",
+			"{\"choices\":[null],\"usage\":{\"total_tokens\":1}}" })
+	void rejectsMissingChoicesAndNullChoiceEntries(String json) {
+		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE,
+				"data: " + json + "\n\ndata: [DONE]\n\n");
+
+		StepVerifier.create(capture.api().chatCompletionStream(chatRequest()))
+			.expectErrorSatisfies(error -> assertThat(error).isInstanceOf(OpenRouterProtocolException.class)
+				.hasMessage("OpenRouter chat chunk requires non-null choices or usage"))
+			.verify();
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "[", "[bad]", "42 trailing", "true false", "\"unterminated", "{} {}" })
+	void keepsJacksonCauseForMalformedChunks(String json) {
+		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE,
+				"data: " + json + "\n\ndata: [DONE]\n\n");
+
+		StepVerifier.create(capture.api().chatCompletionStream(chatRequest()))
+			.expectErrorSatisfies(error -> assertThat(error).isInstanceOf(OpenRouterProtocolException.class)
+				.hasMessage("Failed to decode OpenRouter stream chunk")
+				.hasCauseInstanceOf(JacksonException.class))
+			.verify();
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {
+			"{\"probe\":1,\"choices\":\"bad\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"OK\"}}],\"probe\":\"OK\"}",
+			"{\"probe\":1,\"probe\":\"OK\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"OK\"}}]}" })
+	void duplicateKeysKeepTheLastValue(String json) {
+		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE,
+				"data: " + json + "\n\ndata: [DONE]\n\n");
+
+		StepVerifier.create(capture.api().chatCompletionStream(chatRequest())).assertNext(chunk -> {
+			assertThat(chunk.choices().get(0).delta().content()).isEqualTo("OK");
+			assertThat(chunk.extensions()).containsEntry("probe", "OK");
+		}).verifyComplete();
+	}
+
+	@ParameterizedTest
+	@CsvSource({ "1.50,1.5", "-0,0", "1e400,Infinity", "502,502" })
+	void numbersInStringFieldsKeepTheTreeBindingText(String literal, String expected) {
+		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE, "data: {\"id\":" + literal
+				+ ",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"OK\"}}]}\n\ndata: [DONE]\n\n");
+
+		StepVerifier.create(capture.api().chatCompletionStream(chatRequest()))
+			.assertNext(chunk -> assertThat(chunk.id()).isEqualTo(expected))
+			.verifyComplete();
+	}
+
+	@Test
+	void bigDecimalMappersKeepTheTreeRangeCheck() {
+		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE,
+				"data: {\"choices\":[],\"usage\":{\"cost\":1e400}}\n\ndata: [DONE]\n\n",
+				JsonMapper.builder().enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS).build());
+
+		StepVerifier.create(capture.api().chatCompletionStream(chatRequest()))
+			.expectErrorSatisfies(error -> assertThat(error).isInstanceOf(OpenRouterProtocolException.class)
+				.hasMessage("Failed to decode OpenRouter stream chunk"))
+			.verify();
+	}
+
+	@Test
+	void treeNullPropertySettingAppliesToExtensions() {
+		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE,
+				"data: {\"probe\":null,\"choices\":[{\"index\":0,\"delta\":{\"content\":\"OK\"}}]}\n\ndata: [DONE]\n\n",
+				JsonMapper.builder().disable(JsonNodeFeature.READ_NULL_PROPERTIES).build());
+
+		StepVerifier.create(capture.api().chatCompletionStream(chatRequest()))
+			.assertNext(chunk -> assertThat(chunk.extensions()).doesNotContainKey("probe"))
+			.verifyComplete();
+	}
+
+	@Test
+	void providerErrorTakesPrecedenceOverNullChoiceValidation() {
+		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE,
+				"data: {\"choices\":[null],\"error\":{\"message\":\"synthetic error\"}}\n\n");
+
+		StepVerifier.create(capture.api().chatCompletionStream(chatRequest()))
+			.assertNext(chunk -> assertThat(chunk.error().message()).isEqualTo("synthetic error"))
+			.verifyComplete();
 	}
 
 	@Test

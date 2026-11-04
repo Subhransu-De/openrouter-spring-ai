@@ -1,10 +1,12 @@
 package de.subhransu.openrouter.springai.chat;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import java.lang.reflect.Field;
 import java.util.LinkedHashMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -23,6 +25,68 @@ import org.springframework.ai.tool.function.FunctionToolCallback;
 class OpenRouterChatOptionsRobustnessTests {
 
 	private static final String MODEL = "openai/gpt-5.4-mini";
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void copiesKeepNestedSnapshotsIsolatedAcrossBuilderAndSetterChanges() {
+		var values = new ArrayList<>(List.of("original"));
+		var nested = new LinkedHashMap<String, Object>();
+		nested.put("values", values);
+		nested.put("nullable", null);
+		Object opaque = new Object();
+		var builder = OpenRouterChatOptions.builder()
+			.metadata(Map.of("nested", nested))
+			.imageConfig(Map.of("nested", nested))
+			.toolChoice(Map.of("nested", nested))
+			.toolContext(Map.of("nested", nested, "opaque", opaque));
+		var source = builder.build();
+		OpenRouterChatOptions copy = source.copy();
+		values.add("later");
+		nested.put("later", true);
+		builder.toolContext("builderOnly", true);
+		copy.setToolContext(Map.of("copyOnly", true));
+		for (var snapshot : List.of(source, source.mutate().clone().build(), copy)) {
+			for (var map : List.of(snapshot.getMetadata(), snapshot.getImageConfig(),
+					(Map<String, Object>) snapshot.getToolChoice())) {
+				var child = (Map<String, Object>) map.get("nested");
+				assertThat(child).containsEntry("nullable", null).doesNotContainKey("later");
+				assertThat((List<String>) child.get("values")).containsExactly("original");
+				assertThatThrownBy(() -> child.put("new", true)).isInstanceOf(UnsupportedOperationException.class);
+			}
+		}
+		assertThat(source.getToolContext()).containsEntry("opaque", opaque)
+			.doesNotContainKeys("builderOnly", "copyOnly");
+		assertThat(copy.getToolContext()).containsOnlyKeys("copyOnly");
+	}
+
+	@Test
+	void copyPreservesOverriddenMutateBehavior() {
+		var source = new OpenRouterChatOptions() {
+			@Override
+			public Builder mutate() {
+				return OpenRouterChatOptions.builder().model("synthetic/subclass");
+			}
+		};
+		OpenRouterChatOptions copy = source.copy();
+		assertThat(copy.getModel()).isEqualTo("synthetic/subclass");
+	}
+
+	@Test
+	void getterSnapshotsRemainDetachedAfterRuntimeSettersReplaceCollections() {
+		ToolCallback first = tool("first");
+		ToolCallback second = tool("second");
+		var options = OpenRouterChatOptions.builder().toolCallbacks(first).toolContext(Map.of("first", true)).build();
+		var callbacks = options.getToolCallbacks();
+		var context = options.getToolContext();
+		options.setToolCallbacks(List.of(second));
+		options.setToolContext(Map.of("second", true));
+		assertThat(callbacks).containsExactly(first);
+		assertThat(context).containsOnlyKeys("first");
+		assertThat(options.getToolCallbacks()).containsExactly(second);
+		assertThat(options.getToolContext()).containsOnlyKeys("second");
+		assertThatThrownBy(() -> callbacks.add(second)).isInstanceOf(UnsupportedOperationException.class);
+		assertThatThrownBy(() -> context.put("later", true)).isInstanceOf(UnsupportedOperationException.class);
+	}
 
 	private ToolCallback tool(String name) {
 		return FunctionToolCallback.builder(name, (Map<String, Object> in) -> "ok")

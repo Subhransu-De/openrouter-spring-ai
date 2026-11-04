@@ -26,6 +26,55 @@ class OpenRouterExtensionTests {
 	private final ObjectMapper json = new ObjectMapper();
 
 	@Test
+	@SuppressWarnings("unchecked")
+	void responseExtensionsRemainDetachedImmutableCumulativeSnapshots() {
+		Map<String, Object> nested = new LinkedHashMap<>();
+		nested.put("flag", false);
+		nested.put("zero", 0);
+		nested.put("absent", null);
+		List<Object> items = new ArrayList<>(List.of(nested));
+		Map<String, Object> extensions = new LinkedHashMap<>();
+		extensions.put("opaque", items);
+		var first = new ChatCompletionChunk(null, null, null, null, null, List.of(), null, null, extensions);
+		var empty = this.json.readValue("{\"choices\":[]}", ChatCompletionChunk.class);
+		var replacement = this.json.readValue("{\"choices\":[],\"opaque\":null,\"later\":true}",
+				ChatCompletionChunk.class);
+		nested.clear();
+		items.clear();
+		extensions.clear();
+		List<String> emitted = new ArrayList<>();
+		var stream = new OpenRouterStreamingResponseMapper().map(Flux.just(empty, first, empty, replacement, empty));
+		for (int subscription = 0; subscription < 2; subscription++) {
+			emitted.clear();
+			var responses = stream
+				.doOnNext(response -> emitted
+					.add(this.json.writeValueAsString(response.getMetadata().get(ExtensionMetadata.RESPONSE))))
+				.collectList()
+				.block();
+			assertThat(responses).hasSize(5);
+			for (int index = 0; index < responses.size(); index++) {
+				Map<String, Object> snapshot = responses.get(index).getMetadata().get(ExtensionMetadata.RESPONSE);
+				assertThat(this.json.writeValueAsString(snapshot)).isEqualTo(emitted.get(index));
+				assertThatThrownBy(() -> snapshot.put("changed", true))
+					.isInstanceOf(UnsupportedOperationException.class);
+			}
+			Map<String, Object> initial = responses.get(0).getMetadata().get(ExtensionMetadata.RESPONSE);
+			assertThat(initial).isEmpty();
+			assertThat(initial.containsKey(null)).isFalse();
+			assertThat(initial.get(null)).isNull();
+			Map<String, Object> snapshot = responses.get(1).getMetadata().get(ExtensionMetadata.RESPONSE);
+			List<Object> savedItems = (List<Object>) snapshot.get("opaque");
+			Map<String, Object> savedNested = (Map<String, Object>) savedItems.get(0);
+			assertThat(savedNested).containsEntry("flag", false).containsEntry("zero", 0).containsEntry("absent", null);
+			assertThatThrownBy(() -> savedItems.add(true)).isInstanceOf(UnsupportedOperationException.class);
+			assertThatThrownBy(() -> savedNested.put("changed", true))
+				.isInstanceOf(UnsupportedOperationException.class);
+			Map<String, Object> last = responses.get(4).getMetadata().get(ExtensionMetadata.RESPONSE);
+			assertThat(last).containsEntry("opaque", null).containsEntry("later", true);
+		}
+	}
+
+	@Test
 	void numericExtensionMapsRejectNonNumericLeavesAndNonFiniteValues() {
 		for (String key : List.of("logit_bias", "max_price", "preferred_min_throughput", "preferred_max_latency")) {
 			for (Object invalid : List.of(true, List.of(1), Map.of("nested", 1), Double.NaN, Double.POSITIVE_INFINITY,

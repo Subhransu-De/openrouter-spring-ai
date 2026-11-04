@@ -21,11 +21,9 @@ import io.micrometer.observation.ObservationRegistry;
 import io.micrometer.observation.contextpropagation.ObservationThreadLocalAccessor;
 import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
-import org.springframework.ai.chat.metadata.ChatResponseMetadata;
+import java.util.Objects;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.chat.model.MessageAggregator;
 import org.springframework.ai.chat.observation.ChatModelObservationContext;
 import org.springframework.ai.chat.observation.ChatModelObservationConvention;
 import org.springframework.ai.chat.observation.ChatModelObservationDocumentation;
@@ -110,15 +108,16 @@ public class OpenRouterChatModel implements ChatModel {
 
 	@Override
 	public ChatResponse call(Prompt prompt) {
-		OpenRouterChatOptions options = buildRequestOptions(prompt.getOptions());
+		RequestOptions requestOptions = requestOptions(prompt);
 		ChatModelObservationContext observationContext = ChatModelObservationContext.builder()
-			.prompt(new Prompt(prompt.getInstructions(), options))
+			.prompt(requestOptions.prompt())
 			.provider(PROVIDER_NAME)
 			.build();
 		return ChatModelObservationDocumentation.CHAT_MODEL_OPERATION
 			.observation(this.observationConvention, DEFAULT_OBSERVATION_CONVENTION, () -> observationContext,
 					this.observationRegistry)
 			.observe(() -> {
+				OpenRouterChatOptions options = requestOptions.require();
 				ChatResponse response = switch (resolveRequestMode(options)) {
 					case OPENAI_CHAT_COMPLETIONS -> callChatCompletions(prompt, options);
 					case OPENAI_RESPONSES -> callResponses(prompt, options);
@@ -130,10 +129,10 @@ public class OpenRouterChatModel implements ChatModel {
 
 	@Override
 	public Flux<ChatResponse> stream(Prompt prompt) {
-		OpenRouterChatOptions options = buildRequestOptions(prompt.getOptions());
 		return Flux.deferContextual(contextView -> {
+			RequestOptions requestOptions = requestOptions(prompt);
 			ChatModelObservationContext observationContext = ChatModelObservationContext.builder()
-				.prompt(new Prompt(prompt.getInstructions(), options))
+				.prompt(requestOptions.prompt())
 				.provider(PROVIDER_NAME)
 				.streaming(true)
 				.build();
@@ -148,46 +147,33 @@ public class OpenRouterChatModel implements ChatModel {
 					: Observation.Scope.NOOP) {
 				observation.start();
 			}
-			Flux<ChatResponse> responses = Flux.defer(() -> switch (resolveRequestMode(options)) {
-				case OPENAI_CHAT_COMPLETIONS -> {
-					ChatCompletionRequest request = buildChatCompletionsRequest(prompt, options, true);
-					yield this.streamingResponseMapper.map(
-							this.streamingToolCallAggregator.aggregate(StreamRetries
-								.stream(this.openRouterApi.chatCompletionStream(request), this.retryTemplate)),
-							options.getAudio());
-				}
-				case OPENAI_RESPONSES -> {
-					ResponsesRequest request = this.responsesRequestMapper.map(prompt.getInstructions(), options, true,
-							resolveToolDefinitions(options));
-					yield this.responsesStreamingResponseMapper
-						.map(StreamRetries.stream(this.openRouterApi.responsesStream(request), this.retryTemplate));
-				}
+			Flux<ChatResponse> responses = Flux.defer(() -> {
+				OpenRouterChatOptions options = requestOptions.require();
+				return switch (resolveRequestMode(options)) {
+					case OPENAI_CHAT_COMPLETIONS -> {
+						ChatCompletionRequest request = buildChatCompletionsRequest(prompt, options, true);
+						yield this.streamingResponseMapper.map(
+								this.streamingToolCallAggregator.aggregate(StreamRetries
+									.stream(this.openRouterApi.chatCompletionStream(request), this.retryTemplate)),
+								options.getAudio());
+					}
+					case OPENAI_RESPONSES -> {
+						ResponsesRequest request = this.responsesRequestMapper.map(prompt.getInstructions(), options,
+								true, resolveToolDefinitions(options));
+						yield this.responsesStreamingResponseMapper
+							.map(StreamRetries.stream(this.openRouterApi.responsesStream(request), this.retryTemplate));
+					}
+				};
 			});
-			AtomicReference<OpenRouterUsage> usage = new AtomicReference<>();
-			Flux<ChatResponse> observed = responses.doOnNext(response -> {
-				if (response.getMetadata().getUsage() instanceof OpenRouterUsage current) {
-					usage.set(current);
-				}
-			})
-				.doOnError(observation::error)
+			Flux<ChatResponse> observed = responses.doOnError(observation::error)
 				.doFinally(signal -> observation.stop())
 				.contextWrite(ctx -> ctx.put(ObservationThreadLocalAccessor.KEY, observation));
-			return new MessageAggregator().aggregate(observed, response -> {
-				// Spring AI's aggregator replaces provider usage with token totals only.
-				// OpenRouter usage is a cumulative snapshot, not a per-chunk delta.
-				if (usage.get() != null) {
-					ChatResponseMetadata original = response.getMetadata();
-					ChatResponseMetadata.Builder metadata = ChatResponseMetadata.builder()
-						.id(original.getId())
-						.model(original.getModel())
-						.rateLimit(original.getRateLimit())
-						.promptMetadata(original.getPromptMetadata())
-						.usage(usage.get());
-					original.entrySet().forEach(entry -> metadata.keyValue(entry.getKey(), entry.getValue()));
-					response = new ChatResponse(response.getResults(), metadata.build());
-				}
-				observationContext.setResponse(response);
-			});
+			if (observation.isNoop() && this.observationRegistry.isNoop()) {
+				return observed;
+			}
+			OpenRouterChatObservationAggregator aggregator = new OpenRouterChatObservationAggregator();
+			return observed.doOnNext(aggregator::add)
+				.doOnComplete(() -> observationContext.setResponse(aggregator.response()));
 		});
 	}
 
@@ -208,6 +194,16 @@ public class OpenRouterChatModel implements ChatModel {
 
 	private OpenRouterChatOptions buildRequestOptions(@Nullable ChatOptions runtimeOptions) {
 		return runtimeOptions == null ? this.defaultOptions.copy() : OpenRouterChatOptions.fromOptions(runtimeOptions);
+	}
+
+	private RequestOptions requestOptions(Prompt prompt) {
+		try {
+			OpenRouterChatOptions options = buildRequestOptions(prompt.getOptions());
+			return new RequestOptions(new Prompt(prompt.getInstructions(), options), options, null);
+		}
+		catch (RuntimeException ex) {
+			return new RequestOptions(prompt, null, ex);
+		}
 	}
 
 	private ChatResponse callChatCompletions(Prompt prompt, OpenRouterChatOptions options) {
@@ -330,6 +326,18 @@ public class OpenRouterChatModel implements ChatModel {
 
 		public OpenRouterChatModel build() {
 			return new OpenRouterChatModel(this);
+		}
+
+	}
+
+	private record RequestOptions(Prompt prompt, @Nullable OpenRouterChatOptions options,
+			@Nullable RuntimeException failure) {
+
+		private OpenRouterChatOptions require() {
+			if (this.failure != null) {
+				throw this.failure;
+			}
+			return Objects.requireNonNull(this.options);
 		}
 
 	}

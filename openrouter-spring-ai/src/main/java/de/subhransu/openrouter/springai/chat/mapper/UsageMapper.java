@@ -19,6 +19,15 @@ public final class UsageMapper {
 				cachedTokens(usage), reasoningTokens(usage), usage.cost(), usage);
 	}
 
+	public static @Nullable Long cacheWriteInputTokens(@Nullable Object nativeUsage) {
+		if (nativeUsage instanceof Usage usage) {
+			var details = usage.promptTokensDetails();
+			Integer written = details != null ? details.cacheWriteTokens() : null;
+			return written != null ? written.longValue() : null;
+		}
+		return null;
+	}
+
 	// Preserve explicit top-level counts (including zero) before nested details.
 	private static @Nullable Integer cachedTokens(Usage usage) {
 		var details = usage.promptTokensDetails();

@@ -4,7 +4,6 @@ import de.subhransu.openrouter.springai.errors.OpenRouterHttpException;
 import de.subhransu.openrouter.springai.errors.OpenRouterRetryAfter;
 import java.lang.reflect.UndeclaredThrowableException;
 import java.time.Duration;
-import java.util.concurrent.atomic.AtomicReference;
 import org.jspecify.annotations.Nullable;
 import org.springframework.core.retry.RetryException;
 import org.springframework.core.retry.RetryPolicy;
@@ -42,17 +41,18 @@ public final class Retries {
 	// RetryTemplate.invoke rethrows the original cause instead of its retry wrapper.
 	@SuppressWarnings("PMD.PreserveStackTrace")
 	public static <T> T invoke(RetryTemplate retryTemplate, Retryable<T> retryable) {
-		AtomicReference<@Nullable Duration> retryAfter = new AtomicReference<>();
 		long startedAtNanos = System.nanoTime();
-		RetryTemplate effectiveTemplate = retryAfterAware(retryTemplate, retryAfter, startedAtNanos);
+		RetryAfterAwarePolicy policy = new RetryAfterAwarePolicy(retryTemplate.getRetryPolicy(), startedAtNanos);
+		RetryTemplate effectiveTemplate = new RetryTemplate(policy);
+		effectiveTemplate.setRetryListener(retryTemplate.getRetryListener());
 		try {
 			return effectiveTemplate.execute(() -> {
-				retryAfter.set(null);
+				policy.retryAfter = null;
 				try {
 					return retryable.execute();
 				}
 				catch (Throwable ex) {
-					retryAfter.set(retryAfter(ex));
+					policy.retryAfter = retryAfter(ex);
 					throw ex;
 				}
 			});
@@ -67,14 +67,6 @@ public final class Retries {
 			}
 			throw new UndeclaredThrowableException(cause);
 		}
-	}
-
-	private static RetryTemplate retryAfterAware(RetryTemplate retryTemplate,
-			AtomicReference<@Nullable Duration> retryAfter, long startedAtNanos) {
-		RetryTemplate effectiveTemplate = new RetryTemplate(
-				new RetryAfterAwarePolicy(retryTemplate.getRetryPolicy(), retryAfter, startedAtNanos));
-		effectiveTemplate.setRetryListener(retryTemplate.getRetryListener());
-		return effectiveTemplate;
 	}
 
 	private static @Nullable Duration retryAfter(Throwable throwable) {
@@ -113,8 +105,18 @@ public final class Retries {
 		}
 	}
 
-	private record RetryAfterAwarePolicy(RetryPolicy delegate, AtomicReference<@Nullable Duration> retryAfter,
-			long startedAtNanos) implements RetryPolicy {
+	private static final class RetryAfterAwarePolicy implements RetryPolicy {
+
+		private final RetryPolicy delegate;
+
+		private final long startedAtNanos;
+
+		private volatile @Nullable Duration retryAfter;
+
+		private RetryAfterAwarePolicy(RetryPolicy delegate, long startedAtNanos) {
+			this.delegate = delegate;
+			this.startedAtNanos = startedAtNanos;
+		}
 
 		@Override
 		public boolean shouldRetry(Throwable throwable) {
@@ -136,7 +138,7 @@ public final class Retries {
 					if (configuredDelay == BackOffExecution.STOP) {
 						return BackOffExecution.STOP;
 					}
-					return effectiveBackOffMillis(configuredDelay, this.retryAfter.get(), remainingTimeout());
+					return effectiveBackOffMillis(configuredDelay, this.retryAfter, remainingTimeout());
 				};
 			};
 		}

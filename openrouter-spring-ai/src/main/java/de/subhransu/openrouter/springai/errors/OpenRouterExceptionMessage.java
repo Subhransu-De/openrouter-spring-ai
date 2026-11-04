@@ -10,6 +10,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.nio.charset.StandardCharsets;
+import java.util.HexFormat;
 import java.util.regex.Pattern;
 import org.springframework.util.StringUtils;
 
@@ -57,13 +59,32 @@ public final class OpenRouterExceptionMessage {
 		}
 		String safeValue = neutralizeControls(value);
 		if (StringUtils.hasText(apiKey)) {
-			safeValue = safeValue.replace(apiKey, "[REDACTED]");
+			safeValue = encodedKeyPattern(apiKey).matcher(safeValue).replaceAll("[REDACTED]");
 		}
 		safeValue = AUTHORIZATION_JSON.matcher(safeValue).replaceAll("$1[REDACTED]$2");
 		safeValue = BEARER_TOKEN.matcher(safeValue).replaceAll("Bearer [REDACTED]");
 		safeValue = OPENAI_STYLE_KEY.matcher(safeValue).replaceAll("[REDACTED]");
 		safeValue = NAMED_CREDENTIAL.matcher(safeValue).replaceAll("$1[REDACTED]");
 		return bound(safeValue);
+	}
+
+	private static Pattern encodedKeyPattern(String apiKey) {
+		StringBuilder pattern = new StringBuilder();
+		for (int offset = 0; offset < apiKey.length();) {
+			int end = offset + Character.charCount(apiKey.codePointAt(offset));
+			String character = apiKey.substring(offset, end);
+			pattern.append("(?:").append(Pattern.quote(character)).append("|(?i:");
+			for (byte value : character.getBytes(StandardCharsets.UTF_8)) {
+				pattern.append('%').append(HexFormat.of().toHexDigits(value));
+			}
+			pattern.append('|');
+			for (int index = offset; index < end; index++) {
+				pattern.append("\\\\u").append(HexFormat.of().toHexDigits(apiKey.charAt(index)));
+			}
+			pattern.append("))");
+			offset = end;
+		}
+		return Pattern.compile(pattern.toString());
 	}
 
 	/**

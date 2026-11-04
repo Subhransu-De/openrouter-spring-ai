@@ -2,9 +2,11 @@ package de.subhransu.openrouter.springai.autoconfigure;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
 import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingModel;
 import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingOptions;
 import io.micrometer.observation.ObservationRegistry;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.document.Document;
@@ -42,7 +44,10 @@ class OpenRouterEmbeddingAutoConfigurationTests {
 					"spring.ai.openrouter.embedding.dimensions=256",
 					"spring.ai.openrouter.embedding.metadata-mode=embed",
 					"spring.ai.openrouter.embedding.encoding-format=float",
-					"spring.ai.openrouter.embedding.user=embed-user")
+					"spring.ai.openrouter.embedding.user=embed-user",
+					"spring.ai.openrouter.embedding.provider.data-collection=deny",
+					"spring.ai.openrouter.embedding.provider.order[0]=synthetic-a",
+					"spring.ai.openrouter.embedding.provider.sort=price")
 			.run(context -> {
 				OpenRouterEmbeddingModel embeddingModel = context.getBean(OpenRouterEmbeddingModel.class);
 				OpenRouterEmbeddingOptions options = (OpenRouterEmbeddingOptions) ReflectionTestUtils
@@ -55,6 +60,8 @@ class OpenRouterEmbeddingAutoConfigurationTests {
 					.isEqualTo("topic: synthetic-topic\n\nsynthetic passage");
 				assertThat(options.getEncodingFormat()).isEqualTo("float");
 				assertThat(options.getUser()).isEqualTo("embed-user");
+				assertThat(options.getProvider()).isEqualTo(new OpenRouterProviderPreferences(null, null, "deny",
+						List.of("synthetic-a"), null, null, "price"));
 			});
 	}
 

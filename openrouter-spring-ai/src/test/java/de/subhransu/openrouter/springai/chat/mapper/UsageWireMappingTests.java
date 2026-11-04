@@ -24,61 +24,64 @@ class UsageWireMappingTests {
 	private final ObjectMapper mapper = new ObjectMapper();
 
 	@ParameterizedTest
-	@CsvSource({ "3,2", "0,0", "," })
-	void responsesRetainNativeDetailsInSyncAndTerminalEvent(Integer cached, Integer reasoning) {
+	@CsvSource({ "3,2,7", "0,0,0", "3,2,", ",," })
+	void responsesRetainNativeDetailsInSyncAndTerminalEvent(Integer cached, Integer reasoning, Integer written) {
 		String json = """
 				{"id":"response-synthetic","model":"test-model","status":"completed","output":[],"usage":%s}
-				""".formatted(usageJson(true, cached, reasoning));
+				""".formatted(usageJson(true, cached, reasoning, written));
 		ResponsesResult result = this.mapper.readValue(json, ResponsesResult.class);
 		assertWireDetails(result.usage(), cached, reasoning);
 		assertUsage(new OpenRouterResponsesResponseMapper().map(result).getMetadata().getUsage(), result.usage(),
-				cached, reasoning);
+				cached, reasoning, written);
 
 		ResponsesStreamEvent event = this.mapper
 			.readValue("{\"type\":\"response.completed\",\"response\":" + json + "}", ResponsesStreamEvent.class);
 		assertWireDetails(event.response().usage(), cached, reasoning);
 		StepVerifier.create(new OpenRouterResponsesStreamingResponseMapper().map(Flux.just(event)))
 			.assertNext(response -> assertUsage(response.getMetadata().getUsage(), event.response().usage(), cached,
-					reasoning))
+					reasoning, written))
 			.verifyComplete();
 	}
 
 	@ParameterizedTest
-	@CsvSource({ "3,2", "0,0", "," })
-	void chatEmbeddingsAndImagesUseTheSameNestedAccounting(Integer cached, Integer reasoning) {
-		String usage = usageJson(false, cached, reasoning);
+	@CsvSource({ "3,2,7", "0,0,0", "3,2,", ",," })
+	void chatEmbeddingsAndImagesUseTheSameNestedAccounting(Integer cached, Integer reasoning, Integer written) {
+		String usage = usageJson(false, cached, reasoning, written);
 		ChatCompletionResponse chat = this.mapper
 			.readValue("{\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"ok\"}}],\"usage\":"
 					+ usage + "}", ChatCompletionResponse.class);
 		assertUsage(new OpenRouterChatResponseMapper().map(chat).getMetadata().getUsage(), chat.usage(), cached,
-				reasoning);
+				reasoning, written);
 		ChatCompletionChunk chunk = this.mapper.readValue("{\"choices\":[],\"usage\":" + usage + "}",
 				ChatCompletionChunk.class);
 		StepVerifier.create(new OpenRouterStreamingResponseMapper().map(Flux.just(chunk)))
-			.assertNext(response -> assertUsage(response.getMetadata().getUsage(), chunk.usage(), cached, reasoning))
+			.assertNext(response -> assertUsage(response.getMetadata().getUsage(), chunk.usage(), cached, reasoning,
+					written))
 			.verifyComplete();
 
 		EmbeddingsResponse embeddings = this.mapper.readValue(
 				"{\"model\":\"test-model\",\"data\":[{\"index\":0,\"embedding\":[0.5]}],\"usage\":" + usage + "}",
 				EmbeddingsResponse.class);
 		assertUsage(new OpenRouterEmbeddingResponseMapper().map(embeddings).getMetadata().getUsage(),
-				embeddings.usage(), cached, reasoning);
+				embeddings.usage(), cached, reasoning, written);
 		ImagesResponse images = this.mapper.readValue("{\"data\":[],\"usage\":" + usage + "}", ImagesResponse.class);
 		assertUsage(new OpenRouterImageResponseMapper().map(images).getMetadata().get("openrouter.usage"),
-				images.usage(), cached, reasoning);
+				images.usage(), cached, reasoning, written);
 		ImagesStreamEvent imageEvent = this.mapper.readValue(
 				"{\"type\":\"image_generation.completed\",\"b64_json\":\"aW1hZ2U=\",\"usage\":" + usage + "}",
 				ImagesStreamEvent.class);
 		assertUsage(new OpenRouterImageResponseMapper().map(imageEvent).getMetadata().get("openrouter.usage"),
-				imageEvent.usage(), cached, reasoning);
+				imageEvent.usage(), cached, reasoning, written);
 	}
 
-	private String usageJson(boolean responses, Integer cached, Integer reasoning) {
+	private String usageJson(boolean responses, Integer cached, Integer reasoning, Integer written) {
 		String input = responses ? "input" : "prompt";
 		String output = responses ? "output" : "completion";
-		String details = cached == null ? "" : """
-				,"%s_tokens_details":{"cached_tokens":%d},"%s_tokens_details":{"reasoning_tokens":%d}
-				""".formatted(input, cached, output, reasoning);
+		String details = cached == null ? ""
+				: """
+						,"%s_tokens_details":{"cached_tokens":%d,"cache_write_tokens":%s},"%s_tokens_details":{"reasoning_tokens":%d}
+						"""
+					.formatted(input, cached, written, output, reasoning);
 		return """
 				{"%s_tokens":12,"%s_tokens":7,"total_tokens":19,"cost":0.003,"details":{"synthetic":true}%s}
 				""".formatted(input, output, details);
@@ -96,7 +99,7 @@ class UsageWireMappingTests {
 		}
 	}
 
-	private void assertUsage(Object mapped, Usage source, Integer cached, Integer reasoning) {
+	private void assertUsage(Object mapped, Usage source, Integer cached, Integer reasoning, Integer written) {
 		assertThat(mapped).isInstanceOf(OpenRouterUsage.class);
 		OpenRouterUsage usage = (OpenRouterUsage) mapped;
 		assertThat(usage.getPromptTokens()).isEqualTo(12);
@@ -106,7 +109,7 @@ class UsageWireMappingTests {
 		assertThat(usage.getReasoningTokens()).isEqualTo(reasoning);
 		org.springframework.ai.chat.metadata.Usage portable = usage;
 		assertThat(portable.getCacheReadInputTokens()).isEqualTo(cached == null ? null : cached.longValue());
-		assertThat(portable.getCacheWriteInputTokens()).isNull();
+		assertThat(portable.getCacheWriteInputTokens()).isEqualTo(written == null ? null : written.longValue());
 		assertThat(usage.getCost()).isEqualTo(0.003);
 		assertThat(usage.getNativeUsage()).isSameAs(source);
 		assertThat(source.details()).containsEntry("synthetic", true);

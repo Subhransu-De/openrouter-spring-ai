@@ -32,7 +32,7 @@ String answer = ChatClient.builder(chatModel).build()
 
 ## Tool names and IDs
 
-A streamed Chat Completions tool call must end with one complete function name. Conflicting names, including split-name fragments, or no name raise `OpenRouterProtocolException`. A blank function name, or a blank Responses `call_id`, raises it in Responses and in synchronous Chat Completions calls. A missing Chat Completions tool-call ID is accepted. Malformed JSON arguments reach the callback; see the [failure policy](#tool-failure-policy).
+A streamed Chat Completions tool call must end with one complete function name. Conflicting names, including split-name fragments, or no name raise `OpenRouterProtocolException`. A blank function name, or a blank Responses `call_id`, raises it in Responses and in synchronous Chat Completions calls. A missing Chat Completions tool-call ID is accepted. Malformed JSON arguments reach the callback; see the [failure policy](#tool-failure-policy). Buffered fragments count against the [tool-call assembly limits](http-and-limits.md#tool-call-assembly-limits).
 
 ## Strict function tools
 
@@ -78,4 +78,12 @@ A custom or delegating manager can instead implement `OpenRouterToolFailurePolic
 
 To keep Spring AI's throwing behavior in a custom manager, declare `DefaultToolExecutionExceptionProcessor.builder().alwaysThrow(true).build()` as a bean and pass that bean to the manager. An inline instance fails validation, because the check accepts only processors declared as beans.
 
-The `spring.ai.openrouter.chat.allow-unsafe-tool-failure-results=true` opt-out skips manager validation and makes the application responsible for redacting failure results. It does not disable the automatically supplied processor.
+A manager created after startup, such as a prototype, scoped or lazily initialized bean, is validated when it is created. A processor produced by a `FactoryBean` counts as declared only in the context that creates it, so declare processors as regular beans.
+
+### Parent contexts
+
+A child context also checks the managers it inherits from a parent context that has no validation of its own. It reads the parent and never changes it, so sibling contexts and the parent itself are unaffected. A singleton processor bean declared in a parent counts as application-declared.
+
+If such a parent declares a custom manager that is not a singleton, the child fails at startup, because it cannot check the instances the parent creates later. Make that manager a singleton, or set the opt-out below in the child. One case is not detected: in a parent with global lazy initialization, a `FactoryBean` manager whose product type is known only at runtime. Declare it as a regular eager bean.
+
+The `spring.ai.openrouter.chat.allow-unsafe-tool-failure-results=true` opt-out skips manager validation in the context that sets it and makes the application responsible for redacting failure results. It does not disable the automatically supplied processor.

@@ -3,7 +3,9 @@ package de.subhransu.openrouter.springai.chat.mapper;
 import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import java.util.Collections;
 import java.util.Map;
+import java.util.LinkedHashMap;
 import java.util.Set;
 import org.springframework.util.StringUtils;
 
@@ -25,8 +27,10 @@ final class ToolChoiceMapper {
 		}
 		String name = functionName(node);
 		if (name != null) {
-			return responses ? Map.of("type", "function", "name", name)
-					: Map.of("type", "function", "function", Map.of("name", name));
+			Map<String, Object> namedChoice = new LinkedHashMap<>();
+			namedChoice.put("type", "function");
+			namedChoice.put(responses ? "name" : "function", responses ? name : Map.of("name", name));
+			return Collections.unmodifiableMap(namedChoice);
 		}
 		throw new IllegalArgumentException("toolChoice must be auto, none, required, or a named function "
 				+ "({type:function,name:...} or {type:function,function:{name:...}})");

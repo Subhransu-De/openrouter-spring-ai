@@ -20,6 +20,10 @@ float[] vector = embeddingModel.embed("The quick brown fox");
 
 Provider routing (`spring.ai.openrouter.embedding.provider.*`) works the same way as for chat. Only `float` embeddings are decoded; requesting `encoding_format: base64` fails fast.
 
+An error envelope in an HTTP 200 response takes precedence over any vectors in it. A transient one raises `OpenRouterTransientApiException`, which the blocking retry policy retries; see [Errors and retries](errors-and-retries.md). Low-level callers can read the nullable `EmbeddingsResponse.error()`.
+
+Embedding indexes must be whole numbers within the input range. A fractional index raises `OpenRouterProtocolException`.
+
 Documents embed their raw text by default (`metadata-mode: none`). To include metadata, set `spring.ai.openrouter.embedding.metadata-mode: embed`, or use `OpenRouterEmbeddingModel.builder().metadataMode(MetadataMode.EMBED)`. Single and batched document embedding both apply the mode. The values are Spring AI's `MetadataMode`:
 
 - `NONE`: the text only.

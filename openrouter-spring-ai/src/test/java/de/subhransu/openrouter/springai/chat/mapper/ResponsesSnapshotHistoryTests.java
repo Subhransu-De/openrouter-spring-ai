@@ -15,6 +15,7 @@ import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -142,6 +143,28 @@ class ResponsesSnapshotHistoryTests {
 			.hasMessageContaining("assistant media history");
 		assertThatThrownBy(() -> model.stream(prompt).blockLast()).isInstanceOf(IllegalArgumentException.class)
 			.hasMessageContaining("assistant media history");
+		verifyNoInteractions(api);
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "123", "[]", "\"synthetic\"" })
+	void rejectsNonObjectSnapshotItemsBeforeDispatch(String item) {
+		AssistantMessage history = AssistantMessage.builder()
+			.content("")
+			.properties(Map.of(ReasoningMetadata.RESPONSES_ITEMS, List.of(Map.of("type", "reasoning")),
+					ReasoningMetadata.RESPONSES_OUTPUT_ITEMS,
+					List.of(Map.of("type", "reasoning"), this.mapper.readValue(item, Object.class))))
+			.build();
+		OpenRouterApi api = mock(OpenRouterApi.class);
+		OpenRouterChatModel model = OpenRouterChatModel.builder().openRouterApi(api).build();
+		Prompt prompt = new Prompt(List.of(history),
+				OpenRouterChatOptions.builder()
+					.model("synthetic")
+					.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
+					.build());
+		assertThatThrownBy(() -> model.call(prompt)).hasMessageContaining("output item must be a JSON object");
+		assertThatThrownBy(() -> model.stream(prompt).blockLast())
+			.hasMessageContaining("output item must be a JSON object");
 		verifyNoInteractions(api);
 	}
 

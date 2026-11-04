@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -72,6 +73,27 @@ class OpenRouterResponsesEnvelopeTests {
 		}
 	}
 
+	static Stream<Arguments> nonObjectOutputItems() {
+		return Stream.of("call", "completed", "item")
+			.flatMap(mode -> Stream.of("123", "[]", "\"synthetic\"", "true").map(item -> Arguments.of(mode, item)));
+	}
+
+	@ParameterizedTest
+	@MethodSource("nonObjectOutputItems")
+	void nonObjectOutputItemsFailAsMalformed(String mode, String item) {
+		String output = "{\"status\":\"completed\",\"output\":[" + item + "]}";
+		String body = switch (mode) {
+			case "call" -> output;
+			case "completed" -> wire(mode, output);
+			default -> "data: {\"type\":\"response.output_item.done\",\"output_index\":0,\"item\":" + item + "}\n\n"
+					+ wire("completed", "{\"status\":\"completed\",\"output\":[]}");
+		};
+		boolean streaming = !"call".equals(mode);
+		assertThatThrownBy(() -> invoke(model(streaming, body), streaming))
+			.isInstanceOf(OpenRouterProtocolException.class);
+		assertFailure(OpenRouterProtocolException.class);
+	}
+
 	@ParameterizedTest
 	@ValueSource(strings = { "call", "completed", "incomplete" })
 	void errorEnvelopeOverridesStatusAndPreservesBoundedTypedDiagnostics(String mode) {
@@ -112,6 +134,33 @@ class OpenRouterResponsesEnvelopeTests {
 		String body = "data: {\"type\":\"response.output_item.done\",\"item\":" + TOOL + "}\n\n" + "data: " + terminal
 				+ "\n\n";
 		assertNoToolExecution(true, body);
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "{\"delta\":\"synthetic\"}", "{\"type\":null,\"delta\":\"synthetic\"}",
+			"{\"type\":\"\",\"delta\":\"synthetic\"}", "{\"type\":\" \",\"delta\":\"synthetic\"}" })
+	void typelessEventFailsBeforeSuccessfulTerminal(String event) {
+		String body = "data: " + event + "\n\n" + wire("completed", "{\"status\":\"completed\",\"output\":[]}");
+		assertThatThrownBy(() -> invoke(model(true, body), true)).isInstanceOf(OpenRouterProtocolException.class);
+		assertFailure(OpenRouterProtocolException.class);
+	}
+
+	@Test
+	void typelessErrorEnvelopeKeepsProviderFailure() {
+		String body = "data: {\"error\":{\"code\":503,\"message\":\"synthetic failure\"}}\n\n";
+		assertThatThrownBy(() -> invoke(model(true, body), true)).isInstanceOf(OpenRouterTransientApiException.class);
+		assertFailure(OpenRouterTransientApiException.class);
+	}
+
+	@Test
+	void unknownNamedEventRemainsANoOp() {
+		String body = "data: {\"type\":\"response.synthetic_future\",\"delta\":\"synthetic\"}\n\n"
+				+ wire("completed", "{\"status\":\"completed\",\"output\":[]}");
+		List<ChatResponse> responses = model(true, body).stream(new Prompt("synthetic"))
+			.collectList()
+			.block(Duration.ofSeconds(5));
+		assertThat(responses).allSatisfy(response -> assertThat(response.getResult().getOutput().getText()).isEmpty());
+		assertThat(responses.get(responses.size() - 1).getResult().getMetadata().getFinishReason()).isEqualTo("STOP");
 	}
 
 	@ParameterizedTest

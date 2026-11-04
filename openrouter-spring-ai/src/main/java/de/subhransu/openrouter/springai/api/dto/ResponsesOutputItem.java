@@ -68,6 +68,10 @@ public record ResponsesOutputItem(@Nullable String id, @Nullable String type, @N
 		@Override
 		public ResponsesOutputItem deserialize(JsonParser parser, DeserializationContext context) {
 			JsonNode node = parser.readValueAsTree();
+			if (!node.isObject()) {
+				return context.reportInputMismatch(this, "Responses output item must be a JSON object, not %s",
+						node.getNodeType());
+			}
 			String type = text(node, "type");
 			List<@Nullable ResponsesContent> content = !"reasoning".equals(type) && node.hasNonNull("content")
 					? Arrays.asList(context.readTreeAsValue(node.get("content"), ResponsesContent[].class)) : null;

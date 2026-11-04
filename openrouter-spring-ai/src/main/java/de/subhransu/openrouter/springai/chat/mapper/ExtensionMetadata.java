@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
+import org.springframework.util.CollectionUtils;
 
 /**
  * Opaque response extensions are exposed for inspection, never automatically replayed.
@@ -50,6 +51,9 @@ final class ExtensionMetadata {
 
 	static Map<String, @Nullable Object> merge(@Nullable Map<String, @Nullable Object> earlier,
 			@Nullable Map<String, @Nullable Object> later) {
+		if (CollectionUtils.isEmpty(earlier) && CollectionUtils.isEmpty(later)) {
+			return Map.of();
+		}
 		return OptionSnapshots.map(combine(earlier, later));
 	}
 
@@ -67,6 +71,9 @@ final class ExtensionMetadata {
 
 	static Map<String, @Nullable Object> mergeMessage(@Nullable Map<String, @Nullable Object> earlier,
 			@Nullable Map<String, @Nullable Object> later) {
+		if (CollectionUtils.isEmpty(earlier) && CollectionUtils.isEmpty(later)) {
+			return Map.of();
+		}
 		Map<String, @Nullable Object> result = combine(earlier, later);
 		// Only message annotations have incremental semantics. Identically named
 		// fields at other wire locations remain opaque, with latest-value precedence.
@@ -82,6 +89,9 @@ final class ExtensionMetadata {
 	@SuppressWarnings("unchecked")
 	static Map<String, @Nullable Object> mergeChoice(@Nullable Map<String, @Nullable Object> earlier,
 			@Nullable Map<String, @Nullable Object> later) {
+		if (CollectionUtils.isEmpty(earlier) && CollectionUtils.isEmpty(later)) {
+			return Map.of();
+		}
 		Map<String, @Nullable Object> result = combine(earlier, later);
 		if (earlier != null && earlier.get("logprobs") instanceof Map<?, ?> first) {
 			Object next = later != null ? later.get("logprobs") : null;

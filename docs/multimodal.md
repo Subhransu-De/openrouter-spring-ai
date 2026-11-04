@@ -98,7 +98,7 @@ imageModel.stream(prompt).doOnNext(response -> response.getResults().forEach(res
 
 - A JSON response must contain a `data` array. An empty array is a valid empty result for blocking calls. The JSON fallback needs at least one image and raises `OpenRouterTruncatedResponseException` for an empty array.
 - Each entry and each completed SSE event needs a nonblank `b64_json` or `url`. Otherwise `OpenRouterProtocolException` is raised.
-- An HTTP 200 error envelope raises a structured `OpenRouterApiException`.
+- An HTTP 200 error envelope takes precedence over image data. It raises `OpenRouterTransientApiException` when transient and `OpenRouterApiException` otherwise. Errors inside an accepted stream, including its JSON fallback, are not retried.
 
 ### Chat models with image output
 

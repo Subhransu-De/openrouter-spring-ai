@@ -21,7 +21,12 @@ public record Usage(@JsonAlias("input_tokens") @JsonProperty("prompt_tokens") @N
 
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(Include.NON_NULL)
-	public record PromptTokensDetails(@JsonProperty("cached_tokens") @Nullable Integer cachedTokens) {
+	public record PromptTokensDetails(@JsonProperty("cached_tokens") @Nullable Integer cachedTokens,
+			@JsonProperty("cache_write_tokens") @Nullable Integer cacheWriteTokens) {
+
+		public PromptTokensDetails(@Nullable Integer cachedTokens) {
+			this(cachedTokens, null);
+		}
 	}
 
 	@JsonIgnoreProperties(ignoreUnknown = true)

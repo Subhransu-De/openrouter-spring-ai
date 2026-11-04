@@ -195,6 +195,14 @@ class OpenRouterAudioOutputTests {
 						.mimeType(MimeTypeUtils.parseMimeType("audio/wav"))
 						.data(new byte[] { 1 })
 						.build()))
+					.build(),
+				AssistantMessage.builder()
+					.content("synthetic mixed media")
+					.media(List.of(Media.builder().mimeType(MimeTypeUtils.IMAGE_PNG).data(new byte[] { 1 }).build(),
+							Media.builder()
+								.mimeType(MimeTypeUtils.parseMimeType("audio/wav"))
+								.data(new byte[] { 2 })
+								.build()))
 					.build())) {
 			assertThatThrownBy(() -> new OpenRouterChatRequestMapper(this.json).map(List.of(assistant),
 					OpenRouterChatOptions.builder().build(), true, List.of()))

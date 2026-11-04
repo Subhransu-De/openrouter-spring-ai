@@ -12,6 +12,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.retry.TransientAiException;
 import org.springframework.core.retry.RetryPolicy;
+import org.springframework.core.retry.RetryListener;
+import org.springframework.core.retry.RetryState;
+import org.springframework.core.retry.Retryable;
 import org.springframework.core.retry.RetryTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.util.backoff.BackOffExecution;
@@ -45,6 +48,49 @@ class RetriesTests {
 
 		assertThat(result).isEqualTo("ok");
 		assertThat(attempts).hasValue(3);
+	}
+
+	@Test
+	void propagatesListenerCallbacksAndUsesTheCurrentTemplateConfiguration() {
+		RetryTemplate template = retryTemplate(1);
+		AtomicInteger executions = new AtomicInteger();
+		AtomicInteger retries = new AtomicInteger();
+		template.setRetryListener(new RetryListener() {
+			@Override
+			public void onRetryableExecution(RetryPolicy policy, Retryable<?> retryable, RetryState state) {
+				executions.incrementAndGet();
+			}
+
+			@Override
+			public void beforeRetry(RetryPolicy policy, Retryable<?> retryable, RetryState state) {
+				retries.incrementAndGet();
+			}
+		});
+		AtomicInteger attempts = new AtomicInteger();
+		assertThat(Retries.invoke(template, () -> {
+			if (attempts.incrementAndGet() == 1) {
+				throw new IllegalStateException("synthetic retry");
+			}
+			return "ok";
+		})).isEqualTo("ok");
+		assertThat(executions).hasValue(2);
+		assertThat(retries).hasValue(1);
+
+		template.setRetryPolicy(RetryPolicy.withMaxRetries(0));
+		AtomicInteger updatedExecutions = new AtomicInteger();
+		template.setRetryListener(new RetryListener() {
+			@Override
+			public void onRetryableExecution(RetryPolicy policy, Retryable<?> retryable, RetryState state) {
+				updatedExecutions.incrementAndGet();
+			}
+		});
+		IllegalStateException failure = new IllegalStateException("synthetic exhaustion");
+		assertThatThrownBy(() -> Retries.invoke(template, () -> {
+			throw failure;
+		})).isSameAs(failure);
+		assertThat(updatedExecutions).hasValue(1);
+		assertThat(executions).hasValue(2);
+		assertThat(retries).hasValue(1);
 	}
 
 	@Test

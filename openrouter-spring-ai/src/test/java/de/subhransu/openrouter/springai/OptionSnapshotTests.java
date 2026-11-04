@@ -21,6 +21,38 @@ import org.springframework.ai.tool.ToolCallback;
 class OptionSnapshotTests {
 
 	@Test
+	void emptyMapSnapshotsRetainNullQueriesAndRejectAllMutations() {
+		var input = new LinkedHashMap<String, Object>();
+		var snapshot = OptionSnapshots.map(input);
+		input.put("later", true);
+		assertThat(snapshot).isEmpty();
+		assertThat(snapshot.containsKey(null)).isFalse();
+		assertThat(snapshot.containsValue(null)).isFalse();
+		assertThat(snapshot.get(null)).isNull();
+		assertThatThrownBy(() -> snapshot.remove("absent")).isInstanceOf(UnsupportedOperationException.class);
+		assertThatThrownBy(() -> snapshot.put("new", true)).isInstanceOf(UnsupportedOperationException.class);
+		assertThatThrownBy(snapshot::clear).isInstanceOf(UnsupportedOperationException.class);
+	}
+
+	@Test
+	void mapSnapshotsRetainInsertionOrderAndNullableEntries() {
+		for (int size : List.of(1, 2, 3, 8, 9)) {
+			var input = new LinkedHashMap<String, Object>();
+			input.put(null, null);
+			for (int index = 1; index < size; index++) {
+				input.put("key" + index, index);
+			}
+			var snapshot = OptionSnapshots.map(input);
+			assertThat(snapshot).isEqualTo(input);
+			assertThat(snapshot.keySet()).containsExactlyElementsOf(input.keySet());
+			input.clear();
+			assertThat(snapshot).hasSize(size).containsEntry(null, null);
+			assertThatThrownBy(snapshot::clear).isInstanceOf(UnsupportedOperationException.class);
+		}
+		assertThat(OptionSnapshots.map(null)).isNull();
+	}
+
+	@Test
 	void listSnapshotsRetainNullsOrderDuplicatesAndOpaqueIdentity() {
 		Object opaque = new Object();
 		var input = new ArrayList<Object>();
@@ -56,7 +88,10 @@ class OptionSnapshotTests {
 		var child = (List<?>) snapshot.get(1);
 		assertThat(child).hasSize(1);
 		assertThat(child.get(0)).isSameAs(opaque);
-		assertThat((List<?>) snapshot.get(2)).isEmpty();
+		var empty = (List<?>) snapshot.get(2);
+		assertThat(empty).isEmpty();
+		assertThat(empty.contains(null)).isFalse();
+		assertThatThrownBy(empty::clear).isInstanceOf(UnsupportedOperationException.class);
 		assertThatThrownBy(snapshot::clear).isInstanceOf(UnsupportedOperationException.class);
 		assertThatThrownBy(child::clear).isInstanceOf(UnsupportedOperationException.class);
 	}

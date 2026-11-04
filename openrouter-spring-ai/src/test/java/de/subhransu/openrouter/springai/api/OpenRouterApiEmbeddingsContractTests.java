@@ -104,6 +104,23 @@ class OpenRouterApiEmbeddingsContractTests {
 	}
 
 	@Test
+	void preservesInBandErrorAndToleratesUnknownFields() {
+		Fixture fixture = fixture();
+		fixture.server().expect(once(), requestTo(EMBEDDINGS)).andRespond(withSuccess("""
+				{"error":{"code":429,"message":"synthetic rate limit","future_error_field":true},
+				 "future_field":true}
+				""", MediaType.APPLICATION_JSON));
+
+		EmbeddingsResponse response = fixture.api()
+			.embeddings(new EmbeddingsRequest(MODEL, List.of("hello"), null, null, null, null));
+
+		assertThat(response.error().code()).isEqualTo("429");
+		assertThat(response.error().message()).isEqualTo("synthetic rate limit");
+		assertThat(response.data()).isNull();
+		fixture.server().verify();
+	}
+
+	@Test
 	void surfacesErrorBodyOnFailure() {
 		Fixture fixture = fixture();
 		fixture.server()

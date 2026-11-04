@@ -3,6 +3,9 @@ package de.subhransu.openrouter.springai.api;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionRequest;
+import de.subhransu.openrouter.springai.api.dto.FunctionCall;
+import de.subhransu.openrouter.springai.api.dto.ImagesRequest;
+import de.subhransu.openrouter.springai.api.dto.ResponsesRequest;
 import de.subhransu.openrouter.springai.api.dto.ChatMessage;
 import de.subhransu.openrouter.springai.errors.OpenRouterHttpException;
 import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
@@ -10,8 +13,11 @@ import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseExcept
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.TimeoutException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DefaultDataBufferFactory;
 import org.springframework.http.HttpHeaders;
@@ -23,8 +29,104 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
+import tools.jackson.core.JsonParser;
+import tools.jackson.databind.DeserializationContext;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ValueDeserializer;
+import tools.jackson.databind.annotation.JsonDeserialize;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.module.SimpleModule;
 
 class OpenRouterApiStreamingTests {
+
+	@Test
+	void suppliedModuleIsNotSetUpAgainForStreamBinding() {
+		AtomicInteger setups = new AtomicInteger();
+		SimpleModule module = new SimpleModule("counted") {
+			@Override
+			public void setupModule(SetupContext context) {
+				int generation = setups.incrementAndGet();
+				new SimpleModule().addDeserializer(FunctionCall.class, new ValueDeserializer<FunctionCall>() {
+					@Override
+					public FunctionCall deserialize(JsonParser parser, DeserializationContext context) {
+						parser.skipChildren();
+						return new FunctionCall("generation-" + generation, "{}");
+					}
+				}).setupModule(context);
+			}
+		};
+		ObjectMapper mapper = JsonMapper.builder().addModule(module).build();
+		String body = "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"function\":{}}]}}]}\n\ndata: [DONE]\n\n";
+		OpenRouterApi api = mappedApi(mapper, body);
+		StepVerifier.create(api.chatCompletionStream(chatRequest()))
+			.assertNext(chunk -> assertThat(chunk.choices().get(0).delta().toolCalls().get(0).function().name())
+				.isEqualTo("generation-1"))
+			.verifyComplete();
+		assertThat(setups).hasValue(1);
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "chat", "responses", "images" })
+	void suppliedStringDeserializerReadsNormalizedTreeTokens(String endpoint) {
+		SimpleModule module = new SimpleModule("numeric-strings").addDeserializer(String.class,
+				new ValueDeserializer<String>() {
+					@Override
+					public String deserialize(JsonParser parser, DeserializationContext context) {
+						return parser.getText();
+					}
+				});
+		ObjectMapper mapper = JsonMapper.builder().addModule(module).build();
+		String payload = switch (endpoint) {
+			case "chat" -> "{\"id\":1.50,\"choices\":[{\"index\":0,\"delta\":{}}]}";
+			case "responses" -> "{\"type\":\"response.output_text.delta\",\"delta\":1.50}";
+			case "images" -> "{\"type\":\"image_generation.partial_image\",\"b64_json\":1.50}";
+			default -> throw new IllegalArgumentException(endpoint);
+		};
+		OpenRouterApi api = mappedApi(mapper, "data: " + payload + "\n\n");
+		Flux<String> values = switch (endpoint) {
+			case "chat" -> api.chatCompletionStream(chatRequest()).map(chunk -> chunk.id());
+			case "responses" ->
+				api.responsesStream(ResponsesRequest.builder().model("test").input("hello").stream(true).build())
+					.map(event -> event.delta());
+			case "images" -> api
+				.imagesStream(new ImagesRequest("test", "hello", null, null, null, null, null, null, null, null, null,
+						true, null, null))
+				.map(event -> event.b64Json());
+			default -> throw new IllegalArgumentException(endpoint);
+		};
+		StepVerifier.create(values.take(1)).expectNext("1.5").verifyComplete();
+	}
+
+	@Test
+	void suppliedMixInDeserializerKeepsTreeParserSemantics() {
+		ObjectMapper mapper = JsonMapper.builder().addMixIn(FunctionCall.class, FunctionMixin.class).build();
+		String body = "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"function\":{}}]}}]}\n\ndata: [DONE]\n\n";
+		OpenRouterApi api = mappedApi(mapper, body);
+		StepVerifier.create(api.chatCompletionStream(chatRequest()))
+			.assertNext(chunk -> assertThat(chunk.choices().get(0).delta().toolCalls().get(0).function().name())
+				.isEqualTo("TreeTraversingParser"))
+			.verifyComplete();
+	}
+
+	@Test
+	void binderKeepsSuppliedDeserializerOnItsTreePath() {
+		ObjectMapper mapper = JsonMapper.builder().addMixIn(FunctionCall.class, FunctionMixin.class).build();
+		StreamEventBinder binder = new StreamEventBinder(mapper, false);
+		FunctionCall function = binder.bind("{}", binder.reader(FunctionCall.class), FunctionCall.class);
+		assertThat(function.name()).isEqualTo("TreeTraversingParser");
+	}
+
+	private OpenRouterApi mappedApi(ObjectMapper mapper, String body) {
+		return OpenRouterApi.builder()
+			.apiKey("test-key")
+			.objectMapper(mapper)
+			.webClientBuilder(WebClient.builder()
+				.exchangeFunction(request -> Mono.just(ClientResponse.create(HttpStatus.OK)
+					.header(HttpHeaders.CONTENT_TYPE, MediaType.TEXT_EVENT_STREAM_VALUE)
+					.body(body)
+					.build())))
+			.build();
+	}
 
 	private OpenRouterApi apiRespondingWith(HttpStatus status, String contentType, String body) {
 		ExchangeFunction exchange = request -> Mono
@@ -186,6 +288,22 @@ class OpenRouterApiStreamingTests {
 			assertThat(apiException.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
 			assertThat(apiException.getResponseBody()).contains("bad key");
 		}).verify();
+	}
+
+	@JsonDeserialize(using = ParserFunctionDeserializer.class)
+	private abstract static class FunctionMixin {
+
+	}
+
+	public static final class ParserFunctionDeserializer extends ValueDeserializer<FunctionCall> {
+
+		@Override
+		public FunctionCall deserialize(JsonParser parser, DeserializationContext context) {
+			String parserType = parser.getClass().getSimpleName();
+			parser.skipChildren();
+			return new FunctionCall(parserType, "{}");
+		}
+
 	}
 
 }

@@ -18,6 +18,7 @@ import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
 import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -26,7 +27,9 @@ import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.model.MessageAggregator;
 import org.springframework.ai.tool.definition.ToolDefinition;
+import reactor.core.publisher.Flux;
 
 class OpenRouterResponsesMapperTests {
 
@@ -192,6 +195,27 @@ class OpenRouterResponsesMapperTests {
 				"""));
 
 		assertThat(mapped.getResult().getOutput().getText()).isEqualTo("hello");
+		assertThat(mapped.getResult().getMetadata().isEmpty()).isTrue();
+		assertThat(mapped.getResult().getMetadata().getFinishReason()).isNull();
+		assertThat(mapped.getResult().getMetadata().getContentFilters()).isEmpty();
+	}
+
+	@Test
+	void aggregatedPerEventResultsKeepTheLastEventMetadata() throws Exception {
+		OpenRouterResponsesStreamingResponseMapper mapper = new OpenRouterResponsesStreamingResponseMapper();
+		ChatResponse reasoning = mapper.map(streamEvent("""
+				{"type": "response.reasoning_text.delta", "delta": "thinking"}
+				"""));
+		ChatResponse text = mapper.map(streamEvent("""
+				{"type": "response.output_text.delta", "delta": "hello"}
+				"""));
+		List<ChatResponse> aggregated = new ArrayList<>();
+
+		new MessageAggregator().aggregate(Flux.just(reasoning, text), aggregated::add).blockLast();
+
+		assertThat(reasoning.getResult().getMetadata().containsKey("openrouter.reasoning")).isTrue();
+		assertThat(aggregated).singleElement()
+			.satisfies(response -> assertThat(response.getResult().getMetadata().isEmpty()).isTrue());
 	}
 
 	@Test

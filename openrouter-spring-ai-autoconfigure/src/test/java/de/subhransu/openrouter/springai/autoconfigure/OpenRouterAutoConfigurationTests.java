@@ -169,6 +169,14 @@ class OpenRouterAutoConfigurationTests {
 	}
 
 	@Test
+	void toolCallAggregationDefaultsMatchAggregatorDefaults() {
+		var defaults = new OpenRouterChatProperties().getToolCallAggregation();
+		assertThat(defaults.getMaxSize().toBytes()).isEqualTo(OpenRouterStreamingToolCallAggregator.DEFAULT_MAX_BYTES);
+		assertThat(defaults.getMaxChunks()).isEqualTo(OpenRouterStreamingToolCallAggregator.DEFAULT_MAX_CHUNKS);
+		assertThat(defaults.getMaxDuration()).isEqualTo(OpenRouterStreamingToolCallAggregator.DEFAULT_MAX_DURATION);
+	}
+
+	@Test
 	void injectsUserDefinedToolCallingManagerIntoChatModel() {
 		contextRunner.withUserConfiguration(ToolCallingManagerConfiguration.class)
 			.withPropertyValues(API_KEY_PROPERTY)
