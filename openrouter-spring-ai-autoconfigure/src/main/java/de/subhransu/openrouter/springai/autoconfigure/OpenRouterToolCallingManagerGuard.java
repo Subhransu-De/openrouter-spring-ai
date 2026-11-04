@@ -21,13 +21,10 @@ import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.beans.factory.config.BeanPostProcessor;
-import org.springframework.beans.factory.support.AbstractBeanFactory;
 
 final class OpenRouterToolCallingManagerGuard implements BeanPostProcessor, SmartInitializingSingleton {
 
 	private static final String SPRING_TOOL_CALLING_AUTO_CONFIGURATION = "org.springframework.ai.model.tool.autoconfigure.ToolCallingAutoConfiguration";
-
-	private static final Object ANCESTOR_GUARD_LOCK = new Object();
 
 	private final ConfigurableListableBeanFactory beanFactory;
 
@@ -62,25 +59,30 @@ final class OpenRouterToolCallingManagerGuard implements BeanPostProcessor, Smar
 		this.singletonDeclaredProcessors
 			.addAll(this.beanFactory.getBeansOfType(ToolExecutionExceptionProcessor.class, false, false).values());
 		validateCustomManagers(this.beanFactory);
-		List<ConfigurableListableBeanFactory> unguardedAncestors = unguardedAncestors();
-		unguardedAncestors.forEach(this::validateCustomManagers);
-		unguardedAncestors.forEach(OpenRouterToolCallingManagerGuard::installIfAbsent);
+		// Ancestors are only read. A post-processor applies to the container that
+		// registers it, so registering one in a parent would also act on the parent's
+		// other children, including those that opted out.
+		for (ConfigurableListableBeanFactory ancestor : unguardedAncestors()) {
+			rejectNonSingletonManagers(ancestor);
+			validateCustomManagers(ancestor);
+		}
 		this.singletonsValidated = true;
 	}
 
-	private static void installIfAbsent(ConfigurableListableBeanFactory ancestor) {
-		if (!(ancestor instanceof AbstractBeanFactory factory)) {
-			return;
-		}
-		synchronized (ANCESTOR_GUARD_LOCK) {
-			if (factory.getBeanPostProcessors()
-				.stream()
-				.noneMatch(OpenRouterToolCallingManagerGuard.class::isInstance)) {
-				OpenRouterToolCallingManagerGuard guard = new OpenRouterToolCallingManagerGuard(ancestor);
-				guard.singletonsValidated = true;
-				factory.addBeanPostProcessor(guard);
+	private static void rejectNonSingletonManagers(ConfigurableListableBeanFactory ancestor) {
+		for (String name : ancestor.getBeanNamesForType(ToolCallingManager.class, true, false)) {
+			if (isCustomManager(ancestor, name) && !isSingletonWithoutCreating(ancestor, name)) {
+				throw nonSingletonAncestorManager(name);
 			}
 		}
+	}
+
+	private static boolean isSingletonWithoutCreating(ConfigurableListableBeanFactory factory, String name) {
+		String beanName = BeanFactoryUtils.transformedBeanName(name);
+		if (factory.containsSingleton(beanName)) {
+			return factory.isSingleton(beanName);
+		}
+		return !factory.containsBeanDefinition(beanName) || factory.getMergedBeanDefinition(beanName).isSingleton();
 	}
 
 	private void validateCustomManagers(ConfigurableListableBeanFactory factory) {
@@ -173,6 +175,14 @@ final class OpenRouterToolCallingManagerGuard implements BeanPostProcessor, Smar
 				+ " does not declare a provider-visible tool failure policy. Build it with "
 				+ "OpenRouterToolCallingManagers.withFailurePolicy(...), implement OpenRouterToolFailurePolicy, or "
 				+ "explicitly set spring.ai.openrouter.chat.allow-unsafe-tool-failure-results=true after auditing its "
+				+ "behavior.");
+	}
+
+	private static IllegalStateException nonSingletonAncestorManager(String beanName) {
+		return new IllegalStateException("Custom ToolCallingManager bean '" + beanName
+				+ "' in a parent application context is not a singleton, so this context cannot check the instances "
+				+ "the parent creates later. Declare it as a singleton, or explicitly set "
+				+ "spring.ai.openrouter.chat.allow-unsafe-tool-failure-results=true in this context after auditing its "
 				+ "behavior.");
 	}
 
