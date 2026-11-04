@@ -6,7 +6,7 @@ How to customize the HTTP clients, which timeouts apply, and the size limits for
 
 The supported transport extension points are Spring's `RestClient.Builder` request interceptors (blocking calls) and `WebClient.Builder` filters (streams). Boot auto-configuration clones the `RestClient.Builder` and `WebClient.Builder` beans from your application before applying OpenRouter settings. Your builder beans are not modified.
 
-`OpenRouterApi.Builder.objectMapper(...)` serializes every request body and decodes every response, including the JSON fallback of streamed image requests. Boot passes the application's `ObjectMapper` in servlet and reactive applications. A supplied mapper bypasses any JSON converters or codecs registered on the supplied builders. Without one, the builders' request serialization is unchanged.
+`OpenRouterApi.Builder.objectMapper(...)` serializes every request body and decodes every response, including the JSON fallback of streamed image requests. Boot always passes one: the application's `ObjectMapper`, or a default mapper when the application has none. A supplied mapper bypasses any JSON converters or codecs registered on the supplied builders. Without one, the builders' request serialization is unchanged.
 
 To own the whole client, define an `OpenRouterApi` bean. API auto-configuration backs off, and the auto-configured chat, embedding and image models use your bean. Set the base URL, attribution, timeout and size limits on its builder, because `spring.ai.openrouter.connection.*` and `app.*` no longer apply:
 

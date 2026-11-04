@@ -8,7 +8,7 @@ Notable changes in each release. The full notes for each release candidate are o
 
 - A transient error inside an HTTP 200 response from Chat Completions, embeddings or images now raises `OpenRouterTransientApiException` instead of `OpenRouterApiException`, and the blocking retry policy retries it. Each retry sends the request again. To limit retries, set `spring.ai.retry.max-attempts` or supply a `RetryTemplate` bean. See [Errors and retries](docs/errors-and-retries.md).
 - A child context now checks `ToolCallingManager` beans it inherits from a parent context without validation of its own. Startup fails if such a parent declares a manager without an OpenRouter failure policy, or a custom manager that is not a singleton. The parent and sibling contexts are not changed. See [Parent contexts](docs/tool-calling.md#parent-contexts).
-- A supplied `ObjectMapper` now serializes every request body, bypassing JSON converters and codecs registered on the supplied `RestClient.Builder` and `WebClient.Builder`.
+- The `ObjectMapper` passed to `OpenRouterApi.Builder.objectMapper(...)` now serializes every request body, bypassing JSON converters and codecs registered on the `RestClient.Builder` and `WebClient.Builder`. Boot auto-configuration always passes one (the application's `ObjectMapper`, or a default mapper), so this applies to every Boot application. See [HTTP customization](docs/http-and-limits.md#http-customization-and-timeout-ownership).
 - Chat `stream()` with invalid options returns a `Flux` that fails on subscription instead of throwing when called.
 
 ### Changed
