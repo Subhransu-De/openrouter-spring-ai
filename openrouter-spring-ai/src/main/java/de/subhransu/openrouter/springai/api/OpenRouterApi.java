@@ -53,7 +53,6 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectReader;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.DeserializationFeature;
-import tools.jackson.databind.json.JsonMapper;
 
 public class OpenRouterApi {
 
@@ -502,7 +501,7 @@ public class OpenRouterApi {
 
 		private WebClient.@Nullable Builder webClientBuilder;
 
-		private ObjectMapper objectMapper = JsonMapper.builder().addModule(new WireRecordModule()).build();
+		private ObjectMapper objectMapper = new ObjectMapper();
 
 		private boolean customObjectMapper;
 

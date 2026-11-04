@@ -38,10 +38,6 @@ final class StreamEventBinder {
 	<T> T bind(String line, @Nullable ObjectReader reader, Class<T> eventType) {
 		if (reader != null && line.startsWith("{")) {
 			try {
-				T event = StreamRecordReader.read(this.objectMapper, line, eventType);
-				if (event != null) {
-					return event;
-				}
 				return reader.readValue(line);
 			}
 			catch (JacksonException ex) {
