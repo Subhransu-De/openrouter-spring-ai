@@ -45,7 +45,7 @@ spring:
             {"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"],"additionalProperties":false}
 ```
 
-For a portable schema, set `spring.ai.openrouter.chat.output-schema` to the JSON document instead. A JSON-schema format requires a schema, and malformed JSON fails before the request is sent.
+For a portable schema, set `spring.ai.openrouter.chat.output-schema` to the JSON document instead. A JSON-schema format requires a nonblank schema. A blank schema or malformed JSON raises `IllegalArgumentException` before the request is sent.
 
 ## Tool choice
 
@@ -55,7 +55,7 @@ For a portable schema, set `spring.ai.openrouter.chat.output-schema` to the JSON
 OpenRouterChatOptions.builder().toolChoice(Map.of("type", "function", "name", "lookup"))
 ```
 
-The mapper converts the named form to the selected endpoint's wire shape. `{type: "function", function: {name: "lookup"}}` is accepted too. Other shapes are rejected.
+The mapper converts the named form to the selected endpoint's wire shape. `{type: "function", function: {name: "lookup"}}` is accepted too. Other shapes are rejected. A named choice serializes with `type` first.
 
 ## Refusals and incomplete output
 
@@ -71,4 +71,4 @@ A `completed` status or `stop` finish reason does not prove that the output ende
 
 ## Stream contract
 
-A Responses stream must end with `response.completed`, `response.incomplete`, `response.failed` or an error event. Otherwise it raises `OpenRouterTruncatedResponseException`, which is not retried. Any other contract violation raises `OpenRouterProtocolException`; see [Errors and retries](errors-and-retries.md). A non-null error envelope raises a typed provider exception, even over HTTP 200.
+A Responses stream must end with `response.completed`, `response.incomplete`, `response.failed` or an error event. Otherwise it raises `OpenRouterTruncatedResponseException`, which is not retried. Any other contract violation raises `OpenRouterProtocolException`; see [Errors and retries](errors-and-retries.md). A non-null error envelope raises a typed provider exception, even over HTTP 200. Unknown event types are ignored. An event with a missing, null or blank `type` raises `OpenRouterProtocolException`, even when a successful terminal event follows, unless it carries an error envelope.

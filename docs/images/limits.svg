@@ -85,7 +85,7 @@ text{font-family:"Libron",Georgia,serif;fill:var(--ink)}
 <text x="202" y="394"><tspan class="mb">Chat Completions</tspan><tspan class="s" dx="10" style="fill:var(--ink)">1MB retained metadata · 128 active choices</tspan></text>
 <text class="m" x="828" y="394" text-anchor="end" style="fill:var(--libs)">chat.streaming-state.*</text>
 <rect class="lib" x="190" y="412" width="650" height="30" rx="6"/>
-<text x="202" y="432"><tspan class="mb">tool calls, Responses</tspan><tspan class="s" dx="10" style="fill:var(--ink)">1MB · 1024 chunks or events · 2m</tspan></text>
+<text x="202" y="432"><tspan class="mb">tool calls, Responses</tspan><tspan class="s" dx="10" style="fill:var(--ink)">1MB · 8192 chunks or events · 2m</tspan></text>
 <text class="m" x="828" y="432" text-anchor="end" style="fill:var(--libs)">chat.tool-call-aggregation.*</text>
 <text class="s" x="202" y="460">Chat Completions tool-call assembly and all Responses state. The 2m starts at the first state event.</text>
 <rect class="lib" x="190" y="470" width="650" height="30" rx="6"/>
