@@ -38,6 +38,17 @@ spring.ai.retry.backoff.initial-interval=1s
 
 The Boot defaults are 10 retries, a 2-second initial interval, `backoff.multiplier=5` and a 3-minute `backoff.max-interval`. Spring AI uses the same numbers when no template is supplied.
 
+The library classifies HTTP errors itself, as the table above shows. So only the keys that build the `RetryTemplate` apply:
+
+| Key                                                                                                      | Applies to OpenRouter models                                                            |
+| -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `spring.ai.retry.max-attempts`, `backoff.initial-interval`, `backoff.multiplier`, `backoff.max-interval` | Yes, through the `RetryTemplate`.                                                       |
+| `spring.ai.retry.on-http-codes`, `exclude-on-http-codes`, `on-client-errors`                             | No. They configure Spring AI's `ResponseErrorHandler`, which this library does not use. |
+
+Spring AI's `RetryTemplate` bean backs off when the application declares any `RetryTemplate`, so a single application `RetryTemplate`, even one meant for other code, becomes the OpenRouter retry policy. With two or more and no `@Primary`, the models use Spring AI's built-in default policy. In that case `spring.ai.retry.*` does not apply at all: Spring AI's own `RetryTemplate` bean, which reads those keys, is not created when the application declares templates, and the built-in default does not read them. Declare the template you want for AI calls as `@Primary`, or build the models yourself.
+
+When `on-http-codes` or `exclude-on-http-codes` is non-empty, or `on-client-errors` is `true`, startup logs one message naming them. The keys can still apply to another provider in the same application, so the message never stops startup. It is an INFO message when the application also uses a Spring AI provider that reads these keys: DeepSeek chat, ElevenLabs, Mistral chat, embedding, moderation or OCR, or Ollama. That means the provider's starter is present and its `spring.ai.model.*` selector does not rule it out. The check cannot tell whether the application replaced that provider's client, so the INFO message says the keys may still configure another client. Otherwise it is a warning.
+
 ## Stream retries
 
 Streams are stricter: chat, Responses and image streams retry only an HTTP 429 that arrives before the first decoded event. This avoids replaying requests that may already have run upstream.

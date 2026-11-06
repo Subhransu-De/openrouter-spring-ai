@@ -4,6 +4,7 @@ import static com.tngtech.archunit.base.DescribedPredicate.not;
 import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAPackage;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noMethods;
 import static com.tngtech.archunit.library.GeneralCodingRules.ASSERTIONS_SHOULD_HAVE_DETAIL_MESSAGE;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -74,6 +75,21 @@ class CoreArchitectureTests {
 		.should(tolerateUnknownJsonFields())
 		.because("DD-01 requires OpenRouter wire DTOs to survive additive provider fields; "
 				+ "non-record helpers such as custom deserializers carry no bound fields to protect");
+
+	@ArchTest
+	static final ArchRule options_expose_no_setters_or_copy = noMethods().that()
+		.areDeclaredInClassesThat()
+		.haveSimpleNameEndingWith("Options")
+		.and()
+		.areDeclaredInClassesThat()
+		.resideInAnyPackage("..springai.chat", "..springai.embedding", "..springai.image")
+		.and()
+		.arePublic()
+		.should()
+		.haveNameStartingWith("set")
+		.orShould()
+		.haveName("copy")
+		.because("Spring AI 2.0 options are immutable and removed copy(); derive changed options with mutate()");
 
 	@ArchTest
 	static final ArchRule core_packages_must_not_form_cycles = SlicesRuleDefinition.slices()

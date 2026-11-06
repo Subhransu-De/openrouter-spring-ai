@@ -74,6 +74,7 @@ String base64 = response.getResult().getOutput().getB64Json();
 - `OpenRouterImageOptions` holds `resolution`, `aspectRatio`, `quality`, `outputFormat`, `background`, `outputCompression`, `seed`, `inputReferences` (image-to-image) and `providerOptions` (passthrough). `outputFormat` selects the image encoding, such as `webp`, not URL or base64 delivery.
 - Spring AI `ImageOptions` map `model` and `n` directly. A paired `width` and `height` becomes a pixel `size`. A lone dimension is rejected after defaults merge.
 - `responseFormat` must be omitted or `b64_json`, because the Image API always returns base64. A non-null `style` is rejected because OpenRouter has no equivalent. Both throw `IllegalArgumentException` before HTTP, in `call` and `stream`.
+- `OpenRouterImageModel.getOptions()` returns a copy of the model's default options, typed as `OpenRouterImageOptions`; derive per-request options from it with `mutate()`.
 - `OpenRouterImageOptions.fromOptions(...)` converts generic defaults. Generic per-request options override the mapped fields and keep unset native defaults such as `quality` and `providerOptions`.
 
 ### Streaming

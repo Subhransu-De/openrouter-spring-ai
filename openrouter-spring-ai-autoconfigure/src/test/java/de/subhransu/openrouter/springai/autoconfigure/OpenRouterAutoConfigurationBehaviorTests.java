@@ -3,21 +3,29 @@ package de.subhransu.openrouter.springai.autoconfigure;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionRequest;
 import de.subhransu.openrouter.springai.api.dto.ChatMessage;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
 import de.subhransu.openrouter.springai.chat.OpenRouterToolCallingManagers;
+import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingModel;
+import de.subhransu.openrouter.springai.image.OpenRouterImageModel;
+import io.micrometer.observation.ObservationRegistry;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.ai.model.tool.ToolCallingManager;
+import org.springframework.ai.retry.RetryUtils;
 import org.springframework.ai.tool.execution.ToolExecutionExceptionProcessor;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -32,12 +40,15 @@ import org.springframework.core.retry.RetryTemplate;
 
 /**
  * Behavioral auto-configuration coverage beyond the property matrix: bean back-off,
- * custom collaborator integration ({@link ObjectMapper}, {@link RetryTemplate},
+ * custom collaborator integration ({@link JsonMapper}, {@link RetryTemplate},
  * {@link ToolCallingManager}), and the attribution-categories comma-join contract
  * observed on a real outgoing request. The full property matrix lives in
  * {@code OpenRouterAutoConfigurationPropertyMatrixTests}.
  */
+@ExtendWith(OutputCaptureExtension.class)
 class OpenRouterAutoConfigurationBehaviorTests {
+
+	private static final String DEFAULT_MAPPER_WARNING = "OpenRouter uses a default JsonMapper";
 
 	private static final String API_KEY = "spring.ai.openrouter.api-key=test-key";
 
@@ -58,7 +69,7 @@ class OpenRouterAutoConfigurationBehaviorTests {
 	}
 
 	@Test
-	void usesCustomObjectMapperRetryTemplateAndToolCallingManager() {
+	void usesCustomJsonMapperRetryTemplateAndToolCallingManager() {
 		contextRunner.withUserConfiguration(CustomCollaboratorsConfiguration.class)
 			.withPropertyValues(API_KEY)
 			.run(context -> {
@@ -71,7 +82,75 @@ class OpenRouterAutoConfigurationBehaviorTests {
 				assertThat(chatModel).extracting("retryTemplate").isSameAs(context.getBean(RetryTemplate.class));
 				assertThat(chatModel).extracting("requestMapper")
 					.extracting("objectMapper")
-					.isSameAs(context.getBean(ObjectMapper.class));
+					.isSameAs(context.getBean(JsonMapper.class));
+				assertThat(context.getBean(OpenRouterApi.class)).extracting("objectMapper")
+					.isSameAs(context.getBean(JsonMapper.class));
+			});
+	}
+
+	@Test
+	void otherFormatMappersDoNotMakeTheJsonMapperLookupAmbiguous(CapturedOutput output) {
+		// Boot 4 defines an XmlMapper or CBORMapper next to the JsonMapper when those
+		// formats are on the classpath. When the application replaces Boot's JsonMapper,
+		// none of them is primary, so a lookup by ObjectMapper would find two beans.
+		contextRunner.withUserConfiguration(JsonAndOtherFormatMapperConfiguration.class)
+			.withPropertyValues(API_KEY)
+			.run(context -> {
+				assertThat(context).hasNotFailed();
+				JsonMapper jsonMapper = context.getBean(JsonMapper.class);
+				assertThat(context.getBean(OpenRouterApi.class)).extracting("objectMapper").isSameAs(jsonMapper);
+				assertThat(context.getBean(OpenRouterChatModel.class)).extracting("requestMapper")
+					.extracting("objectMapper")
+					.isSameAs(jsonMapper);
+				assertThat(output).doesNotContain(DEFAULT_MAPPER_WARNING);
+			});
+	}
+
+	@Test
+	void ambiguousRetryTemplatesAndRegistriesFallBackLikeTheOfficialProviders() {
+		// Framework 7 core retry makes application RetryTemplate beans common. Two of
+		// them without @Primary must not fail startup; the models use Spring AI's
+		// defaults, as Mistral, Ollama and DeepSeek do with getIfUnique(...).
+		new ApplicationContextRunner()
+			.withConfiguration(
+					AutoConfigurations.of(OpenRouterApiAutoConfiguration.class, OpenRouterChatAutoConfiguration.class,
+							OpenRouterEmbeddingAutoConfiguration.class, OpenRouterImageAutoConfiguration.class))
+			.withUserConfiguration(AmbiguousInfrastructureConfiguration.class)
+			.withPropertyValues(API_KEY)
+			.run(context -> {
+				assertThat(context).hasNotFailed();
+				for (Object model : List.of(context.getBean(OpenRouterChatModel.class),
+						context.getBean(OpenRouterEmbeddingModel.class), context.getBean(OpenRouterImageModel.class))) {
+					assertThat(model).extracting("retryTemplate").isSameAs(RetryUtils.DEFAULT_RETRY_TEMPLATE);
+					assertThat(model).extracting("observationRegistry").isSameAs(ObservationRegistry.NOOP);
+				}
+			});
+	}
+
+	@Test
+	void ambiguousJsonMappersFallBackToADefaultMapperAndSayWhy(CapturedOutput output) {
+		contextRunner.withUserConfiguration(TwoJsonMappersConfiguration.class)
+			.withPropertyValues(API_KEY)
+			.run(context -> {
+				assertThat(context).hasNotFailed();
+				assertThat(context.getBean(OpenRouterApi.class)).extracting("objectMapper")
+					.isInstanceOf(JsonMapper.class)
+					.isNotIn(context.getBeansOfType(JsonMapper.class).values().toArray());
+				assertThat(output).contains(DEFAULT_MAPPER_WARNING, "2 JSON ObjectMapper bean(s) are not used");
+			});
+	}
+
+	@Test
+	void plainObjectMapperBeanIsNotUsedForTheJsonWireProtocolAndSayWhy(CapturedOutput output) {
+		contextRunner.withUserConfiguration(PlainObjectMapperConfiguration.class)
+			.withPropertyValues(API_KEY)
+			.run(context -> {
+				assertThat(context).hasNotFailed();
+				ObjectMapper plain = context.getBean(ObjectMapper.class);
+				assertThat(context.getBean(OpenRouterApi.class)).extracting("objectMapper")
+					.isInstanceOf(JsonMapper.class)
+					.isNotSameAs(plain);
+				assertThat(output).contains(DEFAULT_MAPPER_WARNING, "1 JSON ObjectMapper bean(s) are not used");
 			});
 	}
 
@@ -159,8 +238,8 @@ class OpenRouterAutoConfigurationBehaviorTests {
 		}
 
 		@Bean
-		ObjectMapper objectMapper() {
-			return new ObjectMapper();
+		JsonMapper jsonMapper() {
+			return new JsonMapper();
 		}
 
 		@Bean
@@ -172,6 +251,73 @@ class OpenRouterAutoConfigurationBehaviorTests {
 		ToolCallingManager toolCallingManager(ToolExecutionExceptionProcessor processor) {
 			return OpenRouterToolCallingManagers.withFailurePolicy(processor, builder -> {
 			});
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	static class JsonAndOtherFormatMapperConfiguration {
+
+		@Bean
+		JsonMapper applicationJsonMapper() {
+			return new JsonMapper();
+		}
+
+		// Stands in for Boot's XmlMapper or CBORMapper without the extra dataformat
+		// dependency: another ObjectMapper bean that is not a JsonMapper.
+		@Bean
+		ObjectMapper otherFormatMapper() {
+			return new ObjectMapper();
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	static class AmbiguousInfrastructureConfiguration {
+
+		@Bean
+		RetryTemplate firstRetryTemplate() {
+			return new RetryTemplate();
+		}
+
+		@Bean
+		RetryTemplate secondRetryTemplate() {
+			return new RetryTemplate();
+		}
+
+		@Bean
+		ObservationRegistry firstObservationRegistry() {
+			return ObservationRegistry.create();
+		}
+
+		@Bean
+		ObservationRegistry secondObservationRegistry() {
+			return ObservationRegistry.create();
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	static class TwoJsonMappersConfiguration {
+
+		@Bean
+		JsonMapper firstJsonMapper() {
+			return new JsonMapper();
+		}
+
+		@Bean
+		JsonMapper secondJsonMapper() {
+			return new JsonMapper();
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	static class PlainObjectMapperConfiguration {
+
+		@Bean
+		ObjectMapper plainObjectMapper() {
+			return new ObjectMapper();
 		}
 
 	}

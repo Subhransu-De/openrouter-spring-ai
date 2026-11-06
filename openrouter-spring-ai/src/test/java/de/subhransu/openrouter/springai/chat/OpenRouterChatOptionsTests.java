@@ -138,7 +138,7 @@ class OpenRouterChatOptionsTests {
 	void collectionGettersDoNotExposeMutableInternalState() {
 		OpenRouterChatOptions options = OpenRouterChatOptions.builder().stopSequences(List.of("END")).build();
 
-		OpenRouterChatOptions copy = options.copy();
+		OpenRouterChatOptions copy = options.mutate().build();
 
 		assertThatThrownBy(() -> copy.getStopSequences().add("STOP")).isInstanceOf(UnsupportedOperationException.class);
 		assertThat(options.getStopSequences()).containsExactly("END");

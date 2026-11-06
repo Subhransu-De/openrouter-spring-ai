@@ -52,6 +52,8 @@ import org.springframework.context.annotation.Scope;
 import org.springframework.context.annotation.ScopedProxyMode;
 import org.springframework.context.support.GenericApplicationContext;
 import org.springframework.context.support.SimpleThreadScope;
+import org.springframework.security.oauth2.client.ClientAuthorizationException;
+import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class OpenRouterToolCallingAutoConfigurationTests {
@@ -86,6 +88,24 @@ class OpenRouterToolCallingAutoConfigurationTests {
 				assertThat(context.getBean(ToolCallingManager.class)
 					.resolveToolDefinitions(ToolCallingChatOptions.builder().build())).isEmpty();
 			});
+	}
+
+	@Test
+	void autoConfiguredProcessorRethrowsOAuth2ReauthorizationFailures() {
+		// As in Spring AI's default processor, so that Spring Security can re-authorize.
+		ToolDefinition definition = ToolDefinition.builder()
+			.name("load_account")
+			.description("Load an account")
+			.inputSchema("{\"type\":\"object\"}")
+			.build();
+		ClientAuthorizationException reauthorize = new ClientAuthorizationException(new OAuth2Error("invalid_grant"),
+				"synthetic-client");
+		this.contextRunner.run(context -> {
+			ToolExecutionExceptionProcessor processor = context.getBean(ToolExecutionExceptionProcessor.class);
+			assertThat(processor).isInstanceOf(OpenRouterToolExecutionExceptionProcessor.class);
+			assertThatThrownBy(() -> processor.process(new ToolExecutionException(definition, reauthorize)))
+				.isSameAs(reauthorize);
+		});
 	}
 
 	@Test

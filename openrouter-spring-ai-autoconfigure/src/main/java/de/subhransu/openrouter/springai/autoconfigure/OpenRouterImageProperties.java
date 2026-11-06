@@ -11,30 +11,70 @@ public class OpenRouterImageProperties {
 
 	public static final String CONFIG_PREFIX = "spring.ai.openrouter.image";
 
+	/**
+	 * Image model id in vendor/model form.
+	 */
 	private @Nullable String model;
 
+	/**
+	 * Maximum number of images to generate. Providers may return fewer.
+	 */
 	private @Nullable Integer n;
 
+	/**
+	 * Image width in pixels. Set together with height.
+	 */
 	private @Nullable Integer width;
 
+	/**
+	 * Image height in pixels. Set together with width.
+	 */
 	private @Nullable Integer height;
 
+	/**
+	 * Provider resolution preset.
+	 */
 	private @Nullable String resolution;
 
+	/**
+	 * Aspect ratio, such as 16:9.
+	 */
 	private @Nullable String aspectRatio;
 
+	/**
+	 * Image quality level, such as high.
+	 */
 	private @Nullable String quality;
 
+	/**
+	 * Image encoding, such as png or webp. Does not choose URL or base64 delivery.
+	 */
 	private @Nullable String outputFormat;
 
+	/**
+	 * Background handling, such as transparent.
+	 */
 	private @Nullable String background;
 
+	/**
+	 * Compression level for lossy output formats.
+	 */
 	private @Nullable Integer outputCompression;
 
+	/**
+	 * Seed for repeatable generation, where the upstream provider supports it.
+	 */
 	private @Nullable Integer seed;
 
+	/**
+	 * Comma-separated list of reference images, as HTTP(S) or base64 data URLs, for
+	 * image-to-image generation.
+	 */
 	private @Nullable List<String> inputReferences;
 
+	/**
+	 * Provider-specific options passed through unchanged.
+	 */
 	private @Nullable Map<String, @Nullable Object> providerOptions;
 
 	public OpenRouterImageOptions toOptions() {

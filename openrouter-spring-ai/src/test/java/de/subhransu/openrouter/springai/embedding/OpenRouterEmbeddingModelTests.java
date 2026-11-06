@@ -22,6 +22,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -180,6 +181,18 @@ class OpenRouterEmbeddingModelTests {
 	}
 
 	@Test
+	void rejectsAMissingModelBeforeCallingTheApi() {
+		Fixture fixture = fixture(OpenRouterEmbeddingOptions.builder().build());
+		OpenRouterEmbeddingModel model = fixture.model();
+
+		assertThatThrownBy(() -> model.embed("hello")).isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("Embedding model must not be empty");
+		assertThatThrownBy(model::dimensions).isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("Embedding model must not be empty");
+		fixture.server().verify();
+	}
+
+	@Test
 	void rejectsNonFloatEncodingFormatBeforeCallingTheApi() {
 		Fixture fixture = fixture(OpenRouterEmbeddingOptions.builder().model(MODEL).encodingFormat("base64").build());
 		OpenRouterEmbeddingModel model = fixture.model();
@@ -326,8 +339,7 @@ class OpenRouterEmbeddingModelTests {
 	void configuredDimensionsUseSnapshotWithoutProbing() {
 		OpenRouterEmbeddingOptions options = OpenRouterEmbeddingOptions.builder().model(MODEL).dimensions(2).build();
 		Fixture first = fixture(options);
-		options.setDimensions(3);
-		Fixture second = fixture(options);
+		Fixture second = fixture(options.mutate().dimensions(3).build());
 		assertThat(first.model().dimensions()).isEqualTo(2);
 		assertThat(second.model().dimensions()).isEqualTo(3);
 		first.server().verify();
@@ -344,9 +356,9 @@ class OpenRouterEmbeddingModelTests {
 
 	@Test
 	void dimensionDiscoveryIsIsolatedFromOtherModelsAndRequestOverrides() {
-		OpenRouterEmbeddingOptions options = OpenRouterEmbeddingOptions.builder().model("synthetic/model-a").build();
-		Fixture first = fixture(options);
-		options.setModel("synthetic/model-b");
+		OpenRouterEmbeddingOptions defaults = OpenRouterEmbeddingOptions.builder().model("synthetic/model-a").build();
+		Fixture first = fixture(defaults);
+		OpenRouterEmbeddingOptions options = defaults.mutate().model("synthetic/model-b").build();
 		Fixture second = fixture(options);
 		first.server()
 			.expect(once(), requestTo(BASE_URL + "/embeddings"))
@@ -418,6 +430,38 @@ class OpenRouterEmbeddingModelTests {
 		finally {
 			executor.shutdownNow();
 		}
+		fixture.server().verify();
+	}
+
+	@Test
+	void dimensionDiscoveryHoldsNoMonitorDuringTheProbe() {
+		// A virtual thread that blocks on I/O inside a monitor pins its carrier thread
+		// on JDK 21 to 23, so the probe HTTP call must not run while the model's monitor
+		// is held. Pinning itself is visible only through JFR on those JDKs, so this
+		// checks its cause, which every CI JDK can observe.
+		Fixture fixture = fixture(OpenRouterEmbeddingOptions.builder().model(MODEL).build());
+		AtomicBoolean monitorFreeDuringProbe = new AtomicBoolean();
+		fixture.server().expect(once(), requestTo(BASE_URL + "/embeddings")).andRespond(request -> {
+			AtomicBoolean entered = new AtomicBoolean();
+			Thread contender = new Thread(() -> {
+				synchronized (fixture.model()) {
+					entered.set(true);
+				}
+			});
+			contender.setDaemon(true);
+			contender.start();
+			try {
+				contender.join(TimeUnit.SECONDS.toMillis(5));
+			}
+			catch (InterruptedException ex) {
+				Thread.currentThread().interrupt();
+				throw new AssertionError(ex);
+			}
+			monitorFreeDuringProbe.set(entered.get());
+			return withSuccess(SINGLE_EMBEDDING_BODY, MediaType.APPLICATION_JSON).createResponse(request);
+		});
+		assertThat(fixture.model().dimensions()).isEqualTo(2);
+		assertThat(monitorFreeDuringProbe).as("model monitor free while the probe runs").isTrue();
 		fixture.server().verify();
 	}
 

@@ -24,7 +24,7 @@ import org.springframework.core.retry.RetryTemplate;
 @ConditionalOnProperty(name = SpringAIModelProperties.IMAGE_MODEL, havingValue = OpenRouterIdentifiers.PROVIDER_ID,
 		matchIfMissing = true)
 @EnableConfigurationProperties(OpenRouterImageProperties.class)
-public class OpenRouterImageAutoConfiguration {
+public final class OpenRouterImageAutoConfiguration {
 
 	@Bean
 	@ConditionalOnMissingBean(ImageModel.class)
@@ -35,8 +35,8 @@ public class OpenRouterImageAutoConfiguration {
 		OpenRouterImageModel imageModel = OpenRouterImageModel.builder()
 			.openRouterApi(openRouterApi)
 			.defaultOptions(imageProperties.toOptions())
-			.retryTemplate(retryTemplateProvider.getIfAvailable())
-			.observationRegistry(observationRegistryProvider.getIfAvailable())
+			.retryTemplate(retryTemplateProvider.getIfUnique())
+			.observationRegistry(observationRegistryProvider.getIfUnique())
 			.build();
 		observationConventionProvider.ifAvailable(imageModel::setObservationConvention);
 		return imageModel;

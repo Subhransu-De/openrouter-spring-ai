@@ -24,7 +24,7 @@ import org.springframework.core.retry.RetryTemplate;
 @ConditionalOnProperty(name = SpringAIModelProperties.EMBEDDING_MODEL, havingValue = OpenRouterIdentifiers.PROVIDER_ID,
 		matchIfMissing = true)
 @EnableConfigurationProperties(OpenRouterEmbeddingProperties.class)
-public class OpenRouterEmbeddingAutoConfiguration {
+public final class OpenRouterEmbeddingAutoConfiguration {
 
 	@Bean
 	@ConditionalOnMissingBean(EmbeddingModel.class)
@@ -36,8 +36,8 @@ public class OpenRouterEmbeddingAutoConfiguration {
 			.openRouterApi(openRouterApi)
 			.defaultOptions(embeddingProperties.toOptions())
 			.metadataMode(embeddingProperties.getMetadataMode())
-			.retryTemplate(retryTemplateProvider.getIfAvailable())
-			.observationRegistry(observationRegistryProvider.getIfAvailable())
+			.retryTemplate(retryTemplateProvider.getIfUnique())
+			.observationRegistry(observationRegistryProvider.getIfUnique())
 			.build();
 		observationConventionProvider.ifAvailable(embeddingModel::setObservationConvention);
 		return embeddingModel;

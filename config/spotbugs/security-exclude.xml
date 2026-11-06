@@ -9,6 +9,19 @@
     <Method name="process" params="org.springframework.ai.tool.execution.ToolExecutionException" returns="java.lang.String"/>
     <Bug pattern="CRLF_INJECTION_LOGS"/>
   </Match>
+  <!-- These startup messages are built only from string literals and a bean count.
+       No property value, bean name or other external input reaches them, so they
+       cannot carry CR or LF. Keep these exclusions confined to the two methods. -->
+  <Match>
+    <Class name="de.subhransu.openrouter.springai.autoconfigure.OpenRouterApiAutoConfiguration"/>
+    <Method name="jsonMapper" params="org.springframework.beans.factory.ObjectProvider,org.springframework.beans.factory.ObjectProvider" returns="tools.jackson.databind.json.JsonMapper"/>
+    <Bug pattern="CRLF_INJECTION_LOGS"/>
+  </Match>
+  <Match>
+    <Class name="de.subhransu.openrouter.springai.autoconfigure.OpenRouterApiAutoConfiguration"/>
+    <Method name="reportUnusedRetrySettings" params="org.springframework.ai.retry.autoconfigure.SpringAiRetryProperties,org.springframework.beans.factory.ListableBeanFactory" returns="void"/>
+    <Bug pattern="CRLF_INJECTION_LOGS"/>
+  </Match>
   <!-- URI.create validates the scheme's ASCII grammar before this comparison.
        equalsIgnoreCase therefore cannot admit Unicode lookalikes; mixed-case
        HTTP(S) schemes are valid and must remain supported. -->

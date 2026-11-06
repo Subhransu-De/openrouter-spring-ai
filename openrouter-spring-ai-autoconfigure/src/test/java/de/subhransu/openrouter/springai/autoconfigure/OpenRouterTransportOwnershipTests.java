@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
@@ -23,6 +24,9 @@ import org.springframework.mock.http.client.MockClientHttpResponse;
 import org.springframework.web.client.RestClient;
 
 class OpenRouterTransportOwnershipTests {
+
+	private static final HttpClientSettings BOOT_TIMEOUTS = HttpClientSettings.defaults()
+		.withTimeouts(Duration.ofSeconds(2), Duration.ofSeconds(3));
 
 	@ParameterizedTest
 	@ValueSource(strings = { "15s", "45s" })
@@ -51,6 +55,8 @@ class OpenRouterTransportOwnershipTests {
 					.embeddings(new EmbeddingsRequest("synthetic", List.of("input"), null, null, null, null));
 				assertThat(providerHeaders.get().getFirst(HttpHeaders.AUTHORIZATION)).isEqualTo("Bearer synthetic-key");
 				assertThat(providerHeaders.get().getFirst("X-Synthetic")).isEqualTo("shared");
+				// An explicit connection.timeout is more specific than Boot's shared
+				// timeouts, so it bounds OpenRouter's blocking connect and read.
 				assertThat(settings.get())
 					.extracting(HttpClientSettings::connectTimeout, HttpClientSettings::readTimeout)
 					.containsExactly(Duration.parse("PT" + timeout), Duration.parse("PT" + timeout));
@@ -62,6 +68,77 @@ class OpenRouterTransportOwnershipTests {
 						"HTTP-Referer", "X-OpenRouter-Title", "X-OpenRouter-Categories");
 				assertThat(unrelatedHeaders.get().getFirst("X-Synthetic")).isEqualTo("shared");
 			});
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "15s", "45s" })
+	void connectionTimeoutAlsoBoundsConnectWhenBootSetsNoConnectTimeout(String timeout) {
+		AtomicReference<HttpClientSettings> settings = new AtomicReference<>();
+		new ApplicationContextRunner().withConfiguration(AutoConfigurations.of(OpenRouterApiAutoConfiguration.class))
+			.withBean(HttpClientSettings.class,
+					() -> HttpClientSettings.defaults().withReadTimeout(Duration.ofSeconds(3)))
+			.withBean(ClientHttpRequestFactoryBuilder.class, () -> configured -> {
+				settings.set(configured);
+				return factory(new AtomicReference<>());
+			})
+			.withPropertyValues("spring.ai.openrouter.api-key=synthetic-key",
+					"spring.ai.openrouter.connection.timeout=" + timeout)
+			.run(context -> {
+				assertThat(context).hasNotFailed();
+				assertThat(settings.get())
+					.extracting(HttpClientSettings::connectTimeout, HttpClientSettings::readTimeout)
+					.containsExactly(Duration.parse("PT" + timeout), Duration.parse("PT" + timeout));
+			});
+	}
+
+	@Test
+	void bootsConnectTimeoutAppliesWhenConnectTimeoutIsUnset() {
+		assertThat(blockingSettings(BOOT_TIMEOUTS))
+			.extracting(HttpClientSettings::connectTimeout, HttpClientSettings::readTimeout)
+			.containsExactly(Duration.ofSeconds(2), Duration.ofMinutes(2));
+	}
+
+	@Test
+	void explicitTimeoutWinsOverBootsConnectTimeout() {
+		assertThat(blockingSettings(BOOT_TIMEOUTS, "spring.ai.openrouter.connection.timeout=45s"))
+			.extracting(HttpClientSettings::connectTimeout, HttpClientSettings::readTimeout)
+			.containsExactly(Duration.ofSeconds(45), Duration.ofSeconds(45));
+	}
+
+	@Test
+	void explicitConnectTimeoutWinsOverBootsConnectTimeout() {
+		assertThat(blockingSettings(BOOT_TIMEOUTS, "spring.ai.openrouter.connection.connect-timeout=7s"))
+			.extracting(HttpClientSettings::connectTimeout, HttpClientSettings::readTimeout)
+			.containsExactly(Duration.ofSeconds(7), Duration.ofMinutes(2));
+	}
+
+	@Test
+	void explicitConnectTimeoutWinsOverAnExplicitTimeout() {
+		assertThat(blockingSettings(BOOT_TIMEOUTS, "spring.ai.openrouter.connection.timeout=5m",
+				"spring.ai.openrouter.connection.connect-timeout=7s"))
+			.extracting(HttpClientSettings::connectTimeout, HttpClientSettings::readTimeout)
+			.containsExactly(Duration.ofSeconds(7), Duration.ofMinutes(5));
+	}
+
+	@Test
+	void defaultTimeoutBoundsConnectAndReadWhenBootSetsNoTimeouts() {
+		assertThat(blockingSettings(HttpClientSettings.defaults()))
+			.extracting(HttpClientSettings::connectTimeout, HttpClientSettings::readTimeout)
+			.containsExactly(Duration.ofMinutes(2), Duration.ofMinutes(2));
+	}
+
+	private HttpClientSettings blockingSettings(HttpClientSettings shared, String... properties) {
+		AtomicReference<HttpClientSettings> settings = new AtomicReference<>();
+		new ApplicationContextRunner().withConfiguration(AutoConfigurations.of(OpenRouterApiAutoConfiguration.class))
+			.withBean(HttpClientSettings.class, () -> shared)
+			.withBean(ClientHttpRequestFactoryBuilder.class, () -> configured -> {
+				settings.set(configured);
+				return factory(new AtomicReference<>());
+			})
+			.withPropertyValues("spring.ai.openrouter.api-key=synthetic-key")
+			.withPropertyValues(properties)
+			.run(context -> assertThat(context).hasNotFailed());
+		return settings.get();
 	}
 
 	private ClientHttpRequestFactory factory(AtomicReference<HttpHeaders> headers) {

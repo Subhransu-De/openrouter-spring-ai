@@ -54,11 +54,37 @@ Beyond the diagram, arrays must declare `items`, and a `$ref` must be a local po
 
 The library never rewrites a schema. Use a routed model and provider that support strict function tools; the library does not discover capabilities. Validation covers the common [strict function contract](https://developers.openai.com/api/docs/guides/function-calling#strict-mode), not every provider keyword, size limit or model restriction. A provider rejection surfaces as a normal API error, with no retry as non-strict. Response-format strictness is unaffected.
 
+Coming from Spring AI's OpenAI module: its `strict` tool option rewrites each schema before sending it. It sets `additionalProperties: false`, makes optional properties nullable and lists every property as required. This library checks the schema instead, so a schema generated from a type with an optional field fails here although it worked there. For example, OpenAI's module accepts this tool input in strict mode, after rewriting it. Here it fails the check, because it lacks `additionalProperties: false` and does not list `note` as required:
+
+```json
+{
+  "type": "object",
+  "properties": { "city": { "type": "string" }, "note": { "type": "string" } },
+  "required": ["city"]
+}
+```
+
+Spring AI's schema generator marks a parameter optional when it has `@ToolParam(required = false)`, `@Nullable` or an equivalent Jackson or OpenAPI annotation. For strict tools, keep every parameter required, so the model always supplies a value. For a value that may be absent, write the schema by hand the way the rewrite would:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "city": { "type": "string" },
+    "note": { "type": ["string", "null"] }
+  },
+  "required": ["city", "note"],
+  "additionalProperties": false
+}
+```
+
+Response formats differ as well. OpenAI's module sends a JSON-schema response format as `strict: true` unless told otherwise. Here, `spring.ai.openrouter.chat.response-format.strict` is sent only when set, so the routed provider's default applies.
+
 ## Tool failure policy
 
-By default, when a tool fails with Spring AI's `ToolExecutionException`, the model receives `{"error":"Tool execution failed"}` as the tool result and the loop continues. The library logs the failure (details only at debug level) and records it on the current observation. `@Tool` methods throw that exception for method errors and for unparsable arguments. `FunctionToolCallback` throws it only for errors inside the function. Argument deserialization failures there, and any other exception from a custom callback, end the call.
+By default, when a tool fails with Spring AI's `ToolExecutionException`, the model receives `{"error":"Tool execution failed"}` as the tool result and the loop continues. As with Spring AI's default processor, a failure whose cause is not a `RuntimeException`, such as an `IOException` or an `Error`, propagates instead, and so does Spring Security's `ClientAuthorizationException` when it is on the classpath, so OAuth2 clients can re-authorize. The library logs the failure (details only at debug level) and records it on the current observation. `@Tool` methods throw that exception for method errors and for unparsable arguments. `FunctionToolCallback` throws it only for errors inside the function. Argument deserialization failures there, and any other exception from a custom callback, end the call.
 
-The starter does this by supplying `OpenRouterToolExecutionExceptionProcessor` before Spring AI creates its shared manager, so the processor also applies to other providers that use that manager.
+The starter does this by supplying `OpenRouterToolExecutionExceptionProcessor` before Spring AI creates its shared manager, so the processor also applies to other providers that use that manager. When another provider's chat model is in the context, startup logs a warning; set `spring.ai.model.chat` to the provider you use, or declare your own `ToolExecutionExceptionProcessor` bean.
 
 ![Two decision trees. Which processor handles a tool exception: an application ChatModel bean means you own the policy; an application ToolExecutionExceptionProcessor bean takes precedence; spring.ai.tools.throw-exception-on-error=true keeps Spring AI's throwing policy; otherwise OpenRouterToolExecutionExceptionProcessor is used. Whether a custom ToolCallingManager bean starts: one built with OpenRouterToolCallingManagers.withFailurePolicy or one that implements OpenRouterToolFailurePolicy starts; a plain ToolCallingManager.builder().build() fails at startup unless allow-unsafe-tool-failure-results=true.](images/tool-failure-policy.svg)
 

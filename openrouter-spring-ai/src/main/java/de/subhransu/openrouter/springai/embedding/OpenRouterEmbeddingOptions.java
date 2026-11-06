@@ -31,16 +31,12 @@ public class OpenRouterEmbeddingOptions implements EmbeddingOptions {
 		return new Builder(this);
 	}
 
-	public OpenRouterEmbeddingOptions copy() {
-		return this.mutate().build();
-	}
-
 	public static @Nullable OpenRouterEmbeddingOptions fromOptions(@Nullable EmbeddingOptions options) {
 		if (options == null) {
 			return null;
 		}
 		if (options instanceof OpenRouterEmbeddingOptions openRouterOptions) {
-			return openRouterOptions.copy();
+			return openRouterOptions.mutate().build();
 		}
 		return OpenRouterEmbeddingOptions.builder()
 			.model(options.getModel())
@@ -50,7 +46,7 @@ public class OpenRouterEmbeddingOptions implements EmbeddingOptions {
 
 	public OpenRouterEmbeddingOptions merge(@Nullable OpenRouterEmbeddingOptions runtimeOptions) {
 		if (runtimeOptions == null) {
-			return this.copy();
+			return this.mutate().build();
 		}
 		return this.mutate()
 			.model(value(runtimeOptions.model, this.model))
@@ -70,41 +66,21 @@ public class OpenRouterEmbeddingOptions implements EmbeddingOptions {
 		return this.model;
 	}
 
-	public void setModel(@Nullable String model) {
-		this.model = model;
-	}
-
 	@Override
 	public @Nullable Integer getDimensions() {
 		return this.dimensions;
-	}
-
-	public void setDimensions(@Nullable Integer dimensions) {
-		this.dimensions = dimensions;
 	}
 
 	public @Nullable String getEncodingFormat() {
 		return this.encodingFormat;
 	}
 
-	public void setEncodingFormat(@Nullable String encodingFormat) {
-		this.encodingFormat = encodingFormat;
-	}
-
 	public @Nullable String getUser() {
 		return this.user;
 	}
 
-	public void setUser(@Nullable String user) {
-		this.user = user;
-	}
-
 	public @Nullable OpenRouterProviderPreferences getProvider() {
 		return this.provider;
-	}
-
-	public void setProvider(@Nullable OpenRouterProviderPreferences provider) {
-		this.provider = provider;
 	}
 
 	public static final class Builder {
@@ -117,35 +93,35 @@ public class OpenRouterEmbeddingOptions implements EmbeddingOptions {
 
 		private Builder(OpenRouterEmbeddingOptions source) {
 			this();
-			this.options.setModel(source.getModel());
-			this.options.setDimensions(source.getDimensions());
-			this.options.setEncodingFormat(source.getEncodingFormat());
-			this.options.setUser(source.getUser());
-			this.options.setProvider(source.getProvider());
+			this.options.model = source.model;
+			this.options.dimensions = source.dimensions;
+			this.options.encodingFormat = source.encodingFormat;
+			this.options.user = source.user;
+			this.options.provider = source.provider;
 		}
 
 		public Builder model(@Nullable String model) {
-			this.options.setModel(model);
+			this.options.model = model;
 			return this;
 		}
 
 		public Builder dimensions(@Nullable Integer dimensions) {
-			this.options.setDimensions(dimensions);
+			this.options.dimensions = dimensions;
 			return this;
 		}
 
 		public Builder encodingFormat(@Nullable String encodingFormat) {
-			this.options.setEncodingFormat(encodingFormat);
+			this.options.encodingFormat = encodingFormat;
 			return this;
 		}
 
 		public Builder user(@Nullable String user) {
-			this.options.setUser(user);
+			this.options.user = user;
 			return this;
 		}
 
 		public Builder provider(@Nullable OpenRouterProviderPreferences provider) {
-			this.options.setProvider(provider);
+			this.options.provider = provider;
 			return this;
 		}
 

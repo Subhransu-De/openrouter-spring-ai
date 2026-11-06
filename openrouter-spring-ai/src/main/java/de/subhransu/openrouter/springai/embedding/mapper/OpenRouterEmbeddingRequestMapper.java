@@ -6,11 +6,16 @@ import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
 import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingOptions;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
+import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
 public final class OpenRouterEmbeddingRequestMapper {
 
 	public EmbeddingsRequest map(List<String> inputs, OpenRouterEmbeddingOptions options) {
+		// OpenRouter requires a model for embeddings and has no account default for them,
+		// unlike chat. Fail before the round trip, as the image mapper does.
+		String model = options.getModel();
+		Assert.hasText(model, "Embedding model must not be empty");
 		// The response decoder only understands JSON float arrays; a base64
 		// encoding_format would deserialize into garbage, so reject it up front rather
 		// than fail deep inside Jackson.
@@ -18,7 +23,7 @@ public final class OpenRouterEmbeddingRequestMapper {
 			throw new IllegalArgumentException("Unsupported encoding_format '" + options.getEncodingFormat()
 					+ "': only 'float' embeddings can be decoded");
 		}
-		return new EmbeddingsRequest(options.getModel(), inputs, options.getEncodingFormat(), options.getDimensions(),
+		return new EmbeddingsRequest(model, inputs, options.getEncodingFormat(), options.getDimensions(),
 				options.getUser(), mapProvider(options.getProvider()));
 	}
 
