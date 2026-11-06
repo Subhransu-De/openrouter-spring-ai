@@ -73,4 +73,4 @@ The `app.*` properties set the `HTTP-Referer`, `X-OpenRouter-Title` and `X-OpenR
 
 - Builders, copies and model defaults hold their own copies of collections. Getters return routing lists and JSON maps and lists as read-only. Use `mutate()` to derive changed options.
 - JSON maps and lists are copied recursively. Callbacks and other application objects, such as tool context values, are shared by identity and not cloned.
-- Snapshots do not make options thread-safe. Option setters and Boot property beans stay mutable, so do not change shared options while calls run.
+- Options have no setters, as in Spring AI 2.0: `mutate()` returns a builder for a changed copy and leaves the original untouched. Boot property beans stay mutable, so do not change them while calls run.

@@ -38,7 +38,7 @@ class OpenRouterReactiveMapperTests {
 		AtomicReference<String> streaming = new AtomicReference<>();
 		new ReactiveWebApplicationContextRunner()
 			.withConfiguration(AutoConfigurations.of(OpenRouterApiAutoConfiguration.class))
-			.withBean(ObjectMapper.class, OpenRouterReactiveMapperTests::mapper)
+			.withBean(JsonMapper.class, OpenRouterReactiveMapperTests::mapper)
 			.withBean(ClientHttpRequestFactoryBuilder.class,
 					() -> settings -> (uri, method) -> new MockClientHttpRequest(method, uri) {
 						@Override
@@ -76,7 +76,7 @@ class OpenRouterReactiveMapperTests {
 			});
 	}
 
-	private static ObjectMapper mapper() {
+	private static JsonMapper mapper() {
 		SimpleModule module = new SimpleModule();
 		module.addSerializer(String.class, new ValueSerializer<String>() {
 			@Override

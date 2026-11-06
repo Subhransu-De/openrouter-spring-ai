@@ -15,9 +15,15 @@ dependencies {
 
 	compileOnly("org.springframework.boot:spring-boot-configuration-processor")
 	annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
+	// Writes META-INF/spring-autoconfigure-metadata.properties so Boot can filter these
+	// auto-configurations by their class conditions without loading them.
+	annotationProcessor("org.springframework.boot:spring-boot-autoconfigure-processor")
 
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
 	testImplementation("org.springframework.ai:spring-ai-client-chat")
 	testImplementation("io.projectreactor:reactor-test")
+	// Supplies ClientAuthorizationException, which the tool failure processor rethrows by
+	// class name.
+	testImplementation("org.springframework.security:spring-security-oauth2-client")
 	testImplementation("com.tngtech.archunit:archunit-junit5:$archunitVersion")
 }

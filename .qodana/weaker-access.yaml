@@ -19,3 +19,4 @@ inspections:
       - "scope#src:de.subhransu.openrouter.springai.chat.errors.*"
       - "scope#src:de.subhransu.openrouter.springai.api.errors.OpenRouterApiException"
       - "scope#src:de.subhransu.openrouter.springai.autoconfigure.*Properties"
+      - "scope#src:de.subhransu.openrouter.springai.autoconfigure.*Customizer"

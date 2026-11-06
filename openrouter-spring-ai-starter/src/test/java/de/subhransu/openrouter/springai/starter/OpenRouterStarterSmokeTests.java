@@ -12,8 +12,11 @@ import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingModel;
 import de.subhransu.openrouter.springai.image.OpenRouterImageModel;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
@@ -29,7 +32,9 @@ import org.springframework.ai.model.tool.autoconfigure.ToolCallingAutoConfigurat
 import org.springframework.ai.retry.TransientAiException;
 import org.springframework.ai.retry.autoconfigure.SpringAiRetryAutoConfiguration;
 import org.springframework.ai.retry.autoconfigure.SpringAiRetryProperties;
+import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
+import org.springframework.boot.context.annotation.ImportCandidates;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.boot.test.context.runner.ContextConsumer;
 import org.springframework.context.annotation.Bean;
@@ -54,18 +59,39 @@ class OpenRouterStarterSmokeTests {
 					OpenRouterImageAutoConfiguration.class, ChatClientAutoConfiguration.class));
 
 	@Test
-	void autoConfigurationImportsFileRegistersRequiredAutoConfigurations() throws IOException {
-		// The starter's real contract is runtime registration: Boot discovers the
-		// auto-configurations through the imports file on the classpath, not through
-		// compile-time class references.
-		try (InputStream in = getClass().getClassLoader()
-			.getResourceAsStream("META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports")) {
-			assertThat(in).as("AutoConfiguration.imports must be on the starter classpath").isNotNull();
-			String imports = new String(in.readAllBytes(), StandardCharsets.UTF_8);
-			assertThat(imports).contains(OpenRouterApiAutoConfiguration.class.getName())
-				.contains(OpenRouterChatAutoConfiguration.class.getName())
-				.contains(SpringAiRetryAutoConfiguration.class.getName());
+	void autoConfigurationImportsRegisterRequiredAutoConfigurations() {
+		// The starter's real contract is runtime registration: Boot merges the imports
+		// files of every module on the classpath. Spring AI's retry module registers its
+		// own auto-configuration; the starter only has to bring that module along.
+		List<String> candidates = ImportCandidates.load(AutoConfiguration.class, getClass().getClassLoader())
+			.getCandidates();
+		assertThat(candidates).contains(OpenRouterApiAutoConfiguration.class.getName(),
+				OpenRouterChatAutoConfiguration.class.getName(), OpenRouterEmbeddingAutoConfiguration.class.getName(),
+				OpenRouterImageAutoConfiguration.class.getName(), SpringAiRetryAutoConfiguration.class.getName(),
+				ToolCallingAutoConfiguration.class.getName());
+		assertThat(candidates).as("Spring AI's retry auto-configuration is registered only by its own module")
+			.filteredOn(name -> name.equals(SpringAiRetryAutoConfiguration.class.getName()))
+			.hasSize(1);
+	}
+
+	@Test
+	void ownImportsFileListsOnlyOpenRouterAutoConfigurations() throws IOException {
+		Enumeration<URL> imports = getClass().getClassLoader()
+			.getResources("META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports");
+		List<String> openRouterEntries = new ArrayList<>();
+		while (imports.hasMoreElements()) {
+			try (InputStream in = imports.nextElement().openStream()) {
+				List<String> entries = new String(in.readAllBytes(), StandardCharsets.UTF_8).lines()
+					.map(String::trim)
+					.filter(line -> !line.isEmpty() && !line.startsWith("#"))
+					.toList();
+				if (entries.contains(OpenRouterApiAutoConfiguration.class.getName())) {
+					openRouterEntries.addAll(entries);
+				}
+			}
 		}
+		assertThat(openRouterEntries).isNotEmpty()
+			.allSatisfy(entry -> assertThat(entry).startsWith("de.subhransu.openrouter.springai.autoconfigure."));
 	}
 
 	@Test

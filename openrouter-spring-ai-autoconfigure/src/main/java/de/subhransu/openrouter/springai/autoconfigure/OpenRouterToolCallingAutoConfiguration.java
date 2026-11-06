@@ -3,6 +3,7 @@ package de.subhransu.openrouter.springai.autoconfigure;
 import de.subhransu.openrouter.springai.OpenRouterIdentifiers;
 import de.subhransu.openrouter.springai.chat.OpenRouterToolExecutionExceptionProcessor;
 import io.micrometer.observation.ObservationRegistry;
+import java.util.List;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.model.SpringAIModelProperties;
 import org.springframework.ai.tool.execution.ToolExecutionExceptionProcessor;
@@ -13,6 +14,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
+import org.springframework.util.ClassUtils;
 
 /**
  * Installs provider-safe tool failure handling before Spring AI creates its shared tool
@@ -25,7 +27,11 @@ import org.springframework.context.annotation.Bean;
 @ConditionalOnMissingBean(ChatModel.class)
 @ConditionalOnProperty(name = SpringAIModelProperties.CHAT_MODEL, havingValue = OpenRouterIdentifiers.PROVIDER_ID,
 		matchIfMissing = true)
-public class OpenRouterToolCallingAutoConfiguration {
+public final class OpenRouterToolCallingAutoConfiguration {
+
+	// Spring AI's ToolCallingAutoConfiguration rethrows this from its default processor
+	// so that Spring Security's OAuth2 client support can re-authorize.
+	private static final String CLIENT_AUTHORIZATION_EXCEPTION = "org.springframework.security.oauth2.client.ClientAuthorizationException";
 
 	@Bean
 	@ConditionalOnMissingBean(ToolExecutionExceptionProcessor.class)
@@ -34,7 +40,17 @@ public class OpenRouterToolCallingAutoConfiguration {
 	OpenRouterToolExecutionExceptionProcessor openRouterToolExecutionExceptionProcessor(
 			ObjectProvider<ObservationRegistry> observationRegistryProvider) {
 		return new OpenRouterToolExecutionExceptionProcessor(
-				observationRegistryProvider.getIfUnique(() -> ObservationRegistry.NOOP));
+				observationRegistryProvider.getIfUnique(() -> ObservationRegistry.NOOP),
+				(exception) -> OpenRouterToolExecutionExceptionProcessor.DEFAULT_FAILURE_PAYLOAD, rethrownExceptions());
+	}
+
+	private static List<Class<? extends RuntimeException>> rethrownExceptions() {
+		if (!ClassUtils.isPresent(CLIENT_AUTHORIZATION_EXCEPTION, null)) {
+			return List.of();
+		}
+		Class<?> type = ClassUtils.resolveClassName(CLIENT_AUTHORIZATION_EXCEPTION, null);
+		return RuntimeException.class.isAssignableFrom(type) ? List.of(type.asSubclass(RuntimeException.class))
+				: List.of();
 	}
 
 	@Bean
@@ -43,6 +59,12 @@ public class OpenRouterToolCallingAutoConfiguration {
 	static OpenRouterToolCallingManagerGuard openRouterToolCallingManagerGuard(
 			ConfigurableListableBeanFactory beanFactory) {
 		return new OpenRouterToolCallingManagerGuard(beanFactory);
+	}
+
+	@Bean
+	static OpenRouterToolFailurePolicyScope openRouterToolFailurePolicyScope(
+			ConfigurableListableBeanFactory beanFactory) {
+		return new OpenRouterToolFailurePolicyScope(beanFactory);
 	}
 
 }

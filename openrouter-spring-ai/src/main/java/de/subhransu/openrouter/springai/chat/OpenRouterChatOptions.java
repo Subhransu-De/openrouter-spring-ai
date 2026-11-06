@@ -101,7 +101,7 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 			return null;
 		}
 		if (options instanceof OpenRouterChatOptions openRouterOptions) {
-			return openRouterOptions.copy();
+			return openRouterOptions.mutate().build();
 		}
 		Builder builder = OpenRouterChatOptions.builder()
 			.requestMode(null)
@@ -125,7 +125,7 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 
 	public OpenRouterChatOptions merge(@Nullable OpenRouterChatOptions runtimeOptions) {
 		if (runtimeOptions == null) {
-			return this.copy();
+			return this.mutate().build();
 		}
 		Builder builder = this.mutate();
 		builder.model(value(runtimeOptions.model, this.model));
@@ -171,11 +171,6 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 
 	private static <T> @Nullable T value(@Nullable T runtime, @Nullable T defaults) {
 		return runtime != null ? runtime : defaults;
-	}
-
-	@SuppressWarnings("unchecked")
-	public <T extends ChatOptions> T copy() {
-		return (T) this.mutate().build();
 	}
 
 	@Override
@@ -315,26 +310,14 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 		return this.outputSchema;
 	}
 
-	public void setOutputSchema(@Nullable String outputSchema) {
-		this.outputSchema = outputSchema;
-	}
-
 	@Override
 	public @Nullable List<ToolCallback> getToolCallbacks() {
 		return readOnlyList(this.toolCallbacks);
 	}
 
-	public void setToolCallbacks(@Nullable List<ToolCallback> toolCallbacks) {
-		this.toolCallbacks = copyList(toolCallbacks);
-	}
-
 	@Override
 	public @Nullable Map<String, Object> getToolContext() {
 		return readOnlyMap(this.toolContext);
-	}
-
-	public void setToolContext(@Nullable Map<String, Object> toolContext) {
-		this.toolContext = copyToolContext(toolContext);
 	}
 
 	private static <T> @Nullable List<T> copyList(@Nullable List<T> values) {

@@ -1,4 +1,3 @@
-org.springframework.ai.retry.autoconfigure.SpringAiRetryAutoConfiguration
 de.subhransu.openrouter.springai.autoconfigure.OpenRouterApiAutoConfiguration
 de.subhransu.openrouter.springai.autoconfigure.OpenRouterToolCallingAutoConfiguration
 de.subhransu.openrouter.springai.autoconfigure.OpenRouterChatAutoConfiguration

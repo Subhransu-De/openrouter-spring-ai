@@ -62,7 +62,7 @@ public class OpenRouterImageModel implements ImageModel {
 	private OpenRouterImageModel(Builder builder) {
 		Assert.notNull(builder.openRouterApi, "OpenRouterApi must not be null");
 		this.openRouterApi = builder.openRouterApi;
-		this.defaultOptions = builder.defaultOptions != null ? builder.defaultOptions.copy()
+		this.defaultOptions = builder.defaultOptions != null ? builder.defaultOptions.mutate().build()
 				: OpenRouterImageOptions.builder().build();
 		this.retryTemplate = builder.retryTemplate != null ? builder.retryTemplate : RetryUtils.DEFAULT_RETRY_TEMPLATE;
 		this.observationRegistry = builder.observationRegistry != null ? builder.observationRegistry
@@ -135,13 +135,22 @@ public class OpenRouterImageModel implements ImageModel {
 		});
 	}
 
+	/**
+	 * Returns a copy of this model's default options, the starting point for per-request
+	 * options built with {@code mutate()}.
+	 * @return the default options
+	 */
+	public OpenRouterImageOptions getOptions() {
+		return this.defaultOptions.mutate().build();
+	}
+
 	public void setObservationConvention(ImageModelObservationConvention observationConvention) {
 		Assert.notNull(observationConvention, "observationConvention must not be null");
 		this.observationConvention = observationConvention;
 	}
 
 	private OpenRouterImageOptions buildRequestOptions(@Nullable ImageOptions runtimeOptions) {
-		return runtimeOptions == null ? this.defaultOptions.copy()
+		return runtimeOptions == null ? this.defaultOptions.mutate().build()
 				: this.defaultOptions.merge(OpenRouterImageOptions.fromOptions(runtimeOptions));
 	}
 

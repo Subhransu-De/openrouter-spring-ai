@@ -84,7 +84,7 @@ public class OpenRouterChatModel implements ChatModel {
 	private OpenRouterChatModel(Builder builder) {
 		Assert.notNull(builder.openRouterApi, "OpenRouterApi must not be null");
 		this.openRouterApi = builder.openRouterApi;
-		this.defaultOptions = builder.defaultOptions != null ? builder.defaultOptions.copy()
+		this.defaultOptions = builder.defaultOptions != null ? builder.defaultOptions.mutate().build()
 				: OpenRouterChatOptions.builder().build();
 		this.retryTemplate = builder.retryTemplate != null ? builder.retryTemplate : RetryUtils.DEFAULT_RETRY_TEMPLATE;
 		this.observationRegistry = builder.observationRegistry != null ? builder.observationRegistry
@@ -178,8 +178,8 @@ public class OpenRouterChatModel implements ChatModel {
 	}
 
 	@Override
-	public ChatOptions getOptions() {
-		return this.defaultOptions.copy();
+	public OpenRouterChatOptions getOptions() {
+		return this.defaultOptions.mutate().build();
 	}
 
 	public void setObservationConvention(ChatModelObservationConvention observationConvention) {
@@ -193,7 +193,8 @@ public class OpenRouterChatModel implements ChatModel {
 	}
 
 	private OpenRouterChatOptions buildRequestOptions(@Nullable ChatOptions runtimeOptions) {
-		return runtimeOptions == null ? this.defaultOptions.copy() : OpenRouterChatOptions.fromOptions(runtimeOptions);
+		return runtimeOptions == null ? this.defaultOptions.mutate().build()
+				: OpenRouterChatOptions.fromOptions(runtimeOptions);
 	}
 
 	private RequestOptions requestOptions(Prompt prompt) {

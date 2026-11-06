@@ -43,7 +43,7 @@ class OpenRouterImageOptionsTests {
 			.providerOptions(Map.of("openai", Map.of("moderation", "low")))
 			.build();
 
-		OpenRouterImageOptions copy = source.copy();
+		OpenRouterImageOptions copy = source.mutate().build();
 
 		assertThat(copy.getInputReferences()).isNotSameAs(source.getInputReferences())
 			.containsExactly("https://example.test/ref.png");
