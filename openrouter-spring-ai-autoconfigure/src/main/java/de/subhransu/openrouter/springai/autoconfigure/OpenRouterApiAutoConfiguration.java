@@ -4,7 +4,6 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.util.Assert;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
-import de.subhransu.openrouter.springai.OpenRouterIdentifiers;
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.OpenRouterSerializationRuntimeHints;
 import java.time.Duration;
@@ -13,9 +12,8 @@ import java.util.List;
 import java.util.StringJoiner;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import java.util.stream.Stream;
-import org.springframework.ai.model.SpringAIModelProperties;
 import org.springframework.ai.retry.autoconfigure.SpringAiRetryProperties;
+import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -26,7 +24,6 @@ import org.springframework.boot.http.client.HttpClientSettings;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ImportRuntimeHints;
 import org.springframework.context.annotation.Conditional;
-import org.springframework.core.env.Environment;
 import org.springframework.util.CollectionUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -41,6 +38,20 @@ public final class OpenRouterApiAutoConfiguration {
 
 	private static final Log logger = LogFactory.getLog(OpenRouterApiAutoConfiguration.class);
 
+	// Spring AI 2.0.2 auto-configurations that pass its ResponseErrorHandler bean to a
+	// provider client. Boot registers a matched auto-configuration under its class name,
+	// so a definition means the provider is on the classpath and its selector, if any,
+	// did not rule it out. It is a heuristic: the client factory inside can still back
+	// off for an application's own client, so the INFO message says "may".
+	private static final List<String> ERROR_HANDLER_CONSUMERS = List.of(
+			"org.springframework.ai.model.deepseek.autoconfigure.DeepSeekChatAutoConfiguration",
+			"org.springframework.ai.model.elevenlabs.autoconfigure.ElevenLabsAutoConfiguration",
+			"org.springframework.ai.model.mistralai.autoconfigure.MistralAiChatAutoConfiguration",
+			"org.springframework.ai.model.mistralai.autoconfigure.MistralAiEmbeddingAutoConfiguration",
+			"org.springframework.ai.model.mistralai.autoconfigure.MistralAiModerationAutoConfiguration",
+			"org.springframework.ai.model.mistralai.autoconfigure.MistralAiOcrAutoConfiguration",
+			"org.springframework.ai.model.ollama.autoconfigure.OllamaApiAutoConfiguration");
+
 	@Bean
 	@ConditionalOnMissingBean
 	OpenRouterApi openRouterApi(OpenRouterCommonProperties commonProperties,
@@ -52,11 +63,11 @@ public final class OpenRouterApiAutoConfiguration {
 			ObjectProvider<OpenRouterRestClientCustomizer> restClientCustomizers,
 			ObjectProvider<OpenRouterWebClientCustomizer> webClientCustomizers,
 			ObjectProvider<JsonMapper> jsonMapperProvider, ObjectProvider<ObjectMapper> objectMapperProvider,
-			ObjectProvider<SpringAiRetryProperties> retryPropertiesProvider, Environment environment) {
+			ObjectProvider<SpringAiRetryProperties> retryPropertiesProvider, ListableBeanFactory beanFactory) {
 		String apiKey = commonProperties.getApiKey();
 		Assert.hasText(apiKey, "OpenRouter API key must not be empty");
 		retryPropertiesProvider
-			.ifAvailable((retryProperties) -> reportUnusedRetrySettings(retryProperties, environment));
+			.ifAvailable((retryProperties) -> reportUnusedRetrySettings(retryProperties, beanFactory));
 		OpenRouterCommonProperties.App app = commonProperties.getApp();
 		// Customize clones only: an application may supply a singleton builder bean.
 		RestClient.Builder restClientBuilder = restClientBuilderProvider.getIfAvailable(RestClient::builder).clone();
@@ -130,9 +141,10 @@ public final class OpenRouterApiAutoConfiguration {
 
 	// These keys configure Spring AI's ResponseErrorHandler bean, which OpenRouterApi
 	// does not use. Say so instead of ignoring them silently. They may still apply to
-	// another provider in the same application, so this is not a failure, and it is only
-	// a warning when every model selector rules other providers out.
-	private static void reportUnusedRetrySettings(SpringAiRetryProperties retryProperties, Environment environment) {
+	// another provider in the same application, so this is never a failure, and it is a
+	// warning unless such a provider is active.
+	private static void reportUnusedRetrySettings(SpringAiRetryProperties retryProperties,
+			ListableBeanFactory beanFactory) {
 		List<String> unused = new ArrayList<>();
 		if (!CollectionUtils.isEmpty(retryProperties.getOnHttpCodes())) {
 			unused.add("on-http-codes");
@@ -149,25 +161,12 @@ public final class OpenRouterApiAutoConfiguration {
 		String message = "spring.ai.retry." + String.join(", spring.ai.retry.", unused)
 				+ " do not apply to OpenRouter models, which classify HTTP errors themselves. "
 				+ "spring.ai.retry.max-attempts and spring.ai.retry.backoff.* still apply.";
-		if (onlyOpenRouterSelected(environment)) {
-			logger.warn(message);
+		if (ERROR_HANDLER_CONSUMERS.stream().anyMatch(beanFactory::containsBeanDefinition)) {
+			logger.info(message + " They may still configure another Spring AI provider's client in this application.");
 		}
 		else {
-			logger.info(message);
+			logger.warn(message);
 		}
-	}
-
-	private static boolean onlyOpenRouterSelected(Environment environment) {
-		// Every Spring AI selector counts: some providers select on the narrower keys,
-		// for example Google GenAI text embeddings on spring.ai.model.embedding.text and
-		// Mistral moderation, which uses Spring AI's error handler, on .moderation.
-		return Stream
-			.of(SpringAIModelProperties.CHAT_MODEL, SpringAIModelProperties.EMBEDDING_MODEL,
-					SpringAIModelProperties.TEXT_EMBEDDING_MODEL, SpringAIModelProperties.MULTI_MODAL_EMBEDDING_MODEL,
-					SpringAIModelProperties.IMAGE_MODEL, SpringAIModelProperties.AUDIO_SPEECH_MODEL,
-					SpringAIModelProperties.AUDIO_TRANSCRIPTION_MODEL, SpringAIModelProperties.MODERATION_MODEL)
-			.map(environment::getProperty)
-			.allMatch((selected) -> OpenRouterIdentifiers.PROVIDER_ID.equals(selected) || "none".equals(selected));
 	}
 
 	private @Nullable String categories(@Nullable List<String> categories) {

@@ -91,6 +91,15 @@ public class OpenRouterEmbeddingModel implements EmbeddingModel {
 		return embed(content);
 	}
 
+	/**
+	 * Returns a copy of this model's default options, the starting point for per-request
+	 * options built with {@code mutate()}.
+	 * @return the default options
+	 */
+	public OpenRouterEmbeddingOptions getOptions() {
+		return this.defaultOptions.mutate().build();
+	}
+
 	@Override
 	public @Nullable String getEmbeddingContent(Document document) {
 		Assert.notNull(document, "Document must not be null");

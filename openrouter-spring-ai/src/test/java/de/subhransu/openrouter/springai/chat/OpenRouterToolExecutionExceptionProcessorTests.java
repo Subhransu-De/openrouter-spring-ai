@@ -1,6 +1,7 @@
 package de.subhransu.openrouter.springai.chat;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
@@ -10,6 +11,8 @@ import ch.qos.logback.core.read.ListAppender;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationRegistry;
 import io.micrometer.observation.tck.TestObservationRegistry;
+import java.io.IOException;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.tool.definition.ToolDefinition;
@@ -94,6 +97,33 @@ class OpenRouterToolExecutionExceptionProcessorTests {
 				failure -> failure.getCause().getMessage() + ": " + failure.getCause().getCause().getMessage());
 
 		assertThat(processor.process(exception)).contains(SECRET, NESTED_DETAIL);
+	}
+
+	@Test
+	void checkedExceptionsAndErrorsPropagateAsInSpringAisDefaultProcessor() {
+		// They are not tool results: an IOException or an Error must reach the caller
+		// instead of becoming a payload the model reads.
+		OpenRouterToolExecutionExceptionProcessor processor = new OpenRouterToolExecutionExceptionProcessor();
+		ToolExecutionException checked = new ToolExecutionException(this.toolDefinition,
+				new IOException("synthetic read failure"));
+		ToolExecutionException error = new ToolExecutionException(this.toolDefinition,
+				new AssertionError("synthetic error"));
+
+		assertThatThrownBy(() -> processor.process(checked)).isSameAs(checked);
+		assertThatThrownBy(() -> processor.process(error)).isSameAs(error);
+	}
+
+	@Test
+	void configuredExceptionTypesPropagateAndOtherRuntimeFailuresStayResults() {
+		OpenRouterToolExecutionExceptionProcessor processor = new OpenRouterToolExecutionExceptionProcessor(
+				ObservationRegistry.NOOP, failure -> OpenRouterToolExecutionExceptionProcessor.DEFAULT_FAILURE_PAYLOAD,
+				List.of(UnsupportedOperationException.class));
+		UnsupportedOperationException reauthorize = new UnsupportedOperationException("synthetic re-authorization");
+
+		assertThatThrownBy(() -> processor.process(new ToolExecutionException(this.toolDefinition, reauthorize)))
+			.isSameAs(reauthorize);
+		assertThat(processor.process(nestedFailure()))
+			.isEqualTo(OpenRouterToolExecutionExceptionProcessor.DEFAULT_FAILURE_PAYLOAD);
 	}
 
 	private ToolExecutionException nestedFailure() {

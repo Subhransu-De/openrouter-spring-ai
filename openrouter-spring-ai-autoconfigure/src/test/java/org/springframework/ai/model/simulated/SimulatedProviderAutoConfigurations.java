@@ -40,6 +40,25 @@ public final class SimulatedProviderAutoConfigurations {
 	}
 
 	/**
+	 * Text embedding auto-configuration shaped like
+	 * {@code GoogleGenAiTextEmbeddingAutoConfiguration}, which selects on
+	 * {@code spring.ai.model.embedding.text} instead of
+	 * {@code spring.ai.model.embedding}.
+	 */
+	@AutoConfiguration
+	@ConditionalOnProperty(name = SpringAIModelProperties.TEXT_EMBEDDING_MODEL, havingValue = "simulated",
+			matchIfMissing = true)
+	public static final class TextEmbedding {
+
+		@Bean
+		@ConditionalOnMissingBean
+		SimulatedTextEmbeddingModel simulatedTextEmbeddingModel() {
+			return new SimulatedTextEmbeddingModel();
+		}
+
+	}
+
+	/**
 	 * Image auto-configuration shaped like {@code OpenAiImageAutoConfiguration}.
 	 */
 	@AutoConfiguration
@@ -58,6 +77,23 @@ public final class SimulatedProviderAutoConfigurations {
 	 * Embedding model registered by the simulated provider.
 	 */
 	public static final class SimulatedEmbeddingModel implements EmbeddingModel {
+
+		@Override
+		public EmbeddingResponse call(EmbeddingRequest request) {
+			throw new UnsupportedOperationException("not called");
+		}
+
+		@Override
+		public float[] embed(Document document) {
+			throw new UnsupportedOperationException("not called");
+		}
+
+	}
+
+	/**
+	 * Text embedding model registered by the simulated provider.
+	 */
+	public static final class SimulatedTextEmbeddingModel implements EmbeddingModel {
 
 		@Override
 		public EmbeddingResponse call(EmbeddingRequest request) {

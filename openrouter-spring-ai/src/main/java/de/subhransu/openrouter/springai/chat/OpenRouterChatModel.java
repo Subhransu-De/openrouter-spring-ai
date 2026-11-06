@@ -178,7 +178,7 @@ public class OpenRouterChatModel implements ChatModel {
 	}
 
 	@Override
-	public ChatOptions getOptions() {
+	public OpenRouterChatOptions getOptions() {
 		return this.defaultOptions.mutate().build();
 	}
 

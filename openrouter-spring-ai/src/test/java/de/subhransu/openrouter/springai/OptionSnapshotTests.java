@@ -8,7 +8,9 @@ import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
+import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingModel;
 import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingOptions;
+import de.subhransu.openrouter.springai.image.OpenRouterImageModel;
 import de.subhransu.openrouter.springai.image.OpenRouterImageOptions;
 import de.subhransu.openrouter.springai.support.OptionSnapshots;
 import java.util.ArrayList;
@@ -117,6 +119,37 @@ class OptionSnapshotTests {
 		assertThat(((OpenRouterChatOptions) model.getOptions()).getProvider().order())
 			.containsExactly("synthetic-route");
 		assertThat(new OpenRouterProviderPreferences(null, null, null, null, List.of(), null, null).order()).isNull();
+	}
+
+	@Test
+	void modelsReturnTypedCopiesOfTheirDefaultOptions() {
+		// Typed getters let callers derive per-request options with OpenRouter-only
+		// fields without a cast, as the official provider models allow.
+		OpenRouterApi api = mock(OpenRouterApi.class);
+		var chatDefaults = OpenRouterChatOptions.builder().model("synthetic/chat").build();
+		OpenRouterChatOptions chat = OpenRouterChatModel.builder()
+			.openRouterApi(api)
+			.defaultOptions(chatDefaults)
+			.build()
+			.getOptions();
+		var embeddingDefaults = OpenRouterEmbeddingOptions.builder().model("synthetic/embedding").build();
+		OpenRouterEmbeddingOptions embedding = OpenRouterEmbeddingModel.builder()
+			.openRouterApi(api)
+			.defaultOptions(embeddingDefaults)
+			.build()
+			.getOptions();
+		var imageDefaults = OpenRouterImageOptions.builder().model("synthetic/image").build();
+		OpenRouterImageOptions image = OpenRouterImageModel.builder()
+			.openRouterApi(api)
+			.defaultOptions(imageDefaults)
+			.build()
+			.getOptions();
+		assertThat(chat.getModel()).isEqualTo("synthetic/chat");
+		assertThat(embedding.getModel()).isEqualTo("synthetic/embedding");
+		assertThat(image.getModel()).isEqualTo("synthetic/image");
+		assertThat(chat).isNotSameAs(chatDefaults);
+		assertThat(embedding).isNotSameAs(embeddingDefaults);
+		assertThat(image).isNotSameAs(imageDefaults);
 	}
 
 	@Test

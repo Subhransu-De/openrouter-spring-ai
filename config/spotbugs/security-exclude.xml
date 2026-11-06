@@ -19,7 +19,7 @@
   </Match>
   <Match>
     <Class name="de.subhransu.openrouter.springai.autoconfigure.OpenRouterApiAutoConfiguration"/>
-    <Method name="reportUnusedRetrySettings" params="org.springframework.ai.retry.autoconfigure.SpringAiRetryProperties,org.springframework.core.env.Environment" returns="void"/>
+    <Method name="reportUnusedRetrySettings" params="org.springframework.ai.retry.autoconfigure.SpringAiRetryProperties,org.springframework.beans.factory.ListableBeanFactory" returns="void"/>
     <Bug pattern="CRLF_INJECTION_LOGS"/>
   </Match>
   <!-- URI.create validates the scheme's ASCII grammar before this comparison.

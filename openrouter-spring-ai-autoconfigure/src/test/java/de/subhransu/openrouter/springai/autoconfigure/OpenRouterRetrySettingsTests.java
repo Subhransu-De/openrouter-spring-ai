@@ -2,7 +2,6 @@ package de.subhransu.openrouter.springai.autoconfigure;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.Arrays;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -22,12 +21,6 @@ class OpenRouterRetrySettingsTests {
 
 	private static final String WARNING = "do not apply to OpenRouter models";
 
-	private static final String[] EVERY_SELECTOR_RULES_OUT_OTHER_PROVIDERS = { "spring.ai.model.chat=openrouter",
-			"spring.ai.model.embedding=none", "spring.ai.model.embedding.text=none",
-			"spring.ai.model.embedding.multimodal=none", "spring.ai.model.image=none",
-			"spring.ai.model.audio.speech=none", "spring.ai.model.audio.transcription=none",
-			"spring.ai.model.moderation=none" };
-
 	private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
 		.withConfiguration(
 				AutoConfigurations.of(SpringAiRetryAutoConfiguration.class, OpenRouterApiAutoConfiguration.class))
@@ -45,41 +38,38 @@ class OpenRouterRetrySettingsTests {
 	}
 
 	@Test
-	void warnsWhenEveryModelSelectorRulesOutOtherProviders(CapturedOutput output) {
-		this.contextRunner.withPropertyValues(EVERY_SELECTOR_RULES_OUT_OTHER_PROVIDERS)
-			.withPropertyValues("spring.ai.retry.on-http-codes=429")
-			.run(context -> {
-				assertThat(context).hasNotFailed();
-				assertThat(output).containsPattern("WARN .*" + WARNING);
-			});
+	void warnsWhenNoOtherProviderReadsTheKeys(CapturedOutput output) {
+		// The narrower selectors such as spring.ai.model.ocr stay unset, as in a
+		// single-provider application; no other provider is on the classpath.
+		this.contextRunner.withPropertyValues("spring.ai.retry.on-http-codes=429").run(context -> {
+			assertThat(context).hasNotFailed();
+			assertThat(output).containsPattern("WARN .*" + WARNING);
+		});
 	}
 
-	@Test
-	void onlyInformsWhenANarrowerSelectorIsUnset(CapturedOutput output) {
-		// Google GenAI text embeddings select on spring.ai.model.embedding.text, so
-		// setting spring.ai.model.embedding alone does not rule them out.
-		String[] withoutTextEmbedding = Arrays.stream(EVERY_SELECTOR_RULES_OUT_OTHER_PROVIDERS)
-			.filter((property) -> !property.startsWith("spring.ai.model.embedding.text="))
-			.toArray(String[]::new);
-		this.contextRunner.withPropertyValues(withoutTextEmbedding)
+	@ParameterizedTest
+	@ValueSource(strings = { "org.springframework.ai.model.mistralai.autoconfigure.MistralAiOcrAutoConfiguration",
+			"org.springframework.ai.model.ollama.autoconfigure.OllamaApiAutoConfiguration" })
+	void onlyInformsWhenAnotherProviderReadsTheKeys(String autoConfiguration, CapturedOutput output) {
+		// A provider whose auto-configuration passes Spring AI's error handler to its
+		// client is active, so a warning would be noise. The auto-configuration does not
+		// prove that its client reads the keys, because its client factory can back off
+		// for an application's own client, so the message only says they may.
+		this.contextRunner.withBean(autoConfiguration, Object.class, Object::new)
 			.withPropertyValues("spring.ai.retry.on-http-codes=429")
 			.run(context -> {
 				assertThat(context).hasNotFailed();
 				assertThat(output).containsPattern("INFO .*" + WARNING).doesNotContainPattern("WARN .*" + WARNING);
+				assertThat(output).contains("They may still configure another Spring AI provider's client");
 			});
 	}
 
 	@Test
-	void onlyInformsWhenAnotherProviderMayUseTheKeys(CapturedOutput output) {
-		// With a selector left unset or naming another provider, the keys may configure
-		// that provider's error handler, so a warning on every startup would be noise.
-		this.contextRunner
-			.withPropertyValues("spring.ai.retry.on-http-codes=429", "spring.ai.model.chat=openrouter",
-					"spring.ai.model.embedding=mistral")
-			.run(context -> {
-				assertThat(context).hasNotFailed();
-				assertThat(output).containsPattern("INFO .*" + WARNING).doesNotContainPattern("WARN .*" + WARNING);
-			});
+	void bootRegistersAutoConfigurationsUnderTheirClassName() {
+		// The level check relies on this naming to see which providers are active.
+		this.contextRunner.run(context -> assertThat(
+				context.getBeanFactory().containsBeanDefinition(SpringAiRetryAutoConfiguration.class.getName()))
+			.isTrue());
 	}
 
 	@Test

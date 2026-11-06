@@ -10,11 +10,13 @@ import java.util.Arrays;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.model.tool.DefaultToolCallingManager;
 import org.springframework.aot.hint.RuntimeHints;
+import org.springframework.aot.hint.RuntimeHintsRegistrar;
 import org.springframework.aot.hint.predicate.RuntimeHintsPredicates;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.ImportRuntimeHints;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
+import org.springframework.core.io.support.SpringFactoriesLoader;
 import org.springframework.core.type.classreading.SimpleMetadataReaderFactory;
 
 class OpenRouterSerializationRuntimeHintsTests {
@@ -56,6 +58,15 @@ class OpenRouterSerializationRuntimeHintsTests {
 		assertThat(hints.reflection().getTypeHint(OpenRouterErrorResponse.Error.class)).isNotNull();
 		assertThat(hints.reflection().getTypeHint(TolerantJsonStringDeserializer.class)).isNotNull();
 		assertThat(hints.reflection().getTypeHint(DefaultToolCallingManager.class)).isNull();
+	}
+
+	@Test
+	void coreModuleRegistersSerializationHintsForAotWithoutAutoConfiguration() {
+		// Spring's AOT processing loads registrars from aot.factories, so the wire hints
+		// also apply when the core module is used without Boot auto-configuration.
+		var registrars = SpringFactoriesLoader.forResourceLocation("META-INF/spring/aot.factories")
+			.load(RuntimeHintsRegistrar.class);
+		assertThat(registrars).hasAtLeastOneElementOfType(OpenRouterSerializationRuntimeHints.class);
 	}
 
 	@Test

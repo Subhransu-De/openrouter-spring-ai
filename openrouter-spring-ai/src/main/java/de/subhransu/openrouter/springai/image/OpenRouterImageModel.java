@@ -135,6 +135,15 @@ public class OpenRouterImageModel implements ImageModel {
 		});
 	}
 
+	/**
+	 * Returns a copy of this model's default options, the starting point for per-request
+	 * options built with {@code mutate()}.
+	 * @return the default options
+	 */
+	public OpenRouterImageOptions getOptions() {
+		return this.defaultOptions.mutate().build();
+	}
+
 	public void setObservationConvention(ImageModelObservationConvention observationConvention) {
 		Assert.notNull(observationConvention, "observationConvention must not be null");
 		this.observationConvention = observationConvention;

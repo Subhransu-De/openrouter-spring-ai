@@ -126,6 +126,30 @@ class OpenRouterModelSelectionAutoConfigurationTests {
 	}
 
 	@Test
+	void replacingTheChatModelKeepsTheSharedApiWhileTheSelectorIsUnset() {
+		// The shared API bean depends only on the selectors, because application model
+		// beans may inject it. Replacing the chat model therefore still requires the key
+		// unless the selector rules OpenRouter out.
+		ApplicationContextRunner ownChatModel = this.contextRunner
+			.withUserConfiguration(OtherChatProviderConfiguration.class)
+			.withPropertyValues(EMBEDDING_NONE, IMAGE_NONE);
+		ownChatModel.run(context -> {
+			assertThat(context).hasFailed();
+			assertThat(context.getStartupFailure()).rootCause().hasMessageContaining("OpenRouter API key");
+		});
+		ownChatModel.withPropertyValues(CHAT_NONE).run(context -> {
+			assertThat(context).hasNotFailed();
+			assertThat(context).doesNotHaveBean(OpenRouterApi.class);
+			assertThat(context).hasSingleBean(ChatModel.class);
+		});
+		ownChatModel.withPropertyValues(API_KEY).run(context -> {
+			assertThat(context).hasNotFailed();
+			assertThat(context).hasSingleBean(OpenRouterApi.class);
+			assertThat(context).doesNotHaveBean(OpenRouterChatModel.class);
+		});
+	}
+
+	@Test
 	void providerSelectionIsSeparateFromConcreteModelSelection() {
 		this.contextRunner
 			.withPropertyValues(API_KEY, "spring.ai.model.chat=" + OpenRouterIdentifiers.PROVIDER_ID, EMBEDDING_NONE,

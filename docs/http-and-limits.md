@@ -59,7 +59,7 @@ OpenRouterApi api = OpenRouterApi.builder().apiKey(apiKey)
 	.restClientBuilder(blocking).timeout(Duration.ofMinutes(2)).build();
 ```
 
-Boot replaces any request factory already set on the builder it clones. To change the transport, define a `ClientHttpRequestFactoryBuilder` bean and tune it through `HttpClientSettings`. A programmatic `timeout(null)` disables the streaming guard only.
+Boot replaces any request factory already set on the builder it clones. To change the transport, define a `ClientHttpRequestFactoryBuilder` bean and tune it through `HttpClientSettings`. In a WebFlux application, Boot creates no such bean and ignores `spring.http.clients.imperative.*` and `ClientHttpRequestFactoryBuilderCustomizer` beans, so blocking OpenRouter calls use `ClientHttpRequestFactoryBuilder.detect()` unless you define the bean yourself. A programmatic `timeout(null)` disables the streaming guard only.
 
 For a deadline on one stream, apply Reactor `timeout(duration)` to the returned `Flux`. It measures gaps between emitted items, not wire keepalives, cancels only its own subscription and is not a total-stream deadline.
 
