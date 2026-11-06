@@ -143,7 +143,7 @@ When the gate fails:
 2. Reproduce the affected behavior with a synthetic test, and assert the observable contract.
 3. Document equivalent mutations. Do not lower the threshold or remove targets to make the gate pass.
 
-No mutations are excluded. Not every survivor is equivalent, so inspect its observable effect before you add tests or propose a narrow exclusion. PIT counts a mutation timeout as a detection, so when you compare runs, compare which mutations timed out, not only the score.
+The configuration excludes no mutations. PIT 1.30.2 and later filter `null` return mutations from methods that JSpecify `@NullMarked` declares non-null; such a mutation breaks the declared contract instead of testing behavior, so it no longer counts toward the score. Not every survivor is equivalent, so inspect its observable effect before you add tests or propose a narrow exclusion. PIT counts a mutation timeout as a detection, so when you compare runs, compare which mutations timed out, not only the score.
 
 ## Releases
 
