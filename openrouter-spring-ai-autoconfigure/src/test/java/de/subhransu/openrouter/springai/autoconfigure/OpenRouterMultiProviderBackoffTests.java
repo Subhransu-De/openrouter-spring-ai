@@ -19,6 +19,8 @@ import org.springframework.ai.model.simulated.SimulatedProviderChatAutoConfigura
 import org.springframework.ai.model.tool.autoconfigure.ToolCallingAutoConfiguration;
 import org.springframework.ai.tool.execution.DefaultToolExecutionExceptionProcessor;
 import org.springframework.ai.tool.execution.ToolExecutionExceptionProcessor;
+import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
+import org.springframework.boot.LazyInitializationBeanFactoryPostProcessor;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.boot.test.system.CapturedOutput;
@@ -57,6 +59,20 @@ class OpenRouterMultiProviderBackoffTests {
 			// Our processor now serves the other provider's tool calls too, so say so.
 			assertThat(output).containsPattern("WARN .*" + SCOPE_WARNING);
 		});
+	}
+
+	@Test
+	void scopeWarningLeavesLazyChatModelsUncreated(CapturedOutput output) {
+		this.contextRunner
+			.withInitializer(
+					(context) -> context.addBeanFactoryPostProcessor(new LazyInitializationBeanFactoryPostProcessor()))
+			.run(context -> {
+				assertThat(context).hasNotFailed();
+				ConfigurableListableBeanFactory beanFactory = context.getBeanFactory();
+				assertThat(beanFactory.getBeanNamesForType(ChatModel.class, false, false)).hasSize(2)
+					.noneMatch(beanFactory::containsSingleton);
+				assertThat(output).containsPattern("WARN .*" + SCOPE_WARNING);
+			});
 	}
 
 	@Test

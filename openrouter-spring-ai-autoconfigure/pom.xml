@@ -83,6 +83,12 @@
       <artifactId>reactor-test</artifactId>
       <scope>test</scope>
     </dependency>
+    <!-- Supplies ClientAuthorizationException, which the tool failure processor rethrows by class name. -->
+    <dependency>
+      <groupId>org.springframework.security</groupId>
+      <artifactId>spring-security-oauth2-client</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>

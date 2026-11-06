@@ -22,5 +22,8 @@ dependencies {
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
 	testImplementation("org.springframework.ai:spring-ai-client-chat")
 	testImplementation("io.projectreactor:reactor-test")
+	// Supplies ClientAuthorizationException, which the tool failure processor rethrows by
+	// class name.
+	testImplementation("org.springframework.security:spring-security-oauth2-client")
 	testImplementation("com.tngtech.archunit:archunit-junit5:$archunitVersion")
 }

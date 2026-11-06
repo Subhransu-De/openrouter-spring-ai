@@ -2,6 +2,7 @@ package de.subhransu.openrouter.springai.autoconfigure;
 
 import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
 import de.subhransu.openrouter.springai.chat.OpenRouterToolExecutionExceptionProcessor;
+import java.util.Arrays;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.springframework.ai.chat.model.ChatModel;
@@ -30,18 +31,24 @@ final class OpenRouterToolFailurePolicyScope implements SmartInitializingSinglet
 		// with spring.ai.model.chat unset another provider's chat model can appear after
 		// our processor was chosen. Spring AI's shared tool calling manager then applies
 		// our failure policy to that provider's tool calls as well.
-		boolean ownProcessor = !this.beanFactory
-			.getBeansOfType(OpenRouterToolExecutionExceptionProcessor.class, false, false)
-			.isEmpty();
-		boolean otherChatModel = this.beanFactory.getBeansOfType(ChatModel.class, false, false)
-			.values()
-			.stream()
-			.anyMatch((model) -> !(model instanceof OpenRouterChatModel));
-		if (ownProcessor && otherChatModel) {
+		if (this.beanFactory.getBeanNamesForType(OpenRouterToolExecutionExceptionProcessor.class, false,
+				false).length == 0) {
+			return;
+		}
+		if (Arrays.stream(this.beanFactory.getBeanNamesForType(ChatModel.class, false, false))
+			.anyMatch(this::isOtherProviderModel)) {
 			logger.warn("OpenRouter's tool failure policy also handles the tool calls of another provider's chat "
 					+ "model in this context. Set spring.ai.model.chat to the provider you use, or declare your own "
 					+ "ToolExecutionExceptionProcessor bean.");
 		}
+	}
+
+	// Reads the type without creating the bean, because a diagnostic must not create
+	// lazy models or their dependencies. A lazy model declared only as an interface
+	// cannot be identified without creating it, so it is skipped.
+	private boolean isOtherProviderModel(String beanName) {
+		Class<?> type = this.beanFactory.getType(beanName, false);
+		return type != null && !type.isInterface() && !OpenRouterChatModel.class.isAssignableFrom(type);
 	}
 
 }

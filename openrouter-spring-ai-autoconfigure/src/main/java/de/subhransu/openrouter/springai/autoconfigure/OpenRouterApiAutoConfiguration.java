@@ -42,7 +42,8 @@ public final class OpenRouterApiAutoConfiguration {
 	// provider client. Boot registers a matched auto-configuration under its class name,
 	// so a definition means the provider is on the classpath and its selector, if any,
 	// did not rule it out. It is a heuristic: the client factory inside can still back
-	// off for an application's own client, so the INFO message says "may".
+	// off for an application's own client, so the INFO message says "may". A test fails
+	// on a new Spring AI minor version so that the list is checked again.
 	private static final List<String> ERROR_HANDLER_CONSUMERS = List.of(
 			"org.springframework.ai.model.deepseek.autoconfigure.DeepSeekChatAutoConfiguration",
 			"org.springframework.ai.model.elevenlabs.autoconfigure.ElevenLabsAutoConfiguration",

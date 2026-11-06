@@ -73,6 +73,16 @@ class OpenRouterRetrySettingsTests {
 	}
 
 	@Test
+	void errorHandlerConsumersWereCheckedForThisSpringAiLine() {
+		// The level check names the Spring AI 2.0 auto-configurations that pass the error
+		// handler to a client. A new minor release can add or rename one.
+		assertThat(SpringAiRetryAutoConfiguration.class.getPackage().getImplementationVersion())
+			.as("Re-check OpenRouterApiAutoConfiguration.ERROR_HANDLER_CONSUMERS against the new Spring AI "
+					+ "auto-configurations, then update this version")
+			.startsWith("2.0.");
+	}
+
+	@Test
 	void staysQuietForKeysThatApply(CapturedOutput output) {
 		this.contextRunner
 			.withPropertyValues("spring.ai.retry.max-attempts=2", "spring.ai.retry.backoff.initial-interval=1s",
