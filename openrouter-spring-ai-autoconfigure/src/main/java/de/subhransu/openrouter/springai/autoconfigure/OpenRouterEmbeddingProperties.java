@@ -12,16 +12,34 @@ public class OpenRouterEmbeddingProperties {
 
 	public static final String CONFIG_PREFIX = "spring.ai.openrouter.embedding";
 
+	/**
+	 * Document metadata to include in the embedded text.
+	 */
 	private MetadataMode metadataMode = MetadataMode.NONE;
 
+	/**
+	 * Embedding model id in vendor/model form.
+	 */
 	private @Nullable String model;
 
+	/**
+	 * Number of output dimensions, for models that support shortened embeddings.
+	 */
 	private @Nullable Integer dimensions;
 
+	/**
+	 * Embedding encoding format. Only float embeddings are decoded.
+	 */
 	private @Nullable String encodingFormat;
 
+	/**
+	 * End-user identifier forwarded to OpenRouter.
+	 */
 	private @Nullable String user;
 
+	/**
+	 * Provider routing preferences.
+	 */
 	@NestedConfigurationProperty
 	private @Nullable OpenRouterProviderPreferences provider;
 

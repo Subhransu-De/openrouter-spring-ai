@@ -45,9 +45,8 @@ class PublicApiNullabilityTests {
 				        .metadata(mapOf("optional" to null)).build()
 				    val portable: ChatOptions = options
 				    val model: String? = portable.model
-				    options.setOutputSchema(null)
-				    options.setToolContext(null)
-				    val copy: OpenRouterChatOptions = options.copy()
+				    val changed: OpenRouterChatOptions = options.mutate().outputSchema(null).toolContext(null).build()
+				    val copy: OpenRouterChatOptions = changed.mutate().build()
 				    val merged: OpenRouterChatOptions = copy.merge(null)
 				    val embedding: Int? = OpenRouterEmbeddingOptions.builder().dimensions(null).build().dimensions
 				    val style: String? = OpenRouterImageOptions.builder().width(null).build().style

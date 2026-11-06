@@ -28,7 +28,7 @@ class OpenRouterChatOptionsRobustnessTests {
 
 	@Test
 	@SuppressWarnings("unchecked")
-	void copiesKeepNestedSnapshotsIsolatedAcrossBuilderAndSetterChanges() {
+	void copiesKeepNestedSnapshotsIsolatedAcrossBuilderAndMutateChanges() {
 		var values = new ArrayList<>(List.of("original"));
 		var nested = new LinkedHashMap<String, Object>();
 		nested.put("values", values);
@@ -40,11 +40,11 @@ class OpenRouterChatOptionsRobustnessTests {
 			.toolChoice(Map.of("nested", nested))
 			.toolContext(Map.of("nested", nested, "opaque", opaque));
 		var source = builder.build();
-		OpenRouterChatOptions copy = source.copy();
+		OpenRouterChatOptions copy = source.mutate().build();
 		values.add("later");
 		nested.put("later", true);
 		builder.toolContext("builderOnly", true);
-		copy.setToolContext(Map.of("copyOnly", true));
+		OpenRouterChatOptions changed = copy.mutate().toolContext(null).toolContext("copyOnly", true).build();
 		for (var snapshot : List.of(source, source.mutate().clone().build(), copy)) {
 			for (var map : List.of(snapshot.getMetadata(), snapshot.getImageConfig(),
 					(Map<String, Object>) snapshot.getToolChoice())) {
@@ -56,34 +56,27 @@ class OpenRouterChatOptionsRobustnessTests {
 		}
 		assertThat(source.getToolContext()).containsEntry("opaque", opaque)
 			.doesNotContainKeys("builderOnly", "copyOnly");
-		assertThat(copy.getToolContext()).containsOnlyKeys("copyOnly");
+		assertThat(copy.getToolContext()).containsEntry("opaque", opaque).doesNotContainKey("copyOnly");
+		assertThat(changed.getToolContext()).containsOnlyKeys("copyOnly");
 	}
 
 	@Test
-	void copyPreservesOverriddenMutateBehavior() {
-		var source = new OpenRouterChatOptions() {
-			@Override
-			public Builder mutate() {
-				return OpenRouterChatOptions.builder().model("synthetic/subclass");
-			}
-		};
-		OpenRouterChatOptions copy = source.copy();
-		assertThat(copy.getModel()).isEqualTo("synthetic/subclass");
-	}
-
-	@Test
-	void getterSnapshotsRemainDetachedAfterRuntimeSettersReplaceCollections() {
+	void getterSnapshotsRemainDetachedWhenMutateReplacesCollections() {
 		ToolCallback first = tool("first");
 		ToolCallback second = tool("second");
 		var options = OpenRouterChatOptions.builder().toolCallbacks(first).toolContext(Map.of("first", true)).build();
 		var callbacks = options.getToolCallbacks();
 		var context = options.getToolContext();
-		options.setToolCallbacks(List.of(second));
-		options.setToolContext(Map.of("second", true));
+		var replaced = options.mutate()
+			.toolCallbacks(List.of(second))
+			.toolContext(null)
+			.toolContext("second", true)
+			.build();
 		assertThat(callbacks).containsExactly(first);
 		assertThat(context).containsOnlyKeys("first");
-		assertThat(options.getToolCallbacks()).containsExactly(second);
-		assertThat(options.getToolContext()).containsOnlyKeys("second");
+		assertThat(options.getToolCallbacks()).containsExactly(first);
+		assertThat(replaced.getToolCallbacks()).containsExactly(second);
+		assertThat(replaced.getToolContext()).containsOnlyKeys("second");
 		assertThatThrownBy(() -> callbacks.add(second)).isInstanceOf(UnsupportedOperationException.class);
 		assertThatThrownBy(() -> context.put("later", true)).isInstanceOf(UnsupportedOperationException.class);
 	}
@@ -120,7 +113,7 @@ class OpenRouterChatOptionsRobustnessTests {
 			.metadata(Map.of("k", "v"))
 			.build();
 
-		OpenRouterChatOptions copy = source.copy();
+		OpenRouterChatOptions copy = source.mutate().build();
 		copy = copy.mutate().stopSequences(List.of("END", "STOP")).build();
 
 		// The source's mutable collections are untouched by edits to the copy.
@@ -134,7 +127,7 @@ class OpenRouterChatOptionsRobustnessTests {
 		metadata.put("trace", "1");
 		OpenRouterChatOptions source = OpenRouterChatOptions.builder().model(MODEL).metadata(metadata).build();
 
-		OpenRouterChatOptions copy = source.copy();
+		OpenRouterChatOptions copy = source.mutate().build();
 		copy = copy.mutate().metadata(Map.of("trace", "2")).build();
 
 		assertThat(source.getMetadata()).containsEntry("trace", "1");
@@ -152,7 +145,7 @@ class OpenRouterChatOptionsRobustnessTests {
 			.reasoning(reasoning)
 			.build();
 
-		OpenRouterChatOptions copy = source.copy();
+		OpenRouterChatOptions copy = source.mutate().build();
 
 		// Nested records are immutable, so sharing the reference is safe and expected.
 		assertThat(copy.getProvider()).isEqualTo(provider);
@@ -160,7 +153,7 @@ class OpenRouterChatOptionsRobustnessTests {
 	}
 
 	// ---------------------------------------------------------------------
-	// Exhaustive field sweep: every option must survive merge() and copy()
+	// Exhaustive field sweep: every option must survive merge() and mutate()
 	// ---------------------------------------------------------------------
 
 	private OpenRouterChatOptions fullyPopulatedOptions() {
@@ -210,7 +203,7 @@ class OpenRouterChatOptionsRobustnessTests {
 	@Test
 	void fullyPopulatedFixtureCoversEveryDeclaredField() throws IllegalAccessException {
 		// Guard for the sweep tests below: a newly added option field that the fixture
-		// does not populate fails here, so it cannot silently escape merge()/copy()
+		// does not populate fails here, so it cannot silently escape merge()/mutate()
 		// coverage.
 		OpenRouterChatOptions options = fullyPopulatedOptions();
 		for (Field field : OpenRouterChatOptions.class.getDeclaredFields()) {
@@ -246,7 +239,7 @@ class OpenRouterChatOptionsRobustnessTests {
 	void copyPreservesEveryField() {
 		OpenRouterChatOptions source = fullyPopulatedOptions();
 
-		OpenRouterChatOptions copy = source.copy();
+		OpenRouterChatOptions copy = source.mutate().build();
 
 		assertThat((Object) copy).isNotSameAs(source);
 		assertThat((Object) copy).usingRecursiveComparison().ignoringFields("toolCallbacks").isEqualTo(source);
@@ -260,9 +253,10 @@ class OpenRouterChatOptionsRobustnessTests {
 		// action-at-a-distance bug.
 		OpenRouterChatOptions source = fullyPopulatedOptions();
 
-		OpenRouterChatOptions copy = source.copy();
-		copy.setToolCallbacks(List.of(tool("extra")));
-		copy.setToolContext(Map.of("region", "eu"));
+		OpenRouterChatOptions copy = source.mutate()
+			.toolCallbacks(List.of(tool("extra")))
+			.toolContext("region", "eu")
+			.build();
 
 		assertThat(source.getToolCallbacks()).hasSize(1);
 		assertThat(source.getToolContext()).doesNotContainKey("region");

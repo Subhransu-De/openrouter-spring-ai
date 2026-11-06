@@ -1,6 +1,6 @@
 package de.subhransu.openrouter.springai.autoconfigure;
 
-import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import de.subhransu.openrouter.springai.OpenRouterIdentifiers;
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
@@ -27,22 +27,22 @@ import org.springframework.core.retry.RetryTemplate;
 @ConditionalOnProperty(name = SpringAIModelProperties.CHAT_MODEL, havingValue = OpenRouterIdentifiers.PROVIDER_ID,
 		matchIfMissing = true)
 @EnableConfigurationProperties(OpenRouterChatProperties.class)
-public class OpenRouterChatAutoConfiguration {
+public final class OpenRouterChatAutoConfiguration {
 
 	@Bean
 	@ConditionalOnMissingBean(ChatModel.class)
 	OpenRouterChatModel openRouterChatModel(OpenRouterApi openRouterApi, OpenRouterChatProperties chatProperties,
 			ObjectProvider<ToolCallingManager> toolCallingManagerProvider,
-			ObjectProvider<RetryTemplate> retryTemplateProvider, ObjectProvider<ObjectMapper> objectMapperProvider,
+			ObjectProvider<RetryTemplate> retryTemplateProvider, ObjectProvider<JsonMapper> jsonMapperProvider,
 			ObjectProvider<ObservationRegistry> observationRegistryProvider,
 			ObjectProvider<ChatModelObservationConvention> observationConventionProvider) {
 		OpenRouterChatModel chatModel = OpenRouterChatModel.builder()
 			.openRouterApi(openRouterApi)
 			.defaultOptions(chatProperties.toOptions())
 			.toolCallingManager(toolCallingManagerProvider.getIfAvailable())
-			.retryTemplate(retryTemplateProvider.getIfAvailable())
-			.objectMapper(objectMapperProvider.getIfAvailable(ObjectMapper::new))
-			.observationRegistry(observationRegistryProvider.getIfAvailable())
+			.retryTemplate(retryTemplateProvider.getIfUnique())
+			.objectMapper(jsonMapperProvider.getIfUnique(JsonMapper::new))
+			.observationRegistry(observationRegistryProvider.getIfUnique())
 			.streamingStateMaxBytes(chatProperties.getStreamingState().getMaxSize().toBytes())
 			.streamingStateMaxChoices(chatProperties.getStreamingState().getMaxChoices())
 			.toolCallAggregationMaxBytes(chatProperties.getToolCallAggregation().getMaxSize().toBytes())

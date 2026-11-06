@@ -148,7 +148,7 @@ class OpenRouterAudioOutputTests {
 	void serializesTypedOptionsAndMapsFormats(String format) {
 		OpenRouterAudioOptions config = new OpenRouterAudioOptions("provider-specific-voice", format);
 		OpenRouterChatOptions configured = this.options.mutate().audio(config).build();
-		assertThat(configured.<OpenRouterChatOptions>copy().getAudio()).isEqualTo(config);
+		assertThat(configured.mutate().build().getAudio()).isEqualTo(config);
 		assertThat(this.options.merge(configured).getAudio()).isEqualTo(config);
 		ChatCompletionRequest request = new OpenRouterChatRequestMapper(this.json)
 			.map(List.of(new UserMessage("synthetic")), configured, true, List.of());

@@ -31,10 +31,10 @@ class OpenRouterEmbeddingOptionsTests {
 	void copyIsIndependentOfTheSource() {
 		OpenRouterEmbeddingOptions source = OpenRouterEmbeddingOptions.builder().model(MODEL).build();
 
-		OpenRouterEmbeddingOptions copy = source.copy();
-		copy.setModel("changed");
+		OpenRouterEmbeddingOptions changed = source.mutate().model("changed").build();
 
 		assertThat(source.getModel()).isEqualTo(MODEL);
+		assertThat(changed.getModel()).isEqualTo("changed");
 	}
 
 	@Test

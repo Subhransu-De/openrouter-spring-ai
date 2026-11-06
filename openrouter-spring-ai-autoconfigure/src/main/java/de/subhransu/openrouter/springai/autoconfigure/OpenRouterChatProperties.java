@@ -20,8 +20,15 @@ public class OpenRouterChatProperties {
 
 	public static final String CONFIG_PREFIX = "spring.ai.openrouter.chat";
 
+	/**
+	 * Model id in vendor/model form, such as openai/gpt-oss-120b.
+	 */
 	private @Nullable String model;
 
+	/**
+	 * Comma-separated list of fallback model ids that OpenRouter tries after the primary
+	 * model.
+	 */
 	private @Nullable List<String> models;
 
 	/**
@@ -30,24 +37,54 @@ public class OpenRouterChatProperties {
 	 */
 	private @Nullable OpenRouterRequestMode requestMode = OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS;
 
+	/**
+	 * Sampling temperature.
+	 */
 	private @Nullable Double temperature;
 
+	/**
+	 * Nucleus sampling probability mass.
+	 */
 	private @Nullable Double topP;
 
+	/**
+	 * Number of most likely tokens to sample from.
+	 */
 	private @Nullable Integer topK;
 
+	/**
+	 * Maximum number of tokens to generate, sent as max_tokens.
+	 */
 	private @Nullable Integer maxTokens;
 
+	/**
+	 * Maximum number of completion tokens, sent as max_completion_tokens.
+	 */
 	private @Nullable Integer maxCompletionTokens;
 
+	/**
+	 * Comma-separated list of stop sequences.
+	 */
 	private @Nullable List<String> stop;
 
+	/**
+	 * Seed for repeatable sampling, where the upstream provider supports it.
+	 */
 	private @Nullable Integer seed;
 
+	/**
+	 * Penalty for tokens that already appear in the text.
+	 */
 	private @Nullable Double presencePenalty;
 
+	/**
+	 * Penalty that grows with how often a token already appears in the text.
+	 */
 	private @Nullable Double frequencyPenalty;
 
+	/**
+	 * End-user identifier forwarded to OpenRouter.
+	 */
 	private @Nullable String user;
 
 	/**
@@ -61,52 +98,112 @@ public class OpenRouterChatProperties {
 	 */
 	private @Nullable String outputSchema;
 
+	/**
+	 * Optional OpenRouter request fields without a typed option, added at the request
+	 * root. Unknown and standard keys are rejected.
+	 */
 	private @Nullable Map<String, @Nullable Object> extraBody;
 
+	/**
+	 * Optional provider routing fields without a typed option, added inside the provider
+	 * object.
+	 */
 	private @Nullable Map<String, @Nullable Object> providerExtraBody;
 
-	/** Strictness for all function tools; unset preserves the provider default. */
+	/**
+	 * Whether to request strict schemas for all function tools. Unset keeps the provider
+	 * default.
+	 */
 	private @Nullable Boolean toolStrict;
 
+	/**
+	 * Whether the model may request several tool calls in one response.
+	 */
 	private @Nullable Boolean parallelToolCalls;
 
+	/**
+	 * Tool choice: auto, none or required.
+	 */
 	private @Nullable String toolChoice;
 
+	/**
+	 * Penalty applied to repeated tokens.
+	 */
 	private @Nullable Double repetitionPenalty;
 
+	/**
+	 * Minimum token probability, relative to the most likely token.
+	 */
 	private @Nullable Double minP;
 
+	/**
+	 * Top-a sampling threshold, relative to the probability of the most likely token.
+	 */
 	private @Nullable Double topA;
 
+	/**
+	 * OpenRouter routing strategy for the models list, sent as route.
+	 */
 	private @Nullable String route;
 
+	/**
+	 * Whether to ask OpenRouter for usage and cost in Chat Completions calls and streams.
+	 * Responses mode rejects it.
+	 */
 	private @Nullable Boolean includeUsage;
 
+	/**
+	 * Comma-separated list of output modalities, such as text, image or audio.
+	 */
 	private @Nullable List<String> modalities;
 
+	/**
+	 * Audio output voice and format. Streaming Chat Completions only.
+	 */
 	@NestedConfigurationProperty
 	private @Nullable OpenRouterAudioOptions audio;
 
+	/**
+	 * Image generation settings sent as image_config when the modalities include image.
+	 */
 	private @Nullable Map<String, @Nullable Object> imageConfig;
 
+	/**
+	 * Service tier requested from the upstream provider.
+	 */
 	private @Nullable OpenRouterServiceTier serviceTier;
 
+	/**
+	 * Key-value metadata attached to the request.
+	 */
 	private @Nullable Map<String, @Nullable Object> metadata;
 
+	/**
+	 * Provider routing preferences.
+	 */
 	@NestedConfigurationProperty
 	private @Nullable OpenRouterProviderPreferences provider;
 
+	/**
+	 * Reasoning settings for models that support reasoning.
+	 */
 	@NestedConfigurationProperty
 	private @Nullable OpenRouterReasoningOptions reasoning;
 
+	/**
+	 * Per-stream state limits for Chat Completions streams.
+	 */
 	private StreamingState streamingState = new StreamingState();
 
+	/**
+	 * Limits for assembling streamed tool calls and for Responses stream state.
+	 */
 	private ToolCallAggregation toolCallAggregation = new ToolCallAggregation();
 
 	/**
-	 * Allow a custom tool calling manager whose provider-visible failure policy cannot be
-	 * verified. Enabling this transfers all failure-result redaction responsibility to
-	 * the application.
+	 * Whether to allow a custom tool calling manager whose provider-visible failure
+	 * policy cannot be verified. Enabling this makes the application responsible for
+	 * redacting failure results.
 	 */
 	private boolean allowUnsafeToolFailureResults;
 
@@ -429,8 +526,15 @@ public class OpenRouterChatProperties {
 
 	public static class StreamingState {
 
+		/**
+		 * Maximum metadata bytes retained per Chat Completions stream. Text deltas do not
+		 * count.
+		 */
 		private DataSize maxSize = DataSize.ofMegabytes(1);
 
+		/**
+		 * Maximum number of simultaneously active choices per Chat Completions stream.
+		 */
 		private int maxChoices = 128;
 
 		public DataSize getMaxSize() {
@@ -453,10 +557,21 @@ public class OpenRouterChatProperties {
 
 	public static class ToolCallAggregation {
 
+		/**
+		 * Maximum serialized bytes buffered while a streamed tool call or Responses round
+		 * is assembled.
+		 */
 		private DataSize maxSize = DataSize.ofMegabytes(1);
 
+		/**
+		 * Maximum number of chunks or events buffered while a streamed tool call or
+		 * Responses round is assembled.
+		 */
 		private int maxChunks = 8192;
 
+		/**
+		 * Maximum time a streamed tool call or Responses round may stay incomplete.
+		 */
 		private Duration maxDuration = Duration.ofMinutes(2);
 
 		public DataSize getMaxSize() {

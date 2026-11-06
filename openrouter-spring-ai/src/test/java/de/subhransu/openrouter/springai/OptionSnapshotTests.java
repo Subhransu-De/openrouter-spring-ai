@@ -106,7 +106,7 @@ class OptionSnapshotTests {
 			.defaultOptions(options)
 			.build();
 		routes.clear();
-		for (var snapshot : List.of(options, options.<OpenRouterChatOptions>copy(), options.merge(null),
+		for (var snapshot : List.of(options, options.mutate().build(), options.merge(null),
 				(OpenRouterChatOptions) model.getOptions())) {
 			for (var values : List.of(snapshot.getProvider().order(), snapshot.getProvider().ignore(),
 					snapshot.getProvider().quantizations())) {
@@ -120,7 +120,7 @@ class OptionSnapshotTests {
 	}
 
 	@Test
-	void nestedContainersAreOwnedAcrossChatCopyMergeSettersAndBuilderReuse() {
+	void nestedContainersAreOwnedAcrossChatCopyMergeMutateAndBuilderReuse() {
 		var values = new ArrayList<Object>();
 		values.add("original");
 		values.add(null);
@@ -138,11 +138,14 @@ class OptionSnapshotTests {
 			.toolContext("callback", callback)
 			.toolCallbacks(callbacks);
 		var options = builder.build();
-		var copy = options.<OpenRouterChatOptions>copy();
+		var copy = options.mutate().build();
 		var merged = OpenRouterChatOptions.builder().metadata(Map.of("default", true)).build().merge(options);
-		var setterOptions = OpenRouterChatOptions.builder().build();
-		setterOptions.setToolContext(input);
-		setterOptions.setToolCallbacks(callbacks);
+		var mutated = OpenRouterChatOptions.builder()
+			.build()
+			.mutate()
+			.toolContext(input)
+			.toolCallbacks(callbacks)
+			.build();
 		values.clear();
 		nested.clear();
 		input.clear();
@@ -156,8 +159,8 @@ class OptionSnapshotTests {
 			assertThat(snapshot.getToolContext().get("callback")).isSameAs(callback);
 			assertThat(snapshot.getToolCallbacks()).containsExactly(callback);
 		}
-		assertNestedSnapshot(setterOptions.getToolContext());
-		assertThat(setterOptions.getToolCallbacks()).containsExactly(callback);
+		assertNestedSnapshot(mutated.getToolContext());
+		assertThat(mutated.getToolCallbacks()).containsExactly(callback);
 	}
 
 	@Test
@@ -174,7 +177,7 @@ class OptionSnapshotTests {
 		values.clear();
 		input.clear();
 		builder.inputReferences(List.of()).providerOptions(Map.of());
-		for (var snapshot : List.of(options, options.copy(), options.merge(null))) {
+		for (var snapshot : List.of(options, options.mutate().build(), options.merge(null))) {
 			assertThat(snapshot.getInputReferences()).containsExactly("https://example.com/synthetic.png");
 			assertThatThrownBy(() -> snapshot.getInputReferences().clear())
 				.isInstanceOf(UnsupportedOperationException.class);
@@ -190,15 +193,13 @@ class OptionSnapshotTests {
 			.encodingFormat("float")
 			.user("synthetic");
 		var first = builder.build();
-		var copy = first.copy();
+		var copy = first.mutate().build();
 		var second = builder.model("second").dimensions(16).encodingFormat("base64").user("other").build();
-		assertThat(first).usingRecursiveComparison().isEqualTo(copy);
-		first.setModel("changed");
-		first.setDimensions(32);
-		first.setEncodingFormat("changed");
-		first.setUser("changed");
+		var changed = first.mutate().model("changed").dimensions(32).encodingFormat("changed").user("changed").build();
 		assertThat(builder.build()).usingRecursiveComparison().isEqualTo(second);
-		assertThat(copy.getModel()).isEqualTo("first");
+		assertThat(first).usingRecursiveComparison().isEqualTo(copy);
+		assertThat(changed.getModel()).isEqualTo("changed");
+		assertThat(first.getModel()).isEqualTo("first");
 	}
 
 	private static void assertNestedSnapshot(Map<?, ?> snapshot) {

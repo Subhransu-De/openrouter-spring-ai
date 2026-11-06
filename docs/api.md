@@ -15,6 +15,7 @@ These types under `de.subhransu.openrouter.springai` are the supported API.
 | `chat.OpenRouterToolFailurePolicy`, `chat.OpenRouterToolCallingManagers`, `chat.OpenRouterToolExecutionExceptionProcessor` | Custom tool-manager failure policy, a factory for policy-declaring managers, and failure rendering. The policy accessor must return the actual, non-null processor. Tool execution belongs to Spring AI's advisor. |
 | `errors`, `chat.errors`, `api.errors.OpenRouterApiException`                                                               | Exception types, diagnostic records, category enums, and inspection interfaces. Missing diagnostics are nullable. `OpenRouterHttpException` is sealed; consumers cannot implement it.                              |
 | `autoconfigure.*Properties` and `spring.ai.openrouter.*`                                                                   | Boot property binding. Custom model, API, and tool beans use the existing auto-configuration backoff rules.                                                                                                        |
+| `autoconfigure.OpenRouterRestClientCustomizer`, `autoconfigure.OpenRouterWebClientCustomizer`                              | Beans that customize only the auto-configured `OpenRouterApi` clients. See [HTTP customization](http-and-limits.md#http-customization-and-timeout-ownership).                                                      |
 
 The models implement the Spring AI interfaces `ChatModel` (which includes `StreamingChatModel`), `EmbeddingModel` and `ImageModel`. `OpenRouterImageModel.stream()` is a provider extension. The embedding model accepts a `Document` but does not implement `DocumentEmbeddingModel`.
 
@@ -36,7 +37,7 @@ New request fields are added to the builders. The records' canonical constructor
 
 ## Implementation details
 
-Mapper packages, `internal`, `support.OptionSnapshots`, error factories/classifiers, `OpenRouterExceptionMessage`, `OpenRouterErrorResponse`, deserializers, runtime hints, and auto-configuration implementation methods are implementation details even where Java visibility is public. They are not supported extension points and may change between releases. Prefer the consumer types above.
+Mapper packages, `internal`, `support.OptionSnapshots`, error factories/classifiers, `OpenRouterExceptionMessage`, `OpenRouterErrorResponse`, deserializers, runtime hints, and the auto-configuration classes are implementation details even where Java visibility is public. The auto-configuration classes are `final` and expose no public methods; replace their beans instead. They are not supported extension points and may change between releases. Prefer the consumer types above.
 
 ## Nullability
 

@@ -25,7 +25,7 @@ import org.springframework.context.annotation.Bean;
 @ConditionalOnMissingBean(ChatModel.class)
 @ConditionalOnProperty(name = SpringAIModelProperties.CHAT_MODEL, havingValue = OpenRouterIdentifiers.PROVIDER_ID,
 		matchIfMissing = true)
-public class OpenRouterToolCallingAutoConfiguration {
+public final class OpenRouterToolCallingAutoConfiguration {
 
 	@Bean
 	@ConditionalOnMissingBean(ToolExecutionExceptionProcessor.class)

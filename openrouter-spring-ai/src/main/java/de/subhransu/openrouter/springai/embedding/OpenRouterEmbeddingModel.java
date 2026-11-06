@@ -5,6 +5,7 @@ import de.subhransu.openrouter.springai.embedding.mapper.OpenRouterEmbeddingRequ
 import de.subhransu.openrouter.springai.embedding.mapper.OpenRouterEmbeddingResponseMapper;
 import de.subhransu.openrouter.springai.internal.Retries;
 import io.micrometer.observation.ObservationRegistry;
+import java.util.concurrent.locks.ReentrantLock;
 import org.jspecify.annotations.Nullable;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.document.MetadataMode;
@@ -37,7 +38,9 @@ public class OpenRouterEmbeddingModel implements EmbeddingModel {
 
 	private final MetadataMode metadataMode;
 
-	private int discoveredDimensions;
+	private final ReentrantLock dimensionsLock = new ReentrantLock();
+
+	private volatile int discoveredDimensions;
 
 	private final RetryTemplate retryTemplate;
 
@@ -52,7 +55,7 @@ public class OpenRouterEmbeddingModel implements EmbeddingModel {
 	private OpenRouterEmbeddingModel(Builder builder) {
 		Assert.notNull(builder.openRouterApi, "OpenRouterApi must not be null");
 		this.openRouterApi = builder.openRouterApi;
-		this.defaultOptions = builder.defaultOptions != null ? builder.defaultOptions.copy()
+		this.defaultOptions = builder.defaultOptions != null ? builder.defaultOptions.mutate().build()
 				: OpenRouterEmbeddingOptions.builder().build();
 		this.metadataMode = builder.metadataMode;
 		this.retryTemplate = builder.retryTemplate != null ? builder.retryTemplate : RetryUtils.DEFAULT_RETRY_TEMPLATE;
@@ -101,18 +104,31 @@ public class OpenRouterEmbeddingModel implements EmbeddingModel {
 	 * retried. Per-request options do not change this model's default dimensions.
 	 */
 	@Override
-	public synchronized int dimensions() {
+	public int dimensions() {
 		Integer configuredDimensions = this.defaultOptions.getDimensions();
 		if (configuredDimensions != null) {
 			Assert.isTrue(configuredDimensions > 0, "Dimensions must be positive");
 			return configuredDimensions;
 		}
-		if (this.discoveredDimensions == 0) {
-			int dimensions = EmbeddingModel.super.dimensions();
-			Assert.state(dimensions > 0, "Discovered dimensions must be positive");
-			this.discoveredDimensions = dimensions;
+		int discovered = this.discoveredDimensions;
+		if (discovered > 0) {
+			return discovered;
 		}
-		return this.discoveredDimensions;
+		// Discovery is a retried HTTP call. On JDK 21 to 23, a virtual thread that blocks
+		// inside a monitor pins its carrier thread; one that blocks holding a lock does
+		// not.
+		this.dimensionsLock.lock();
+		try {
+			if (this.discoveredDimensions == 0) {
+				int dimensions = EmbeddingModel.super.dimensions();
+				Assert.state(dimensions > 0, "Discovered dimensions must be positive");
+				this.discoveredDimensions = dimensions;
+			}
+			return this.discoveredDimensions;
+		}
+		finally {
+			this.dimensionsLock.unlock();
+		}
 	}
 
 	public void setObservationConvention(EmbeddingModelObservationConvention observationConvention) {
@@ -121,7 +137,7 @@ public class OpenRouterEmbeddingModel implements EmbeddingModel {
 	}
 
 	private OpenRouterEmbeddingOptions buildRequestOptions(@Nullable EmbeddingOptions runtimeOptions) {
-		return runtimeOptions == null ? this.defaultOptions.copy()
+		return runtimeOptions == null ? this.defaultOptions.mutate().build()
 				: this.defaultOptions.merge(OpenRouterEmbeddingOptions.fromOptions(runtimeOptions));
 	}
 

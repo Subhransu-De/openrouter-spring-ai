@@ -15,6 +15,9 @@ dependencies {
 
 	compileOnly("org.springframework.boot:spring-boot-configuration-processor")
 	annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
+	// Writes META-INF/spring-autoconfigure-metadata.properties so Boot can filter these
+	// auto-configurations by their class conditions without loading them.
+	annotationProcessor("org.springframework.boot:spring-boot-autoconfigure-processor")
 
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
 	testImplementation("org.springframework.ai:spring-ai-client-chat")

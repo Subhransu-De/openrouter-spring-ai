@@ -38,6 +38,17 @@ spring.ai.retry.backoff.initial-interval=1s
 
 The Boot defaults are 10 retries, a 2-second initial interval, `backoff.multiplier=5` and a 3-minute `backoff.max-interval`. Spring AI uses the same numbers when no template is supplied.
 
+The library classifies HTTP errors itself, as the table above shows. So only the keys that build the `RetryTemplate` apply:
+
+| Key                                                                                                      | Applies to OpenRouter models                                                            |
+| -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `spring.ai.retry.max-attempts`, `backoff.initial-interval`, `backoff.multiplier`, `backoff.max-interval` | Yes, through the `RetryTemplate`.                                                       |
+| `spring.ai.retry.on-http-codes`, `exclude-on-http-codes`, `on-client-errors`                             | No. They configure Spring AI's `ResponseErrorHandler`, which this library does not use. |
+
+Spring AI's `RetryTemplate` bean backs off when the application declares any `RetryTemplate`, so a single application `RetryTemplate`, even one meant for other code, becomes the OpenRouter retry policy. With two or more and no `@Primary`, the models use Spring AI's default policy. Declare the template you want for AI calls as `@Primary`, or build the models yourself.
+
+When `on-http-codes` or `exclude-on-http-codes` is non-empty, or `on-client-errors` is `true`, startup logs one message naming them. The keys can still apply to another provider in the same application, so the message never stops startup. It is a warning when every Spring AI model selector is set to `openrouter` or `none`, which rules other providers' models out, and an INFO message otherwise. The selectors are `spring.ai.model.chat`, `.embedding`, `.embedding.text`, `.embedding.multimodal`, `.image`, `.audio.speech`, `.audio.transcription` and `.moderation`. Some Spring AI API beans have no selector, such as Ollama's `OllamaApi`. If your application calls one directly, the keys still apply to it despite the warning.
+
 ## Stream retries
 
 Streams are stricter: chat, Responses and image streams retry only an HTTP 429 that arrives before the first decoded event. This avoids replaying requests that may already have run upstream.

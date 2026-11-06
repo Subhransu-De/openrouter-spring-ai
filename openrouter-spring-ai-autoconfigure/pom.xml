@@ -97,6 +97,13 @@
               <artifactId>spring-boot-configuration-processor</artifactId>
               <version>${spring-boot.version}</version>
             </path>
+            <!-- Writes META-INF/spring-autoconfigure-metadata.properties so Boot can filter these
+                 auto-configurations by their class conditions without loading them. -->
+            <path>
+              <groupId>org.springframework.boot</groupId>
+              <artifactId>spring-boot-autoconfigure-processor</artifactId>
+              <version>${spring-boot.version}</version>
+            </path>
           </annotationProcessorPaths>
         </configuration>
       </plugin>

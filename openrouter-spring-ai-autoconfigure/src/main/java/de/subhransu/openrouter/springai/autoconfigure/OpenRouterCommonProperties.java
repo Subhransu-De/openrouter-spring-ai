@@ -10,10 +10,20 @@ public class OpenRouterCommonProperties {
 
 	public static final String CONFIG_PREFIX = "spring.ai.openrouter";
 
+	/**
+	 * OpenRouter API key, sent as a bearer token. Required while any model type selects
+	 * OpenRouter.
+	 */
 	private @Nullable String apiKey;
 
+	/**
+	 * Base URL of the OpenRouter API.
+	 */
 	private @Nullable String baseUrl = OpenRouterApi.DEFAULT_BASE_URL;
 
+	/**
+	 * Application attribution sent with every request.
+	 */
 	private @Nullable App app = new App();
 
 	public @Nullable String getApiKey() {
@@ -42,10 +52,20 @@ public class OpenRouterCommonProperties {
 
 	public static class App {
 
+		/**
+		 * Application URL sent in the HTTP-Referer attribution header.
+		 */
 		private @Nullable String httpReferer;
 
+		/**
+		 * Application name sent in the X-OpenRouter-Title attribution header.
+		 */
 		private @Nullable String title;
 
+		/**
+		 * Comma-separated list of application categories sent in the
+		 * X-OpenRouter-Categories attribution header.
+		 */
 		private @Nullable List<String> categories;
 
 		public @Nullable String getHttpReferer() {

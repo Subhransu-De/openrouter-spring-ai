@@ -31,6 +31,8 @@ Documents embed their raw text by default (`metadata-mode: none`). To include me
 - `INFERENCE`: the text and metadata, minus the excluded inference keys.
 - `ALL`: the text and all metadata.
 
-Changing the mode changes the embedding input, so existing vector collections may need re-embedding.
+Changing the mode changes the embedding input, so existing vector collections may need re-embedding. Spring AI's OpenAI and Mistral embedding models default to `EMBED`. When you move a collection filled by one of them to OpenRouter, set `metadata-mode: embed` to keep the same input.
 
 `dimensions()` returns the configured dimensions when they are positive, without an API call. Otherwise it discovers them once per model instance and caches the result. Failed or invalid responses are not cached, and per-request overrides never update the cache. Build a new model to change its defaults.
+
+Discovery is a billable embedding request, retried under the model's `RetryTemplate`, as in every Spring AI embedding model. A vector store may call `dimensions()` while its bean initializes. PgVector, for example, does so only when it initializes the schema and has no dimensions of its own. Then application startup, including an AOT cache training run, makes a network call. Prefer the vector store's own setting, such as `spring.ai.vectorstore.pgvector.dimensions`. `spring.ai.openrouter.embedding.dimensions` also avoids discovery, but it is sent as `dimensions` on every embedding request, which only some models accept.

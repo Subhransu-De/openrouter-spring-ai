@@ -56,16 +56,12 @@ public class OpenRouterImageOptions implements ImageOptions {
 		return new Builder(this);
 	}
 
-	public OpenRouterImageOptions copy() {
-		return this.mutate().build();
-	}
-
 	public static @Nullable OpenRouterImageOptions fromOptions(@Nullable ImageOptions options) {
 		if (options == null) {
 			return null;
 		}
 		if (options instanceof OpenRouterImageOptions openRouterOptions) {
-			return openRouterOptions.copy();
+			return openRouterOptions.mutate().build();
 		}
 		if (options.getResponseFormat() != null && !"b64_json".equals(options.getResponseFormat())) {
 			throw new IllegalArgumentException(
@@ -85,7 +81,7 @@ public class OpenRouterImageOptions implements ImageOptions {
 
 	public OpenRouterImageOptions merge(@Nullable OpenRouterImageOptions runtimeOptions) {
 		if (runtimeOptions == null) {
-			return this.copy();
+			return this.mutate().build();
 		}
 		return this.mutate()
 			.model(value(runtimeOptions.model, this.model))

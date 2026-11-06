@@ -6,7 +6,21 @@ How to customize the HTTP clients, which timeouts apply, and the size limits for
 
 The supported transport extension points are Spring's `RestClient.Builder` request interceptors (blocking calls) and `WebClient.Builder` filters (streams). Boot auto-configuration clones the `RestClient.Builder` and `WebClient.Builder` beans from your application before applying OpenRouter settings. Your builder beans are not modified.
 
-`OpenRouterApi.Builder.objectMapper(...)` serializes every request body and decodes every response, including the JSON fallback of streamed image requests. Boot always passes one: the application's `ObjectMapper`, or a default mapper when the application has none. A supplied mapper bypasses any JSON converters or codecs registered on the supplied builders. Without one, the builders' request serialization is unchanged.
+To change only OpenRouter traffic, declare `OpenRouterRestClientCustomizer` or `OpenRouterWebClientCustomizer` beans. They receive the OpenRouter clones after Boot's global `RestClientCustomizer` and `WebClientCustomizer` beans have run, in `@Order` order. Other clients in the application are unaffected:
+
+```java
+@Bean
+OpenRouterRestClientCustomizer openRouterLogging() {
+	return builder -> builder.requestInterceptor((request, body, execution) -> {
+		log.debug("OpenRouter {} {}", request.getMethod(), request.getURI());
+		return execution.execute(request, body);
+	});
+}
+```
+
+OpenRouter installs its base URL and its `Authorization` and attribution default headers after the customizers, so builder defaults a customizer sets do not replace them. Interceptors and filters a customizer adds still run on every request and can change any header or the URI. Customizers are trusted application code, so the rules below apply to them too. When `connection.timeout` is set, OpenRouter also replaces the request factory on the blocking builder; select the transport with a `ClientHttpRequestFactoryBuilder` bean instead. The streaming builder keeps the `max-response-body-size` codec limit. Customizers apply only to the auto-configured `OpenRouterApi`, not to one you declare yourself.
+
+`OpenRouterApi.Builder.objectMapper(...)` serializes every request body and decodes every response, including the JSON fallback of streamed image requests. Boot always passes one: the application's `JsonMapper` (Boot's auto-configured mapper, or one you declare), or a default `JsonMapper` when the application has none or several without `@Primary`. Other `ObjectMapper` beans, such as Boot's `XmlMapper` or `CBORMapper`, are never used. When the default mapper is used although the context holds a `JsonMapper` or plain `ObjectMapper` bean, startup logs a warning that names how many were skipped. The application's mapper settings apply to the wire format. The wire types fix their inclusion rules and tolerate unknown fields, but a global naming strategy can still rename fields they do not name explicitly, such as `model`. A supplied mapper bypasses any JSON converters or codecs registered on the supplied builders. Without one, the builders' request serialization is unchanged.
 
 To own the whole client, define an `OpenRouterApi` bean. API auto-configuration backs off, and the auto-configured chat, embedding and image models use your bean. Set the base URL, attribution, timeout and size limits on its builder, because `spring.ai.openrouter.connection.*` and `app.*` no longer apply:
 
@@ -25,7 +39,16 @@ OpenRouterApi openRouterApi(@Value("${spring.ai.openrouter.api-key}") String api
 
 ### Timeouts
 
-`OpenRouterApi.Builder.timeout(...)` and Boot's `spring.ai.openrouter.connection.timeout` guard streams: the wait for the response and the idle gap between SSE events, keepalives included. Blocking connect and read timeouts belong to the request factory. Boot sets them from the same property. For a programmatic `OpenRouterApi`, supply a configured factory through `restClientBuilder(...)`:
+`OpenRouterApi.Builder.timeout(...)` and Boot's `spring.ai.openrouter.connection.timeout` guard streams: the wait for the response and the idle gap between SSE events, keepalives included. Blocking connect and read timeouts belong to the request factory. Boot sets the blocking read timeout from the same property. The read timeout does not inherit `spring.http.clients.read-timeout`, because a generation can take longer than a global timeout tuned for ordinary REST calls. The blocking connect timeout is the first of these that is set, from the most specific to the most general:
+
+1. `spring.ai.openrouter.connection.connect-timeout`.
+2. `spring.ai.openrouter.connection.timeout`, when you set it.
+3. Spring Boot's shared `spring.http.clients.connect-timeout`, which streams use as well.
+4. The 2m default of `connection.timeout`.
+
+`connection.connect-timeout` applies to blocking calls only. Streams connect with `spring.http.clients.connect-timeout`, or with the connector's own default when it is unset.
+
+Streams have a second, transport-level read timeout. Their connector comes from Boot's `WebClient.Builder`, which applies `spring.http.clients.read-timeout`; Reactor Netty uses it as the longest allowed gap between reads. A global read timeout shorter than `connection.timeout` therefore ends a slow stream first. Leave the global value unset, or at least as long as `connection.timeout`. To change only OpenRouter streams, set a connector with an `OpenRouterWebClientCustomizer`. For a programmatic `OpenRouterApi`, supply a configured factory through `restClientBuilder(...)`:
 
 ```java
 HttpClientSettings settings = HttpClientSettings.defaults()

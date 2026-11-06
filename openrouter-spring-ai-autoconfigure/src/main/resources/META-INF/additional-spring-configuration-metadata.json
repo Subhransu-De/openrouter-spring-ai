@@ -1,4 +1,106 @@
 {
+  "properties": [
+    {
+      "name": "spring.ai.openrouter.connection.timeout",
+      "defaultValue": "2m"
+    },
+    {
+      "name": "spring.ai.openrouter.chat.provider.allow-fallbacks",
+      "description": "Whether OpenRouter may route to other upstream providers when the preferred ones are unavailable."
+    },
+    {
+      "name": "spring.ai.openrouter.chat.provider.require-parameters",
+      "description": "Whether to route only to upstream providers that support every parameter in the request."
+    },
+    {
+      "name": "spring.ai.openrouter.chat.provider.data-collection",
+      "description": "Data collection policy that upstream providers must meet, allow or deny."
+    },
+    {
+      "name": "spring.ai.openrouter.chat.provider.order",
+      "description": "Comma-separated list of upstream provider slugs to try in order."
+    },
+    {
+      "name": "spring.ai.openrouter.chat.provider.ignore",
+      "description": "Comma-separated list of upstream provider slugs never to route to."
+    },
+    {
+      "name": "spring.ai.openrouter.chat.provider.quantizations",
+      "description": "Comma-separated list of model quantization levels to accept, such as fp8 or int4."
+    },
+    {
+      "name": "spring.ai.openrouter.chat.provider.sort",
+      "description": "Upstream provider ordering, such as price, throughput or latency."
+    },
+    {
+      "name": "spring.ai.openrouter.embedding.provider.allow-fallbacks",
+      "description": "Whether OpenRouter may route to other upstream providers when the preferred ones are unavailable."
+    },
+    {
+      "name": "spring.ai.openrouter.embedding.provider.require-parameters",
+      "description": "Whether to route only to upstream providers that support every parameter in the request."
+    },
+    {
+      "name": "spring.ai.openrouter.embedding.provider.data-collection",
+      "description": "Data collection policy that upstream providers must meet, allow or deny."
+    },
+    {
+      "name": "spring.ai.openrouter.embedding.provider.order",
+      "description": "Comma-separated list of upstream provider slugs to try in order."
+    },
+    {
+      "name": "spring.ai.openrouter.embedding.provider.ignore",
+      "description": "Comma-separated list of upstream provider slugs never to route to."
+    },
+    {
+      "name": "spring.ai.openrouter.embedding.provider.quantizations",
+      "description": "Comma-separated list of model quantization levels to accept, such as fp8 or int4."
+    },
+    {
+      "name": "spring.ai.openrouter.embedding.provider.sort",
+      "description": "Upstream provider ordering, such as price, throughput or latency."
+    },
+    {
+      "name": "spring.ai.openrouter.chat.reasoning.effort",
+      "description": "Reasoning effort, such as low, medium or high. Mutually exclusive with max-tokens."
+    },
+    {
+      "name": "spring.ai.openrouter.chat.reasoning.max-tokens",
+      "description": "Token budget for reasoning. Mutually exclusive with effort."
+    },
+    {
+      "name": "spring.ai.openrouter.chat.reasoning.exclude",
+      "description": "Whether to leave the reasoning text out of the response while the model still reasons."
+    },
+    {
+      "name": "spring.ai.openrouter.chat.reasoning.enabled",
+      "description": "Whether to enable reasoning with the model's default settings."
+    },
+    {
+      "name": "spring.ai.openrouter.chat.audio.voice",
+      "description": "Provider-specific voice name for audio output. Streaming Chat Completions only."
+    },
+    {
+      "name": "spring.ai.openrouter.chat.audio.format",
+      "description": "Audio output encoding: wav, mp3, flac, opus or pcm16."
+    },
+    {
+      "name": "spring.ai.openrouter.chat.response-format.type",
+      "description": "Response format type: text, JSON object, or JSON schema for structured output."
+    },
+    {
+      "name": "spring.ai.openrouter.chat.response-format.name",
+      "description": "Schema name sent with a JSON schema format. Defaults to response on the wire."
+    },
+    {
+      "name": "spring.ai.openrouter.chat.response-format.strict",
+      "description": "Whether the provider must follow the JSON schema strictly."
+    },
+    {
+      "name": "spring.ai.openrouter.chat.response-format.schema",
+      "description": "JSON schema document for a JSON schema format."
+    }
+  ],
   "hints": [
     {
       "name": "spring.ai.model.chat",
