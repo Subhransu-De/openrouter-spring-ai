@@ -5,6 +5,7 @@ import de.subhransu.openrouter.springai.api.dto.ChatCompletionChunk;
 import de.subhransu.openrouter.springai.api.dto.Choice;
 import de.subhransu.openrouter.springai.api.dto.ToolCall;
 import de.subhransu.openrouter.springai.api.errors.OpenRouterApiExceptionFactory;
+import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import de.subhransu.openrouter.springai.chat.OpenRouterAudioOptions;
 import java.util.ArrayList;
@@ -33,20 +34,29 @@ public final class OpenRouterStreamingResponseMapper {
 
 	private final int maxStateChoices;
 
+	private final OpenRouterDiagnosticSanitizer sanitizer;
+
+	private final OpenRouterChoiceErrorExceptionFactory choiceErrorExceptionFactory;
+
 	public OpenRouterStreamingResponseMapper() {
 		this(DEFAULT_MAX_STATE_BYTES, DEFAULT_MAX_STATE_CHOICES);
 	}
 
 	public OpenRouterStreamingResponseMapper(long maxStateBytes, int maxStateChoices) {
+		this(maxStateBytes, maxStateChoices, OpenRouterDiagnosticSanitizer.keyless());
+	}
+
+	public OpenRouterStreamingResponseMapper(long maxStateBytes, int maxStateChoices,
+			OpenRouterDiagnosticSanitizer sanitizer) {
 		org.springframework.util.Assert.isTrue(maxStateBytes > 0,
 				"Maximum Chat Completions state size must be greater than zero");
 		org.springframework.util.Assert.isTrue(maxStateChoices > 0,
 				"Maximum Chat Completions active choices must be greater than zero");
 		this.maxStateBytes = maxStateBytes;
 		this.maxStateChoices = maxStateChoices;
+		this.sanitizer = sanitizer;
+		this.choiceErrorExceptionFactory = new OpenRouterChoiceErrorExceptionFactory(sanitizer);
 	}
-
-	private final OpenRouterChoiceErrorExceptionFactory choiceErrorExceptionFactory = new OpenRouterChoiceErrorExceptionFactory();
 
 	public ChatResponse map(ChatCompletionChunk chunk) {
 		return map(chunk, new LinkedHashMap<>(), new LinkedHashMap<>(), new ResponseExtensions(),
@@ -114,7 +124,7 @@ public final class OpenRouterStreamingResponseMapper {
 			// over HTTP 200; without this the truncated stream would look like a clean
 			// completion.
 			throw OpenRouterApiExceptionFactory.create("OpenRouter chat completion stream failed", error.toString(),
-					error, null);
+					error, null, this.sanitizer);
 		}
 		throwIfChoiceFailed(chunk, partialOutputs);
 		List<Choice> choices = ResponseValues.items(chunk.choices(), "choice");
@@ -176,8 +186,10 @@ public final class OpenRouterStreamingResponseMapper {
 					partialOutput.append(content);
 				}
 				String diagnostic = partialOutput != null ? partialOutput.diagnosticValue() : null;
-				throw diagnostic != null ? this.choiceErrorExceptionFactory.create(chunk, choice, diagnostic)
-						: this.choiceErrorExceptionFactory.create(chunk, choice);
+				if (partialOutput != null && diagnostic != null) {
+					throw this.choiceErrorExceptionFactory.create(chunk, choice, diagnostic, partialOutput.truncated);
+				}
+				throw this.choiceErrorExceptionFactory.create(chunk, choice);
 			}
 		}
 	}
@@ -315,9 +327,7 @@ public final class OpenRouterStreamingResponseMapper {
 			if (this.value.length() == 0) {
 				return null;
 			}
-			// One extra character tells the shared factory that content exceeded its
-			// bound; it is replaced by the factory's ellipsis and never exposed.
-			return this.truncated ? this.value.toString() + 'x' : this.value.toString();
+			return this.value.toString();
 		}
 
 		private void appendNormalized(char character) {
@@ -329,9 +339,9 @@ public final class OpenRouterStreamingResponseMapper {
 			}
 		}
 
+		// Matches the diagnostic sanitizer, so both paths cut the same normalized text.
 		private static boolean isWhitespace(char character) {
-			return character == ' ' || character == '\t' || character == '\n' || character == '\u000B'
-					|| character == '\f' || character == '\r';
+			return Character.isWhitespace(character) || Character.isISOControl(character);
 		}
 
 	}

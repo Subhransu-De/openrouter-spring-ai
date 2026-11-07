@@ -50,11 +50,13 @@ public class OpenRouterEmbeddingModel implements EmbeddingModel {
 
 	private final OpenRouterEmbeddingRequestMapper requestMapper = new OpenRouterEmbeddingRequestMapper();
 
-	private final OpenRouterEmbeddingResponseMapper responseMapper = new OpenRouterEmbeddingResponseMapper();
+	private final OpenRouterEmbeddingResponseMapper responseMapper;
 
 	private OpenRouterEmbeddingModel(Builder builder) {
 		Assert.notNull(builder.openRouterApi, "OpenRouterApi must not be null");
 		this.openRouterApi = builder.openRouterApi;
+		this.responseMapper = new OpenRouterEmbeddingResponseMapper(
+				OpenRouterApi.diagnosticSanitizer(this.openRouterApi));
 		this.defaultOptions = builder.defaultOptions != null ? builder.defaultOptions.mutate().build()
 				: OpenRouterEmbeddingOptions.builder().build();
 		this.metadataMode = builder.metadataMode;

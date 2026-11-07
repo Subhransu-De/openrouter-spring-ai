@@ -33,7 +33,7 @@ public final class OpenRouterHttpExceptionFactory {
 
 	private final ObjectMapper objectMapper;
 
-	private final @Nullable String apiKey;
+	private final OpenRouterDiagnosticSanitizer sanitizer;
 
 	private final Clock clock;
 
@@ -43,13 +43,13 @@ public final class OpenRouterHttpExceptionFactory {
 
 	OpenRouterHttpExceptionFactory(ObjectMapper objectMapper, @Nullable String apiKey, Clock clock) {
 		this.objectMapper = objectMapper;
-		this.apiKey = apiKey;
+		this.sanitizer = OpenRouterDiagnosticSanitizer.forApiKey(apiKey);
 		this.clock = clock;
 	}
 
 	public RuntimeException create(String endpoint, HttpStatusCode statusCode, HttpHeaders headers,
 			@Nullable String responseBody) {
-		String safeBody = OpenRouterExceptionMessage.sanitize(responseBody, this.apiKey);
+		String safeBody = sanitize(responseBody);
 		OpenRouterErrorDetails details = parseDetails(responseBody, statusCode.value());
 		if (details == null) {
 			details = statusDetails(statusCode.value());
@@ -71,7 +71,7 @@ public final class OpenRouterHttpExceptionFactory {
 	public OpenRouterLimitExceededException createErrorBodyLimit(String endpoint, HttpStatusCode statusCode,
 			@Nullable String responseBodyExcerpt, long configuredLimit, long observedValue,
 			OpenRouterLimitExceededException.Limit limit) {
-		String safeBody = OpenRouterExceptionMessage.sanitize(responseBodyExcerpt, this.apiKey);
+		String safeBody = sanitize(responseBodyExcerpt);
 		OpenRouterErrorDetails details = parseDetails(responseBodyExcerpt, statusCode.value());
 		if (details == null) {
 			details = parseDetailsFromPrefix(responseBodyExcerpt, statusCode.value());
@@ -150,11 +150,11 @@ public final class OpenRouterHttpExceptionFactory {
 				: OpenRouterErrorEnvelope.interpret(statusCode, rootErrorType, null, null, null, null);
 		return new OpenRouterErrorDetails(sanitize(envelope.code()), sanitize(envelope.message()),
 				sanitize(envelope.errorType()), sanitize(envelope.providerCode()),
-				OpenRouterExceptionMessage.sanitizeMetadata(envelope.metadata(), this.apiKey), envelope.category());
+				this.sanitizer.sanitizeMetadata(envelope.metadata()), envelope.category());
 	}
 
 	private @Nullable String sanitize(@Nullable String value) {
-		return OpenRouterExceptionMessage.sanitize(value, this.apiKey);
+		return this.sanitizer.sanitize(value);
 	}
 
 	private @Nullable OpenRouterRetryAfter parseRetryAfter(@Nullable String value) {

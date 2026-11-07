@@ -4,6 +4,7 @@ import de.subhransu.openrouter.springai.api.dto.EmbeddingsResponse;
 import de.subhransu.openrouter.springai.api.dto.Usage;
 import de.subhransu.openrouter.springai.api.errors.OpenRouterApiExceptionFactory;
 import de.subhransu.openrouter.springai.chat.mapper.UsageMapper;
+import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
@@ -13,6 +14,16 @@ import org.springframework.ai.embedding.EmbeddingResponse;
 import org.springframework.ai.embedding.EmbeddingResponseMetadata;
 
 public final class OpenRouterEmbeddingResponseMapper {
+
+	private final OpenRouterDiagnosticSanitizer sanitizer;
+
+	public OpenRouterEmbeddingResponseMapper() {
+		this(OpenRouterDiagnosticSanitizer.keyless());
+	}
+
+	public OpenRouterEmbeddingResponseMapper(OpenRouterDiagnosticSanitizer sanitizer) {
+		this.sanitizer = sanitizer;
+	}
 
 	public EmbeddingResponse map(EmbeddingsResponse response) {
 		var data = response.data();
@@ -46,11 +57,11 @@ public final class OpenRouterEmbeddingResponseMapper {
 		return new EmbeddingResponse(List.of(embeddings), mapMetadata(response));
 	}
 
-	private static void throwIfError(@Nullable EmbeddingsResponse response) {
+	private void throwIfError(@Nullable EmbeddingsResponse response) {
 		var error = response != null ? response.error() : null;
 		if (error != null) {
 			throw OpenRouterApiExceptionFactory.createRetryable("OpenRouter embeddings request failed",
-					error.toString(), error, null, "/embeddings");
+					error.toString(), error, null, "/embeddings", this.sanitizer);
 		}
 	}
 

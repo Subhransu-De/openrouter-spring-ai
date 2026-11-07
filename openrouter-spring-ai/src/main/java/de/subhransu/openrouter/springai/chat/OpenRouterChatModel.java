@@ -14,6 +14,7 @@ import de.subhransu.openrouter.springai.chat.mapper.OpenRouterResponsesResponseM
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterResponsesStreamingResponseMapper;
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterStreamingResponseMapper;
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterStreamingToolCallAggregator;
+import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
 import de.subhransu.openrouter.springai.internal.Retries;
 import de.subhransu.openrouter.springai.internal.StreamRetries;
 import io.micrometer.observation.Observation;
@@ -92,18 +93,19 @@ public class OpenRouterChatModel implements ChatModel {
 		this.toolCallingManager = builder.toolCallingManager != null ? builder.toolCallingManager
 				: ToolCallingManager.builder().observationRegistry(this.observationRegistry).build();
 		ObjectMapper objectMapper = builder.objectMapper != null ? builder.objectMapper : new ObjectMapper();
+		OpenRouterDiagnosticSanitizer sanitizer = OpenRouterApi.diagnosticSanitizer(this.openRouterApi);
 		this.requestMapper = new OpenRouterChatRequestMapper(objectMapper);
-		this.responseMapper = new OpenRouterChatResponseMapper();
+		this.responseMapper = new OpenRouterChatResponseMapper(sanitizer);
 		this.streamingResponseMapper = new OpenRouterStreamingResponseMapper(builder.streamingStateMaxBytes,
-				builder.streamingStateMaxChoices);
+				builder.streamingStateMaxChoices, sanitizer);
 		this.streamingToolCallAggregator = new OpenRouterStreamingToolCallAggregator(objectMapper,
 				builder.toolCallAggregationMaxBytes, builder.toolCallAggregationMaxChunks,
 				builder.toolCallAggregationMaxDuration);
 		this.responsesRequestMapper = new OpenRouterResponsesRequestMapper(objectMapper);
-		this.responsesResponseMapper = new OpenRouterResponsesResponseMapper();
+		this.responsesResponseMapper = new OpenRouterResponsesResponseMapper(sanitizer);
 		this.responsesStreamingResponseMapper = new OpenRouterResponsesStreamingResponseMapper(objectMapper,
 				builder.toolCallAggregationMaxBytes, builder.toolCallAggregationMaxChunks,
-				builder.toolCallAggregationMaxDuration);
+				builder.toolCallAggregationMaxDuration, sanitizer);
 	}
 
 	@Override

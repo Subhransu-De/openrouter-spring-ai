@@ -11,6 +11,7 @@ import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
+import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
 import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException;
 import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException.Limit;
 import java.time.Duration;
@@ -182,12 +183,14 @@ class ResponsesStreamLimitsTests {
 	void rejectsInvalidLimits() {
 		assertThatThrownBy(() -> mapper(0, 1)).isInstanceOf(IllegalArgumentException.class);
 		assertThatThrownBy(() -> mapper(1, 0)).isInstanceOf(IllegalArgumentException.class);
-		assertThatThrownBy(() -> new OpenRouterResponsesStreamingResponseMapper(this.json, 1, 1, Duration.ZERO))
+		assertThatThrownBy(() -> new OpenRouterResponsesStreamingResponseMapper(this.json, 1, 1, Duration.ZERO,
+				OpenRouterDiagnosticSanitizer.keyless()))
 			.isInstanceOf(IllegalArgumentException.class);
 	}
 
 	private OpenRouterResponsesStreamingResponseMapper mapper(long bytes, int chunks) {
-		return new OpenRouterResponsesStreamingResponseMapper(this.json, bytes, chunks, Duration.ofSeconds(5));
+		return new OpenRouterResponsesStreamingResponseMapper(this.json, bytes, chunks, Duration.ofSeconds(5),
+				OpenRouterDiagnosticSanitizer.keyless());
 	}
 
 	private ResponsesStreamEvent textDone(String text) {

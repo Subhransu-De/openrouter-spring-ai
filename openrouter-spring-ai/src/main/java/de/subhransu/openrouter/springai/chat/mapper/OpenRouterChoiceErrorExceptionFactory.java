@@ -8,6 +8,7 @@ import de.subhransu.openrouter.springai.api.dto.ChoiceError;
 import de.subhransu.openrouter.springai.chat.errors.OpenRouterChoiceErrorDetails;
 import de.subhransu.openrouter.springai.chat.errors.OpenRouterNonTransientChoiceException;
 import de.subhransu.openrouter.springai.chat.errors.OpenRouterTransientChoiceException;
+import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorClassifier;
 import java.util.Map;
@@ -20,7 +21,8 @@ import org.springframework.util.StringUtils;
  *
  * <p>
  * This factory is deliberately separate from normal generation mapping and delegates
- * retry classification to the same policy used for HTTP failures.
+ * retry classification to the same policy used for HTTP failures. As on the HTTP path, it
+ * classifies the original provider values before redacting the retained ones.
  *
  * @author Subhransu De
  */
@@ -30,6 +32,12 @@ final class OpenRouterChoiceErrorExceptionFactory {
 
 	private static final Set<String> NATIVE_FAILURE_REASONS = Set.of("error", "insufficient_system_resources",
 			"insufficient_quota");
+
+	private final OpenRouterDiagnosticSanitizer sanitizer;
+
+	OpenRouterChoiceErrorExceptionFactory(OpenRouterDiagnosticSanitizer sanitizer) {
+		this.sanitizer = sanitizer;
+	}
 
 	static boolean isFailure(Choice choice) {
 		return choice.error() != null || failureReason(choice) != null;
@@ -43,8 +51,8 @@ final class OpenRouterChoiceErrorExceptionFactory {
 		return create(chunk.id(), chunk.model(), chunk.provider(), choice, partialOutput(choice));
 	}
 
-	RuntimeException create(ChatCompletionChunk chunk, Choice choice, String partialOutput) {
-		return create(chunk.id(), chunk.model(), chunk.provider(), choice, bounded(partialOutput));
+	RuntimeException create(ChatCompletionChunk chunk, Choice choice, String partialOutput, boolean truncated) {
+		return create(chunk.id(), chunk.model(), chunk.provider(), choice, bounded(partialOutput, truncated));
 	}
 
 	private RuntimeException create(@Nullable String responseId, @Nullable String model, @Nullable String provider,
@@ -71,9 +79,11 @@ final class OpenRouterChoiceErrorExceptionFactory {
 		}
 		Object nativeFinishReason = choice.nativeFinishReason() != null ? choice.nativeFinishReason()
 				: nativeFailureReason;
-		OpenRouterChoiceErrorDetails details = new OpenRouterChoiceErrorDetails(responseId, model, provider,
-				choice.index(), choice.finishReason(), nativeFinishReason, code, errorMessage, errorType, providerCode,
-				metadata, partialOutput.text(), partialOutput.truncated(), category);
+		OpenRouterChoiceErrorDetails details = new OpenRouterChoiceErrorDetails(sanitize(responseId), sanitize(model),
+				sanitize(provider), choice.index(), sanitize(choice.finishReason()),
+				this.sanitizer.sanitizeDiagnosticValue(nativeFinishReason), sanitize(code), sanitize(errorMessage),
+				sanitize(errorType), sanitize(providerCode), this.sanitizer.sanitizeMetadata(metadata),
+				partialOutput.text(), partialOutput.truncated(), category);
 		if (OpenRouterErrorClassifier.isTransient(category)) {
 			return new OpenRouterTransientChoiceException("OpenRouter chat-completion choice failed", details);
 		}
@@ -111,18 +121,34 @@ final class OpenRouterChoiceErrorExceptionFactory {
 		var delta = choice.delta();
 		var message = choice.message();
 		Object content = message != null ? message.content() : delta != null ? delta.content() : null;
-		return bounded(AssistantContentMapper.map(content).text());
+		return bounded(AssistantContentMapper.map(content).text(), false);
 	}
 
-	private Diagnostic bounded(@Nullable String value) {
-		if (!StringUtils.hasText(value)) {
-			return new Diagnostic(null, false);
+	private Diagnostic bounded(@Nullable String value, boolean alreadyTruncated) {
+		// Redact before cutting, so a key that crosses the bound leaves no prefix.
+		String normalized = sanitize(value);
+		if (!StringUtils.hasText(normalized)) {
+			return new Diagnostic(null, alreadyTruncated);
 		}
-		String normalized = value.replaceAll("\\s+", " ").trim();
-		if (normalized.length() <= MAX_DIAGNOSTIC_LENGTH) {
+		boolean cut = normalized.length() > MAX_DIAGNOSTIC_LENGTH;
+		if (!cut && !alreadyTruncated) {
 			return new Diagnostic(normalized, false);
 		}
-		return new Diagnostic(normalized.substring(0, MAX_DIAGNOSTIC_LENGTH) + "...", true);
+		if (!cut && normalized.length() < MAX_DIAGNOSTIC_LENGTH && value != null && value.endsWith(" ")) {
+			// A stream cut can fall just after a space, which sanitizing trims as
+			// trailing.
+			normalized += " ";
+		}
+		int end = cut ? MAX_DIAGNOSTIC_LENGTH : normalized.length();
+		// Either cut can fall inside a surrogate pair; drop the unpaired half.
+		if (Character.isHighSurrogate(normalized.charAt(end - 1))) {
+			end--;
+		}
+		return new Diagnostic(normalized.substring(0, end) + "...", true);
+	}
+
+	private @Nullable String sanitize(@Nullable String value) {
+		return this.sanitizer.sanitize(value);
 	}
 
 	private @Nullable String metadataText(Map<String, @Nullable Object> metadata, String key) {

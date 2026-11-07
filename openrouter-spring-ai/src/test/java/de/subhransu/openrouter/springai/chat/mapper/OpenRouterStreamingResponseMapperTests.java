@@ -15,6 +15,7 @@ import de.subhransu.openrouter.springai.api.dto.Usage;
 import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
 import de.subhransu.openrouter.springai.chat.errors.OpenRouterNonTransientChoiceException;
 import de.subhransu.openrouter.springai.chat.errors.OpenRouterTransientChoiceException;
+import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import java.util.List;
@@ -235,6 +236,36 @@ class OpenRouterStreamingResponseMapperTests {
 						}))
 					.verify();
 			}
+		}
+	}
+
+	@Test
+	void streamPartialOutputMatchesBlockingCutsAfterRedaction() {
+		// A nine-character key grows by one into "[REDACTED]".
+		String key = "K".repeat(9);
+		OpenRouterStreamingResponseMapper mapper = new OpenRouterStreamingResponseMapper(
+				OpenRouterStreamingResponseMapper.DEFAULT_MAX_STATE_BYTES,
+				OpenRouterStreamingResponseMapper.DEFAULT_MAX_STATE_CHOICES,
+				OpenRouterDiagnosticSanitizer.forApiKey(key));
+		String expanded = "a".repeat(489) + key + "\uD83D\uDE00" + "z".repeat(20);
+		String exact = key + " " + "a".repeat(489) + " " + "z".repeat(20);
+		String split = "a".repeat(499) + "\uD83D\uDE00" + "z".repeat(20);
+		String blank = "\u2003".repeat(500) + "text";
+		Map<String, String> expected = Map.of(expanded, "a".repeat(489) + "[REDACTED]...", exact,
+				"[REDACTED] " + "a".repeat(489) + "...", split, "a".repeat(499) + "...", blank, "text");
+		for (String content : List.of(expanded, exact, split, blank)) {
+			var failure = new ChatCompletionChunk(null, null, null, null, null,
+					List.of(new Choice(0, null, new Delta(null, content, null, null), "error", null,
+							new ChoiceError("502", "synthetic", Map.of()))),
+					null, null);
+			StepVerifier.create(mapper.map(Flux.just(failure)))
+				.expectErrorSatisfies(error -> assertThat(error)
+					.isInstanceOfSatisfying(OpenRouterTransientChoiceException.class, exception -> {
+						assertThat(exception.getErrorDetails().partialOutput()).isEqualTo(expected.get(content));
+						assertThat(exception.getErrorDetails().partialOutputTruncated())
+							.isEqualTo(!content.equals(blank));
+					}))
+				.verify();
 		}
 	}
 

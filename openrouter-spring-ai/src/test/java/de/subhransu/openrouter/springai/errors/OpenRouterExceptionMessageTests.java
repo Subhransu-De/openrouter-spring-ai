@@ -22,7 +22,7 @@ class OpenRouterExceptionMessageTests {
 	@ParameterizedTest
 	@MethodSource("encodedEchoes")
 	void configuredKeyIsRedactedInPlainEncodedAndMixedForms(String echo) {
-		assertThat(OpenRouterExceptionMessage.sanitize("before " + echo + " after " + echo, SYNTHETIC_KEY))
+		assertThat(OpenRouterDiagnosticSanitizer.forApiKey(SYNTHETIC_KEY).sanitize("before " + echo + " after " + echo))
 			.isEqualTo("before [REDACTED] after [REDACTED]");
 	}
 
@@ -46,9 +46,9 @@ class OpenRouterExceptionMessageTests {
 	void unrelatedEncodedTextAndDifferentKeyCaseRemainUnchanged() {
 		for (String text : List.of("ordinary %2f path \\u0041 text", SYNTHETIC_KEY.toLowerCase(Locale.ROOT),
 				"synthetic-Key%2B%2F%3D_8", "partial synthetic-Key")) {
-			assertThat(OpenRouterExceptionMessage.sanitize(text, SYNTHETIC_KEY)).isEqualTo(text);
+			assertThat(OpenRouterDiagnosticSanitizer.forApiKey(SYNTHETIC_KEY).sanitize(text)).isEqualTo(text);
 		}
-		assertThat(OpenRouterExceptionMessage.sanitize("ordinary encoded text", " "))
+		assertThat(OpenRouterDiagnosticSanitizer.forApiKey(" ").sanitize("ordinary encoded text"))
 			.isEqualTo("ordinary encoded text");
 	}
 
@@ -58,7 +58,8 @@ class OpenRouterExceptionMessageTests {
 		String unicode = "synthetic-\\u2603-\\uD83D\\uDE80";
 		for (String echo : List.of(key, unicode, URLEncoder.encode(key, StandardCharsets.UTF_8),
 				"synthetic-\\u2603-%F0%9f%9A%80")) {
-			assertThat(OpenRouterExceptionMessage.sanitize("echo " + echo, key)).isEqualTo("echo [REDACTED]");
+			assertThat(OpenRouterDiagnosticSanitizer.forApiKey(key).sanitize("echo " + echo))
+				.isEqualTo("echo [REDACTED]");
 		}
 	}
 

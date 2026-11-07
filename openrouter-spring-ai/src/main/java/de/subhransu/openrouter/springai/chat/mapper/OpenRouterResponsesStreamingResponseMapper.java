@@ -8,6 +8,7 @@ import de.subhransu.openrouter.springai.api.dto.ResponsesOutputItem;
 import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
 import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
 import de.subhransu.openrouter.springai.api.dto.StreamError;
+import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -30,15 +31,18 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 
 	private final ResponsesStreamBudget budget;
 
+	private final OpenRouterDiagnosticSanitizer sanitizer;
+
 	public OpenRouterResponsesStreamingResponseMapper() {
 		this(new ObjectMapper(), OpenRouterStreamingToolCallAggregator.DEFAULT_MAX_BYTES,
 				OpenRouterStreamingToolCallAggregator.DEFAULT_MAX_CHUNKS,
-				OpenRouterStreamingToolCallAggregator.DEFAULT_MAX_DURATION);
+				OpenRouterStreamingToolCallAggregator.DEFAULT_MAX_DURATION, OpenRouterDiagnosticSanitizer.keyless());
 	}
 
 	public OpenRouterResponsesStreamingResponseMapper(ObjectMapper objectMapper, long maxBytes, int maxChunks,
-			Duration maxDuration) {
+			Duration maxDuration, OpenRouterDiagnosticSanitizer sanitizer) {
 		this.budget = new ResponsesStreamBudget(objectMapper, maxBytes, maxChunks, maxDuration);
+		this.sanitizer = sanitizer;
 	}
 
 	public Flux<ChatResponse> map(Flux<ResponsesStreamEvent> events) {
@@ -116,14 +120,14 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 		String type = event.type();
 		if (event.error() != null || "error".equals(type) || type != null && type.endsWith(".error")) {
 			throw OpenRouterResponsesResponseMapper.failure("OpenRouter responses stream failed", String.valueOf(event),
-					eventError(event), event.errorType());
+					eventError(event), event.errorType(), this.sanitizer);
 		}
 		ResponseValues.requiredText(type, "Responses event type");
 		if ("response.failed".equals(type)) {
 			// HTTP 200 can carry a failed generation; never emit an empty finish chunk.
 			ResponsesResult failed = event.response();
 			throw OpenRouterResponsesResponseMapper.failure("OpenRouter responses stream failed", String.valueOf(event),
-					failed != null ? failed.error() : null, failed != null ? failed.errorType() : null);
+					failed != null ? failed.error() : null, failed != null ? failed.errorType() : null, this.sanitizer);
 		}
 	}
 
@@ -136,7 +140,8 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 		if (result == null) {
 			throw new OpenRouterTruncatedResponseException("Responses stream terminated without a response snapshot");
 		}
-		OpenRouterResponsesResponseMapper.validateTerminal(result, completed ? "completed" : "incomplete");
+		OpenRouterResponsesResponseMapper.validateTerminal(result, completed ? "completed" : "incomplete",
+				this.sanitizer);
 		return result;
 	}
 
@@ -153,13 +158,14 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 		}
 		var details = result.incompleteDetails();
 		String reason = details != null ? details.reason() : null;
-		List<AssistantMessage.ToolCall> calls = OpenRouterResponsesResponseMapper.toolCalls(status, reason, pending);
+		List<AssistantMessage.ToolCall> calls = OpenRouterResponsesResponseMapper.toolCalls(status, reason, pending,
+				this.sanitizer);
 		var output = result.output();
 		if (output != null) {
 			// Validate both representations: a snapshot cannot erase a non-final item
 			// status.
 			List<AssistantMessage.ToolCall> terminal = OpenRouterResponsesResponseMapper.toolCalls(status, reason,
-					output);
+					output, this.sanitizer);
 			if (!terminal.isEmpty()) {
 				calls = terminal;
 			}

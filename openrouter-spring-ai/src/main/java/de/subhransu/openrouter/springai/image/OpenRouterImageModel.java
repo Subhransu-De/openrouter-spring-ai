@@ -57,11 +57,12 @@ public class OpenRouterImageModel implements ImageModel {
 
 	private final OpenRouterImageRequestMapper requestMapper = new OpenRouterImageRequestMapper();
 
-	private final OpenRouterImageResponseMapper responseMapper = new OpenRouterImageResponseMapper();
+	private final OpenRouterImageResponseMapper responseMapper;
 
 	private OpenRouterImageModel(Builder builder) {
 		Assert.notNull(builder.openRouterApi, "OpenRouterApi must not be null");
 		this.openRouterApi = builder.openRouterApi;
+		this.responseMapper = new OpenRouterImageResponseMapper(OpenRouterApi.diagnosticSanitizer(this.openRouterApi));
 		this.defaultOptions = builder.defaultOptions != null ? builder.defaultOptions.mutate().build()
 				: OpenRouterImageOptions.builder().build();
 		this.retryTemplate = builder.retryTemplate != null ? builder.retryTemplate : RetryUtils.DEFAULT_RETRY_TEMPLATE;
