@@ -6,6 +6,7 @@ import de.subhransu.openrouter.springai.api.dto.StreamError;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorClassifier;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorDetails;
+import de.subhransu.openrouter.springai.errors.OpenRouterErrorEnvelope;
 import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.util.StringUtils;
@@ -34,24 +35,18 @@ public final class OpenRouterApiExceptionFactory {
 			@Nullable StreamError error, @Nullable String rootErrorType) {
 		String parsedMessage = error != null ? error.message() : null;
 		String diagnosticMessage = StringUtils.hasText(parsedMessage) ? parsedMessage : fallbackMessage;
-		String errorType = rootErrorType;
-		JsonNode metadata = error != null ? error.metadata() : null;
-		if (!StringUtils.hasText(errorType) && error != null) {
-			errorType = error.errorType();
-		}
-		if (!StringUtils.hasText(errorType) && metadata != null) {
-			errorType = text(metadata.get("error_type"));
-		}
 		String code = error != null ? error.code() : null;
 		int statusCode = numericCode(code);
-		OpenRouterErrorCategory category = OpenRouterErrorClassifier.category(statusCode, errorType, code,
-				diagnosticMessage);
+		OpenRouterErrorEnvelope envelope = OpenRouterErrorEnvelope.interpret(statusCode, rootErrorType,
+				error != null ? error.errorType() : null, code, diagnosticMessage,
+				error != null ? error.metadata() : null);
 		if (statusCode < 400 || statusCode > 599) {
-			statusCode = syntheticStatus(category);
+			statusCode = syntheticStatus(envelope.category());
 		}
-		OpenRouterErrorDetails details = new OpenRouterErrorDetails(code, diagnosticMessage, errorType,
-				metadata != null ? text(metadata.get("provider_code")) : null,
-				metadata != null ? metadata.deepCopy() : null, category);
+		JsonNode metadata = envelope.metadata();
+		OpenRouterErrorDetails details = new OpenRouterErrorDetails(envelope.code(), envelope.message(),
+				envelope.errorType(), envelope.providerCode(), metadata != null ? metadata.deepCopy() : null,
+				envelope.category());
 		return new OpenRouterApiException(fallbackMessage, HttpStatusCode.valueOf(statusCode), responseBody, details);
 	}
 
@@ -74,13 +69,6 @@ public final class OpenRouterApiExceptionFactory {
 			case TIMEOUT -> 504;
 			case PROVIDER_UNAVAILABLE, UNKNOWN -> 500;
 		};
-	}
-
-	private static @Nullable String text(@Nullable JsonNode value) {
-		if (value == null || value.isNull()) {
-			return null;
-		}
-		return value.isString() ? value.stringValue() : value.toString();
 	}
 
 }

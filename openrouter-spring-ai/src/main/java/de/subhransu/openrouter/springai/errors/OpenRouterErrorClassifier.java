@@ -3,7 +3,6 @@ package de.subhransu.openrouter.springai.errors;
 import java.util.Locale;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
-import org.springframework.http.HttpStatusCode;
 import org.springframework.util.StringUtils;
 
 /**
@@ -12,10 +11,6 @@ import org.springframework.util.StringUtils;
  * @author Subhransu De
  */
 public final class OpenRouterErrorClassifier {
-
-	private static final Set<String> TRANSIENT_ERROR_TYPES = Set.of("api_error", "insufficient_system_resources",
-			"rate_limit_error", "rate_limit_exceeded", "provider_overloaded", "provider_unavailable", "server",
-			"server_error", "timeout", "timeout_error");
 
 	private static final Set<String> AUTHENTICATION_TYPES = Set.of("authentication", "authentication_error",
 			"invalid_api_key", "unauthorized");
@@ -46,33 +41,9 @@ public final class OpenRouterErrorClassifier {
 	}
 
 	/**
-	 * Determine whether an OpenRouter failure is retryable. A recognized canonical
-	 * {@code error_type} takes precedence over the status. Unknown combinations default
-	 * to non-transient so a potentially chargeable request is not repeated.
-	 */
-	public static boolean isTransient(HttpStatusCode statusCode, @Nullable String errorType) {
-		return isTransient(statusCode.value(), errorType);
-	}
-
-	/**
-	 * Variant for in-band errors whose numeric code has not been converted into an HTTP
-	 * status object.
-	 */
-	public static boolean isTransient(int statusCode, @Nullable String errorType) {
-		if (StringUtils.hasText(errorType)) {
-			if (TRANSIENT_ERROR_TYPES.contains(errorType)) {
-				return true;
-			}
-			return false;
-		}
-		return switch (statusCode) {
-			case 408, 429, 500, 502, 503, 504, 524, 529 -> true;
-			default -> false;
-		};
-	}
-
-	/**
-	 * Determine retryability from an already normalized error category.
+	 * Determine retryability from a normalized error category. Classify the failure with
+	 * {@link #category(int, String, String, String)} first; an unknown category is not
+	 * retried so a potentially chargeable request is not repeated.
 	 */
 	public static boolean isTransient(OpenRouterErrorCategory category) {
 		return category == OpenRouterErrorCategory.RATE_LIMIT || category == OpenRouterErrorCategory.TIMEOUT
