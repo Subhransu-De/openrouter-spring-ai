@@ -40,7 +40,7 @@
   </scm>
 
   <properties>
-    <revision>0.1.0-SNAPSHOT</revision>
+    <revision>0.2.0-SNAPSHOT</revision>
 
     <java.version>17</java.version>
     <!-- Integration projects under config/gate-its point this at the repository's config directory. -->

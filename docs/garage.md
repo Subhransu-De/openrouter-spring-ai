@@ -23,14 +23,14 @@ The Garage is a Spring MVC application. Build and start it from the repository r
 
 ```bash
 mvn -B -pl openrouter-spring-ai-samples -am -DskipTests package
-java -jar openrouter-spring-ai-samples/target/openrouter-spring-ai-samples-0.1.0-SNAPSHOT.jar
+java -jar openrouter-spring-ai-samples/target/openrouter-spring-ai-samples-0.2.0-SNAPSHOT.jar
 ```
 
 The equivalent Gradle command (CI uses Gradle 9.7.1) is:
 
 ```bash
 gradle --no-daemon :openrouter-spring-ai-samples:bootJar
-java -jar openrouter-spring-ai-samples/build/libs/openrouter-spring-ai-samples-0.1.0-SNAPSHOT.jar
+java -jar openrouter-spring-ai-samples/build/libs/openrouter-spring-ai-samples-0.2.0-SNAPSHOT.jar
 ```
 
 The filename follows the source POM revision, not the published starter version. The Garage listens on `127.0.0.1:8080`; set `GARAGE_ADDRESS` and `GARAGE_PORT` to change that. Anyone who can reach the port can start runs that make billable API calls, so keep it on the loopback address unless your own access control sits in front of it. Live scenes need `OPENROUTER_API_KEY` in the environment; offline contracts do not.

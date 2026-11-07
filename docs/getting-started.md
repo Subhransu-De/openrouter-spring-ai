@@ -4,7 +4,7 @@ This page creates a new Spring Boot application that calls OpenRouter through Sp
 
 ## Install and make a first call
 
-Use the published `de.subhransu:openrouter-spring-ai-starter:0.1.0-RC3` from Maven Central. For a new application, create this `pom.xml`:
+Use the published `de.subhransu:openrouter-spring-ai-starter:0.1.0` from Maven Central. For a new application, create this `pom.xml`:
 
 ```xml
 <project xmlns="http://maven.apache.org/POM/4.0.0">
@@ -12,7 +12,7 @@ Use the published `de.subhransu:openrouter-spring-ai-starter:0.1.0-RC3` from Mav
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.1.1</version>
+        <version>4.1.2</version>
         <relativePath/>
     </parent>
     <groupId>example</groupId>
@@ -23,7 +23,7 @@ Use the published `de.subhransu:openrouter-spring-ai-starter:0.1.0-RC3` from Mav
         <dependency>
             <groupId>de.subhransu</groupId>
             <artifactId>openrouter-spring-ai-starter</artifactId>
-            <version>0.1.0-RC3</version>
+            <version>0.1.0</version>
         </dependency>
     </dependencies>
     <build><plugins><plugin>
@@ -38,13 +38,13 @@ Or create `build.gradle.kts`:
 ```kotlin
 plugins {
     java
-    id("org.springframework.boot") version "4.1.1"
+    id("org.springframework.boot") version "4.1.2"
 }
 repositories { mavenCentral() }
 java { sourceCompatibility = JavaVersion.VERSION_17 }
 dependencies {
-    implementation(platform("org.springframework.boot:spring-boot-dependencies:4.1.1"))
-    implementation("de.subhransu:openrouter-spring-ai-starter:0.1.0-RC3")
+    implementation(platform("org.springframework.boot:spring-boot-dependencies:4.1.2"))
+    implementation("de.subhransu:openrouter-spring-ai-starter:0.1.0")
 }
 ```
 
@@ -112,12 +112,12 @@ Fallback models, provider routing, service tier and attribution headers are in [
 
 ## Release compatibility
 
-| Source / artifact                                                                      | Java release target | Spring Boot | Spring AI |
-| -------------------------------------------------------------------------------------- | ------------------- | ----------- | --------- |
-| [RC3: `e336517`](https://github.com/Subhransu-De/openrouter-spring-ai/tree/v0.1.0-RC3) | 17                  | 4.1.1       | 2.0.1     |
-| Unreleased main (`0.1.0-SNAPSHOT`)                                                     | 17                  | 4.1.2       | 2.0.2     |
+| Source / artifact                                                                    | Java release target | Spring Boot | Spring AI |
+| ------------------------------------------------------------------------------------ | ------------------- | ----------- | --------- |
+| [0.1.0: `41786f9`](https://github.com/Subhransu-De/openrouter-spring-ai/tree/v0.1.0) | 17                  | 4.1.2       | 2.0.2     |
+| Unreleased main (`0.2.0-SNAPSHOT`)                                                   | 17                  | 4.1.2       | 2.0.2     |
 
-The snippets on this page use Boot 4.1.1, the version RC3 was tested with, and RC3's starter brings in Spring AI 2.0.1. `main` targets Boot 4.1.2 and Spring AI 2.0.2. The versions come from the tagged and root POMs and the [published RC3 parent POM](https://repo.maven.apache.org/maven2/de/subhransu/openrouter-spring-ai-parent/0.1.0-RC3/openrouter-spring-ai-parent-0.1.0-RC3.pom). CI targets JDK 17, 21 and 25. Other Boot and Spring AI versions are not covered. Earlier release candidates are listed in the [changelog](../CHANGELOG.md).
+The snippets on this page use Boot 4.1.2, the version 0.1.0 was tested with, and the 0.1.0 starter brings in Spring AI 2.0.2. The versions come from the tagged and root POMs and the [published 0.1.0 parent POM](https://repo.maven.apache.org/maven2/de/subhransu/openrouter-spring-ai-parent/0.1.0/openrouter-spring-ai-parent-0.1.0.pom). CI targets JDK 17, 21 and 25. Other Boot and Spring AI versions are not covered. Release candidates are listed in the [changelog](../CHANGELOG.md).
 
 ## Model selection and replacement beans
 
