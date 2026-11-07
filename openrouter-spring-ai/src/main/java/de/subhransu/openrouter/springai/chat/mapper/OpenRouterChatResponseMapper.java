@@ -5,6 +5,7 @@ import de.subhransu.openrouter.springai.api.dto.Choice;
 import de.subhransu.openrouter.springai.api.dto.ToolCall;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import de.subhransu.openrouter.springai.api.errors.OpenRouterApiExceptionFactory;
+import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import java.util.ArrayList;
 import java.util.List;
@@ -21,7 +22,18 @@ import org.springframework.util.CollectionUtils;
 
 public final class OpenRouterChatResponseMapper {
 
-	private final OpenRouterChoiceErrorExceptionFactory choiceErrorExceptionFactory = new OpenRouterChoiceErrorExceptionFactory();
+	private final OpenRouterDiagnosticSanitizer sanitizer;
+
+	private final OpenRouterChoiceErrorExceptionFactory choiceErrorExceptionFactory;
+
+	public OpenRouterChatResponseMapper() {
+		this(OpenRouterDiagnosticSanitizer.keyless());
+	}
+
+	public OpenRouterChatResponseMapper(OpenRouterDiagnosticSanitizer sanitizer) {
+		this.sanitizer = sanitizer;
+		this.choiceErrorExceptionFactory = new OpenRouterChoiceErrorExceptionFactory(sanitizer);
+	}
 
 	public ChatResponse map(ChatCompletionResponse response) {
 		if (response == null) {
@@ -30,7 +42,7 @@ public final class OpenRouterChatResponseMapper {
 		var error = response.error();
 		if (error != null) {
 			throw OpenRouterApiExceptionFactory.createRetryable("OpenRouter chat completion failed", error.toString(),
-					error, null, "/chat/completions");
+					error, null, "/chat/completions", this.sanitizer);
 		}
 		var choices = response.choices();
 		if (CollectionUtils.isEmpty(choices) || choices.stream().anyMatch(Objects::isNull)) {

@@ -6,6 +6,7 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
+import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
@@ -43,7 +44,8 @@ class ImageResponseContractTests {
 
 	@Test
 	void validatorRejectsNullWithAProtocolError() {
-		assertThatThrownBy(() -> OpenRouterImageResponseValidator.validate(null))
+		assertThatThrownBy(
+				() -> OpenRouterImageResponseValidator.validate(null, OpenRouterDiagnosticSanitizer.keyless()))
 			.isInstanceOf(OpenRouterProtocolException.class)
 			.hasMessage("Null OpenRouter image response");
 	}

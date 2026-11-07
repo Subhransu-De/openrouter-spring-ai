@@ -11,6 +11,7 @@ import de.subhransu.openrouter.springai.api.dto.ImagesStreamEvent;
 import de.subhransu.openrouter.springai.api.dto.ResponsesRequest;
 import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
 import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
+import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
 import de.subhransu.openrouter.springai.errors.OpenRouterHttpExceptionFactory;
 import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
@@ -79,6 +80,8 @@ public class OpenRouterApi {
 
 	private final OpenRouterHttpExceptionFactory httpExceptionFactory;
 
+	private final OpenRouterDiagnosticSanitizer diagnosticSanitizer;
+
 	private final @Nullable Duration timeout;
 
 	private final int maxResponseBodyBytes;
@@ -94,6 +97,7 @@ public class OpenRouterApi {
 		this.customObjectMapper = builder.customObjectMapper;
 		this.eventBinder = new StreamEventBinder(this.objectMapper, !this.customObjectMapper);
 		this.httpExceptionFactory = new OpenRouterHttpExceptionFactory(this.objectMapper, builder.apiKey);
+		this.diagnosticSanitizer = OpenRouterDiagnosticSanitizer.forApiKey(builder.apiKey);
 		this.timeout = builder.timeout;
 		Assert.isTrue(builder.maxResponseBodyBytes > 0, "Maximum response body size must be greater than zero");
 		Assert.isTrue(builder.maxErrorBodyBytes > 0, "Maximum error body size must be greater than zero");
@@ -142,6 +146,21 @@ public class OpenRouterApi {
 
 	public static Builder builder() {
 		return new Builder();
+	}
+
+	/**
+	 * Return the sanitizer that redacts a client's configured API key, including its
+	 * encoded forms, from provider diagnostics. The OpenRouter models use it for errors
+	 * that arrive inside a successful response or stream. It does not expose the key.
+	 * <p>
+	 * This is static so that it records no interaction on a mocked client. A mock skips
+	 * the constructor, so it gets the keyless sanitizer.
+	 * @param api the client
+	 * @return the diagnostic sanitizer bound to the client
+	 */
+	public static OpenRouterDiagnosticSanitizer diagnosticSanitizer(OpenRouterApi api) {
+		OpenRouterDiagnosticSanitizer sanitizer = api.diagnosticSanitizer;
+		return sanitizer != null ? sanitizer : OpenRouterDiagnosticSanitizer.keyless();
 	}
 
 	public ChatCompletionResponse chatCompletion(ChatCompletionRequest request) {
@@ -293,7 +312,7 @@ public class OpenRouterApi {
 	}
 
 	private List<ImagesStreamEvent> completedEvents(ImagesResponse images) {
-		OpenRouterImageResponseValidator.validate(images);
+		OpenRouterImageResponseValidator.validate(images, this.diagnosticSanitizer);
 		List<ImagesResponse.@Nullable ImageData> imageData = Objects.requireNonNull(images.data());
 		List<ImagesStreamEvent> events = new ArrayList<>(imageData.size());
 		for (int i = 0; i < imageData.size(); i++) {

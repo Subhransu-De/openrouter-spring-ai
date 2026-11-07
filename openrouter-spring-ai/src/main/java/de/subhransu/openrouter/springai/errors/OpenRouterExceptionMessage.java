@@ -13,7 +13,6 @@ import java.util.Map;
 import java.nio.charset.StandardCharsets;
 import java.util.HexFormat;
 import java.util.regex.Pattern;
-import org.springframework.util.StringUtils;
 
 /**
  * Shared policy for host-controlled exception messages and retained provider diagnostics.
@@ -53,13 +52,13 @@ public final class OpenRouterExceptionMessage {
 	}
 
 	@Contract("!null, _ -> !null")
-	static @Nullable String sanitize(@Nullable String value, @Nullable String apiKey) {
+	static @Nullable String sanitize(@Nullable String value, @Nullable Pattern apiKey) {
 		if (value == null) {
 			return null;
 		}
 		String safeValue = neutralizeControls(value);
-		if (StringUtils.hasText(apiKey)) {
-			safeValue = encodedKeyPattern(apiKey).matcher(safeValue).replaceAll("[REDACTED]");
+		if (apiKey != null) {
+			safeValue = apiKey.matcher(safeValue).replaceAll("[REDACTED]");
 		}
 		safeValue = AUTHORIZATION_JSON.matcher(safeValue).replaceAll("$1[REDACTED]$2");
 		safeValue = BEARER_TOKEN.matcher(safeValue).replaceAll("Bearer [REDACTED]");
@@ -68,7 +67,7 @@ public final class OpenRouterExceptionMessage {
 		return bound(safeValue);
 	}
 
-	private static Pattern encodedKeyPattern(String apiKey) {
+	static Pattern encodedKeyPattern(String apiKey) {
 		StringBuilder pattern = new StringBuilder();
 		for (int offset = 0; offset < apiKey.length();) {
 			int end = offset + Character.charCount(apiKey.codePointAt(offset));
@@ -110,12 +109,16 @@ public final class OpenRouterExceptionMessage {
 	 * @return a detached, sanitized metadata map
 	 */
 	public static Map<String, @Nullable Object> sanitizeMetadata(@Nullable Map<String, ?> metadata) {
+		return sanitizeMetadata(metadata, null);
+	}
+
+	static Map<String, @Nullable Object> sanitizeMetadata(@Nullable Map<String, ?> metadata, @Nullable Pattern apiKey) {
 		if (metadata == null || metadata.isEmpty()) {
 			return Map.of();
 		}
 		Map<String, @Nullable Object> sanitized = new LinkedHashMap<>();
-		metadata.forEach((key, value) -> sanitized.put(sanitize(key),
-				isCredentialField(key) ? "[REDACTED]" : sanitizeMetadataValue(value)));
+		metadata.forEach((key, value) -> sanitized.put(sanitize(key, apiKey),
+				isCredentialField(key) ? "[REDACTED]" : sanitizeMetadataValue(value, apiKey)));
 		return sanitized;
 	}
 
@@ -126,14 +129,11 @@ public final class OpenRouterExceptionMessage {
 	 */
 	@Contract("!null -> !null")
 	public static @Nullable Object sanitizeDiagnosticValue(@Nullable Object value) {
-		if (value instanceof JsonNode node) {
-			return sanitizeMetadata(node, null);
-		}
-		return sanitizeMetadataValue(value);
+		return sanitizeMetadataValue(value, null);
 	}
 
 	@Contract("!null, _ -> !null")
-	static @Nullable JsonNode sanitizeMetadata(@Nullable JsonNode metadata, @Nullable String apiKey) {
+	static @Nullable JsonNode sanitizeMetadata(@Nullable JsonNode metadata, @Nullable Pattern apiKey) {
 		if (metadata == null) {
 			return null;
 		}
@@ -158,23 +158,26 @@ public final class OpenRouterExceptionMessage {
 		return metadata.deepCopy();
 	}
 
-	@Contract("!null -> !null")
-	private static @Nullable Object sanitizeMetadataValue(@Nullable Object value) {
+	@Contract("!null, _ -> !null")
+	static @Nullable Object sanitizeMetadataValue(@Nullable Object value, @Nullable Pattern apiKey) {
 		if (value instanceof String text) {
-			return sanitize(text);
+			return sanitize(text, apiKey);
+		}
+		if (value instanceof JsonNode node) {
+			return sanitizeMetadata(node, apiKey);
 		}
 		if (value instanceof Map<?, ?> map) {
 			Map<String, @Nullable Object> sanitized = new LinkedHashMap<>();
 			map.forEach((key, nestedValue) -> {
 				String name = String.valueOf(key);
-				sanitized.put(sanitize(name),
-						isCredentialField(name) ? "[REDACTED]" : sanitizeMetadataValue(nestedValue));
+				sanitized.put(sanitize(name, apiKey),
+						isCredentialField(name) ? "[REDACTED]" : sanitizeMetadataValue(nestedValue, apiKey));
 			});
 			return sanitized;
 		}
 		if (value instanceof Iterable<?> iterable) {
 			List<@Nullable Object> sanitized = new ArrayList<>();
-			iterable.forEach(item -> sanitized.add(sanitizeMetadataValue(item)));
+			iterable.forEach(item -> sanitized.add(sanitizeMetadataValue(item, apiKey)));
 			return sanitized;
 		}
 		return value;

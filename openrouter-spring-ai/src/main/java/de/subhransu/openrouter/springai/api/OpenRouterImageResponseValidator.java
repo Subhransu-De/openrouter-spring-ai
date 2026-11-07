@@ -2,6 +2,7 @@ package de.subhransu.openrouter.springai.api;
 
 import de.subhransu.openrouter.springai.api.dto.ImagesResponse;
 import de.subhransu.openrouter.springai.api.errors.OpenRouterApiExceptionFactory;
+import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import org.jspecify.annotations.Nullable;
 import org.springframework.util.StringUtils;
@@ -16,14 +17,14 @@ public final class OpenRouterImageResponseValidator {
 	private OpenRouterImageResponseValidator() {
 	}
 
-	public static void validate(@Nullable ImagesResponse response) {
+	public static void validate(@Nullable ImagesResponse response, OpenRouterDiagnosticSanitizer sanitizer) {
 		if (response == null) {
 			throw new OpenRouterProtocolException("Null OpenRouter image response");
 		}
 		var error = response.error();
 		if (error != null) {
 			throw OpenRouterApiExceptionFactory.createRetryable("OpenRouter image generation failed", error.toString(),
-					error, null, "/images");
+					error, null, "/images", sanitizer);
 		}
 		var images = response.data();
 		if (images == null) {

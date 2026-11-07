@@ -5,6 +5,7 @@ import de.subhransu.openrouter.springai.api.OpenRouterImageResponseValidator;
 import de.subhransu.openrouter.springai.api.dto.ImagesStreamEvent;
 import de.subhransu.openrouter.springai.api.dto.Usage;
 import de.subhransu.openrouter.springai.api.errors.OpenRouterApiExceptionFactory;
+import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import de.subhransu.openrouter.springai.chat.mapper.UsageMapper;
 import de.subhransu.openrouter.springai.image.OpenRouterImageGenerationMetadata;
@@ -20,8 +21,18 @@ import org.springframework.util.StringUtils;
 
 public final class OpenRouterImageResponseMapper {
 
+	private final OpenRouterDiagnosticSanitizer sanitizer;
+
+	public OpenRouterImageResponseMapper() {
+		this(OpenRouterDiagnosticSanitizer.keyless());
+	}
+
+	public OpenRouterImageResponseMapper(OpenRouterDiagnosticSanitizer sanitizer) {
+		this.sanitizer = sanitizer;
+	}
+
 	public ImageResponse map(ImagesResponse response) {
-		OpenRouterImageResponseValidator.validate(response);
+		OpenRouterImageResponseValidator.validate(response, this.sanitizer);
 		var images = response.data();
 		List<ImageGeneration> generations = CollectionUtils.isEmpty(images) ? List.of()
 				: images.stream()
@@ -41,7 +52,7 @@ public final class OpenRouterImageResponseMapper {
 		var error = event.error();
 		if (error != null || ImagesStreamEvent.ERROR_EVENT.equals(event.type())) {
 			throw OpenRouterApiExceptionFactory.create("OpenRouter image generation stream failed",
-					error != null ? error.toString() : null, error, null);
+					error != null ? error.toString() : null, error, null, this.sanitizer);
 		}
 		if (!StringUtils.hasText(event.type())) {
 			throw new OpenRouterProtocolException("OpenRouter image event requires a type");

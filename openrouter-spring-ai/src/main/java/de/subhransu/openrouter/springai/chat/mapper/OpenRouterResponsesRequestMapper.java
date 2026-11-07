@@ -16,6 +16,7 @@ import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterCacheBreakpoint;
 import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
 import de.subhransu.openrouter.springai.chat.OpenRouterReasoningOptions;
+import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -204,8 +205,10 @@ public final class OpenRouterResponsesRequestMapper {
 				: List.of();
 		if (!Objects.equals(OpenRouterResponsesResponseMapper.text(snapshot),
 				message.getText() != null ? message.getText() : "")
-				|| !Objects.equals(OpenRouterResponsesResponseMapper.toolCalls(null, null, snapshot), calls) || !Objects
-					.equals(RefusalMetadata.responses(snapshot), message.getMetadata().get(RefusalMetadata.REFUSAL))) {
+				|| !Objects.equals(OpenRouterResponsesResponseMapper.toolCalls(null, null, snapshot,
+						OpenRouterDiagnosticSanitizer.keyless()), calls)
+				|| !Objects.equals(RefusalMetadata.responses(snapshot),
+						message.getMetadata().get(RefusalMetadata.REFUSAL))) {
 			throw new IllegalArgumentException("OPENAI_RESPONSES cannot replay a stale assistant output snapshot: "
 					+ "text, tool calls, or refusal metadata changed; retain the original assistant message "
 					+ "or start a new conversation without its reasoning state");

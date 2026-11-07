@@ -6,9 +6,9 @@ import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
 import de.subhransu.openrouter.springai.api.dto.StreamError;
 import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
 import de.subhransu.openrouter.springai.api.errors.OpenRouterApiExceptionFactory;
+import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
 import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
-import de.subhransu.openrouter.springai.errors.OpenRouterExceptionMessage;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import java.util.List;
 import java.util.Map;
@@ -23,12 +23,22 @@ import org.springframework.util.CollectionUtils;
 
 public final class OpenRouterResponsesResponseMapper {
 
+	private final OpenRouterDiagnosticSanitizer sanitizer;
+
+	public OpenRouterResponsesResponseMapper() {
+		this(OpenRouterDiagnosticSanitizer.keyless());
+	}
+
+	public OpenRouterResponsesResponseMapper(OpenRouterDiagnosticSanitizer sanitizer) {
+		this.sanitizer = sanitizer;
+	}
+
 	public ChatResponse map(@Nullable ResponsesResult response) {
 		response = ResponseValues.required(response, "Responses result");
-		validateTerminal(response, null);
+		validateTerminal(response, null, this.sanitizer);
 		var details = response.incompleteDetails();
 		List<AssistantMessage.ToolCall> toolCalls = toolCalls(response.status(),
-				details != null ? details.reason() : null, response.output());
+				details != null ? details.reason() : null, response.output(), this.sanitizer);
 		Map<String, Object> properties = ReasoningMetadata.responses(response.output());
 		RefusalMetadata.put(properties, RefusalMetadata.responses(response.output()));
 		AssistantMessage assistantMessage = AssistantMessage.builder()
@@ -62,19 +72,20 @@ public final class OpenRouterResponsesResponseMapper {
 		return new ChatResponse(List.of(new Generation(assistantMessage, generationMetadata)), responseMetadata);
 	}
 
-	static void validateTerminal(ResponsesResult response, @Nullable String expectedStatus) {
+	static void validateTerminal(ResponsesResult response, @Nullable String expectedStatus,
+			OpenRouterDiagnosticSanitizer sanitizer) {
 		var details = response.incompleteDetails();
 		var error = response.error();
 		// HTTP success and a completion event cannot override a provider error.
 		if (response.error() != null || "failed".equals(response.status())) {
 			throw failure("OpenRouter responses request failed", error != null ? error.toString() : response.status(),
-					response.error(), response.errorType());
+					response.error(), response.errorType(), sanitizer);
 		}
 		String status = ResponseValues.required(response.status(), "Responses status");
 		if (!"completed".equals(status) && !"incomplete".equals(status)) {
-			throw new OpenRouterTruncatedResponseException("Responses result is not final: status="
-					+ OpenRouterExceptionMessage.sanitize(status) + ", incomplete reason="
-					+ OpenRouterExceptionMessage.sanitize(details != null ? details.reason() : null));
+			throw new OpenRouterTruncatedResponseException(
+					"Responses result is not final: status=" + sanitizer.sanitize(status) + ", incomplete reason="
+							+ sanitizer.sanitize(details != null ? details.reason() : null));
 		}
 		if (expectedStatus != null && !expectedStatus.equals(status)) {
 			throw new OpenRouterProtocolException("Responses terminal event disagrees with response status");
@@ -83,9 +94,9 @@ public final class OpenRouterResponsesResponseMapper {
 	}
 
 	static RuntimeException failure(String message, @Nullable String responseBody, @Nullable StreamError error,
-			@Nullable String errorType) {
+			@Nullable String errorType, OpenRouterDiagnosticSanitizer sanitizer) {
 		RuntimeException failure = OpenRouterApiExceptionFactory.createRetryable(message, responseBody, error,
-				errorType, "/responses");
+				errorType, "/responses", sanitizer);
 		if (failure instanceof OpenRouterApiException permanent) {
 			return new OpenRouterNonTransientApiException(message, permanent.getStatusCode(),
 					permanent.getResponseBody(), permanent.getErrorDetails(), null, "/responses");
@@ -95,7 +106,7 @@ public final class OpenRouterResponsesResponseMapper {
 
 	// Accept absent status for compatibility; reject every explicit non-final status.
 	static List<AssistantMessage.ToolCall> toolCalls(@Nullable String status, @Nullable String reason,
-			@Nullable List<? extends @Nullable ResponsesOutputItem> output) {
+			@Nullable List<? extends @Nullable ResponsesOutputItem> output, OpenRouterDiagnosticSanitizer sanitizer) {
 		if (CollectionUtils.isEmpty(output)) {
 			return List.of();
 		}
@@ -107,9 +118,8 @@ public final class OpenRouterResponsesResponseMapper {
 			if (status != null && !"completed".equals(status)
 					|| item.status() != null && !"completed".equals(item.status())) {
 				throw new OpenRouterTruncatedResponseException("Responses tool round is not complete: response status="
-						+ OpenRouterExceptionMessage.sanitize(status) + ", item status="
-						+ OpenRouterExceptionMessage.sanitize(item.status()) + ", incomplete reason="
-						+ OpenRouterExceptionMessage.sanitize(reason));
+						+ sanitizer.sanitize(status) + ", item status=" + sanitizer.sanitize(item.status())
+						+ ", incomplete reason=" + sanitizer.sanitize(reason));
 			}
 		}
 		return calls.stream()

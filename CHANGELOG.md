@@ -49,7 +49,7 @@ Notable changes in each release. The full notes for each release candidate are o
 - A buffered tool call no longer replaces newer usage, and stream observations keep each choice and its metadata.
 - Nested provider and reasoning properties bind in native images and appear in IDE metadata.
 - A blank structured-output schema fails before the request is sent, and a named `tool_choice` serializes with `type` first.
-- Encoded echoes of the API key are redacted from retained error bodies.
+- Retained error bodies, diagnostics and metadata redact the configured API key and its percent-encoded and JSON `\u`-escaped forms. This now includes errors inside a successful response, a stream event or a choice, which before relied on generic credential patterns only and missed encoded forms and keys without an `sk-` prefix.
 
 ### Documentation
 
