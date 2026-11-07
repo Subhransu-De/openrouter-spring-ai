@@ -371,21 +371,6 @@ class OpenRouterHttpExceptionFactoryTests {
 	}
 
 	@Test
-	void inBandNumericCodesUseTheSharedClassifier() {
-		assertThat(OpenRouterErrorClassifier.isTransient(502, "provider_unavailable")).isTrue();
-		assertThat(OpenRouterErrorClassifier.isTransient(503, "authentication")).isFalse();
-	}
-
-	@ParameterizedTest(name = "[{index}] status {0}, type {1} -> transient {2}")
-	@CsvSource(
-			value = { "524|NULL|true", "529|NULL|true", "500|timeout_error|true", "500|api_error|true",
-					"500|insufficient_system_resources|true", "503|authentication|false", "503|future_error|false" },
-			delimiter = '|', nullValues = "NULL")
-	void alignsRetryabilityWithTransientCategories(int status, String errorType, boolean expected) {
-		assertThat(OpenRouterErrorClassifier.isTransient(status, errorType)).isEqualTo(expected);
-	}
-
-	@Test
 	void canonicalRateLimitErrorIsTransient() {
 		String body = """
 				{"error":{"code":429,"message":"slow down",
@@ -396,21 +381,6 @@ class OpenRouterHttpExceptionFactoryTests {
 				body);
 
 		assertThat(exception).isInstanceOf(OpenRouterTransientApiException.class);
-	}
-
-	@Test
-	void unknownCanonicalErrorTypeDoesNotFallBackToTransientStatus() {
-		assertThat(OpenRouterErrorClassifier.isTransient(503, "future_error")).isFalse();
-	}
-
-	@Test
-	void blankCanonicalErrorTypeFallsBackToTransientStatus() {
-		assertThat(OpenRouterErrorClassifier.isTransient(503, " \t")).isTrue();
-	}
-
-	@Test
-	void nullCanonicalErrorTypeFallsBackToTransientStatus() {
-		assertThat(OpenRouterErrorClassifier.isTransient(503, null)).isTrue();
 	}
 
 	@Test

@@ -37,7 +37,7 @@ New request fields are added to the builders. The records' canonical constructor
 
 ## Implementation details
 
-Mapper packages, `internal`, `support.OptionSnapshots`, error factories/classifiers, `OpenRouterExceptionMessage`, `OpenRouterErrorResponse`, deserializers, runtime hints, and the auto-configuration classes are implementation details even where Java visibility is public. The auto-configuration classes are `final` and expose no public methods; replace their beans instead. They are not supported extension points and may change between releases. Prefer the consumer types above.
+Mapper packages, `internal`, `support.OptionSnapshots`, error factories/classifiers, `OpenRouterExceptionMessage`, `OpenRouterErrorResponse`, `OpenRouterErrorEnvelope`, deserializers, runtime hints, and the auto-configuration classes are implementation details even where Java visibility is public. The auto-configuration classes are `final` and expose no public methods; replace their beans instead. They are not supported extension points and may change between releases. Prefer the consumer types above.
 
 ## Nullability
 

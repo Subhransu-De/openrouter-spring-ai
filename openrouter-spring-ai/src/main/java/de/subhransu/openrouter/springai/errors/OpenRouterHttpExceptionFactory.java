@@ -116,7 +116,7 @@ public final class OpenRouterHttpExceptionFactory {
 				String name = parser.currentName();
 				JsonToken valueToken = parser.nextToken();
 				if ("error_type".equals(name)) {
-					errorType = text(parser.readValueAsTree());
+					errorType = OpenRouterErrorEnvelope.text(parser.readValueAsTree());
 				}
 				else if ("error".equals(name) && valueToken == JsonToken.START_OBJECT) {
 					error = parser.readValueAsTree();
@@ -131,49 +131,30 @@ public final class OpenRouterHttpExceptionFactory {
 				return null;
 			}
 		}
-		OpenRouterErrorResponse.Error typed = error != null && error.isObject() ? new OpenRouterErrorResponse.Error(
-				error.get("code"), error.get("message"), error.get("metadata"), text(error.get("error_type"))) : null;
+		OpenRouterErrorResponse.Error typed = error != null && error.isObject()
+				? new OpenRouterErrorResponse.Error(error.get("code"), error.get("message"), error.get("metadata"),
+						OpenRouterErrorEnvelope.text(error.get("error_type")))
+				: null;
 		return details(typed, errorType, statusCode);
 	}
 
 	private @Nullable OpenRouterErrorDetails details(OpenRouterErrorResponse.@Nullable Error error,
 			@Nullable String rootErrorType, int statusCode) {
-		if (error == null) {
-			return rootTypeDetails(rootErrorType, statusCode);
-		}
-		JsonNode metadata = error.metadata();
-		String errorType = rootErrorType;
-		if (!StringUtils.hasText(errorType)) {
-			errorType = error.errorType();
-		}
-		if (!StringUtils.hasText(errorType) && metadata != null) {
-			errorType = text(metadata.get("error_type"));
-		}
-		String code = text(error.code());
-		String message = text(error.message());
-		OpenRouterErrorCategory category = OpenRouterErrorClassifier.category(statusCode, errorType, code, message);
-		return new OpenRouterErrorDetails(sanitize(code), sanitize(message), sanitize(errorType),
-				metadata != null ? sanitize(text(metadata.get("provider_code"))) : null,
-				OpenRouterExceptionMessage.sanitizeMetadata(metadata, this.apiKey), category);
-	}
-
-	private @Nullable OpenRouterErrorDetails rootTypeDetails(@Nullable String errorType, int statusCode) {
-		if (!StringUtils.hasText(errorType)) {
+		if (error == null && !StringUtils.hasText(rootErrorType)) {
 			return null;
 		}
-		OpenRouterErrorCategory category = OpenRouterErrorClassifier.category(statusCode, errorType, null, null);
-		return new OpenRouterErrorDetails(null, null, sanitize(errorType), null, null, category);
+		OpenRouterErrorEnvelope envelope = error != null
+				? OpenRouterErrorEnvelope.interpret(statusCode, rootErrorType, error.errorType(),
+						OpenRouterErrorEnvelope.text(error.code()), OpenRouterErrorEnvelope.text(error.message()),
+						error.metadata())
+				: OpenRouterErrorEnvelope.interpret(statusCode, rootErrorType, null, null, null, null);
+		return new OpenRouterErrorDetails(sanitize(envelope.code()), sanitize(envelope.message()),
+				sanitize(envelope.errorType()), sanitize(envelope.providerCode()),
+				OpenRouterExceptionMessage.sanitizeMetadata(envelope.metadata(), this.apiKey), envelope.category());
 	}
 
 	private @Nullable String sanitize(@Nullable String value) {
 		return OpenRouterExceptionMessage.sanitize(value, this.apiKey);
-	}
-
-	private @Nullable String text(@Nullable JsonNode node) {
-		if (node == null || node.isNull()) {
-			return null;
-		}
-		return node.isString() ? node.stringValue() : node.toString();
 	}
 
 	private @Nullable OpenRouterRetryAfter parseRetryAfter(@Nullable String value) {
