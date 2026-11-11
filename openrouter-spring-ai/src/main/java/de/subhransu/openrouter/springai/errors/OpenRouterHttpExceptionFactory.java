@@ -6,7 +6,6 @@ import tools.jackson.core.JsonParser;
 import tools.jackson.core.JsonToken;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
-import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -35,16 +34,9 @@ public final class OpenRouterHttpExceptionFactory {
 
 	private final OpenRouterDiagnosticSanitizer sanitizer;
 
-	private final Clock clock;
-
 	public OpenRouterHttpExceptionFactory(ObjectMapper objectMapper, @Nullable String apiKey) {
-		this(objectMapper, apiKey, Clock.systemUTC());
-	}
-
-	OpenRouterHttpExceptionFactory(ObjectMapper objectMapper, @Nullable String apiKey, Clock clock) {
 		this.objectMapper = objectMapper;
 		this.sanitizer = OpenRouterDiagnosticSanitizer.forApiKey(apiKey);
-		this.clock = clock;
 	}
 
 	public RuntimeException create(String endpoint, HttpStatusCode statusCode, HttpHeaders headers,
@@ -179,7 +171,7 @@ public final class OpenRouterHttpExceptionFactory {
 		if (retryAt == null) {
 			return new OpenRouterRetryAfter(value, null, null);
 		}
-		Duration delay = Duration.between(this.clock.instant(), retryAt);
+		Duration delay = Duration.between(Instant.now(), retryAt);
 		return new OpenRouterRetryAfter(value, delay.isNegative() ? Duration.ZERO : delay, retryAt);
 	}
 
@@ -206,7 +198,7 @@ public final class OpenRouterHttpExceptionFactory {
 		if (comma < 0 || comma == candidate.length() - 1) {
 			return null;
 		}
-		int currentYear = ZonedDateTime.now(this.clock).getYear();
+		int currentYear = ZonedDateTime.now(ZoneOffset.UTC).getYear();
 		int currentCentury = Math.floorDiv(currentYear, 100) * 100;
 		DateTimeFormatter formatter = new DateTimeFormatterBuilder().parseCaseInsensitive()
 			.appendPattern("dd-MMM-")

@@ -5,30 +5,61 @@ import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 class RequestBuilderTests {
 
 	private static final List<ChatMessage> MESSAGES = List.of(new ChatMessage("user", "hi", null, null, null));
 
-	private static final ProviderPreferences PROVIDER = new ProviderPreferences(true, null, null, null, null, null,
-			null);
+	private static final ProviderPreferences PROVIDER = new ProviderPreferences(true, false, "deny", List.of("openai"),
+			List.of("anthropic"), List.of("fp16"), "throughput");
 
-	private static final ReasoningOptions REASONING = new ReasoningOptions("high", null, null, null);
+	private static final ReasoningOptions REASONING = new ReasoningOptions("high", 1024, false, true);
 
 	private static final Map<String, Object> EXTRA_BODY = Map.of("prompt_cache_key", "key");
 
-	// Every value is distinct, so a builder method wired to the wrong component makes the
-	// records unequal. Same-typed neighbours such as the Double sampling fields are the
-	// ones a positional call can swap silently.
+	private static final String CHAT_WIRE = """
+			{"model":"model","models":["fallback"],"messages":[{"role":"user","content":"hi"}],
+			 "temperature":0.1,"top_p":0.2,"top_k":3,"frequency_penalty":0.4,"presence_penalty":0.5,
+			 "repetition_penalty":0.6,"min_p":0.7,"top_a":0.8,"max_tokens":9,"max_completion_tokens":10,
+			 "stop":["stop"],"seed":11,"user":"user","stream":true,"response_format":{"type":"json_object"},
+			 "tools":[{"type":"function","function":{"name":"lookup"}}],"tool_choice":"auto",
+			 "parallel_tool_calls":false,"provider":{"allow_fallbacks":true,"require_parameters":false,"data_collection":"deny",
+			 "order":["openai"],"ignore":["anthropic"],"quantizations":["fp16"],"sort":"throughput"},
+			 "reasoning":{"effort":"high","max_tokens":1024,"exclude":false,"enabled":true},
+			 "service_tier":"flex","metadata":{"trace":"t"},"route":"fallback","usage":{"include":true},
+			 "modalities":["text"],"image_config":{"aspect_ratio":"1:1"},
+			 "audio":{"voice":"alloy","format":"wav"},"prompt_cache_key":"key"}
+			""";
+
+	private static final String RESPONSES_WIRE = """
+			{"model":"model","models":["fallback"],"input":"input","instructions":"instructions",
+			 "max_output_tokens":5,"stream":true,"temperature":0.1,"top_p":0.2,"top_k":3,
+			 "frequency_penalty":0.4,"presence_penalty":0.5,"metadata":{"trace":"t"},
+			 "provider":{"allow_fallbacks":true,"require_parameters":false,"data_collection":"deny",
+			 "order":["openai"],"ignore":["anthropic"],"quantizations":["fp16"],"sort":"throughput"},
+			 "reasoning":{"effort":"high","max_tokens":1024,"exclude":false,"enabled":true},"route":"fallback",
+			 "service_tier":"flex","user":"user","parallel_tool_calls":false,"tool_choice":"auto",
+			 "tools":[{"type":"function","name":"lookup"}],"modalities":["text"],
+			 "image_config":{"aspect_ratio":"1:1"},"text":{"verbosity":"low"},"prompt_cache_key":"key"}
+			""";
+
+	private final ObjectMapper mapper = new ObjectMapper();
+
+	// Every value is distinct, so a builder method wired to the wrong component puts a
+	// value under the wrong wire name. Same-typed neighbours such as the Double sampling
+	// fields are the ones a positional call can swap silently. The expected document is
+	// written independently of the record constructors.
 	@Test
 	void chatBuilderSetsEveryComponent() {
 		List<Tool> tools = List.of(new Tool("function", new Function("lookup", null, null)));
-		ChatCompletionRequest expected = new ChatCompletionRequest("model", List.of("fallback"), MESSAGES, 0.1, 0.2, 3,
-				0.4, 0.5, 0.6, 0.7, 0.8, 9, 10, List.of("stop"), 11, "user", true, Map.of("type", "json_object"), tools,
-				"auto", false, PROVIDER, REASONING, "flex", Map.of("trace", "t"), "fallback", new UsageConfig(true),
-				List.of("text"), Map.of("aspect_ratio", "1:1"), new AudioConfig("alloy", "wav"), EXTRA_BODY);
-
 		ChatCompletionRequest built = ChatCompletionRequest.builder()
 			.model("model")
 			.models(List.of("fallback"))
@@ -63,16 +94,13 @@ class RequestBuilderTests {
 			.extraBody(EXTRA_BODY)
 			.build();
 
-		assertThat(built).isEqualTo(expected);
+		JsonNode wire = this.mapper.valueToTree(built);
+		assertThat(wire).isEqualTo(this.mapper.readTree(CHAT_WIRE));
 	}
 
 	@Test
 	void responsesBuilderSetsEveryComponent() {
 		List<ResponsesTool> tools = List.of(new ResponsesTool("function", "lookup", null, null, null));
-		ResponsesRequest expected = new ResponsesRequest("model", List.of("fallback"), "input", "instructions", 5, true,
-				0.1, 0.2, 3, 0.4, 0.5, Map.of("trace", "t"), PROVIDER, REASONING, "fallback", "flex", "user", false,
-				"auto", tools, List.of("text"), Map.of("aspect_ratio", "1:1"), Map.of("verbosity", "low"), EXTRA_BODY);
-
 		ResponsesRequest built = ResponsesRequest.builder()
 			.model("model")
 			.models(List.of("fallback"))
@@ -100,15 +128,22 @@ class RequestBuilderTests {
 			.extraBody(EXTRA_BODY)
 			.build();
 
-		assertThat(built).isEqualTo(expected);
+		JsonNode wire = this.mapper.valueToTree(built);
+		assertThat(wire).isEqualTo(this.mapper.readTree(RESPONSES_WIRE));
 	}
 
-	@Test
-	void buildersRejectMissingRequiredField() {
-		assertThatNullPointerException().isThrownBy(() -> ChatCompletionRequest.builder().model("m").build())
-			.withMessage("messages must be set");
-		assertThatNullPointerException().isThrownBy(() -> ResponsesRequest.builder().model("m").build())
-			.withMessage("input must be set");
+	@ParameterizedTest
+	@MethodSource("missingRequiredFields")
+	void buildersRejectMissingRequiredField(Runnable build, String message) {
+		assertThatNullPointerException().isThrownBy(build::run).withMessage(message);
+	}
+
+	static Stream<Arguments> missingRequiredFields() {
+		return Stream.of(
+				Arguments.of(Named.<Runnable>of("chat completion without messages",
+						() -> ChatCompletionRequest.builder().model("m").build()), "messages must be set"),
+				Arguments.of(Named.<Runnable>of("responses without input",
+						() -> ResponsesRequest.builder().model("m").build()), "input must be set"));
 	}
 
 }

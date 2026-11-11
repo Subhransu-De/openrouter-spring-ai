@@ -32,13 +32,21 @@ class OpenRouterAudioPropertiesTests {
 	}
 
 	@Test
-	void absentAudioStaysUnsetAndInvalidFormatsFailBinding() {
+	void absentAudioStaysUnset() {
 		this.runner.run(
 				context -> assertThat(context.getBean(OpenRouterChatProperties.class).toOptions().getAudio()).isNull());
+	}
+
+	@Test
+	void anUnsupportedAudioFormatFailsBindingAndNamesTheSupportedFormats() {
 		this.runner
 			.withPropertyValues("spring.ai.openrouter.chat.audio.voice=alloy",
 					"spring.ai.openrouter.chat.audio.format=unsupported")
-			.run(context -> assertThat(context).hasFailed());
+			.run(context -> {
+				assertThat(context).hasFailed();
+				assertThat(context.getStartupFailure())
+					.hasStackTraceContaining("Audio format must be wav, mp3, flac, opus, or pcm16");
+			});
 	}
 
 }

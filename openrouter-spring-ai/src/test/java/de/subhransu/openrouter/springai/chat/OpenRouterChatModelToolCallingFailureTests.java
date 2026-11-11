@@ -2,6 +2,7 @@ package de.subhransu.openrouter.springai.chat;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -10,44 +11,45 @@ import static org.mockito.Mockito.when;
 
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
+import de.subhransu.openrouter.springai.api.dto.ChatCompletionChunk;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionRequest;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionResponse;
 import de.subhransu.openrouter.springai.api.dto.ChatMessage;
 import de.subhransu.openrouter.springai.api.dto.Choice;
+import de.subhransu.openrouter.springai.api.dto.Delta;
 import de.subhransu.openrouter.springai.api.dto.FunctionCall;
 import de.subhransu.openrouter.springai.api.dto.ResponsesContent;
 import de.subhransu.openrouter.springai.api.dto.ResponsesFunctionCallOutput;
 import de.subhransu.openrouter.springai.api.dto.ResponsesOutputItem;
 import de.subhransu.openrouter.springai.api.dto.ResponsesRequest;
 import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
+import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
 import de.subhransu.openrouter.springai.api.dto.ToolCall;
+import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
 import org.mockito.ArgumentCaptor;
-import org.springframework.ai.chat.client.AdvisorParams;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.ToolCallingAdvisor;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.tool.ToolCallback;
-import org.springframework.ai.tool.execution.ToolExecutionException;
 import org.springframework.ai.tool.function.FunctionToolCallback;
-import org.springframework.ai.tool.metadata.ToolMetadata;
+import org.springframework.http.HttpStatus;
+import reactor.core.publisher.Flux;
+import reactor.test.StepVerifier;
 
 /**
- * Resilience tests for the tool-execution loop driving {@link OpenRouterChatModel}
- * through {@code ChatClient} + {@code ToolCallingAdvisor} — the Spring AI 2.0 replacement
- * for in-model tool execution. The happy path lives in
- * {@code OpenRouterChatModelToolCallingTests}; this class owns failure modes, multi-round
- * flow, history accumulation, and the (intentional) absence of a max-iteration guard.
- *
- * <p>
- * These tests drive the loop through the real {@code ToolCallingAdvisor} and
- * {@code ToolCallingManager}, so tool resolution, JSON binding, callback invocation, and
- * this library's request/response mapping behave exactly as they do in production.
+ * Tool-round behavior of {@link OpenRouterChatModel} driven through {@code ChatClient}
+ * and the real {@code ToolCallingAdvisor}: how this library maps tool results and the
+ * assistant tool-call history into follow-up requests, and how a provider failure after a
+ * tool round reaches the caller. The happy path lives in
+ * {@code OpenRouterChatModelToolCallingTests}. Tool resolution, JSON binding and the loop
+ * itself belong to Spring AI and are not asserted here.
  */
 class OpenRouterChatModelToolCallingFailureTests {
 
@@ -55,13 +57,16 @@ class OpenRouterChatModelToolCallingFailureTests {
 
 	private static final String BERLIN_ARGS = "{\"city\":\"Berlin\"}";
 
+	private static final String SUNNY_IN_BERLIN = "\"sunny in Berlin\"";
+
 	private static final String TOOL_FAILURE_APOLOGY = "Sorry, the tool failed.";
 
-	private final ToolCallback weatherTool = FunctionToolCallback
-		.builder("get_weather", (Map<String, Object> in) -> "sunny in " + in.getOrDefault("city", "?"))
-		.description("Look up the weather")
-		.inputType(Map.class)
-		.build();
+	private final AtomicInteger weatherInvocations = new AtomicInteger();
+
+	private final ToolCallback weatherTool = FunctionToolCallback.builder("get_weather", (Map<String, Object> in) -> {
+		this.weatherInvocations.incrementAndGet();
+		return "sunny in " + in.getOrDefault("city", "?");
+	}).description("Look up the weather").inputType(Map.class).build();
 
 	private final ToolCallback boomTool = FunctionToolCallback.builder("boom", (Map<String, Object> in) -> {
 		throw new IllegalStateException("tool exploded\napi-key=sk-sensitive",
@@ -87,17 +92,26 @@ class OpenRouterChatModelToolCallingFailureTests {
 				null);
 	}
 
-	private ChatClient toolCallingClient(OpenRouterApi api) {
-		return toolCallingClient(api,
-				ToolCallingAdvisor.builder()
-					.toolCallingManager(org.springframework.ai.model.tool.ToolCallingManager.builder()
-						.toolExecutionExceptionProcessor(new OpenRouterToolExecutionExceptionProcessor())
-						.build())
-					.build());
+	private ResponsesResult responsesToolCall(String toolName) {
+		return new ResponsesResult("resp-1", "response", 123L, MODEL, "completed",
+				List.of(new ResponsesOutputItem("fc-1", "function_call", "completed", null, null, "call-1", toolName,
+						"{}", null)),
+				null, null);
 	}
 
-	private ChatClient toolCallingClient(OpenRouterApi api, ToolCallingAdvisor advisor) {
+	private static OpenRouterNonTransientApiException providerRejection(String endpoint) {
+		return new OpenRouterNonTransientApiException("Provider rejected the follow-up request", HttpStatus.BAD_REQUEST,
+				"{\"error\":{\"code\":400,\"message\":\"Provider rejected the follow-up request\"}}", null, null,
+				endpoint);
+	}
+
+	private ChatClient toolCallingClient(OpenRouterApi api) {
 		OpenRouterChatModel model = OpenRouterChatModel.builder().openRouterApi(api).build();
+		ToolCallingAdvisor advisor = ToolCallingAdvisor.builder()
+			.toolCallingManager(ToolCallingManager.builder()
+				.toolExecutionExceptionProcessor(new OpenRouterToolExecutionExceptionProcessor())
+				.build())
+			.build();
 		return ChatClient.builder(model).defaultAdvisors(advisor).build();
 	}
 
@@ -119,21 +133,6 @@ class OpenRouterChatModelToolCallingFailureTests {
 					.build());
 	}
 
-	// ---------------------------------------------------------------------
-	// Failure modes
-	// ---------------------------------------------------------------------
-
-	@Test
-	void unknownToolNameSurfacesAsClearError() {
-		OpenRouterApi api = mock(OpenRouterApi.class);
-		when(api.chatCompletion(any())).thenReturn(toolCallResponse("does_not_exist", "{}"));
-
-		ChatClient client = toolCallingClient(api);
-		assertThatThrownBy(() -> call(client, this.weatherTool)).isInstanceOf(IllegalStateException.class)
-			.hasMessageContaining("No ToolCallback found")
-			.hasMessageContaining("does_not_exist");
-	}
-
 	@Test
 	void toolCallbackFailureBecomesSafeToolOutputAndLoopContinues() {
 		OpenRouterApi api = mock(OpenRouterApi.class);
@@ -147,26 +146,23 @@ class OpenRouterChatModelToolCallingFailureTests {
 		// The failed-tool result is appended without crossing the provider trust
 		// boundary.
 		List<ChatMessage> followUp = captor.getAllValues().get(1).messages();
-		assertThat(followUp).anySatisfy(message -> {
-			assertThat(message.role()).isEqualTo("tool");
+		assertThat(followUp).filteredOn(message -> "tool".equals(message.role())).singleElement().satisfies(message -> {
 			assertThat(message.content()).isEqualTo(OpenRouterToolExecutionExceptionProcessor.DEFAULT_FAILURE_PAYLOAD);
-			assertThat(String.valueOf(message.content())).doesNotContain("tool exploded", "sk-sensitive",
-					"nested secret", "\n", "IllegalStateException");
+			assertThat(message.toolCallId()).isEqualTo("call-1");
 		});
+		assertThat(followUp).extracting(message -> String.valueOf(message.content()))
+			.allSatisfy(content -> assertThat(content).doesNotContain("tool exploded", "sk-sensitive", "nested secret",
+					"IllegalStateException"));
 	}
 
 	@Test
 	void responsesModeUsesTheSameSafeToolFailurePayload() {
 		OpenRouterApi api = mock(OpenRouterApi.class);
-		ResponsesResult toolCall = new ResponsesResult("resp-1", "response", 123L, MODEL, "completed",
-				List.of(new ResponsesOutputItem("fc-1", "function_call", "completed", null, null, "call-1", "boom",
-						"{}", null)),
-				null, null);
 		ResponsesResult answer = new ResponsesResult(
 				"resp-2", "response", 124L, MODEL, "completed", List.of(new ResponsesOutputItem("msg-1", "message",
 						"completed", "assistant", List.of(new ResponsesContent("output_text", TOOL_FAILURE_APOLOGY)))),
 				null, null);
-		when(api.responses(any())).thenReturn(toolCall, answer);
+		when(api.responses(any())).thenReturn(responsesToolCall("boom"), answer);
 
 		ChatResponse response = toolCallingClient(api).prompt(responsesPrompt(this.boomTool)).call().chatResponse();
 
@@ -176,81 +172,109 @@ class OpenRouterChatModelToolCallingFailureTests {
 		List<?> followUp = (List<?>) captor.getAllValues().get(1).input();
 		assertThat(followUp).filteredOn(ResponsesFunctionCallOutput.class::isInstance)
 			.singleElement()
-			.isInstanceOfSatisfying(ResponsesFunctionCallOutput.class, output -> assertThat(output.output())
-				.isEqualTo(OpenRouterToolExecutionExceptionProcessor.DEFAULT_FAILURE_PAYLOAD));
+			.isInstanceOfSatisfying(ResponsesFunctionCallOutput.class, output -> {
+				assertThat(output.callId()).isEqualTo("call-1");
+				assertThat(output.output())
+					.isEqualTo(OpenRouterToolExecutionExceptionProcessor.DEFAULT_FAILURE_PAYLOAD);
+			});
 	}
 
 	@Test
-	void toolCallbackFailureIsRethrownWhenExecutionProcessorAlwaysThrows() {
-		// A caller who installs an always-throwing exception processor gets the original
-		// failure instead of silent recovery. Verifies the failure cause is preserved and
-		// safe to log.
+	void providerErrorOnTheFollowUpRequestReachesTheCallerAfterTheToolRanOnce() {
+		OpenRouterNonTransientApiException failure = providerRejection("/chat/completions");
 		OpenRouterApi api = mock(OpenRouterApi.class);
-		when(api.chatCompletion(any())).thenReturn(toolCallResponse("boom", "{}"));
-		ToolCallingAdvisor advisor = ToolCallingAdvisor.builder()
-			.toolCallingManager(org.springframework.ai.model.tool.ToolCallingManager.builder()
-				.toolExecutionExceptionProcessor(
-						new org.springframework.ai.tool.execution.DefaultToolExecutionExceptionProcessor(true))
-				.build())
-			.build();
-
-		ChatClient client = toolCallingClient(api, advisor);
-		assertThatThrownBy(() -> call(client, this.boomTool)).isInstanceOf(ToolExecutionException.class)
-			.hasMessageContaining("tool exploded");
-	}
-
-	@Test
-	void invalidJsonArgumentsSurfaceAsError() {
-		OpenRouterApi api = mock(OpenRouterApi.class);
-		when(api.chatCompletion(any())).thenReturn(toolCallResponse("get_weather", "{not valid json"));
-
+		when(api.chatCompletion(any())).thenReturn(toolCallResponse("get_weather", BERLIN_ARGS)).thenThrow(failure);
 		ChatClient client = toolCallingClient(api);
-		assertThatThrownBy(() -> call(client, this.weatherTool)).isInstanceOf(IllegalStateException.class)
-			.hasMessageContaining("Conversion from JSON");
+
+		assertThatThrownBy(() -> call(client, this.weatherTool)).isSameAs(failure);
+
+		assertThat(this.weatherInvocations).hasValue(1);
+		verify(api, times(2)).chatCompletion(any());
 	}
 
 	@Test
-	void optingOutOfToolExecutionSurfacesToolCallsWithoutExecuting() {
-		// ChatClient auto-registers a ToolCallingAdvisor by default; opting out via
-		// AdvisorParams leaves the client behaving like the raw model: the tool call is
-		// returned to the caller, the provider is hit exactly once, and the callback
-		// never runs. This replaces the removed internalToolExecutionEnabled=false
-		// option from the 1.x-style API.
+	void providerErrorOnTheStreamedFollowUpRequestReachesTheCallerAfterTheToolRanOnce() {
+		OpenRouterNonTransientApiException failure = providerRejection("/chat/completions");
 		OpenRouterApi api = mock(OpenRouterApi.class);
-		when(api.chatCompletion(any())).thenReturn(toolCallResponse("get_weather", BERLIN_ARGS));
-		OpenRouterChatModel model = OpenRouterChatModel.builder().openRouterApi(api).build();
-		ChatClient plainClient = ChatClient.builder(model).build();
+		ChatCompletionChunk toolCall = new ChatCompletionChunk("gen-1", "chat.completion.chunk", 123L, MODEL, "openai",
+				List.of(new Choice(0, null,
+						new Delta("assistant", null, null, List
+							.of(new ToolCall("call-1", "function", new FunctionCall("get_weather", BERLIN_ARGS), 0))),
+						"tool_calls", "tool_calls")),
+				null, null);
+		when(api.chatCompletionStream(any())).thenReturn(Flux.just(toolCall), Flux.error(failure));
+		ChatClient client = toolCallingClient(api);
 
-		ChatResponse response = plainClient.prompt(prompt(this.weatherTool))
-			.advisors(AdvisorParams.toolCallingAdvisorAutoRegister(false))
-			.call()
-			.chatResponse();
+		StepVerifier.create(client.prompt(prompt(this.weatherTool)).stream().chatResponse())
+			.expectErrorSatisfies(error -> assertThat(error).isSameAs(failure))
+			.verify();
 
-		assertThat(response.hasToolCalls()).isTrue();
-		assertThat(response.getResult().getOutput().getToolCalls().get(0).name()).isEqualTo("get_weather");
-		verify(api, times(1)).chatCompletion(any());
+		assertThat(this.weatherInvocations).hasValue(1);
+		verify(api, times(2)).chatCompletionStream(any());
 	}
 
 	@Test
-	void returnDirectReturnsToolOutputWithoutAnotherModelCall() {
-		ToolCallback directTool = FunctionToolCallback.builder("get_weather", (Map<String, Object> in) -> "sunny")
-			.description("Look up the weather")
-			.inputType(Map.class)
-			.toolMetadata(ToolMetadata.builder().returnDirect(true).build())
-			.build();
+	void providerErrorOnTheResponsesFollowUpRequestReachesTheCallerAfterTheToolRanOnce() {
+		OpenRouterNonTransientApiException failure = providerRejection("/responses");
 		OpenRouterApi api = mock(OpenRouterApi.class);
-		when(api.chatCompletion(any())).thenReturn(toolCallResponse("get_weather", BERLIN_ARGS));
+		when(api.responses(any())).thenReturn(responsesToolCall("get_weather")).thenThrow(failure);
+		ChatClient client = toolCallingClient(api);
 
-		ChatResponse response = call(toolCallingClient(api), directTool);
+		assertThatThrownBy(() -> client.prompt(responsesPrompt(this.weatherTool)).call().chatResponse())
+			.isSameAs(failure);
 
-		// returnDirect short-circuits the loop: tool output is returned, no second call.
-		assertThat(response.getResult().getOutput().getText()).contains("sunny");
-		verify(api, times(1)).chatCompletion(any());
+		assertThat(this.weatherInvocations).hasValue(1);
+		verify(api, times(2)).responses(any());
 	}
 
-	// ---------------------------------------------------------------------
-	// Multi-round flow and history accumulation
-	// ---------------------------------------------------------------------
+	@Test
+	void providerErrorOnTheStreamedResponsesFollowUpRequestReachesTheCallerAfterTheToolRanOnce() {
+		OpenRouterNonTransientApiException failure = providerRejection("/responses");
+		OpenRouterApi api = mock(OpenRouterApi.class);
+		ResponsesResult round = responsesToolCall("get_weather");
+		when(api.responsesStream(any()))
+			.thenReturn(
+					Flux.just(new ResponsesStreamEvent("response.output_item.done", null, round.output().get(0), null,
+							null), new ResponsesStreamEvent("response.completed", null, null, round, null)),
+					Flux.error(failure));
+		ChatClient client = toolCallingClient(api);
+
+		StepVerifier.create(client.prompt(responsesPrompt(this.weatherTool)).stream().chatResponse())
+			.thenConsumeWhile(response -> true)
+			.expectErrorSatisfies(error -> assertThat(error).isSameAs(failure))
+			.verify();
+
+		assertThat(this.weatherInvocations).hasValue(1);
+		verify(api, times(2)).responsesStream(any());
+	}
+
+	@Test
+	void parallelToolCallsInOneAssistantTurnRunOnceEachAndReturnInCallOrder() {
+		OpenRouterApi api = mock(OpenRouterApi.class);
+		ChatCompletionResponse parallel = new ChatCompletionResponse("gen-1", "chat.completion", 123L, MODEL, "openai",
+				List.of(new Choice(0, new ChatMessage("assistant", null, null, null,
+						List.of(new ToolCall("call-1", "function", new FunctionCall("get_weather", BERLIN_ARGS)),
+								new ToolCall("call-2", "function",
+										new FunctionCall("get_weather", "{\"city\":\"Paris\"}")))),
+						null, "tool_calls", "tool_calls")),
+				null);
+		when(api.chatCompletion(any())).thenReturn(parallel, finalResponse("Both are sunny."));
+
+		ChatResponse response = call(toolCallingClient(api), this.weatherTool);
+
+		assertThat(response.getResult().getOutput().getText()).isEqualTo("Both are sunny.");
+		assertThat(this.weatherInvocations).hasValue(2);
+		ArgumentCaptor<ChatCompletionRequest> captor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
+		verify(api, times(2)).chatCompletion(captor.capture());
+		List<ChatMessage> followUp = captor.getAllValues().get(1).messages();
+		assertThat(followUp).filteredOn(message -> "assistant".equals(message.role()))
+			.singleElement()
+			.satisfies(message -> assertThat(message.toolCalls()).extracting(ToolCall::id)
+				.containsExactly("call-1", "call-2"));
+		assertThat(followUp).filteredOn(message -> "tool".equals(message.role()))
+			.extracting(ChatMessage::toolCallId, ChatMessage::content)
+			.containsExactly(tuple("call-1", SUNNY_IN_BERLIN), tuple("call-2", "\"sunny in Paris\""));
+	}
 
 	@Test
 	void twoSequentialToolRoundsBeforeFinalAnswer() {
@@ -272,36 +296,13 @@ class OpenRouterChatModelToolCallingFailureTests {
 		assertThat(secondRound).anySatisfy(message -> {
 			assertThat(message.role()).isEqualTo("tool");
 			assertThat(message.toolCallId()).isEqualTo("call-1");
-			assertThat(message.content()).isEqualTo("\"sunny in Berlin\"");
+			assertThat(message.content()).isEqualTo(SUNNY_IN_BERLIN);
 		});
 
 		List<ChatMessage> finalRound = captor.getAllValues().get(2).messages();
-		assertThat(finalRound).filteredOn(m -> "tool".equals(m.role())).hasSize(2);
-		assertThat(finalRound).anySatisfy(message -> assertThat(message.toolCallId()).isEqualTo("call-2"));
-	}
-
-	// ---------------------------------------------------------------------
-	// Runaway-provider safety: documented current behavior
-	// ---------------------------------------------------------------------
-
-	@Test
-	@Timeout(5)
-	void providerThatNeverStopsAskingForToolsLoopsUntilItDoes() {
-		// ToolCallingAdvisor has no configurable max-iteration guard today. The loop
-		// terminates only when the provider stops returning tool calls. This test pins
-		// that behavior: a provider that asks N times then answers drives exactly N+1
-		// calls and finishes. (If a guard is ever added, this test should change to
-		// assert the guard fires.) The timeout turns an infinite-loop regression into a
-		// test failure instead of a CI hang.
-		OpenRouterApi api = mock(OpenRouterApi.class);
-		when(api.chatCompletion(any())).thenReturn(toolCallResponse("call-1", "get_weather", "{\"city\":\"A\"}"),
-				toolCallResponse("call-2", "get_weather", "{\"city\":\"B\"}"),
-				toolCallResponse("call-3", "get_weather", "{\"city\":\"C\"}"), finalResponse("Done."));
-
-		ChatResponse response = call(toolCallingClient(api), this.weatherTool);
-
-		assertThat(response.getResult().getOutput().getText()).isEqualTo("Done.");
-		verify(api, times(4)).chatCompletion(any());
+		assertThat(finalRound).filteredOn(m -> "tool".equals(m.role()))
+			.extracting(ChatMessage::toolCallId, ChatMessage::content)
+			.containsExactly(tuple("call-1", SUNNY_IN_BERLIN), tuple("call-2", "\"sunny in Paris\""));
 	}
 
 	@Test
@@ -323,11 +324,12 @@ class OpenRouterChatModelToolCallingFailureTests {
 		assertThat(response.getResult().getOutput().getText()).isEqualTo("Sunny.");
 		ArgumentCaptor<ChatCompletionRequest> captor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
 		verify(api, times(2)).chatCompletion(captor.capture());
-		assertThat(captor.getAllValues().get(1).messages()).anySatisfy(message -> {
-			assertThat(message.role()).isEqualTo("tool");
-			assertThat(String.valueOf(message.content())).contains("sunny in Berlin");
-			assertThat(message.toolCallId()).isNull();
-		});
+		assertThat(captor.getAllValues().get(1).messages()).filteredOn(message -> "tool".equals(message.role()))
+			.singleElement()
+			.satisfies(message -> {
+				assertThat(message.content()).isEqualTo(SUNNY_IN_BERLIN);
+				assertThat(message.toolCallId()).isNull();
+			});
 	}
 
 }

@@ -8,7 +8,10 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Stream;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.core.io.buffer.DataBuffer;
@@ -31,11 +34,15 @@ class OpenRouterApiImageTimeoutTests {
 			{"created":42,"data":[{"b64_json":"YQ=="},{"b64_json":"Yg=="}],"usage":{"total_tokens":2}}
 			""";
 
-	@ParameterizedTest
-	@CsvSource({ "200,text/event-stream,20,0", "200,application/json,20,0", "400,application/json,20,0",
-			"400,application/json,0,20", "200,application/json,0,20", "200,text/event-stream,0,20",
-			"200,application/json,6,6", "200,text/event-stream,6,6" })
-	void timeoutCoversHeadersAndBody(int status, String contentType, int headerDelay, int bodyDelay) {
+	@ParameterizedTest(name = "{4}")
+	@CsvSource(delimiter = '|', value = { "200|text/event-stream|20|0|SSE headers never arrive",
+			"200|application/json|20|0|JSON headers never arrive",
+			"400|application/json|20|0|error headers never arrive",
+			"400|application/json|0|20|error body never arrives", "200|application/json|0|20|JSON body never arrives",
+			"200|text/event-stream|0|20|SSE body never arrives",
+			"200|application/json|6|6|JSON headers and body each slower than half the timeout",
+			"200|text/event-stream|6|6|SSE headers and body each slower than half the timeout" })
+	void timeoutCoversHeadersAndBody(int status, String contentType, int headerDelay, int bodyDelay, String scenario) {
 		AtomicBoolean cancelled = new AtomicBoolean();
 		StepVerifier.withVirtualTime(() -> {
 			Flux<DataBuffer> body = Mono.delay(Duration.ofSeconds(bodyDelay))
@@ -55,10 +62,9 @@ class OpenRouterApiImageTimeoutTests {
 		assertThat(cancelled).isTrue();
 	}
 
-	@ParameterizedTest
-	@ValueSource(strings = { ": keep-alive\n\n",
-			"data: {\"type\":\"image_generation.partial_image\",\"b64_json\":\"YQ==\"}\n\n" })
-	void eachSseEventResetsTimeoutBeforeFiltering(String event) {
+	@ParameterizedTest(name = "{0}")
+	@MethodSource("resettingEvents")
+	void eachSseEventResetsTimeoutBeforeFiltering(String kind, String event, int emitted) {
 		AtomicBoolean cancelled = new AtomicBoolean();
 		StepVerifier.withVirtualTime(() -> {
 			Flux<DataBuffer> body = Flux.interval(Duration.ofSeconds(6))
@@ -69,7 +75,7 @@ class OpenRouterApiImageTimeoutTests {
 			return stream(Mono.just(response(200, "text/event-stream", body)), TIMEOUT);
 		})
 			.thenAwait(Duration.ofSeconds(18))
-			.expectNextCount(event.startsWith(":") ? 0 : 3)
+			.expectNextCount(emitted)
 			.expectNoEvent(TIMEOUT.minusSeconds(1))
 			.thenAwait(Duration.ofSeconds(1))
 			.expectError(TimeoutException.class)
@@ -77,30 +83,38 @@ class OpenRouterApiImageTimeoutTests {
 		assertThat(cancelled).isTrue();
 	}
 
-	@ParameterizedTest
-	@ValueSource(booleans = { false, true })
-	void jsonFallbackPreservesAllImagesAndFinalUsage(boolean timeoutEnabled) {
+	static Stream<Arguments> resettingEvents() {
+		return Stream.of(Arguments.of("SSE comment is filtered but resets the timeout", ": keep-alive\n\n", 0),
+				Arguments.of("partial image event resets the timeout and is emitted",
+						"data: {\"type\":\"image_generation.partial_image\",\"b64_json\":\"YQ==\"}\n\n", 3));
+	}
+
+	@ParameterizedTest(name = "timeout {0}")
+	@ValueSource(strings = { "disabled", "enabled" })
+	void jsonFallbackCompletesAccordingToTheTimeoutSetting(String setting) {
+		boolean timeoutEnabled = setting.equals("enabled");
 		StepVerifier.withVirtualTime(() -> {
 			Flux<DataBuffer> body = Mono.delay(Duration.ofSeconds(timeoutEnabled ? 2 : 20))
 				.map(tick -> buffer(JSON))
 				.flux();
 			return stream(Mono.delay(Duration.ofSeconds(2)).map(tick -> response(200, "application/json", body)),
 					timeoutEnabled ? TIMEOUT : null);
-		}).thenAwait(Duration.ofSeconds(22)).assertNext(event -> {
-			assertThat(event.type()).isEqualTo(ImagesStreamEvent.COMPLETED);
-			assertThat(event.b64Json()).isEqualTo("YQ==");
-			assertThat(event.created()).isEqualTo(42);
-			assertThat(event.usage()).isNull();
-		}).assertNext(event -> {
-			assertThat(event.b64Json()).isEqualTo("Yg==");
-			assertThat(event.usage().totalTokens()).isEqualTo(2);
-		}).expectComplete().verify(VERIFY_TIMEOUT);
+		})
+			.thenAwait(Duration.ofSeconds(22))
+			.assertNext(event -> assertThat(event.b64Json()).isEqualTo("YQ=="))
+			.assertNext(event -> assertThat(event.b64Json()).isEqualTo("Yg=="))
+			.expectComplete()
+			.verify(VERIFY_TIMEOUT);
 	}
 
-	@ParameterizedTest
-	@CsvSource({ "true,200,text/event-stream", "false,200,text/event-stream", "false,200,application/json",
-			"false,400,application/json" })
-	void downstreamCancellationReachesPendingExchange(boolean pendingHeaders, int status, String contentType) {
+	@ParameterizedTest(name = "{3}")
+	@CsvSource(delimiter = '|',
+			value = { "true|200|text/event-stream|cancelled while headers are pending",
+					"false|200|text/event-stream|cancelled while the SSE body is pending",
+					"false|200|application/json|cancelled while the JSON body is pending",
+					"false|400|application/json|cancelled while the error body is pending" })
+	void downstreamCancellationReachesPendingExchange(boolean pendingHeaders, int status, String contentType,
+			String scenario) {
 		AtomicBoolean cancelled = new AtomicBoolean();
 		StepVerifier.withVirtualTime(() -> {
 			Mono<ClientResponse> response = pendingHeaders

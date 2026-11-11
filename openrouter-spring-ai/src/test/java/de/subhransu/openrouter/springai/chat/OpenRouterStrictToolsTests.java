@@ -3,20 +3,22 @@ package de.subhransu.openrouter.springai.chat;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
-import java.time.Duration;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
+import org.jspecify.annotations.Nullable;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.definition.ToolDefinition;
@@ -28,6 +30,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.test.StepVerifier;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.BooleanNode;
 import tools.jackson.databind.ObjectMapper;
 
 class OpenRouterStrictToolsTests {
@@ -66,104 +69,177 @@ class OpenRouterStrictToolsTests {
 		StepVerifier.create(model.stream(prompt))
 			.expectErrorMatches(error -> error instanceof IllegalArgumentException
 					&& error.getMessage().contains("additionalProperties"))
-			.verify(Duration.ofSeconds(5));
-		org.mockito.Mockito.verifyNoInteractions(api);
+			.verify();
+		verifyNoInteractions(api);
 	}
 
-	@ParameterizedTest
-	@EnumSource(OpenRouterRequestMode.class)
-	void serializesTriStateAndUnchangedSchemaOnBothTransports(OpenRouterRequestMode mode) {
-		for (Boolean strict : new Boolean[] { null, false, true }) {
-			for (boolean stream : new boolean[] { false, true }) {
-				assertRequest(mode, strict, stream, false);
-			}
-		}
+	static Stream<Arguments> modesAndTransports() {
+		return Stream.of(OpenRouterRequestMode.values())
+			.flatMap(mode -> Stream.of(false, true)
+				.map(stream -> Arguments.of(Named.of(mode.toString(), mode),
+						Named.of(stream ? "streaming" : "blocking", stream))));
 	}
 
-	@ParameterizedTest
-	@EnumSource(OpenRouterRequestMode.class)
-	void surfacesProviderRejectionWithoutRetryingAsNonStrict(OpenRouterRequestMode mode) {
-		for (boolean stream : new boolean[] { false, true }) {
-			assertRequest(mode, true, stream, true);
-		}
+	static Stream<Arguments> modesStrictAndTransports() {
+		return Stream.of(false, true)
+			.flatMap(strict -> modesAndTransports()
+				.map(row -> Arguments.of(row.get()[0], Named.of("strict=" + strict, strict), row.get()[1])));
 	}
 
-	private void assertRequest(OpenRouterRequestMode mode, Boolean strict, boolean stream, boolean reject) {
-		boolean responses = mode == OpenRouterRequestMode.OPENAI_RESPONSES;
-		String endpoint = "https://openrouter.test" + (responses ? "/responses" : "/chat/completions");
-		AtomicReference<String> body = new AtomicReference<>();
-		HttpStatus status = reject ? HttpStatus.BAD_REQUEST : HttpStatus.OK;
-		String responseBody = reject ? "{\"error\":{\"code\":400,\"message\":\"Strict tools unsupported\"}}" : RESULT;
-		RestClient.Builder rest = RestClient.builder();
-		MockRestServiceServer server = MockRestServiceServer.bindTo(rest).build();
-		if (!stream) {
-			server.expect(requestTo(endpoint))
-				.andExpect(request -> body.set(((MockClientHttpRequest) request).getBodyAsString()))
-				.andRespond(withStatus(status).contentType(MediaType.APPLICATION_JSON).body(responseBody));
-		}
-		var web = WebClient.builder().clientConnector((method, uri, callback) -> {
-			assertThat(uri.toString()).isEqualTo(endpoint);
-			var outgoing = new org.springframework.mock.http.client.reactive.MockClientHttpRequest(method, uri);
-			var incoming = new org.springframework.mock.http.client.reactive.MockClientHttpResponse(status);
-			incoming.getHeaders().setContentType(reject ? MediaType.APPLICATION_JSON : MediaType.TEXT_EVENT_STREAM);
-			String event = responses
-					? "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"output\":[]}}\n\n"
-					: "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n";
-			incoming.setBody(reject ? responseBody : event);
-			return callback.apply(outgoing)
-				.then(reactor.core.publisher.Mono.defer(outgoing::getBodyAsString))
-				.doOnNext(body::set)
-				.thenReturn(incoming);
+	@ParameterizedTest(name = "{0}, {1}, {2}")
+	@MethodSource("modesStrictAndTransports")
+	void explicitStrictValuesReachTheWireWithTheSchemaUnchanged(OpenRouterRequestMode mode, boolean strict,
+			boolean stream) {
+		Exchange exchange = new Exchange(mode, stream, false);
+
+		exchange.succeed(exchange.prompt(strict));
+
+		assertThat(exchange.toolFunction().get("strict")).isEqualTo(BooleanNode.valueOf(strict));
+		exchange.assertSchemaAndOtherFieldsUntouched();
+	}
+
+	@ParameterizedTest(name = "{0}, {1}")
+	@MethodSource("modesAndTransports")
+	void unsetStrictIsOmittedFromTheWireWithTheSchemaUnchanged(OpenRouterRequestMode mode, boolean stream) {
+		Exchange exchange = new Exchange(mode, stream, false);
+
+		exchange.succeed(exchange.prompt(null));
+
+		assertThat(exchange.toolFunction().has("strict")).isFalse();
+		exchange.assertSchemaAndOtherFieldsUntouched();
+	}
+
+	@ParameterizedTest(name = "{0}, {1}")
+	@MethodSource("modesAndTransports")
+	void surfacesProviderRejectionWithoutRetryingAsNonStrict(OpenRouterRequestMode mode, boolean stream) {
+		Exchange exchange = new Exchange(mode, stream, true);
+
+		exchange.failWithRejection(exchange.prompt(true));
+
+		// The single rejected request was sent strict; the mock server accepts no second
+		// (non-strict) attempt.
+		assertThat(exchange.toolFunction().get("strict")).isEqualTo(BooleanNode.TRUE);
+		exchange.assertSchemaAndOtherFieldsUntouched();
+	}
+
+	private static void assertStrictToolsRejection(Throwable error) {
+		assertThat(error).isInstanceOfSatisfying(OpenRouterNonTransientApiException.class, rejection -> {
+			assertThat(rejection.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+			assertThat(rejection.getResponseBody()).contains("Strict tools unsupported");
 		});
-		var api = OpenRouterApi.builder()
-			.apiKey("test-key")
-			.baseUrl("https://openrouter.test")
-			.restClientBuilder(rest)
-			.webClientBuilder(web)
-			.build();
-		ToolCallback tool = mock(ToolCallback.class);
-		when(tool.getToolDefinition()).thenReturn(
-				ToolDefinition.builder().name("synthetic").description("Synthetic tool").inputSchema(SCHEMA).build());
-		var model = OpenRouterChatModel.builder()
-			.openRouterApi(api)
-			.defaultOptions(OpenRouterChatOptions.builder().model("synthetic/model").requestMode(mode).build())
-			.build();
-		var prompt = new Prompt("Synthetic request",
-				OpenRouterChatOptions.builder()
-					.model("synthetic/model")
-					.requestMode(mode)
-					.toolCallbacks(tool)
-					.toolStrict(strict)
-					.responseFormat(OpenRouterResponseFormat.jsonSchema("answer", false, SCHEMA))
-					.build());
-		if (stream) {
-			var verifier = StepVerifier.create(model.stream(prompt));
-			if (reject) {
-				verifier.expectError(OpenRouterNonTransientApiException.class).verify(Duration.ofSeconds(5));
+	}
+
+	/** One request through a model whose transport records the outgoing body. */
+	private final class Exchange {
+
+		private final boolean responses;
+
+		private final boolean stream;
+
+		private final OpenRouterRequestMode mode;
+
+		private final AtomicReference<String> body = new AtomicReference<>();
+
+		private final MockRestServiceServer server;
+
+		private final ToolCallback tool = mock(ToolCallback.class);
+
+		private final OpenRouterChatModel model;
+
+		Exchange(OpenRouterRequestMode mode, boolean stream, boolean reject) {
+			this.mode = mode;
+			this.stream = stream;
+			this.responses = mode == OpenRouterRequestMode.OPENAI_RESPONSES;
+			String endpoint = "https://openrouter.test" + (this.responses ? "/responses" : "/chat/completions");
+			HttpStatus status = reject ? HttpStatus.BAD_REQUEST : HttpStatus.OK;
+			String responseBody = reject ? "{\"error\":{\"code\":400,\"message\":\"Strict tools unsupported\"}}"
+					: RESULT;
+			RestClient.Builder rest = RestClient.builder();
+			this.server = MockRestServiceServer.bindTo(rest).build();
+			if (!stream) {
+				this.server.expect(requestTo(endpoint))
+					.andExpect(request -> this.body.set(((MockClientHttpRequest) request).getBodyAsString()))
+					.andRespond(withStatus(status).contentType(MediaType.APPLICATION_JSON).body(responseBody));
+			}
+			var web = WebClient.builder().clientConnector((method, uri, callback) -> {
+				assertThat(uri.toString()).isEqualTo(endpoint);
+				var outgoing = new org.springframework.mock.http.client.reactive.MockClientHttpRequest(method, uri);
+				var incoming = new org.springframework.mock.http.client.reactive.MockClientHttpResponse(status);
+				incoming.getHeaders().setContentType(reject ? MediaType.APPLICATION_JSON : MediaType.TEXT_EVENT_STREAM);
+				String event = this.responses
+						? "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"output\":[]}}\n\n"
+						: "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n";
+				incoming.setBody(reject ? responseBody : event);
+				return callback.apply(outgoing)
+					.then(reactor.core.publisher.Mono.defer(outgoing::getBodyAsString))
+					.doOnNext(this.body::set)
+					.thenReturn(incoming);
+			});
+			var api = OpenRouterApi.builder()
+				.apiKey("test-key")
+				.baseUrl("https://openrouter.test")
+				.restClientBuilder(rest)
+				.webClientBuilder(web)
+				.build();
+			when(this.tool.getToolDefinition()).thenReturn(ToolDefinition.builder()
+				.name("synthetic")
+				.description("Synthetic tool")
+				.inputSchema(SCHEMA)
+				.build());
+			this.model = OpenRouterChatModel.builder()
+				.openRouterApi(api)
+				.defaultOptions(OpenRouterChatOptions.builder().model("synthetic/model").requestMode(mode).build())
+				.build();
+		}
+
+		Prompt prompt(@Nullable Boolean strict) {
+			return new Prompt("Synthetic request",
+					OpenRouterChatOptions.builder()
+						.model("synthetic/model")
+						.requestMode(this.mode)
+						.toolCallbacks(this.tool)
+						.toolStrict(strict)
+						.responseFormat(OpenRouterResponseFormat.jsonSchema("answer", false, SCHEMA))
+						.build());
+		}
+
+		void succeed(Prompt prompt) {
+			if (this.stream) {
+				StepVerifier.create(this.model.stream(prompt)).thenConsumeWhile(value -> true).verifyComplete();
 			}
 			else {
-				verifier.thenConsumeWhile(value -> true).verifyComplete();
+				this.model.call(prompt);
 			}
 		}
-		else if (reject) {
-			assertThatThrownBy(() -> model.call(prompt)).isInstanceOf(OpenRouterNonTransientApiException.class);
+
+		void failWithRejection(Prompt prompt) {
+			if (this.stream) {
+				StepVerifier.create(this.model.stream(prompt))
+					.expectErrorSatisfies(OpenRouterStrictToolsTests::assertStrictToolsRejection)
+					.verify();
+			}
+			else {
+				assertThatThrownBy(() -> this.model.call(prompt))
+					.satisfies(OpenRouterStrictToolsTests::assertStrictToolsRejection);
+			}
 		}
-		else {
-			model.call(prompt);
+
+		JsonNode toolFunction() {
+			JsonNode json = OpenRouterStrictToolsTests.this.mapper.readTree(this.body.get());
+			return json.at(this.responses ? "/tools/0" : "/tools/0/function");
 		}
-		JsonNode json = this.mapper.readTree(body.get());
-		JsonNode function = json.at(responses ? "/tools/0" : "/tools/0/function");
-		assertThat(function.has("strict")).isEqualTo(strict != null);
-		if (strict != null) {
-			assertThat(function.path("strict").asBoolean()).isEqualTo(strict);
+
+		void assertSchemaAndOtherFieldsUntouched() {
+			JsonNode json = OpenRouterStrictToolsTests.this.mapper.readTree(this.body.get());
+			assertThat(toolFunction().path("parameters"))
+				.isEqualTo(OpenRouterStrictToolsTests.this.mapper.readTree(SCHEMA));
+			assertThat(
+					json.at(this.responses ? "/text/format/strict" : "/response_format/json_schema/strict").asBoolean())
+				.isFalse();
+			assertThat(json.path("stream").asBoolean()).isEqualTo(this.stream);
+			this.server.verify();
 		}
-		assertThat(function.path("parameters")).isEqualTo(this.mapper.readTree(SCHEMA));
-		assertThat(json.at(responses ? "/text/format/strict" : "/response_format/json_schema/strict").asBoolean())
-			.isFalse();
-		assertThat(json.path("stream").asBoolean()).isEqualTo(stream);
-		assertThat(tool.getToolDefinition().inputSchema()).isEqualTo(SCHEMA);
-		verify(tool, never()).call(anyString());
-		server.verify();
+
 	}
 
 }

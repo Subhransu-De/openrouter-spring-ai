@@ -1,55 +1,98 @@
 package de.subhransu.openrouter.springai.garage.integration;
 
-import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
-import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
-import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
-import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.stubbing.ServeEvent;
+import com.github.tomakehurst.wiremock.verification.LoggedRequest;
+import de.subhransu.openrouter.springai.garage.GarageRunRequests;
+import de.subhransu.openrouter.springai.garage.evidence.GarageFeature;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Predicate;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import tools.jackson.databind.JsonNode;
 
-/** A full run over HTTP: every scene in both request modes, all modalities and image surfaces. */
+/**
+ * A full run over HTTP: every scene in both request modes, all modalities and image surfaces.
+ * The run is the expensive part (17 scene runs), so it executes once and every test reads the
+ * same outcome and the same captured OpenRouter traffic.
+ */
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class GarageFullRunIntegrationTests extends MockedGarageIntegrationTest {
 
   private static final String TOPIC = "SENTINEL-TOPIC-7F3A a pickup that overheats";
 
+  private String location;
+
+  private JsonNode run;
+
+  private String evidenceBody;
+
+  private String reportBody;
+
+  private String runBody;
+
+  private List<LoggedRequest> traffic;
+
+  private List<ServeEvent> unmatched;
+
+  @BeforeAll
+  void runEverySceneOnce() {
+    OpenRouterMock.reset();
+    this.location = start("{\"full\": true, \"topic\": \"" + TOPIC + "\"}");
+    this.run = awaitFinished(this.location);
+    this.evidenceBody = file(this.location, "evidence");
+    this.reportBody = file(this.location, "report");
+    this.runBody = body(this.mvc.get().uri(this.location).exchange());
+    this.traffic = OpenRouterMock.server().getAllServeEvents().stream().map(ServeEvent::getRequest).toList();
+    this.unmatched = OpenRouterMock.unmatched();
+  }
+
+  // Runs even when the setup above failed half way, so no run stays active for the next class.
+  @AfterAll
+  void drain() {
+    leaveNoActiveRun();
+  }
+
   @Test
   void aFullRunPassesEverySceneInBothRequestModes() {
-    String location = start("{\"full\": true, \"topic\": \"" + TOPIC + "\"}");
-    JsonNode run = awaitFinished(location);
-
-    assertThat(run.path("message").isNull()).as(run.path("message").asString()).isTrue();
-    assertThat(run.path("status").asString()).isEqualTo("PASSED");
-    assertThat(run.path("incompleteFeatures")).isEmpty();
+    assertThat(this.run.path("message").isNull()).as(this.run.path("message").asString()).isTrue();
+    assertThat(this.run.path("status").asString()).isEqualTo("PASSED");
+    assertThat(this.run.path("incompleteFeatures")).isEmpty();
     List<String> outcomes = new ArrayList<>();
-    run.path("scenes").forEach(scene -> outcomes.add(scene.path("sceneId").asString() + "/"
-        + scene.path("requestMode").asString() + "=" + scene.path("status").asString()));
+    List<String> sceneIds = new ArrayList<>();
+    this.run.path("scenes").forEach(scene -> {
+      sceneIds.add(scene.path("sceneId").asString());
+      outcomes.add(scene.path("sceneId").asString() + "/" + scene.path("requestMode").asString() + "="
+          + scene.path("status").asString());
+    });
+    // Every planned scene ran; the 17 runs are the 9 scenes in the modes each one supports.
+    assertThat(sceneIds).containsAll(GarageRunRequests.plan("{\"full\":true}").sceneIds());
     assertThat(outcomes).hasSize(17).allMatch(outcome -> outcome.endsWith("=PASSED"));
 
-    JsonNode bundle = JSON.readTree(file(location, "evidence"));
+    JsonNode bundle = JSON.readTree(this.evidenceBody);
     assertThat(bundle.path("status").asString()).isEqualTo("passed");
     // "partial" means covered in one mode and declared unsupported in the other.
-    bundle.path("featureRegistry").forEach(feature -> {
+    assertThat(bundle.path("featureRegistry")).hasSize(GarageFeature.values().length).allSatisfy(feature -> {
       List<String> modes = new ArrayList<>();
       feature.path("modeStatuses").forEach(mode -> modes.add(mode.path("status").asString()));
       assertThat(modes).as(feature.path("id").asString())
           .isSubsetOf("covered", "unsupported-in-mode").contains("covered");
     });
-    assertThat(OpenRouterMock.unmatched()).isEmpty();
+    assertThat(this.unmatched).isEmpty();
   }
 
   @Test
   void evidenceAndReportsKeepNoTopicPromptsRepliesOrCredentials() {
-    String location = start("{\"full\": true, \"topic\": \"" + TOPIC + "\"}");
-    assertThat(awaitFinished(location).path("status").asString()).isEqualTo("PASSED");
-
-    for (String published : List.of(file(location, "evidence"), file(location, "report"),
-        body(this.mvc.get().uri(location).exchange()))) {
-      assertThat(published)
+    Map<String, String> published = Map.of("evidence", this.evidenceBody, "report", this.reportBody, "run",
+        this.runBody);
+    published.forEach((name, body) -> {
+      assertThat(body)
+          .as(name)
           .doesNotContain("SENTINEL-TOPIC-7F3A")
           .doesNotContain(MOCK_KEY)
           .doesNotContain("Bearer")
@@ -57,52 +100,48 @@ class GarageFullRunIntegrationTests extends MockedGarageIntegrationTest {
           .doesNotContain("Pressure-test the radiator cap")
           .doesNotContain("CHECK ENGINE")
           .doesNotContain("You are the Garage Foreman");
-    }
+    });
     // The topic does reach the model: the redaction is in the evidence, not the request.
-    assertThat(OpenRouterMock.requests(CHAT)).anySatisfy(request ->
-        assertThat(request.toString()).contains("SENTINEL-TOPIC-7F3A"));
+    assertThat(bodies(CHAT)).anySatisfy(request -> assertThat(request.toString()).contains("SENTINEL-TOPIC-7F3A"));
   }
 
   @Test
   void eachModalitySendsItsWireShape() {
-    assertThat(runToCompletion("{\"full\": true}").path("status").asString()).isEqualTo("PASSED");
-    WireMockServer mock = OpenRouterMock.server();
+    assertThat(bodies(CHAT)).anyMatch(request -> hasPart(request.path("messages"), "image_url"));
+    assertThat(bodies(RESPONSES)).anyMatch(request -> hasPart(request.path("input"), "input_image"));
+    assertThat(bodies(CHAT)).anyMatch(request -> contains(request.path("modalities"), "image"));
+    assertThat(bodies("/images")).hasSize(2).filteredOn(request -> request.path("stream").asBoolean())
+        .hasSize(1);
+    assertThat(bodies("/embeddings")).filteredOn(request -> request.path("input").size() == 5).hasSize(1);
+    assertThat(bodies(CHAT)).anyMatch(request -> anyItem(request.path("messages"),
+        message -> "call_bulletin".equals(message.path("tool_call_id").asString())));
+    assertThat(bodies(CHAT)).anyMatch(request -> "specialist".equals(request.path("metadata").path("phase").asString()));
+    assertThat(bodies(CHAT)).anySatisfy(request -> {
+      assertThat(request.path("metadata").path("sceneId").asString()).isEqualTo("routing-lane");
+      assertThat(request.path("model").asString()).isEqualTo("openai/gpt-3.5-turbo-0613");
+      assertThat(request.path("models").size()).isEqualTo(2);
+      assertThat(request.path("route").asString()).isEqualTo("fallback");
+    });
+  }
 
-    mock.verify(postRequestedFor(urlEqualTo("/api/v1" + CHAT))
-        .withRequestBody(matchingJsonPath("$.messages[*].content[?(@.type == 'image_url')]")));
-    mock.verify(postRequestedFor(urlEqualTo("/api/v1" + RESPONSES))
-        .withRequestBody(matchingJsonPath("$.input[*].content[?(@.type == 'input_image')]")));
-    mock.verify(postRequestedFor(urlEqualTo("/api/v1" + CHAT))
-        .withRequestBody(matchingJsonPath("$.modalities[?(@ == 'image')]")));
-    mock.verify(2, postRequestedFor(urlEqualTo("/api/v1/images")));
-    mock.verify(1, postRequestedFor(urlEqualTo("/api/v1/images"))
-        .withRequestBody(matchingJsonPath("$.stream", equalTo("true"))));
-    mock.verify(1, postRequestedFor(urlEqualTo("/api/v1/embeddings"))
-        .withRequestBody(matchingJsonPath("$.input.size()", equalTo("5"))));
-    mock.verify(postRequestedFor(urlEqualTo("/api/v1" + CHAT))
-        .withRequestBody(matchingJsonPath("$.messages[?(@.tool_call_id == 'call_bulletin')]")));
-    mock.verify(postRequestedFor(urlEqualTo("/api/v1" + CHAT))
-        .withRequestBody(matchingJsonPath("$.metadata.phase", equalTo("specialist"))));
-    mock.verify(postRequestedFor(urlEqualTo("/api/v1" + CHAT))
-        .withRequestBody(matchingJsonPath("$.metadata.sceneId", equalTo("routing-lane")))
-        .withRequestBody(matchingJsonPath("$.model", equalTo("openai/gpt-3.5-turbo-0613")))
-        .withRequestBody(matchingJsonPath("$.models.size()", equalTo("2")))
-        .withRequestBody(matchingJsonPath("$.route", equalTo("fallback"))));
+  @Test
+  void everyModeSendsItsAttributionHeadersOnTheAttributionScene() {
     for (String path : List.of(CHAT, RESPONSES)) {
-      mock.verify(postRequestedFor(urlEqualTo("/api/v1" + path))
-          .withRequestBody(matchingJsonPath("$.metadata.sceneId", equalTo("attribution-check-in")))
-          .withHeader("Authorization", equalTo("Bearer " + MOCK_KEY))
-          .withHeader("HTTP-Referer", equalTo("https://github.com/Subhransu-De/openrouter-spring-ai"))
-          .withHeader("X-OpenRouter-Title", equalTo("Garage Sample")));
+      assertThat(traffic(path).stream().filter(request -> "attribution-check-in"
+          .equals(JSON.readTree(request.getBodyAsString()).path("metadata").path("sceneId").asString())))
+          .as(path).isNotEmpty().allSatisfy(request -> {
+            assertThat(request.getHeader("Authorization")).isEqualTo("Bearer " + MOCK_KEY);
+            assertThat(request.getHeader("HTTP-Referer"))
+                .isEqualTo("https://github.com/Subhransu-De/openrouter-spring-ai");
+            assertThat(request.getHeader("X-OpenRouter-Title")).isEqualTo("Garage Sample");
+          });
     }
   }
 
   @Test
   void responsesToolRoundsReplayReasoningBeforeItsFunctionCall() {
-    assertThat(runToCompletion("{\"scenes\": [\"service-story\"], \"requestModes\": [\"responses\"]}")
-        .path("status").asString()).isEqualTo("PASSED");
-
-    JsonNode followUp = OpenRouterMock.requests(RESPONSES).stream()
+    // Read from the full run's own traffic, so the Responses service-story run is not repeated.
+    JsonNode followUp = bodies(RESPONSES).stream()
         .filter(request -> request.path("input").toString().contains("\"function_call_output\""))
         .findFirst().orElseThrow();
     List<String> types = new ArrayList<>();
@@ -111,4 +150,30 @@ class GarageFullRunIntegrationTests extends MockedGarageIntegrationTest {
     assertThat(types).as("replayed input items").containsSubsequence("reasoning", "function_call",
         "function_call_output");
   }
+
+  private List<JsonNode> bodies(String path) {
+    return traffic(path).stream().map(request -> JSON.readTree(request.getBodyAsString())).toList();
+  }
+
+  private List<LoggedRequest> traffic(String path) {
+    return this.traffic.stream().filter(request -> request.getUrl().equals("/api/v1" + path)).toList();
+  }
+
+  private static boolean hasPart(JsonNode items, String type) {
+    return anyItem(items, item -> anyItem(item.path("content"), part -> type.equals(part.path("type").asString())));
+  }
+
+  private static boolean contains(JsonNode items, String value) {
+    return anyItem(items, item -> value.equals(item.asString()));
+  }
+
+  private static boolean anyItem(JsonNode items, Predicate<JsonNode> test) {
+    for (JsonNode item : items) {
+      if (test.test(item)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
 }

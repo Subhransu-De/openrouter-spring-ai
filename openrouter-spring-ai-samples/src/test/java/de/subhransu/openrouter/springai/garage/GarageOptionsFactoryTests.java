@@ -8,86 +8,156 @@ import static org.mockito.Mockito.when;
 
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
+import de.subhransu.openrouter.springai.chat.mapper.OpenRouterChatRequestMapper;
+import de.subhransu.openrouter.springai.chat.mapper.OpenRouterResponsesRequestMapper;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.definition.ToolDefinition;
+import tools.jackson.databind.ObjectMapper;
 
 class GarageOptionsFactoryTests {
 
   private final GarageOptionsFactory factory =
       new GarageOptionsFactory(new GarageProperties());
 
-  @org.junit.jupiter.params.ParameterizedTest
-  @org.junit.jupiter.params.provider.EnumSource(OpenRouterRequestMode.class)
-  void strictToolRequestsDoNotRequireParallelToolSupport(OpenRouterRequestMode mode) {
+  /** Maps options onto the wire body of one request mode, through that mode's own mapper. */
+  enum Wire {
+
+    CHAT(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS) {
+      @Override
+      Object map(ObjectMapper mapper, OpenRouterChatOptions options, boolean stream, ToolCallback callback) {
+        return new OpenRouterChatRequestMapper(mapper).map(List.of(), options, stream,
+            List.of(callback.getToolDefinition()));
+      }
+    },
+
+    RESPONSES(OpenRouterRequestMode.OPENAI_RESPONSES) {
+      @Override
+      Object map(ObjectMapper mapper, OpenRouterChatOptions options, boolean stream, ToolCallback callback) {
+        return new OpenRouterResponsesRequestMapper(mapper).map(List.of(), options, stream,
+            List.of(callback.getToolDefinition()));
+      }
+    };
+
+    private final OpenRouterRequestMode mode;
+
+    Wire(OpenRouterRequestMode mode) {
+      this.mode = mode;
+    }
+
+    abstract Object map(ObjectMapper mapper, OpenRouterChatOptions options, boolean stream, ToolCallback callback);
+
+  }
+
+  /** The scene profiles that send tools, built for one mode and one tool. */
+  enum Profile {
+
+    SERVICE_STORY {
+      @Override
+      OpenRouterChatOptions build(GarageOptionsFactory factory, OpenRouterRequestMode mode, ToolCallback tool) {
+        return factory.serviceStory("synthetic", mode, "garage/model", List.of(), "synthetic inspection",
+            List.of(tool));
+      }
+    },
+
+    STREAMING_DISPATCH {
+      @Override
+      OpenRouterChatOptions build(GarageOptionsFactory factory, OpenRouterRequestMode mode, ToolCallback tool) {
+        return factory.streamingDispatch("synthetic", mode, "garage/model", "synthetic inspection", tool);
+      }
+    },
+
+    EXPRESS_INVOICE {
+      @Override
+      OpenRouterChatOptions build(GarageOptionsFactory factory, OpenRouterRequestMode mode, ToolCallback tool) {
+        return factory.expressInvoice("synthetic", mode, "garage/model", "synthetic inspection", tool);
+      }
+    };
+
+    abstract OpenRouterChatOptions build(GarageOptionsFactory factory, OpenRouterRequestMode mode,
+        ToolCallback tool);
+
+  }
+
+  static Stream<Arguments> strictToolRequests() {
+    return Stream.of(Wire.values()).flatMap(wire -> Stream.of(Profile.values())
+        .flatMap(profile -> Stream.of(false, true).map(stream -> Arguments.of(
+            Named.of(wire + " " + profile + " stream=" + stream, wire), profile, stream))));
+  }
+
+  @ParameterizedTest
+  @MethodSource("strictToolRequests")
+  void strictToolRequestsDoNotRequireParallelToolSupport(Wire wire, Profile profile, boolean stream) {
     GarageProperties properties = new GarageProperties();
     properties.setProviderRequireParameters(true);
     GarageOptionsFactory optionsFactory = new GarageOptionsFactory(properties);
     ToolCallback callback = tool();
-    var mapper = new tools.jackson.databind.ObjectMapper();
-    List<OpenRouterChatOptions> profiles = List.of(
-        optionsFactory.serviceStory("synthetic", mode, "garage/model", List.of(),
-            "synthetic inspection", List.of(callback)),
-        optionsFactory.streamingDispatch("synthetic", mode, "garage/model",
-            "synthetic inspection", callback),
-        optionsFactory.expressInvoice("synthetic", mode, "garage/model",
-            "synthetic inspection", callback));
+    var mapper = new ObjectMapper();
+    OpenRouterChatOptions options = profile.build(optionsFactory, wire.mode, callback);
 
-    for (OpenRouterChatOptions options : profiles) {
-      for (boolean stream : List.of(false, true)) {
-        Object request = mode == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS
-            ? new de.subhransu.openrouter.springai.chat.mapper.OpenRouterChatRequestMapper(mapper)
-                .map(List.of(), options, stream, List.of(callback.getToolDefinition()))
-            : new de.subhransu.openrouter.springai.chat.mapper.OpenRouterResponsesRequestMapper(mapper)
-                .map(List.of(), options, stream, List.of(callback.getToolDefinition()));
-        var wire = mapper.readTree(mapper.writeValueAsString(request));
-        // Strict routing treats even false as requiring support for this parameter.
-        assertThat(wire.has("parallel_tool_calls")).isFalse();
-        assertThat(wire.path("provider").path("require_parameters").asBoolean()).isTrue();
-        assertThat(wire.path("tools").size()).isEqualTo(1);
-        assertThat(wire.has("tool_choice")).isTrue();
-      }
-    }
+    var request = wire.map(mapper, options, stream, callback);
+
+    var body = mapper.readTree(mapper.writeValueAsString(request));
+    // Strict routing treats even false as requiring support for this parameter.
+    assertThat(body.has("parallel_tool_calls")).isFalse();
+    assertThat(body.path("provider").path("require_parameters").asBoolean()).isTrue();
+    assertThat(body.path("tools").size()).isEqualTo(1);
+    assertThat(body.has("tool_choice")).isTrue();
   }
 
-  @Test
-  void dynoProfilePopulatesEverySamplerAndContextField() {
-    OpenRouterChatOptions options =
-        this.factory.dynoTuning(
-            "op-1",
-            OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS,
-            "garage/model",
-            "topic",
-            List.of(tool()));
+  static Stream<Arguments> dynoProfiles() {
+    Map<String, Object> chatOnly = new HashMap<>();
+    chatOnly.put("stop", List.of("GARAGE_END"));
+    chatOnly.put("seed", 1972);
+    chatOnly.put("repetitionPenalty", 1.05);
+    chatOnly.put("minP", 0.05);
+    chatOnly.put("topA", 0.1);
+    Map<String, Object> responsesOmits = new HashMap<>();
+    for (String key : chatOnly.keySet()) {
+      responsesOmits.put(key, null);
+    }
+    return Stream.of(
+        Arguments.of(Named.of("chat", OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS), chatOnly),
+        Arguments.of(Named.of("responses", OpenRouterRequestMode.OPENAI_RESPONSES), responsesOmits));
+  }
 
-    assertThat(options.getTopP()).isNotNull();
-    assertThat(options.getTopK()).isNotNull();
-    assertThat(options.getMaxTokens()).isNotNull();
-    assertThat(options.getStopSequences()).isNotEmpty();
-    assertThat(options.getSeed()).isNotNull();
-    assertThat(options.getPresencePenalty()).isNotNull();
-    assertThat(options.getFrequencyPenalty()).isNotNull();
-    assertThat(options.getRepetitionPenalty()).isNotNull();
-    assertThat(options.getMinP()).isNotNull();
-    assertThat(options.getTopA()).isNotNull();
-    assertThat(options.getUser()).isEqualTo("garage-demo");
+  @ParameterizedTest
+  @MethodSource("dynoProfiles")
+  void dynoProfileSetsTheSharedSamplersAndOnlyTheSamplersTheModeSupports(OpenRouterRequestMode mode,
+      Map<String, Object> modeSpecificSamplers) {
+    OpenRouterChatOptions options =
+        this.factory.dynoTuning("op-1", mode, "garage/model", "topic", List.of(tool()));
+
+    Map<String, Object> snapshot = this.factory.snapshot(options);
+    assertThat(snapshot).containsEntry("topP", 0.85).containsEntry("topK", 40)
+        .containsEntry("maxTokens", 700).containsEntry("presencePenalty", 0.1)
+        .containsEntry("frequencyPenalty", 0.1).containsEntry("user", "garage-demo");
+    assertThat(snapshot).containsAllEntriesOf(modeSpecificSamplers);
     assertThat(options.getMetadata())
         .containsEntry("operationId", "op-1")
         .containsEntry("sceneId", "dyno-tuning");
     assertThat(options.getToolContext())
         .containsEntry("garage.jobId", "op-1")
         .containsEntry("garage.tenant", "sample-shop");
+    // A mode never receives an option it cannot send.
+    assertThat(this.factory.unsupportedInMode(options)).isEmpty();
   }
 
   @Test
-  void routingProfileIncludesEveryProviderFieldRouteAndNonAutoTier() {
+  void routingProfileCarriesTheFullProviderPreferencesTheRouteAndANonAutoTier() {
     OpenRouterChatOptions options =
         this.factory.routingLane(
             "op-2",
@@ -95,28 +165,18 @@ class GarageOptionsFactoryTests {
             "garage/primary",
             List.of("garage/fallback"),
             "topic");
-    Map<String, Object> snapshot = this.factory.snapshot(options);
 
-    @SuppressWarnings("unchecked")
-    Map<String, Object> provider = (Map<String, Object>) snapshot.get("provider");
-    assertThat(provider.values()).doesNotContainNull();
+    var provider = options.getProvider();
+    assertThat(provider.allowFallbacks()).isTrue();
+    assertThat(provider.requireParameters()).isFalse();
+    assertThat(provider.dataCollection()).isEqualTo("allow");
+    assertThat(provider.order()).containsExactly("OpenAI");
+    assertThat(provider.ignore()).containsExactly("Fireworks");
+    assertThat(provider.quantizations()).containsExactly("bf16", "fp16", "fp8");
+    assertThat(provider.sort()).isEqualTo("throughput");
     assertThat(options.getModels()).containsExactly("garage/fallback");
     assertThat(options.getRoute()).isEqualTo("fallback");
     assertThat(options.getServiceTier().value()).isEqualTo("default");
-  }
-
-  @Test
-  void responsesDynoProfileContainsOnlySupportedOptions() {
-    OpenRouterChatOptions options =
-        this.factory.dynoTuning(
-            "op-3",
-            OpenRouterRequestMode.OPENAI_RESPONSES,
-            "garage/model",
-            "topic",
-            List.of(tool()));
-
-    assertThat(this.factory.unsupportedInMode(options)).isEmpty();
-    assertThat(options.getIncludeUsage()).isNull();
   }
 
   @Test
@@ -137,27 +197,49 @@ class GarageOptionsFactoryTests {
     assertThat(options.getReasoning().maxTokens()).isEqualTo(512);
   }
 
-  @org.junit.jupiter.params.ParameterizedTest
-  @org.junit.jupiter.params.provider.ValueSource(booleans = {true, false})
-  void schemaProbeRequiresParameterSupportEvenWhenGeneralRoutingIsDisabled(boolean routingEnabled) {
+  private static final String PROBE_SCHEMA = "{\"type\":\"object\"}";
+
+  static Stream<Arguments> routingModes() {
+    return Stream.of(
+        Arguments.of(Named.of("routing on", true), "throughput"),
+        Arguments.of(Named.of("routing off", false), null));
+  }
+
+  @ParameterizedTest
+  @MethodSource("routingModes")
+  void aResponseFormatProbeRequiresParameterSupportEvenWhenGeneralRoutingIsDisabled(
+      boolean routingEnabled, String expectedSort) {
+    OpenRouterChatOptions options = digitalInspection(routingEnabled, false);
+
+    assertThat(options.getOutputSchema()).isNull();
+    assertThat(options.getResponseFormat()).isNotNull();
+    assertProviderPreferences(options, expectedSort);
+  }
+
+  @ParameterizedTest
+  @MethodSource("routingModes")
+  void anOutputSchemaProbeRequiresParameterSupportEvenWhenGeneralRoutingIsDisabled(
+      boolean routingEnabled, String expectedSort) {
+    OpenRouterChatOptions options = digitalInspection(routingEnabled, true);
+
+    assertThat(options.getOutputSchema()).isEqualTo(PROBE_SCHEMA);
+    assertThat(options.getResponseFormat()).isNull();
+    assertProviderPreferences(options, expectedSort);
+  }
+
+  private static OpenRouterChatOptions digitalInspection(boolean routingEnabled, boolean outputSchema) {
     GarageProperties properties = new GarageProperties();
     properties.setProviderPreferencesEnabled(routingEnabled);
-    GarageOptionsFactory optionsFactory = new GarageOptionsFactory(properties);
-    for (boolean outputSchema : List.of(false, true)) {
-      OpenRouterChatOptions options = optionsFactory.digitalInspection(
-          "synthetic-schema", OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS,
-          "garage/model", "synthetic report", "{\"type\":\"object\"}", outputSchema);
-      assertThat(options.getOutputSchema()).isEqualTo(outputSchema ? "{\"type\":\"object\"}" : null);
-      if (outputSchema) {
-        assertThat(options.getResponseFormat()).isNull();
-      } else {
-        assertThat(options.getResponseFormat()).isNotNull();
-      }
-      var request = new de.subhransu.openrouter.springai.chat.mapper.OpenRouterChatRequestMapper(
-          new tools.jackson.databind.ObjectMapper()).map(List.of(), options, false, List.of());
-      assertThat(request.provider().requireParameters()).isTrue();
-      assertThat(request.provider().sort()).isEqualTo(routingEnabled ? properties.getProviderSort() : null);
-    }
+    return new GarageOptionsFactory(properties).digitalInspection(
+        "synthetic-schema", OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS,
+        "garage/model", "synthetic report", PROBE_SCHEMA, outputSchema);
+  }
+
+  private static void assertProviderPreferences(OpenRouterChatOptions options, String expectedSort) {
+    var request = new de.subhransu.openrouter.springai.chat.mapper.OpenRouterChatRequestMapper(
+        new tools.jackson.databind.ObjectMapper()).map(List.of(), options, false, List.of());
+    assertThat(request.provider().requireParameters()).isTrue();
+    assertThat(request.provider().sort()).isEqualTo(expectedSort);
   }
 
   @Test
@@ -223,13 +305,8 @@ class GarageOptionsFactoryTests {
         .containsEntry("allow_fallbacks", false)
         .containsEntry("require_parameters", true);
     assertThat(GarageOptionsFactory.imageProviderOptions(null, null)).isNull();
-  }
-
-  @Test
-  void disabledProviderPreferencesLeaveRequestsUnrouted() {
-    GarageProperties properties = new GarageProperties();
+    // With provider preferences disabled there is nothing shared to send.
     properties.setProviderPreferencesEnabled(false);
-
     assertThat(GarageOptionsFactory.serviceProviderPreferences(properties)).isNull();
   }
 

@@ -625,7 +625,7 @@ public class GarageRunService implements DisposableBean {
 
     private final String activeRunId;
 
-    public RunActiveException(String activeRunId) {
+    private RunActiveException(String activeRunId) {
       super("Garage run " + activeRunId + " is still running");
       this.activeRunId = activeRunId;
     }
@@ -640,7 +640,7 @@ public class GarageRunService implements DisposableBean {
 
     private static final long serialVersionUID = 1L;
 
-    public MissingApiKeyException() {
+    private MissingApiKeyException() {
       super("The selected scenes call OpenRouter; set OPENROUTER_API_KEY or"
           + " spring.ai.openrouter.api-key, or select offlineContracts.");
     }

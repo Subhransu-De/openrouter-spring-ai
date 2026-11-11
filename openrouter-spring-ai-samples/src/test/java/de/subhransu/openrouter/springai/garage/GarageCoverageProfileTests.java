@@ -3,59 +3,70 @@ package de.subhransu.openrouter.springai.garage;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import de.subhransu.openrouter.springai.autoconfigure.OpenRouterChatProperties;
-import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
+import de.subhransu.openrouter.springai.chat.OpenRouterServiceTier;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
-import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.boot.builder.SpringApplicationBuilder;
-import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.env.YamlPropertySourceLoader;
+import org.springframework.core.env.StandardEnvironment;
+import org.springframework.core.io.ClassPathResource;
 
+/** The shipped {@code coverage} profile sets every public chat property to a known value. */
 class GarageCoverageProfileTests {
 
   @Test
-  void coverageProfileBindsTheCompletePublicChatPropertySurface() {
-    try (ConfigurableApplicationContext context =
-        new SpringApplicationBuilder(GarageApplication.class)
-            .profiles("coverage")
-            .properties(
-                Map.of(
-                    "spring.main.banner-mode", "off",
-                    "spring.main.web-application-type", "none",
-                    "logging.level.root", "off"))
-            .run()) {
-      OpenRouterChatProperties properties = context.getBean(OpenRouterChatProperties.class);
-      OpenRouterChatOptions options = (OpenRouterChatOptions) context.getBean(ChatModel.class).getOptions();
+  void coverageProfileBindsEveryPublicChatPropertyToItsDocumentedValue() {
+    OpenRouterChatProperties properties = coverageChatProperties();
 
-      assertThat(properties.getModel()).isEqualTo("garage/coverage-primary");
-      assertThat(properties.getModels()).containsExactly("garage/coverage-fallback");
-      assertThat(properties.getTemperature()).isNotNull();
-      assertThat(properties.getTopP()).isNotNull();
-      assertThat(properties.getTopK()).isNotNull();
-      assertThat(properties.getMaxTokens()).isNotNull();
-      assertThat(properties.getMaxCompletionTokens()).isNotNull();
-      assertThat(properties.getStop()).isNotEmpty();
-      assertThat(properties.getSeed()).isNotNull();
-      assertThat(properties.getPresencePenalty()).isNotNull();
-      assertThat(properties.getFrequencyPenalty()).isNotNull();
-      assertThat(properties.getUser()).isNotBlank();
-      assertThat(properties.getParallelToolCalls()).isFalse();
-      assertThat(properties.getToolChoice()).isEqualTo("auto");
-      assertThat(properties.getRepetitionPenalty()).isNotNull();
-      assertThat(properties.getMinP()).isNotNull();
-      assertThat(properties.getTopA()).isNotNull();
-      assertThat(properties.getRoute()).isEqualTo("fallback");
-      assertThat(properties.getIncludeUsage()).isTrue();
-      assertThat(properties.getServiceTier()).isNotNull();
-      assertThat(properties.getMetadata()).containsEntry("profile", "coverage");
-      assertThat(properties.getProvider().dataCollection()).isEqualTo("allow");
-      assertThat(properties.getProvider().order()).isNotEmpty();
-      assertThat(properties.getProvider().ignore()).isNotEmpty();
-      assertThat(properties.getProvider().quantizations()).isNotEmpty();
-      assertThat(properties.getReasoning().effort()).isEqualTo("medium");
-      assertThat(properties.getReasoning().maxTokens()).isNull();
-      assertThat(options.getModel()).isEqualTo(properties.getModel());
-      assertThat(options.getProvider()).isEqualTo(properties.getProvider());
-      assertThat(options.getReasoning()).isEqualTo(properties.getReasoning());
-    }
+    assertThat(properties.getModel()).isEqualTo("garage/coverage-primary");
+    assertThat(properties.getModels()).containsExactly("garage/coverage-fallback");
+    assertThat(properties.getTemperature()).isEqualTo(0.2);
+    assertThat(properties.getTopP()).isEqualTo(0.85);
+    assertThat(properties.getTopK()).isEqualTo(40);
+    assertThat(properties.getMaxTokens()).isEqualTo(700);
+    assertThat(properties.getMaxCompletionTokens()).isEqualTo(900);
+    assertThat(properties.getStop()).containsExactly("GARAGE_END");
+    assertThat(properties.getSeed()).isEqualTo(1972);
+    assertThat(properties.getPresencePenalty()).isEqualTo(0.1);
+    assertThat(properties.getFrequencyPenalty()).isEqualTo(0.1);
+    assertThat(properties.getUser()).isEqualTo("garage-coverage");
+    assertThat(properties.getParallelToolCalls()).isFalse();
+    assertThat(properties.getToolChoice()).isEqualTo("auto");
+    assertThat(properties.getRepetitionPenalty()).isEqualTo(1.05);
+    assertThat(properties.getMinP()).isEqualTo(0.05);
+    assertThat(properties.getTopA()).isEqualTo(0.1);
+    assertThat(properties.getRoute()).isEqualTo("fallback");
+    assertThat(properties.getIncludeUsage()).isTrue();
+    assertThat(properties.getServiceTier()).isEqualTo(OpenRouterServiceTier.DEFAULT);
+    assertThat(properties.getMetadata()).containsOnly(Map.entry("application", "garage"),
+        Map.entry("profile", "coverage"));
+    assertThat(properties.getProvider().allowFallbacks()).isTrue();
+    assertThat(properties.getProvider().requireParameters()).isFalse();
+    assertThat(properties.getProvider().dataCollection()).isEqualTo("allow");
+    assertThat(properties.getProvider().order()).containsExactly("OpenAI");
+    assertThat(properties.getProvider().ignore()).containsExactly("Fireworks");
+    assertThat(properties.getProvider().quantizations()).containsExactly("bf16", "fp16", "fp8");
+    assertThat(properties.getProvider().sort()).isEqualTo("throughput");
+    assertThat(properties.getReasoning().effort()).isEqualTo("medium");
+    assertThat(properties.getReasoning().exclude()).isFalse();
+    assertThat(properties.getReasoning().enabled()).isTrue();
+    assertThat(properties.getReasoning().maxTokens()).isNull();
   }
+
+  private static OpenRouterChatProperties coverageChatProperties() {
+    StandardEnvironment environment = new StandardEnvironment();
+    // Only the shipped profile, never the developer machine's own overrides.
+    environment.getPropertySources().remove(StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME);
+    environment.getPropertySources().remove(StandardEnvironment.SYSTEM_PROPERTIES_PROPERTY_SOURCE_NAME);
+    try {
+      new YamlPropertySourceLoader().load("coverage", new ClassPathResource("application-coverage.yml"))
+          .forEach(environment.getPropertySources()::addLast);
+    } catch (IOException ex) {
+      throw new UncheckedIOException(ex);
+    }
+    return Binder.get(environment).bind("spring.ai.openrouter.chat", OpenRouterChatProperties.class).get();
+  }
+
 }

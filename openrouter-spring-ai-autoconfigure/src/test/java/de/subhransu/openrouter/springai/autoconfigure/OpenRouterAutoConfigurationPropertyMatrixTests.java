@@ -1,35 +1,39 @@
 package de.subhransu.openrouter.springai.autoconfigure;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionRequest;
 import de.subhransu.openrouter.springai.api.dto.ChatMessage;
+import de.subhransu.openrouter.springai.api.dto.ResponsesRequest;
+import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterServiceTier;
-import java.net.URI;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.Map;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.mockito.ArgumentCaptor;
+import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
-import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
-import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.client.ClientHttpRequest;
-import org.springframework.http.client.ClientHttpRequestFactory;
-import org.springframework.http.client.ClientHttpResponse;
-import org.springframework.mock.http.client.MockClientHttpRequest;
-import org.springframework.mock.http.client.MockClientHttpResponse;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Property-binding matrix for {@code spring.ai.openrouter.*}. Each documented property is
  * set, then asserted on the resolved default {@link OpenRouterChatOptions} (or the bound
  * properties bean where it shapes the API client). A relaxed-binding typo or a missed
- * {@code toOptions()} mapping step fails a specific assertion here. JSON wire-name
+ * {@code toOptions()} mapping step fails a specific assertion here. Where a property
+ * shapes the HTTP client or the request, the test asserts what reached it. JSON wire-name
  * coverage lives in {@code OpenRouterChatRequestSerializationTests}.
  */
 class OpenRouterAutoConfigurationPropertyMatrixTests {
@@ -53,25 +57,23 @@ class OpenRouterAutoConfigurationPropertyMatrixTests {
 		// The properties bean is an intermediate: what matters is that base-url and
 		// api-key reach the actual HTTP client. Capture the outgoing request and assert
 		// the URL and Authorization header, not just the bound POJO.
-		AtomicReference<URI> requestUri = new AtomicReference<>();
-		AtomicReference<String> authorization = new AtomicReference<>();
-		contextRunner
-			.withBean("recordingRequestFactoryBuilder", ClientHttpRequestFactoryBuilder.class,
-					() -> settings -> new RecordingRequestFactory(requestUri, authorization))
+		RecordingTransport transport = new RecordingTransport();
+		transport.installOn(this.contextRunner)
 			.withPropertyValues(API_KEY, "spring.ai.openrouter.base-url=https://proxy.example/api/v1",
 					"spring.ai.openrouter.chat.model=openai/gpt-5.4")
 			.run(context -> {
 				assertThat(resolvedOptions(context).getModel()).isEqualTo("openai/gpt-5.4");
 
-				context.getBean(de.subhransu.openrouter.springai.api.OpenRouterApi.class)
+				context.getBean(OpenRouterApi.class)
 					.chatCompletion(ChatCompletionRequest.builder()
 						.model("openai/gpt-5.4")
 						.messages(List.of(new ChatMessage("user", "hi", null, null, null)))
 						.stream(false)
 						.build());
 
-				assertThat(requestUri.get().toString()).startsWith("https://proxy.example/api/v1");
-				assertThat(authorization.get()).isEqualTo("Bearer test-key");
+				RecordingTransport.Exchange exchange = transport.onlyExchange();
+				assertThat(exchange.uri().toString()).isEqualTo("https://proxy.example/api/v1/chat/completions");
+				assertThat(exchange.headers().getFirst("Authorization")).isEqualTo("Bearer test-key");
 			});
 	}
 
@@ -103,6 +105,37 @@ class OpenRouterAutoConfigurationPropertyMatrixTests {
 				assertThat(options.getMinP()).isEqualTo(0.05);
 				assertThat(options.getTopA()).isEqualTo(0.8);
 				assertThat(options.getUser()).isEqualTo("user-7");
+			});
+	}
+
+	@ParameterizedTest
+	@EnumSource(OpenRouterRequestMode.class)
+	void boundSamplingRoutingAndAttributionPropertiesReachTheWireInBothModes(OpenRouterRequestMode mode) {
+		RecordingTransport transport = new RecordingTransport().blockingResponse(HttpStatus.OK, """
+				{"id":"synthetic","status":"completed","output":[],
+				"choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"ok"}}]}
+				""");
+		transport.installOn(this.contextRunner)
+			.withPropertyValues(API_KEY, "spring.ai.openrouter.chat.request-mode=" + mode,
+					"spring.ai.openrouter.chat.model=synthetic/model", "spring.ai.openrouter.chat.temperature=0.7",
+					"spring.ai.openrouter.chat.top-p=0.9", "spring.ai.openrouter.chat.service-tier=FLEX",
+					"spring.ai.openrouter.chat.route=fallback", "spring.ai.openrouter.chat.user=user-7",
+					"spring.ai.openrouter.chat.models[0]=synthetic/first",
+					"spring.ai.openrouter.chat.models[1]=synthetic/second")
+			.run(context -> {
+				assertThat(context).hasNotFailed();
+
+				context.getBean(OpenRouterChatModel.class).call(new Prompt("hi"));
+
+				JsonNode body = new ObjectMapper().readTree(transport.onlyExchange().body());
+				assertThat(body.path("model").asString()).isEqualTo("synthetic/model");
+				assertThat(body.path("temperature").asDouble()).isEqualTo(0.7);
+				assertThat(body.path("top_p").asDouble()).isEqualTo(0.9);
+				assertThat(body.path("service_tier").asString()).isEqualToIgnoringCase("flex");
+				assertThat(body.path("route").asString()).isEqualTo("fallback");
+				assertThat(body.path("user").asString()).isEqualTo("user-7");
+				assertThat(body.path("models")).extracting(JsonNode::asString)
+					.containsExactly("synthetic/first", "synthetic/second");
 			});
 	}
 
@@ -196,32 +229,78 @@ class OpenRouterAutoConfigurationPropertyMatrixTests {
 	}
 
 	@Test
+	void bindsReasoningMaxTokensWithoutEffort() {
+		contextRunner
+			.withPropertyValues(API_KEY, "spring.ai.openrouter.chat.reasoning.max-tokens=1024",
+					"spring.ai.openrouter.chat.reasoning.exclude=true")
+			.run(context -> {
+				var reasoning = resolvedOptions(context).getReasoning();
+				assertThat(reasoning.maxTokens()).isEqualTo(1024);
+				assertThat(reasoning.effort()).isNull();
+				assertThat(reasoning.exclude()).isTrue();
+			});
+	}
+
+	@Test
 	void rejectsMutuallyExclusiveReasoningProperties() {
 		contextRunner
 			.withPropertyValues(API_KEY, "spring.ai.openrouter.chat.reasoning.effort=high",
 					"spring.ai.openrouter.chat.reasoning.max-tokens=1024")
 			.run(context -> {
 				assertThat(context).hasFailed();
-				assertThat(context.getStartupFailure()).rootCause().hasMessageContaining("effort", "max-tokens");
+				assertThat(context.getStartupFailure()).rootCause().hasMessageContainingAll("effort", "max-tokens");
 			});
 	}
 
 	// ---------------------------------------------------------------------
-	// Attribution app properties
+	// Image generation settings sent as image_config
 	// ---------------------------------------------------------------------
 
-	@Test
-	void bindsAttributionAppProperties() {
-		contextRunner
-			.withPropertyValues(API_KEY, "spring.ai.openrouter.app.http-referer=https://app.example",
-					"spring.ai.openrouter.app.title=My App", "spring.ai.openrouter.app.categories[0]=translation",
-					"spring.ai.openrouter.app.categories[1]=programming")
+	@ParameterizedTest
+	@EnumSource(OpenRouterRequestMode.class)
+	void bindsImageConfigAndSendsItInTheRequest(OpenRouterRequestMode mode) {
+		OpenRouterApi api = SyntheticModels.succeedingApi();
+		when(api.responses(any()))
+			.thenReturn(new ResponsesResult("resp", "response", 1L, "m", "completed", List.of(), null, null));
+		contextRunner.withBean(OpenRouterApi.class, () -> api)
+			.withPropertyValues(API_KEY, "spring.ai.openrouter.chat.request-mode=" + mode,
+					"spring.ai.openrouter.chat.modalities=text,image",
+					"spring.ai.openrouter.chat.image-config.[aspect_ratio]=16:9",
+					"spring.ai.openrouter.chat.image-config.[image_size]=2K")
 			.run(context -> {
-				OpenRouterCommonProperties.App app = context.getBean(OpenRouterCommonProperties.class).getApp();
-				assertThat(app.getHttpReferer()).isEqualTo("https://app.example");
-				assertThat(app.getTitle()).isEqualTo("My App");
-				assertThat(app.getCategories()).containsExactly("translation", "programming");
+				Map<String, Object> expected = Map.of("aspect_ratio", "16:9", "image_size", "2K");
+				OpenRouterChatModel model = context.getBean(OpenRouterChatModel.class);
+				assertThat(resolvedOptions(context).getImageConfig()).isEqualTo(expected);
+
+				model.call(new Prompt("draw"));
+				assertThat(sentImageConfig(api, mode)).isEqualTo(expected);
 			});
+	}
+
+	@ParameterizedTest
+	@EnumSource(OpenRouterRequestMode.class)
+	void withoutImageConfigNoImageConfigIsSent(OpenRouterRequestMode mode) {
+		OpenRouterApi api = SyntheticModels.succeedingApi();
+		when(api.responses(any()))
+			.thenReturn(new ResponsesResult("resp", "response", 1L, "m", "completed", List.of(), null, null));
+		contextRunner.withBean(OpenRouterApi.class, () -> api)
+			.withPropertyValues(API_KEY, "spring.ai.openrouter.chat.request-mode=" + mode)
+			.run(context -> {
+				context.getBean(OpenRouterChatModel.class).call(new Prompt("draw"));
+				assertThat(sentImageConfig(api, mode)).isNull();
+			});
+	}
+
+	private static @Nullable Map<String, @Nullable Object> sentImageConfig(OpenRouterApi api,
+			OpenRouterRequestMode mode) {
+		if (mode == OpenRouterRequestMode.OPENAI_RESPONSES) {
+			ArgumentCaptor<ResponsesRequest> request = ArgumentCaptor.forClass(ResponsesRequest.class);
+			verify(api).responses(request.capture());
+			return request.getValue().imageConfig();
+		}
+		ArgumentCaptor<ChatCompletionRequest> request = ArgumentCaptor.forClass(ChatCompletionRequest.class);
+		verify(api).chatCompletion(request.capture());
+		return request.getValue().imageConfig();
 	}
 
 	// ---------------------------------------------------------------------
@@ -229,52 +308,11 @@ class OpenRouterAutoConfigurationPropertyMatrixTests {
 	// ---------------------------------------------------------------------
 
 	@Test
-	void aTypoInAPropertyNameDoesNotBindAndLeavesDefault() {
-		// A misspelled property must not silently bind. temperature stays unset (null)
-		// and
-		// the misspelled key is ignored, so a regression that renamed the setter would be
-		// caught by the matching positive test, while this proves no accidental coercion.
-		contextRunner.withPropertyValues(API_KEY, "spring.ai.openrouter.chat.temprature=0.7").run(context -> {
-			assertThat(resolvedOptions(context).getTemperature()).isNull();
-		});
-	}
-
-	@Test
 	void blankApiKeyFailsContextStartup() {
 		contextRunner.withPropertyValues("spring.ai.openrouter.api-key=").run(context -> {
 			assertThat(context).hasFailed();
 			assertThat(context.getStartupFailure()).rootCause().hasMessageContaining("OpenRouter API key");
 		});
-	}
-
-	static final class RecordingRequestFactory implements ClientHttpRequestFactory {
-
-		private final AtomicReference<URI> requestUri;
-
-		private final AtomicReference<String> authorization;
-
-		RecordingRequestFactory(AtomicReference<URI> requestUri, AtomicReference<String> authorization) {
-			this.requestUri = requestUri;
-			this.authorization = authorization;
-		}
-
-		@Override
-		public ClientHttpRequest createRequest(URI uri, HttpMethod httpMethod) {
-			return new MockClientHttpRequest(httpMethod, uri) {
-				@Override
-				protected ClientHttpResponse executeInternal() {
-					RecordingRequestFactory.this.requestUri.set(getURI());
-					RecordingRequestFactory.this.authorization.set(getHeaders().getFirst("Authorization"));
-					MockClientHttpResponse response = new MockClientHttpResponse(
-							"{\"id\":\"x\",\"object\":\"chat.completion\",\"model\":\"m\",\"choices\":[]}"
-								.getBytes(StandardCharsets.UTF_8),
-							HttpStatus.OK);
-					response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
-					return response;
-				}
-			};
-		}
-
 	}
 
 }

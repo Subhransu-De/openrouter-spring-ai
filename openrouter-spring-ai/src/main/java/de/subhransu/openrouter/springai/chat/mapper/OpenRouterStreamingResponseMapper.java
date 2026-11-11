@@ -38,14 +38,6 @@ public final class OpenRouterStreamingResponseMapper {
 
 	private final OpenRouterChoiceErrorExceptionFactory choiceErrorExceptionFactory;
 
-	public OpenRouterStreamingResponseMapper() {
-		this(DEFAULT_MAX_STATE_BYTES, DEFAULT_MAX_STATE_CHOICES);
-	}
-
-	public OpenRouterStreamingResponseMapper(long maxStateBytes, int maxStateChoices) {
-		this(maxStateBytes, maxStateChoices, OpenRouterDiagnosticSanitizer.keyless());
-	}
-
 	public OpenRouterStreamingResponseMapper(long maxStateBytes, int maxStateChoices,
 			OpenRouterDiagnosticSanitizer sanitizer) {
 		org.springframework.util.Assert.isTrue(maxStateBytes > 0,
@@ -58,22 +50,14 @@ public final class OpenRouterStreamingResponseMapper {
 		this.choiceErrorExceptionFactory = new OpenRouterChoiceErrorExceptionFactory(sanitizer);
 	}
 
-	public ChatResponse map(ChatCompletionChunk chunk) {
-		return map(chunk, new LinkedHashMap<>(), new LinkedHashMap<>(), new ResponseExtensions(),
-				new AudioOutputMapper(null), new ChatStreamBudget(this.maxStateBytes, this.maxStateChoices));
-	}
-
 	/**
 	 * Maps a complete stream with bounded, per-choice partial-output diagnostics. State
 	 * is allocated per subscription so concurrent callers and repeat subscriptions remain
 	 * isolated.
 	 * @param chunks streamed OpenRouter chat-completion chunks
+	 * @param audioOptions requested audio output, or null
 	 * @return mapped Spring AI responses
 	 */
-	public Flux<ChatResponse> map(Flux<ChatCompletionChunk> chunks) {
-		return map(chunks, null);
-	}
-
 	public Flux<ChatResponse> map(Flux<ChatCompletionChunk> chunks, @Nullable OpenRouterAudioOptions audioOptions) {
 		return Flux.defer(() -> {
 			Map<Integer, PartialOutputAccumulator> partialOutputs = new LinkedHashMap<>();

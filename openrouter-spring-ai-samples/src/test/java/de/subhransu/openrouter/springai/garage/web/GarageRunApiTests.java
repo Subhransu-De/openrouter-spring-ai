@@ -2,14 +2,17 @@ package de.subhransu.openrouter.springai.garage.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import de.subhransu.openrouter.springai.garage.GarageProperties;
 import de.subhransu.openrouter.springai.garage.GarageRun;
 import de.subhransu.openrouter.springai.garage.GarageRunService;
+import de.subhransu.openrouter.springai.garage.evidence.GarageFeature;
 import de.subhransu.openrouter.springai.garage.run.GarageRunPlan;
 import de.subhransu.openrouter.springai.garage.run.GarageRunRequest;
 import de.subhransu.openrouter.springai.garage.run.GarageSweepRequest;
+import de.subhransu.openrouter.springai.garage.scenes.GarageScene;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -18,6 +21,7 @@ import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.HttpStatus;
@@ -53,13 +57,15 @@ class GarageRunApiTests {
 
   @Test
   void startingASweepReturnsAcceptedWithItsLocation() {
-    when(this.service.startSweep(any(GarageSweepRequest.class)))
+    ArgumentCaptor<GarageSweepRequest> request = ArgumentCaptor.forClass(GarageSweepRequest.class);
+    when(this.service.startSweep(request.capture()))
         .thenReturn(run("sweep-1", GarageRun.Status.RUNNING, Map.of()));
 
     assertThat(this.mvc.post().uri("/api/sweeps").contentType(MediaType.APPLICATION_JSON)
         .content("{\"embeddingModels\": [\"synthetic/embedding\"]}"))
         .hasStatus(HttpStatus.ACCEPTED)
         .hasHeader("Location", "/api/runs/sweep-1");
+    assertThat(request.getValue().embeddingModels()).containsExactly("synthetic/embedding");
   }
 
   @Test
@@ -87,22 +93,18 @@ class GarageRunApiTests {
             detail -> detail.assertThat().isEqualTo("Unknown request field 'capabilites'"));
   }
 
-  @Test
-  void aSecondActiveRunIsAConflict() {
-    when(this.service.start(any())).thenThrow(new GarageRunService.RunActiveException("run-1"));
+  // The conflict and missing-key problem details are asserted end to end in GarageApiIntegrationTests and
+  // GarageOfflineContractsIntegrationTests: only GarageRunService can create those exceptions.
 
-    assertThat(this.mvc.post().uri("/api/runs"))
-        .hasStatus(HttpStatus.CONFLICT)
-        .bodyJson()
-        .hasPathSatisfying("$.activeRun", run -> run.assertThat().isEqualTo("/api/runs/run-1"));
+  @Test
+  void malformedJsonIsABadRequest() {
+    assertThat(this.mvc.post().uri("/api/runs").contentType(MediaType.APPLICATION_JSON).content("{\"capabilities\": ["))
+        .hasStatus(HttpStatus.BAD_REQUEST);
   }
 
   @Test
-  void aMissingApiKeyIsUnprocessable() {
-    when(this.service.start(any())).thenThrow(new GarageRunService.MissingApiKeyException());
-
-    assertThat(this.mvc.post().uri("/api/runs"))
-        .hasStatus(HttpStatus.UNPROCESSABLE_CONTENT);
+  void runsAreOnlyReachableByIdSoTheCollectionIsNotListable() {
+    assertThat(this.mvc.get().uri("/api/runs")).hasStatus(HttpStatus.METHOD_NOT_ALLOWED);
   }
 
   @Test
@@ -150,10 +152,29 @@ class GarageRunApiTests {
   }
 
   @Test
-  void scenesAreListedWithTheirFeatures() {
-    when(this.service.scenes()).thenReturn(List.of());
+  void scenesAreListedWithTheirOfflineFlagAndFeatureIds() {
+    GarageScene recovery = scene("recovery-road-test", true, GarageFeature.forScene("recovery-road-test"));
+    GarageScene live = scene("service-story", false, GarageFeature.forScene("service-story"));
+    when(this.service.scenes()).thenReturn(List.of(recovery, live));
 
-    assertThat(this.mvc.get().uri("/api/scenes")).hasStatusOk().bodyJson().isEqualTo("[]");
+    assertThat(this.mvc.get().uri("/api/scenes")).hasStatusOk().bodyJson()
+        .hasPathSatisfying("$.length()", size -> size.assertThat().isEqualTo(2))
+        .hasPathSatisfying("$[0].id", id -> id.assertThat().isEqualTo("recovery-road-test"))
+        .hasPathSatisfying("$[0].offline", offline -> offline.assertThat().isEqualTo(true))
+        .hasPathSatisfying("$[1].offline", offline -> offline.assertThat().isEqualTo(false))
+        .hasPathSatisfying("$[1].features",
+            features -> features.assertThat().asArray().containsExactlyElementsOf(
+                GarageFeature.forScene("service-story").stream().map(GarageFeature::id).toList()));
+  }
+
+  private static GarageScene scene(String id, boolean offline, List<GarageFeature> features) {
+    GarageScene scene = mock(GarageScene.class);
+    when(scene.id()).thenReturn(id);
+    when(scene.title()).thenReturn("Synthetic " + id);
+    when(scene.description()).thenReturn("Synthetic description");
+    when(scene.offline()).thenReturn(offline);
+    when(scene.features()).thenReturn(features);
+    return scene;
   }
 
   private GarageRun run(String id, GarageRun.Status status, Map<String, Path> files) {

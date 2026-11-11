@@ -1,8 +1,12 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
+import static de.subhransu.openrouter.springai.chat.mapper.StreamingToolCallFixtures.CHUNK_OBJECT;
+import static de.subhransu.openrouter.springai.chat.mapper.StreamingToolCallFixtures.MODEL;
+import static de.subhransu.openrouter.springai.chat.mapper.StreamingToolCallFixtures.chunk;
+import static de.subhransu.openrouter.springai.chat.mapper.StreamingToolCallFixtures.finishChoice;
+import static de.subhransu.openrouter.springai.chat.mapper.StreamingToolCallFixtures.textChoice;
+import static de.subhransu.openrouter.springai.chat.mapper.StreamingToolCallFixtures.toolFragment;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionChunk;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionResponse;
@@ -16,107 +20,149 @@ import de.subhransu.openrouter.springai.api.dto.StreamError;
 import de.subhransu.openrouter.springai.api.dto.ToolCall;
 import de.subhransu.openrouter.springai.api.dto.Usage;
 import de.subhransu.openrouter.springai.chat.errors.OpenRouterTransientChoiceException;
-import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
+import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException;
+import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException.Limit;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
-import tools.jackson.databind.ObjectMapper;
-import java.lang.reflect.Constructor;
-import java.util.Arrays;
+import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.reactivestreams.Subscriber;
-import org.reactivestreams.Subscription;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.content.Media;
 import org.springframework.util.MimeTypeUtils;
-import org.springframework.test.util.ReflectionTestUtils;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 import reactor.test.publisher.TestPublisher;
+import tools.jackson.databind.ObjectMapper;
 
 class OpenRouterStreamingToolCallAggregatorTests {
 
-	private static final String DELIVERED_EXTENSIONS = "deliveredExtensionSequences";
+	private final OpenRouterStreamingToolCallAggregator aggregator = ResponseMappers.aggregator();
 
-	private static final String CHUNK_OBJECT = "chat.completion.chunk";
+	/**
+	 * Each row feeds the three chunks content/reasoning/refusal = (a, b, c), (b, c, a),
+	 * (c, a, b), so the expected values are literal concatenations in arrival order, null
+	 * only when every part is null.
+	 */
+	static Stream<Arguments> terminalTextFields() {
+		return Stream.of(
+				Arguments.of(Named.of("all null", new String[] { null, null, null }),
+						new String[] { null, null, null }),
+				Arguments.of(Named.of("a lone empty string stays empty, not null", new String[] { "", null, null }),
+						new String[] { "", "", "" }),
+				Arguments.of(Named.of("an empty string between values", new String[] { "first-😀", null, "" }),
+						new String[] { "first-😀", "first-😀", "first-😀" }),
+				Arguments.of(Named.of("one value only", new String[] { null, "second-漢", null }),
+						new String[] { "second-漢", "second-漢", "second-漢" }),
+				Arguments.of(Named.of("unicode in every field", new String[] { "first-😀", "second-漢", "third-ह" }),
+						new String[] { "first-😀second-漢third-ह", "second-漢third-हfirst-😀",
+								"third-हfirst-😀second-漢" }));
+	}
 
-	private static final String MODEL = "openai/gpt-5.4-mini";
+	private static String quote(String value) {
+		return value == null ? "null" : "'" + value + "'";
+	}
 
-	private final OpenRouterStreamingToolCallAggregator aggregator = new OpenRouterStreamingToolCallAggregator();
+	@ParameterizedTest
+	@MethodSource("terminalTextFields")
+	void terminalTextPreservesNullEmptyAndUnicodeFieldsIndependently(String[] fields, String[] expected) {
+		String first = fields[0];
+		String second = fields[1];
+		String third = fields[2];
+		Choice tool = toolFragment(0, 0, "call-0", "lookup", "{}");
+		Flux<ChatCompletionChunk> source = Flux.just(chunk(new Choice(0, null,
+				new Delta("assistant", first, second, tool.delta().toolCalls(), null, null, third), null, null)),
+				chunk(new Choice(0, null, new Delta(null, second, third, null, null, null, first), null, null)),
+				chunk(new Choice(0, null, new Delta(null, third, first, null, null, null, second), null, null)),
+				chunk(finishChoice(0)));
 
-	@Test
-	void terminalTextPreservesNullEmptyAndUnicodeFieldsIndependently() {
-		for (String first : java.util.Arrays.asList(null, "", "first-😀")) {
-			for (String second : java.util.Arrays.asList(null, "", "second-漢")) {
-				for (String third : java.util.Arrays.asList(null, "", "third-ह")) {
-					Choice tool = toolFragment(0, 0, "call-0", "lookup", "{}");
-					Flux<ChatCompletionChunk> source = Flux.just(
-							chunk(new Choice(0, null,
-									new Delta("assistant", first, second, tool.delta().toolCalls(), null, null, third),
-									null, null)),
-							chunk(new Choice(0, null, new Delta(null, second, third, null, null, null, first), null,
-									null)),
-							chunk(new Choice(0, null, new Delta(null, third, first, null, null, null, second), null,
-									null)),
-							chunk(finishChoice(0)));
-					StepVerifier.create(this.aggregator.aggregate(source)).assertNext(merged -> {
-						Delta delta = merged.choices().get(0).delta();
-						assertThat(delta.content()).isEqualTo(expectedText(first, second, third));
-						assertThat(delta.reasoning()).isEqualTo(expectedText(second, third, first));
-						assertThat(delta.refusal()).isEqualTo(expectedText(third, first, second));
-					}).verifyComplete();
-				}
-			}
-		}
+		StepVerifier.create(this.aggregator.aggregate(source)).assertNext(merged -> {
+			Delta delta = merged.choices().get(0).delta();
+			assertThat(delta.content()).isEqualTo(expected[0]);
+			assertThat(delta.reasoning()).isEqualTo(expected[1]);
+			assertThat(delta.refusal()).isEqualTo(expected[2]);
+		}).verifyComplete();
 	}
 
 	private static Map<String, Object> nullValue(String key) {
-		Map<String, Object> value = new java.util.HashMap<>();
+		Map<String, Object> value = new HashMap<>();
 		value.put(key, null);
 		return value;
 	}
 
-	private static String expectedText(String... values) {
-		return java.util.Arrays.stream(values).allMatch(java.util.Objects::isNull) ? null
-				: java.util.Arrays.stream(values)
-					.filter(java.util.Objects::nonNull)
-					.collect(java.util.stream.Collectors.joining());
+	private static Map<String, Object> logprobs(Map<String, Object> value) {
+		return Map.of("logprobs", value);
 	}
 
-	@Test
-	void terminalLogprobsMatchIncrementalMergingAcrossOpaqueAndNullValues() {
-		List<Map<String, Object>> extensions = List.of(Map.of(), nullValue("logprobs"), Map.of("logprobs", "opaque"),
-				Map.of("logprobs", Map.of()),
-				Map.of("logprobs", Map.of("content", List.of(Map.of("token", "first")), "revision", 1)),
-				Map.of("logprobs", Map.of("content", "opaque", "refusal", List.of(Map.of("token", "refused")))),
-				Map.of("logprobs", nullValue("content")),
-				Map.of("logprobs", Map.of("content", List.of(Map.of("token", "second")), "revision", 2)));
-		for (Map<String, Object> first : extensions) {
-			for (Map<String, Object> second : extensions) {
-				for (Map<String, Object> third : extensions) {
-					Map<String, Object> expected = ExtensionMetadata.mergeChoice(
-							ExtensionMetadata.mergeChoice(ExtensionMetadata.mergeChoice(first, second), third),
-							Map.of());
-					Choice start = toolFragment(0, 0, "call-0", "lookup", "{}");
-					Flux<ChatCompletionChunk> source = Flux.just(
-							chunk(new Choice(0, null, start.delta(), null, null, null, first)),
-							chunk(new Choice(0, null, null, null, null, null, second)),
-							chunk(new Choice(0, null, null, null, null, null, third)), chunk(finishChoice(0)));
-					StepVerifier.create(this.aggregator.aggregate(source))
-						.assertNext(merged -> assertThat(merged.choices().get(0).extensions()).isEqualTo(expected))
-						.verifyComplete();
-				}
-			}
-		}
+	private static Map<String, Object> token(String token) {
+		return Map.of("token", token);
+	}
+
+	static Stream<Arguments> choiceExtensionSequences() {
+		return Stream.of(
+				Arguments.of(
+						Named.of("content entries append in arrival order and scalar siblings take the latest value",
+								List.of(logprobs(Map.of("content", List.of(token("a")), "revision", 1)),
+										logprobs(Map.of("content", List.of(token("b")), "revision", 2)),
+										logprobs(Map.of("content", List.of(token("c")), "revision", 3)))),
+						logprobs(Map.of("content", List.of(token("a"), token("b"), token("c")), "revision", 3))),
+				Arguments.of(
+						Named.of("later chunks without logprobs keep the earlier value and add other keys",
+								List.of(logprobs(Map.of("content", List.of(token("a")))), Map.of(),
+										Map.of("other", "x"))),
+						Map.of("logprobs", Map.of("content", List.of(token("a"))), "other", "x")),
+				Arguments.of(Named.of("an explicit null logprobs value does not erase the earlier value",
+						List.of(logprobs(Map.of("content", List.of(token("a")))), nullValue("logprobs"), Map.of())),
+						logprobs(Map.of("content", List.of(token("a"))))),
+				Arguments.of(
+						Named.of("an opaque logprobs value replaces the earlier map",
+								List.of(logprobs(Map.of("content", List.of(token("a")))), Map.of("logprobs", "opaque"),
+										Map.of())),
+						Map.of("logprobs", "opaque")),
+				Arguments.of(
+						Named.of(
+								"content and refusal entries accumulate independently",
+								List.of(logprobs(Map.of("content", List.of(token("a")))),
+										logprobs(Map.of("refusal", List.of(token("r")))),
+										logprobs(Map.of("content", List.of(token("b")))))),
+						logprobs(Map.of("content", List.of(token("a"), token("b")), "refusal", List.of(token("r"))))),
+				Arguments.of(
+						Named.of("a later map without entry lists keeps the accumulated entries",
+								List.of(logprobs(Map.of("content", List.of(token("a")))),
+										logprobs(Map.of("revision", 2)), Map.of())),
+						logprobs(Map.of("content", List.of(token("a")), "revision", 2))),
+				Arguments.of(Named.of("chunks without extensions leave the merged choice without extensions",
+						List.of(Map.of(), Map.of(), Map.of())), Map.of()));
+	}
+
+	@ParameterizedTest
+	@MethodSource("choiceExtensionSequences")
+	void terminalLogprobsAccumulateAcrossFragments(List<Map<String, Object>> fragments, Map<String, Object> expected) {
+		Choice start = toolFragment(0, 0, "call-0", "lookup", "{}");
+		Flux<ChatCompletionChunk> source = Flux.just(
+				chunk(new Choice(0, null, start.delta(), null, null, null, fragments.get(0))),
+				chunk(new Choice(0, null, null, null, null, null, fragments.get(1))),
+				chunk(new Choice(0, null, null, null, null, null, fragments.get(2))), chunk(finishChoice(0)));
+
+		StepVerifier.create(this.aggregator.aggregate(source))
+			.assertNext(merged -> assertThat(merged.choices().get(0).extensions()).isEqualTo(expected))
+			.verifyComplete();
 	}
 
 	@Test
@@ -130,7 +176,7 @@ class OpenRouterStreamingToolCallAggregatorTests {
 			.assertNext(value -> assertThat(value.choices().get(0).delta().toolCalls().get(0).function().arguments())
 				.isEqualTo("{}"))
 			.expectComplete()
-			.verify(Duration.ofSeconds(2));
+			.verify();
 	}
 
 	@Test
@@ -141,18 +187,17 @@ class OpenRouterStreamingToolCallAggregatorTests {
 	}
 
 	@Test
-	void demandSaturatesWhileWaitingForTheUpstreamSubscription() {
+	void demandRequestedBeforeTheUpstreamSubscriptionSaturatesAndEveryItemArrives() {
 		AtomicReference<Subscriber<? super ChatCompletionChunk>> upstream = new AtomicReference<>();
-		Subscription subscription = mock(Subscription.class);
+		List<ChatCompletionChunk> chunks = IntStream.range(0, 20)
+			.mapToObj(index -> chunk(textChoice(0, "text-" + index)))
+			.toList();
 		StepVerifier.create(this.aggregator.aggregate(Flux.<ChatCompletionChunk>from(upstream::set)), 0)
 			.thenRequest(Long.MAX_VALUE - 1)
 			.thenRequest(10)
-			.then(() -> {
-				upstream.get().onSubscribe(subscription);
-				upstream.get().onComplete();
-			})
+			.then(() -> Flux.fromIterable(chunks).subscribe(upstream.get()))
+			.expectNextCount(chunks.size())
 			.verifyComplete();
-		verify(subscription).request(Long.MAX_VALUE);
 	}
 
 	@Test
@@ -190,9 +235,9 @@ class OpenRouterStreamingToolCallAggregatorTests {
 		AtomicBoolean cancelled = new AtomicBoolean();
 		Flux<ChatCompletionChunk> source = Flux.concat(Flux.just(malformed), Flux.never())
 			.doOnCancel(() -> cancelled.set(true));
-		StepVerifier.create(new OpenRouterStreamingResponseMapper().map(this.aggregator.aggregate(source)))
+		StepVerifier.create(ResponseMappers.chatStream(this.aggregator.aggregate(source)))
 			.expectError(OpenRouterProtocolException.class)
-			.verify(Duration.ofSeconds(5));
+			.verify();
 		assertThat(cancelled).isTrue();
 	}
 
@@ -222,20 +267,28 @@ class OpenRouterStreamingToolCallAggregatorTests {
 			.verify();
 	}
 
+	static Stream<Arguments> unnamedCompletedCalls() {
+		return Stream.of(null, "", " ")
+			.flatMap(
+					name -> Stream.of(
+							Arguments.of(Named.of("name=" + quote(name) + " finish on the terminal fragment", name),
+									Named.<Function<Choice, Flux<ChatCompletionChunk>>>of("terminal fragment",
+											fragment -> Flux.just(
+													chunk(new Choice(0, null, fragment.delta(), "tool_calls", null))))),
+							Arguments.of(Named.of("name=" + quote(name) + " finish on a separate chunk", name),
+									Named.<Function<Choice, Flux<ChatCompletionChunk>>>of("separate chunk",
+											fragment -> Flux.just(chunk(fragment), chunk(finishChoice(0)))))));
+	}
+
 	@ParameterizedTest
-	@NullAndEmptySource
-	@ValueSource(strings = " ")
-	void completedToolCallRequiresUsableName(String name) {
-		Choice fragment = toolFragment(0, 0, "call-0", name, "{}");
-		// Check both a single terminal chunk and a separate finish chunk.
-		for (Flux<ChatCompletionChunk> source : List.of(
-				Flux.just(chunk(new Choice(0, null, fragment.delta(), "tool_calls", null))),
-				Flux.just(chunk(fragment), chunk(finishChoice(0))))) {
-			StepVerifier.create(this.aggregator.aggregate(source))
-				.expectErrorMatches(error -> error instanceof OpenRouterProtocolException
-						&& "Completed streamed tool call has no function name".equals(error.getMessage()))
-				.verify();
-		}
+	@MethodSource("unnamedCompletedCalls")
+	void completedToolCallRequiresUsableName(String name, Function<Choice, Flux<ChatCompletionChunk>> finishingSource) {
+		Flux<ChatCompletionChunk> source = finishingSource.apply(toolFragment(0, 0, "call-0", name, "{}"));
+
+		StepVerifier.create(this.aggregator.aggregate(source))
+			.expectErrorMatches(error -> error instanceof OpenRouterProtocolException
+					&& "Completed streamed tool call has no function name".equals(error.getMessage()))
+			.verify();
 	}
 
 	@Test
@@ -245,28 +298,27 @@ class OpenRouterStreamingToolCallAggregatorTests {
 						{"choices":[{"delta":{"tool_calls":[{"type":"function","function":{"name":"lookup","arguments":"{}"}}]},"finish_reason":"tool_calls"}]}
 						""",
 				ChatCompletionChunk.class);
-		StepVerifier.create(new OpenRouterStreamingResponseMapper().map(this.aggregator.aggregate(Flux.just(response))))
+		StepVerifier.create(ResponseMappers.chatStream(this.aggregator.aggregate(Flux.just(response))))
 			.assertNext(mapped -> assertThat(mapped.getResult().getOutput().getToolCalls()).singleElement()
 				.satisfies(call -> assertThat(call.id()).isEmpty()))
 			.verifyComplete();
 	}
 
-	@Test
-	void supportedToolCallTerminatorsProduceExecutableCalls() {
-		for (String reason : List.of("tool_calls", "function_call")) {
-			StepVerifier.create(new OpenRouterStreamingResponseMapper()
-				.map(this.aggregator.aggregate(Flux.just(chunk(toolFragment(0, 0, "call-0", "weather", "{}")),
-						chunk(new Choice(0, null, null, reason, null))))))
-				.assertNext(response -> {
-					assertThat(response.hasToolCalls()).isTrue();
-					assertThat(response.getResult().getMetadata().getFinishReason()).isEqualTo("TOOL_CALLS");
-				})
-				.verifyComplete();
-		}
+	@ParameterizedTest
+	@ValueSource(strings = { "tool_calls", "function_call" })
+	void supportedToolCallTerminatorsProduceExecutableCalls(String reason) {
+		StepVerifier.create(ResponseMappers
+			.chatStream(this.aggregator.aggregate(Flux.just(chunk(toolFragment(0, 0, "call-0", "weather", "{}")),
+					chunk(new Choice(0, null, null, reason, null))))))
+			.assertNext(response -> {
+				assertThat(response.hasToolCalls()).isTrue();
+				assertThat(response.getResult().getMetadata().getFinishReason()).isEqualTo("TOOL_CALLS");
+			})
+			.verifyComplete();
 	}
 
-	@ParameterizedTest
-	@ValueSource(booleans = { false, true })
+	@ParameterizedTest(name = "{0}")
+	@MethodSource("imagePlacements")
 	void imageBearingToolFragmentsRetainMediaAndMatchSynchronousResponse(boolean imagesOnContinuation) {
 		ContentPart firstImage = ContentPart.image("data:image/png;base64,AQID");
 		ContentPart secondImage = ContentPart.image("data:image/png;base64,BAUG");
@@ -287,7 +339,7 @@ class OpenRouterStreamingToolCallAggregatorTests {
 				new ToolCall("call-1", "function", new FunctionCall("time", "{\"zone\":\"UTC\"}"), 1));
 		ChatMessage message = new ChatMessage("assistant", "Checking both.", null, null, expectedTools,
 				List.of(firstImage, secondImage), "First second.", null);
-		ChatResponse synchronous = new OpenRouterChatResponseMapper()
+		ChatResponse synchronous = ResponseMappers.chat()
 			.map(new ChatCompletionResponse("gen-1", "chat.completion", 123L, MODEL, "openai",
 					List.of(new Choice(0, message, null, "tool_calls", "tool_calls")), usage));
 
@@ -304,7 +356,7 @@ class OpenRouterStreamingToolCallAggregatorTests {
 				assertThat(choice.finishReason()).isEqualTo("tool_calls");
 				assertThat(merged.usage()).isEqualTo(usage);
 
-				ChatResponse streamed = new OpenRouterStreamingResponseMapper().map(merged);
+				ChatResponse streamed = ResponseMappers.chunk(merged);
 				assertThat(streamed.getResult().getOutput().getMedia()).hasSize(2)
 					.allSatisfy(media -> assertThat(media.getMimeType()).isEqualTo(MimeTypeUtils.IMAGE_PNG));
 				assertThat(streamed.getResult().getOutput().getMedia()).extracting(Media::getData)
@@ -319,6 +371,11 @@ class OpenRouterStreamingToolCallAggregatorTests {
 			.verifyComplete();
 	}
 
+	static Stream<Arguments> imagePlacements() {
+		return Stream.of(Arguments.of(Named.of("images on the first and a later fragment", false)),
+				Arguments.of(Named.of("all images repeated on the continuation fragment", true)));
+	}
+
 	@Test
 	void usageWhileBufferedIsRetainedAfterToolCallTerminator() {
 		var usage = new Usage(10, 5, 15, null, null, null, null, null, null);
@@ -331,6 +388,33 @@ class OpenRouterStreamingToolCallAggregatorTests {
 				assertThat(value.usage()).isEqualTo(usage);
 			})
 			.verifyComplete();
+	}
+
+	@ParameterizedTest
+	@MethodSource("singleChoiceUsageOrders")
+	void newestUsageAndExtensionsWinForASingleToolChoice(List<ChatCompletionChunk> chunks, int expectedTokens,
+			String expectedRevision) {
+		List<ChatCompletionChunk> aggregated = this.aggregator.aggregate(Flux.fromIterable(chunks))
+			.collectList()
+			.block(Duration.ofSeconds(5));
+
+		assertThat(aggregated).hasSize(1);
+		assertThat(totalTokens(aggregated)).containsExactly(expectedTokens);
+		assertThat(revisions(aggregated)).containsExactly(expectedRevision);
+	}
+
+	static Stream<Arguments> singleChoiceUsageOrders() {
+		return Stream.of(
+				Arguments.of(Named.of("a usage-only chunk replaces the usage of a buffered fragment",
+						List.of(snapshot(10, Map.of("revision", "oldest"),
+								toolFragment(0, 0, "call-0", "weather", "{}")),
+								snapshot(12, Map.of("revision", "newer")), chunk(finishChoice(0)))),
+						12, "newer"),
+				Arguments.of(Named.of("a finish chunk replaces the usage of an earlier usage-only chunk",
+						List.of(chunk(toolFragment(0, 0, "call-0", "weather", "{}")),
+								snapshot(12, Map.of("revision", "older")),
+								snapshot(15, Map.of("revision", "newer"), finishChoice(0)))),
+						15, "newer"));
 	}
 
 	@Test
@@ -404,99 +488,85 @@ class OpenRouterStreamingToolCallAggregatorTests {
 		assertThat(revisions(aggregated)).containsExactly("old", "new");
 	}
 
+	/**
+	 * Chunks that belong to a choice other than the buffered one are passed through. The
+	 * aggregator must remember only enough of them to decide what a buffered choice may
+	 * still report, so neither the byte limit nor the chunk limit applies to them. Each
+	 * extension chunk is larger than the 1,024-byte limit and the three of them exceed
+	 * the two-chunk limit; a nonzero count would fail the stream.
+	 */
 	@Test
-	void passedThroughExtensionsRetainOnlyKeysThatCanSupersedeBufferedValues() throws Exception {
+	void passedThroughChunksDoNotCountAgainstTheRetentionLimits() {
 		var bounded = new OpenRouterStreamingToolCallAggregator(new ObjectMapper(), 1024, 2, Duration.ofHours(1));
-		Object state = aggregationState(bounded);
-		try {
-			ReflectionTestUtils.invokeMethod(state, "accept", chunk(toolFragment(0, 0, "call-0", "lookup", "{}")));
-			for (int index = 0; index < 10000; index++) {
-				ChatCompletionChunk text = snapshot(index, Map.of("key" + index + "x".repeat(1024), index),
-						textChoice(1, "text"));
-				List<ChatCompletionChunk> emitted = ReflectionTestUtils.invokeMethod(state, "accept", text);
-				assertThat(emitted).containsExactly(text);
-			}
-			assertThat(((Map<?, ?>) ReflectionTestUtils.getField(state, DELIVERED_EXTENSIONS)).size()).isZero();
-			assertThat(ReflectionTestUtils.getField(state, "retainedChunks")).isEqualTo(1);
-			assertThat((Long) ReflectionTestUtils.getField(state, "retainedBytes")).isLessThan(1024L);
-			List<ChatCompletionChunk> finished = ReflectionTestUtils.invokeMethod(state, "accept",
-					chunk(finishChoice(0)));
-			assertThat(finished).hasSize(1);
-			assertThat(finished.get(0).extensions()).isEmpty();
-		}
-		finally {
-			ReflectionTestUtils.invokeMethod(state, "clear");
-		}
-	}
+		List<ChatCompletionChunk> passedThrough = List.of(0, 1, 2)
+			.stream()
+			.map(index -> snapshot(index, Map.of("key" + index + "x".repeat(1024), index), textChoice(1, "text")))
+			.toList();
+		Flux<ChatCompletionChunk> source = Flux.concat(Flux.just(chunk(toolFragment(0, 0, "call-0", "lookup", "{}"))),
+				Flux.fromIterable(passedThrough), Flux.just(chunk(finishChoice(0))));
 
-	private static Object aggregationState(OpenRouterStreamingToolCallAggregator aggregator) throws Exception {
-		Class<?> stateType = Arrays.stream(OpenRouterStreamingToolCallAggregator.class.getDeclaredClasses())
-			.filter(type -> type.getSimpleName().equals("AggregationState"))
-			.findFirst()
-			.orElseThrow();
-		Constructor<?> constructor = stateType.getDeclaredConstructors()[0];
-		constructor.setAccessible(true);
-		return constructor.newInstance(aggregator, (Consumer<Throwable>) failure -> {
-			throw new AssertionError(failure);
-		});
+		List<ChatCompletionChunk> emitted = bounded.aggregate(source).collectList().block(Duration.ofSeconds(5));
+
+		assertThat(emitted).hasSize(4).containsSequence(passedThrough);
+		ChatCompletionChunk finished = emitted.get(3);
+		assertThat(finished.choices().get(0).delta().toolCalls()).singleElement()
+			.satisfies(call -> assertThat(call.id()).isEqualTo("call-0"));
+		assertThat(finished.extensions()).isEmpty();
 	}
 
 	@Test
-	void extensionTrackingFollowsSharedAndNewlyBufferedChunksAndPrunesFinishedChoices() throws Exception {
-		Object state = aggregationState(this.aggregator);
-		try {
-			ReflectionTestUtils.invokeMethod(state, "accept",
-					snapshot(1, Map.of("first", "old"), toolFragment(0, 0, "call-0", "lookup", "{}")));
-			ReflectionTestUtils.invokeMethod(state, "accept", snapshot(2, Map.of("shared", "old")));
-			ReflectionTestUtils.invokeMethod(state, "accept",
-					snapshot(3, Map.of("first", "new", "unbuffered", 3), textChoice(2, "text")));
-			assertThat(((Map<?, ?>) ReflectionTestUtils.getField(state, DELIVERED_EXTENSIONS)).keySet())
-				.isEqualTo(java.util.Set.of("first", "shared"));
-			ReflectionTestUtils.invokeMethod(state, "accept",
-					snapshot(4, Map.of("second", "old"), toolFragment(1, 0, "call-1", "lookup", "{}")));
-			ReflectionTestUtils.invokeMethod(state, "accept", snapshot(5, Map.of("shared", "latest")));
-			ReflectionTestUtils.invokeMethod(state, "accept", snapshot(6, Map.of("second", "new"), textChoice(2, ".")));
-			List<ChatCompletionChunk> first = ReflectionTestUtils.invokeMethod(state, "accept", chunk(finishChoice(0)));
-			assertThat(first).hasSize(1);
-			assertThat(first.get(0).extensions()).containsExactlyEntriesOf(Map.of("shared", "latest"));
-			assertThat(((Map<?, ?>) ReflectionTestUtils.getField(state, DELIVERED_EXTENSIONS)).keySet())
-				.isEqualTo(java.util.Set.of("second", "shared"));
-			List<ChatCompletionChunk> second = ReflectionTestUtils.invokeMethod(state, "accept",
-					chunk(finishChoice(1)));
-			assertThat(second).hasSize(1);
-			assertThat(second.get(0).extensions()).containsExactlyEntriesOf(Map.of("shared", "latest"));
-			assertThat((Map<?, ?>) ReflectionTestUtils.getField(state, DELIVERED_EXTENSIONS)).isEmpty();
-			ReflectionTestUtils.invokeMethod(state, "accept",
-					snapshot(7, Map.of("second", "fresh"), toolFragment(0, 0, "call-2", "lookup", "{}")));
-			ReflectionTestUtils.invokeMethod(state, "accept",
-					snapshot(8, Map.of("second", "newer"), textChoice(2, ".")));
-			ReflectionTestUtils.invokeMethod(state, "clear");
-			assertThat((Map<?, ?>) ReflectionTestUtils.getField(state, DELIVERED_EXTENSIONS)).isEmpty();
-			ReflectionTestUtils.invokeMethod(state, "accept",
-					snapshot(9, Map.of("second", "fresh"), toolFragment(0, 0, "call-3", "lookup", "{}")));
-			List<ChatCompletionChunk> fresh = ReflectionTestUtils.invokeMethod(state, "accept", chunk(finishChoice(0)));
-			assertThat(fresh.get(0).extensions()).containsExactlyEntriesOf(Map.of("second", "fresh"));
-		}
-		finally {
-			ReflectionTestUtils.invokeMethod(state, "clear");
-		}
+	void choiceLessChunksWhileABufferIsOpenCountAgainstTheByteLimit() {
+		var bounded = new OpenRouterStreamingToolCallAggregator(new ObjectMapper(), 1024, 8, Duration.ofHours(1));
+		ChatCompletionChunk shared = snapshot(1, Map.of("key" + "x".repeat(1024), 1));
+
+		StepVerifier
+			.create(bounded.aggregate(
+					Flux.just(chunk(toolFragment(0, 0, "call-0", "lookup", "{}")), shared, chunk(finishChoice(0)))))
+			.expectErrorSatisfies(error -> assertThat(error)
+				.isInstanceOfSatisfying(OpenRouterLimitExceededException.class, failure -> {
+					assertThat(failure.getLimit()).isEqualTo(Limit.STREAMING_TOOL_CALL_BYTES);
+					assertThat(failure.getConfiguredLimit()).isEqualTo(1024);
+					assertThat(failure.getObservedValue()).isGreaterThan(1024);
+				}))
+			.verify();
 	}
 
-	private ChatCompletionChunk snapshot(int totalTokens, Map<String, Object> extensions, Choice... choices) {
-		return new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, MODEL, "openai", List.of(choices),
-				new Usage(null, null, totalTokens, null, null, null, null, null, null), null, extensions);
-	}
+	/**
+	 * Extensions delivered on a chunk that is passed through supersede older values from
+	 * a buffered choice. A key reappearing after every buffer finished, or after an
+	 * in-stream error cleared the buffers, must not be compared against stale history.
+	 */
+	@Test
+	void extensionsSupersedeBufferedValuesOnlyWhileTheChoicesThatCarryThemAreBuffered() {
+		ChatCompletionChunk error = new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, MODEL, "openai", List.of(),
+				null, new StreamError("upstream_error", "failed"));
+		Flux<ChatCompletionChunk> source = Flux.just(
+				snapshot(1, Map.of("first", "old"), toolFragment(0, 0, "call-0", "lookup", "{}")),
+				snapshot(2, Map.of("shared", "old")),
+				snapshot(3, Map.of("first", "new", "unbuffered", 3), textChoice(2, "text")),
+				snapshot(4, Map.of("second", "old"), toolFragment(1, 0, "call-1", "lookup", "{}")),
+				snapshot(5, Map.of("shared", "latest")), snapshot(6, Map.of("second", "new"), textChoice(2, ".")),
+				chunk(finishChoice(0)), chunk(finishChoice(1)),
+				snapshot(7, Map.of("second", "fresh"), toolFragment(0, 0, "call-2", "lookup", "{}")),
+				snapshot(8, Map.of("second", "newer"), textChoice(2, ".")), error,
+				snapshot(9, Map.of("second", "fresh"), toolFragment(0, 0, "call-3", "lookup", "{}")),
+				chunk(finishChoice(0)));
 
-	private static List<Integer> totalTokens(List<ChatCompletionChunk> chunks) {
-		return chunks.stream()
-			.map(ChatCompletionChunk::usage)
-			.filter(Objects::nonNull)
-			.map(Usage::totalTokens)
+		List<ChatCompletionChunk> completedCalls = this.aggregator.aggregate(source)
+			.collectList()
+			.block(Duration.ofSeconds(5))
+			.stream()
+			.filter(emitted -> emitted.choices() != null && !emitted.choices().isEmpty()
+					&& emitted.choices().get(0).delta() != null && emitted.choices().get(0).delta().toolCalls() != null)
 			.toList();
-	}
 
-	private static List<Object> revisions(List<ChatCompletionChunk> chunks) {
-		return chunks.stream().map(chunk -> chunk.extensions().get("revision")).filter(Objects::nonNull).toList();
+		assertThat(completedCalls).extracting(emitted -> emitted.choices().get(0).delta().toolCalls().get(0).id())
+			.containsExactly("call-0", "call-1", "call-3");
+		// "first" and "second" were superseded by newer values on passed-through chunks;
+		// "shared" arrived while both choices were buffered, so its latest value reaches
+		// both. After the error, nothing from the earlier round may remain.
+		assertThat(completedCalls).extracting(ChatCompletionChunk::extensions)
+			.containsExactly(Map.of("shared", "latest"), Map.of("shared", "latest"), Map.of("second", "fresh"));
 	}
 
 	@Test
@@ -527,9 +597,8 @@ class OpenRouterStreamingToolCallAggregatorTests {
 		assertThat(choice1.delta().toolCalls()).extracting(call -> call.function().arguments())
 			.containsExactly("{\"city\":\"Paris\"}", "{\"zone\":\"UTC\"}");
 
-		OpenRouterStreamingResponseMapper mapper = new OpenRouterStreamingResponseMapper();
 		assertThat(aggregated.stream()
-			.map(mapper::map)
+			.map(ResponseMappers::chunk)
 			.map(ChatResponse::getResults)
 			.map(generations -> generations.stream()
 				.map(generation -> generation.getMetadata().<Integer>get("openrouter.choice_index"))
@@ -555,25 +624,13 @@ class OpenRouterStreamingToolCallAggregatorTests {
 			.isEqualTo("fresh");
 	}
 
-	@Test
-	void reactiveErrorDiscardsIncompleteChoiceBuffers() {
-		RuntimeException failure = new RuntimeException("stream failed");
-
+	@ParameterizedTest
+	@ValueSource(strings = { "", "{", "{}" })
+	void unexpectedCompletionNeverFlushesToolArguments(String arguments) {
 		StepVerifier
-			.create(this.aggregator.aggregate(Flux
-				.concat(Flux.just(chunk(toolFragment(0, 0, "stale", "weather", "stale"))), Flux.error(failure))))
-			.expectErrorSatisfies(error -> assertThat(error).isSameAs(failure))
-			.verify(Duration.ofSeconds(5));
-	}
-
-	@Test
-	void unexpectedCompletionNeverFlushesToolArguments() {
-		for (String arguments : List.of("", "{", "{}")) {
-			StepVerifier
-				.create(this.aggregator.aggregate(Flux.just(chunk(toolFragment(0, 0, "call-0", "weather", arguments)))))
-				.expectError(OpenRouterTruncatedResponseException.class)
-				.verify();
-		}
+			.create(this.aggregator.aggregate(Flux.just(chunk(toolFragment(0, 0, "call-0", "weather", arguments)))))
+			.expectError(OpenRouterTruncatedResponseException.class)
+			.verify();
 	}
 
 	@Test
@@ -586,57 +643,63 @@ class OpenRouterStreamingToolCallAggregatorTests {
 			.verify();
 	}
 
-	@Test
-	void otherFinishReasonsDoNotAuthorizeToolCalls() {
-		for (String reason : List.of("stop", "length", "content_filter")) {
-			StepVerifier
-				.create(this.aggregator.aggregate(Flux.just(chunk(toolFragment(0, 0, "call-0", "weather", "{}")),
-						chunk(new Choice(0, null, null, reason, null)))))
-				.expectError(OpenRouterTruncatedResponseException.class)
-				.verify();
-		}
+	@ParameterizedTest
+	@ValueSource(strings = { "stop", "length", "content_filter" })
+	void otherFinishReasonsDoNotAuthorizeToolCalls(String reason) {
+		StepVerifier
+			.create(this.aggregator.aggregate(Flux.just(chunk(toolFragment(0, 0, "call-0", "weather", "{}")),
+					chunk(new Choice(0, null, null, reason, null)))))
+			.expectError(OpenRouterTruncatedResponseException.class)
+			.verify();
 	}
 
 	@Test
 	void cancellationReleasesStateBeforeAnotherSubscription() {
 		AtomicInteger subscriptions = new AtomicInteger();
 		AtomicBoolean firstSubscriptionCancelled = new AtomicBoolean();
-		Flux<ChatCompletionChunk> source = Flux.defer(() -> {
+		Flux<ChatCompletionChunk> aggregated = this.aggregator.aggregate(Flux.defer(() -> {
 			if (subscriptions.incrementAndGet() == 1) {
 				return Flux.just(chunk(toolFragment(0, 0, "stale", "weather", "stale")))
 					.concatWith(Flux.never())
 					.doOnCancel(() -> firstSubscriptionCancelled.set(true));
 			}
-			return Flux.just(chunk(toolFragment(0, 0, "fresh", "weather", "fresh")), chunk(finishChoice(0)));
-		});
-		Flux<ChatCompletionChunk> aggregated = this.aggregator.aggregate(source);
+			return freshCall();
+		}));
 
-		StepVerifier.create(aggregated).thenAwait(Duration.ofMillis(10)).thenCancel().verify(Duration.ofSeconds(5));
+		StepVerifier.create(aggregated).thenCancel().verify();
+
 		assertThat(firstSubscriptionCancelled).isTrue();
+		assertOnlyTheFreshCallIsAssembled(aggregated);
+	}
 
+	@Test
+	void upstreamErrorReleasesStateBeforeAnotherSubscription() {
+		RuntimeException failure = new RuntimeException("stream failed");
+		AtomicInteger subscriptions = new AtomicInteger();
+		Flux<ChatCompletionChunk> aggregated = this.aggregator.aggregate(Flux.defer(() -> {
+			if (subscriptions.incrementAndGet() == 1) {
+				return Flux.just(chunk(toolFragment(0, 0, "stale", "weather", "stale")))
+					.concatWith(Flux.error(failure));
+			}
+			return freshCall();
+		}));
+
+		StepVerifier.create(aggregated).expectErrorSatisfies(error -> assertThat(error).isSameAs(failure)).verify();
+
+		assertOnlyTheFreshCallIsAssembled(aggregated);
+	}
+
+	private static Flux<ChatCompletionChunk> freshCall() {
+		return Flux.just(chunk(toolFragment(0, 0, "fresh", "weather", "fresh")), chunk(finishChoice(0)));
+	}
+
+	private static void assertOnlyTheFreshCallIsAssembled(Flux<ChatCompletionChunk> aggregated) {
 		StepVerifier.create(aggregated).assertNext(chunk -> {
-			String arguments = chunk.choices().get(0).delta().toolCalls().get(0).function().arguments();
-			assertThat(arguments).isEqualTo("fresh");
+			assertThat(chunk.choices().get(0).delta().toolCalls()).singleElement().satisfies(call -> {
+				assertThat(call.id()).isEqualTo("fresh");
+				assertThat(call.function().arguments()).isEqualTo("fresh");
+			});
 		}).verifyComplete();
-	}
-
-	private ChatCompletionChunk chunk(Choice... choices) {
-		return new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, MODEL, "openai", List.of(choices), null, null);
-	}
-
-	private Choice textChoice(int choiceIndex, String text) {
-		return new Choice(choiceIndex, null, new Delta("assistant", text, null, null), null, null);
-	}
-
-	private Choice toolFragment(int choiceIndex, int toolIndex, String id, String name, String arguments) {
-		ToolCall toolCall = new ToolCall(id, id != null ? "function" : null, new FunctionCall(name, arguments),
-				toolIndex);
-		return new Choice(choiceIndex, null, new Delta(id != null ? "assistant" : null, null, null, List.of(toolCall)),
-				null, null);
-	}
-
-	private Choice finishChoice(int choiceIndex) {
-		return new Choice(choiceIndex, null, new Delta(null, null, null, null), "tool_calls", "tool_calls");
 	}
 
 	@Test
@@ -650,16 +713,32 @@ class OpenRouterStreamingToolCallAggregatorTests {
 		Choice failed = new Choice(0, null, new Delta(null, "output", null, null), null, null, error);
 		ChatCompletionChunk first = chunk(toolCall);
 		ChatCompletionChunk terminal = chunk(failed);
-		OpenRouterStreamingResponseMapper mapper = new OpenRouterStreamingResponseMapper();
 
 		StepVerifier
-			.create(mapper.map(new OpenRouterStreamingToolCallAggregator().aggregate(Flux.just(first, terminal))))
+			.create(ResponseMappers.chatStream(ResponseMappers.aggregator().aggregate(Flux.just(first, terminal))))
 			.expectErrorSatisfies(thrown -> {
 				assertThat(thrown).isInstanceOf(OpenRouterTransientChoiceException.class);
 				OpenRouterTransientChoiceException exception = (OpenRouterTransientChoiceException) thrown;
 				assertThat(exception.getErrorDetails().partialOutput()).isEqualTo("partial output");
 			})
 			.verify();
+	}
+
+	private static ChatCompletionChunk snapshot(int totalTokens, Map<String, Object> extensions, Choice... choices) {
+		return new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, MODEL, "openai", List.of(choices),
+				new Usage(null, null, totalTokens, null, null, null, null, null, null), null, extensions);
+	}
+
+	private static List<Integer> totalTokens(List<ChatCompletionChunk> chunks) {
+		return chunks.stream()
+			.map(ChatCompletionChunk::usage)
+			.filter(Objects::nonNull)
+			.map(Usage::totalTokens)
+			.toList();
+	}
+
+	private static List<Object> revisions(List<ChatCompletionChunk> chunks) {
+		return chunks.stream().map(chunk -> chunk.extensions().get("revision")).filter(Objects::nonNull).toList();
 	}
 
 }

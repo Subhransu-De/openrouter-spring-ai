@@ -40,6 +40,9 @@ class OpenRouterTransportCustomizationTests {
 	@SuppressWarnings("PMD.CloseResource") // Java 17 has no ExecutorService.close();
 											// finally shuts it down.
 	void blockingInterceptorIsolatesConcurrentHeadersAndReadsDiagnostics(boolean error) throws Exception {
+		// Real threads are needed: the interceptor keeps its correlation id in a
+		// ThreadLocal, and both requests must be in flight at once (the latch, signalled
+		// by the transport) for a shared header or diagnostic to show up.
 		ThreadLocal<String> correlation = new ThreadLocal<>();
 		var diagnostics = new ConcurrentHashMap<String, String>();
 		CountDownLatch entered = new CountDownLatch(2);
@@ -98,10 +101,31 @@ class OpenRouterTransportCustomizationTests {
 		}
 	}
 
-	@ParameterizedTest
-	@ValueSource(booleans = { false, true })
-	void reactiveFilterIsolatesSubscriptionHeadersAndReadsDiagnostics(boolean error) {
+	@Test
+	void reactiveFilterIsolatesSubscriptionHeadersAndReadsDiagnostics() {
 		var diagnostics = new ConcurrentHashMap<String, String>();
+		OpenRouterApi api = filteredApi(false, diagnostics);
+
+		StepVerifier.withVirtualTime(() -> outcomes(api).collectList())
+			.thenAwait(Duration.ofSeconds(1))
+			.assertNext(outcomes -> assertThat(outcomes).containsExactlyInAnyOrder("one:completed", "two:completed"))
+			.verifyComplete();
+		assertThat(diagnostics).containsEntry("one", "one").containsEntry("two", "two");
+	}
+
+	@Test
+	void reactiveFilterIsolatesSubscriptionHeadersAndReadsDiagnosticsOnProviderRejection() {
+		var diagnostics = new ConcurrentHashMap<String, String>();
+		OpenRouterApi api = filteredApi(true, diagnostics);
+
+		StepVerifier.withVirtualTime(() -> outcomes(api).collectList())
+			.thenAwait(Duration.ofSeconds(1))
+			.assertNext(outcomes -> assertThat(outcomes).containsExactlyInAnyOrder("one:PT7S", "two:PT7S"))
+			.verifyComplete();
+		assertThat(diagnostics).containsEntry("one", "one").containsEntry("two", "two");
+	}
+
+	private OpenRouterApi filteredApi(boolean error, ConcurrentHashMap<String, String> diagnostics) {
 		WebClient.Builder transport = WebClient.builder().filter((request, next) -> Mono.deferContextual(context -> {
 			String id = context.get("synthetic-request");
 			return next.exchange(ClientRequest.from(request).header(REQUEST_HEADER, id).build())
@@ -115,20 +139,22 @@ class OpenRouterTransportCustomizationTests {
 							error ? MediaType.APPLICATION_JSON_VALUE : MediaType.TEXT_EVENT_STREAM_VALUE)
 					.body(error ? "{\"error\":{\"code\":429,\"message\":\"synthetic limit\"}}" : "data: [DONE]\n\n")
 					.build()));
-		OpenRouterApi api = OpenRouterApi.builder().apiKey("synthetic-key").webClientBuilder(transport).build();
-		StepVerifier.withVirtualTime(() -> Flux.merge(
-				List.of("one", "two").stream().map(id -> api.imagesStream(imageRequest()).then(Mono.fromSupplier(() -> {
-					assertThat(error).isFalse();
-					return id;
-				})).onErrorResume(OpenRouterTransientApiException.class, failure -> {
-					assertThat(error).isTrue();
-					assertThat(failure.getRetryAfter().delay()).isEqualTo(Duration.ofSeconds(7));
-					return Mono.just(id);
-				}).contextWrite(context -> context.put("synthetic-request", id))).toList()))
-			.thenAwait(Duration.ofSeconds(1))
-			.expectNextCount(2)
-			.verifyComplete();
-		assertThat(diagnostics).containsEntry("one", "one").containsEntry("two", "two");
+		return OpenRouterApi.builder().apiKey("synthetic-key").webClientBuilder(transport).build();
+	}
+
+	/**
+	 * One outcome per concurrent subscription: completed, or the rejection's Retry-After
+	 * delay.
+	 */
+	private Flux<String> outcomes(OpenRouterApi api) {
+		return Flux.merge(List.of("one", "two")
+			.stream()
+			.map(id -> api.imagesStream(imageRequest())
+				.then(Mono.fromSupplier(() -> id + ":completed"))
+				.onErrorResume(OpenRouterTransientApiException.class,
+						failure -> Mono.just(id + ":" + failure.getRetryAfter().delay()))
+				.contextWrite(context -> context.put("synthetic-request", id)))
+			.toList());
 	}
 
 	@Test

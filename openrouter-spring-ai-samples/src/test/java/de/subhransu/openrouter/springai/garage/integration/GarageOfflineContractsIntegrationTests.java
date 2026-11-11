@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.garage.integration;
 
+import de.subhransu.openrouter.springai.garage.GarageRunRequests;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -7,6 +8,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,6 +34,18 @@ class GarageOfflineContractsIntegrationTests {
 
   @Autowired MockMvcTester mvc;
 
+  private String startedRun;
+
+  /** The offline run is a singleton-service run; never leave it active for another test. */
+  @AfterEach
+  void leaveNoActiveRun() {
+    if (this.startedRun != null) {
+      await().atMost(Duration.ofSeconds(60)).untilAsserted(() ->
+          assertThat(this.mvc.get().uri(this.startedRun).exchange())
+              .bodyJson().extractingPath("$.status").isNotEqualTo("RUNNING"));
+    }
+  }
+
   @DynamicPropertySource
   static void outputDirectory(DynamicPropertyRegistry registry) {
     registry.add("garage.output-dir", () -> output.toAbsolutePath().toString());
@@ -46,6 +60,7 @@ class GarageOfflineContractsIntegrationTests {
         .exchange();
     assertThat(started).hasStatus(HttpStatus.ACCEPTED);
     String location = started.getResponse().getHeader("Location");
+    this.startedRun = location;
     assertThat(location).startsWith("/api/runs/");
 
     await().atMost(Duration.ofSeconds(60)).untilAsserted(() ->
@@ -74,21 +89,24 @@ class GarageOfflineContractsIntegrationTests {
     assertThat(scenes).allMatch(scene -> "PASSED".equals(scene.get("status")));
     List<Map<String, Object>> registry =
         (List<Map<String, Object>>) bundle.get("featureRegistry");
-    assertThat(registry).isNotEmpty();
-    assertThat(registry)
-        .filteredOn(
-            feature ->
-                List.of(
-                        "connection-timeout",
-                        "sync-retry",
-                        "error-surfacing",
-                        "extension-points",
-                        "standard-sampling",
-                        "openrouter-samplers",
-                        "tool-context-merge",
-                        "full-property-binding")
-                    .contains(feature.get("id")))
-        .allMatch(feature -> "covered".equals(feature.get("status")));
+    List<String> offlineFeatures = List.of(
+        "connection-timeout",
+        "sync-retry",
+        "error-surfacing",
+        "extension-points",
+        "standard-sampling",
+        "openrouter-samplers",
+        "tool-context-merge",
+        "full-property-binding");
+    List<Map<String, Object>> offlineRows =
+        registry.stream().filter(feature -> offlineFeatures.contains(feature.get("id"))).toList();
+    // Naming the ids first keeps a renamed or missing feature from emptying the status check.
+    assertThat(offlineRows)
+        .extracting(feature -> feature.get("id"))
+        .containsExactlyInAnyOrderElementsOf(offlineFeatures);
+    assertThat(offlineRows)
+        .extracting(feature -> feature.get("status"))
+        .containsOnly("covered");
 
     assertThat(this.mvc.get().uri(location + "/report").exchange())
         .hasStatusOk()
@@ -102,6 +120,10 @@ class GarageOfflineContractsIntegrationTests {
         .content("{\"capabilities\": [\"text\"]}"))
         .hasStatus(HttpStatus.UNPROCESSABLE_CONTENT)
         .bodyJson().extractingPath("$.title").isEqualTo("OpenRouter API key missing");
+    assertThat(this.mvc.post().uri("/api/runs")
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("{\"capabilities\": [\"text\"]}"))
+        .bodyJson().extractingPath("$.detail").asString().contains("OPENROUTER_API_KEY");
   }
 
   @Test
@@ -109,7 +131,8 @@ class GarageOfflineContractsIntegrationTests {
     assertThat(this.mvc.get().uri("/api/scenes"))
         .hasStatusOk()
         .bodyJson()
-        .hasPathSatisfying("$.length()", size -> size.assertThat().isEqualTo(9))
+        .hasPathSatisfying("$[*].id", ids -> ids.assertThat().asArray()
+            .containsExactlyInAnyOrderElementsOf(GarageRunRequests.plan("{\"full\":true}").sceneIds()))
         .hasPathSatisfying("$[?(@.id == 'recovery-road-test')].offline",
             offline -> offline.assertThat().asArray().containsExactly(true));
   }

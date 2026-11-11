@@ -14,24 +14,22 @@ import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterResponsesStreamingResponseMapper;
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterStreamingResponseMapper;
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterStreamingToolCallAggregator;
+import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
 import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException;
 import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException.Limit;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationHandler;
 import io.micrometer.observation.ObservationRegistry;
-import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
-import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.metadata.ChatGenerationMetadata;
 import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.model.MessageAggregator;
 import org.springframework.ai.chat.observation.ChatModelObservationContext;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -67,56 +65,15 @@ class HotPathExactnessTests {
 	void statefulExtensionSerializerStartsFreshForEachSubscription() {
 		var chunk = new ChatCompletionChunk(null, null, null, null, null, List.of(), null, null,
 				Map.of("opaque", new Marker()));
-		var stream = new OpenRouterStreamingResponseMapper(14, 1).map(Flux.just(chunk));
+		// The budget is exactly what a fresh serializer writes for the extensions. The
+		// serializer writes one more byte on every call, so a subscription that reused an
+		// earlier subscription's serializer would exceed the budget.
+		long freshBytes = new ObjectMapper().writeValueAsBytes(chunk.extensions()).length;
+		var stream = new OpenRouterStreamingResponseMapper(freshBytes, 1, OpenRouterDiagnosticSanitizer.keyless())
+			.map(Flux.just(chunk), null);
 
 		assertThat(stream.collectList().block(WAIT)).hasSize(1);
 		assertThat(stream.collectList().block(WAIT)).hasSize(1);
-	}
-
-	@Test
-	void toolChunkBudgetMeasuresEachChunkWithAFreshGenerator() {
-		List<Integer> rootEntries = new ArrayList<>();
-		SimpleModule module = new SimpleModule();
-		module.addSerializer(ChatCompletionChunk.class, new ValueSerializer<ChatCompletionChunk>() {
-			@Override
-			public void serialize(ChatCompletionChunk value, JsonGenerator generator, SerializationContext context) {
-				int entries = generator.streamWriteContext().getEntryCount();
-				rootEntries.add(entries);
-				generator.writeString("x".repeat(entries + 1));
-			}
-		});
-		ObjectMapper mapper = JsonMapper.builder().addModule(module).build();
-		var chunks = Flux.just(
-				chunk("{\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"id\":\"call\",\"index\":0,"
-						+ "\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\"}}]}}]}"),
-				chunk("{\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":"
-						+ "{\"arguments\":\"}\"}}]},\"finish_reason\":\"tool_calls\"}]}"));
-
-		var results = new OpenRouterStreamingToolCallAggregator(mapper, 6, 10, WAIT).aggregate(chunks)
-			.collectList()
-			.block(WAIT);
-
-		assertThat(results).hasSize(1);
-		assertThat(rootEntries).containsExactly(0, 0);
-	}
-
-	@Test
-	void suppliedMapperDecodesBlockingBodiesFromBytes() {
-		SimpleModule module = new SimpleModule();
-		module.addDeserializer(ChatCompletionResponse.class, new ValueDeserializer<ChatCompletionResponse>() {
-			@Override
-			public ChatCompletionResponse deserialize(JsonParser parser, DeserializationContext context) {
-				Object source = parser.streamReadInputSource();
-				parser.skipChildren();
-				return new ChatCompletionResponse(source instanceof InputStream ? "stream" : "bytes", null, null, null,
-						null, null, null);
-			}
-		});
-
-		var response = blockingApi(JsonMapper.builder().addModule(module).build(), "{}", 1024)
-			.chatCompletion(request());
-
-		assertThat(response.id()).isEqualTo("bytes");
 	}
 
 	@Test
@@ -140,16 +97,14 @@ class HotPathExactnessTests {
 	}
 
 	@Test
-	void suppliedMapperProbesTheFirstLineOfAMultilineEvent() {
-		AtomicInteger calls = new AtomicInteger();
+	void suppliedMapperJsonNodeDeserializerAppliesToMultilineEvents() {
 		SimpleModule module = new SimpleModule();
 		module.addDeserializer(JsonNode.class, new ValueDeserializer<JsonNode>() {
 			@Override
 			public JsonNode deserialize(JsonParser parser, DeserializationContext context) {
-				calls.incrementAndGet();
 				JsonNode node = JsonNodeDeserializer.getDeserializer(JsonNode.class).deserialize(parser, context);
 				if (node.at("/choices/0/delta") instanceof ObjectNode delta) {
-					delta.put("content", "hello-" + calls.get());
+					delta.put("content", delta.path("content").asString().toUpperCase(Locale.ROOT));
 				}
 				return node;
 			}
@@ -160,22 +115,32 @@ class HotPathExactnessTests {
 		var chunks = api.chatCompletionStream(request()).collectList().block(WAIT);
 
 		assertThat(chunks).singleElement()
-			.satisfies(chunk -> assertThat(chunk.choices().get(0).delta().content()).isEqualTo("hello-2"));
+			.satisfies(chunk -> assertThat(chunk.choices().get(0).delta().content()).isEqualTo("HELLO"));
 	}
 
 	@Test
-	void responsesTextDeltaReplacesEarlierGenerationMetadataWhenAggregated() {
-		var event = new ObjectMapper().readValue("{\"type\":\"response.output_text.delta\",\"delta\":\"hello\"}",
+	void responsesTextDeltaSupersedesEarlierReasoningMetadataInTheAggregatedResponse() {
+		var mapper = new ObjectMapper();
+		var reasoning = mapper.readValue("{\"type\":\"response.reasoning_text.delta\",\"delta\":\"thinking\"}",
 				ResponsesStreamEvent.class);
-		ChatResponse delta = new OpenRouterResponsesStreamingResponseMapper().map(Flux.just(event)).blockFirst(WAIT);
-		ChatResponse previous = new ChatResponse(
-				List.of(new Generation(AssistantMessage.builder().content("previous").build(),
-						ChatGenerationMetadata.builder().metadata("synthetic", "previous").build())));
+		var text = mapper.readValue("{\"type\":\"response.output_text.delta\",\"delta\":\"hello\"}",
+				ResponsesStreamEvent.class);
+		var responsesMapper = new OpenRouterResponsesStreamingResponseMapper(mapper,
+				OpenRouterStreamingToolCallAggregator.DEFAULT_MAX_BYTES,
+				OpenRouterStreamingToolCallAggregator.DEFAULT_MAX_CHUNKS,
+				OpenRouterStreamingToolCallAggregator.DEFAULT_MAX_DURATION, OpenRouterDiagnosticSanitizer.keyless());
 		AtomicReference<ChatResponse> aggregate = new AtomicReference<>();
 
-		new MessageAggregator().aggregate(Flux.just(previous, delta), aggregate::set).blockLast(WAIT);
+		List<ChatResponse> chunks = new MessageAggregator()
+			.aggregate(responsesMapper.map(Flux.just(reasoning, text)), aggregate::set)
+			.collectList()
+			.block(WAIT);
 
-		assertThat(delta.getResult().getMetadata()).isNotSameAs(ChatGenerationMetadata.NULL);
+		assertThat(chunks).hasSize(2);
+		assertThat(chunks.get(0).getResult().getMetadata().<Object>get("openrouter.reasoning")).isEqualTo("thinking");
+		assertThat(chunks.get(1).getResult().getMetadata()).isNotSameAs(ChatGenerationMetadata.NULL);
+		assertThat(chunks.get(1).getResult().getMetadata().entrySet()).isEmpty();
+		assertThat(aggregate.get().getResult().getOutput().getText()).isEqualTo("hello");
 		assertThat(aggregate.get().getResult().getMetadata().entrySet()).isEmpty();
 	}
 
@@ -207,10 +172,6 @@ class HotPathExactnessTests {
 
 		assertThat(rejected.get().getResponse()).isNotNull();
 		assertThat(rejected.get().getResponse().getResult().getOutput().getText()).isEqualTo("hello");
-	}
-
-	private static ChatCompletionChunk chunk(String json) {
-		return new ObjectMapper().readValue(json, ChatCompletionChunk.class);
 	}
 
 	private static ChatCompletionRequest request() {

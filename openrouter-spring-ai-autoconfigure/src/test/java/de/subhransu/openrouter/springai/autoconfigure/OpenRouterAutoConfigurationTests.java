@@ -7,108 +7,118 @@ import static org.mockito.Mockito.when;
 
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
-import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionChunk;
-import de.subhransu.openrouter.springai.chat.mapper.OpenRouterStreamingResponseMapper;
-import tools.jackson.databind.ObjectMapper;
+import de.subhransu.openrouter.springai.api.dto.Choice;
+import de.subhransu.openrouter.springai.api.dto.Delta;
+import de.subhransu.openrouter.springai.api.dto.FunctionCall;
+import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
+import de.subhransu.openrouter.springai.api.dto.ToolCall;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
-import de.subhransu.openrouter.springai.chat.mapper.OpenRouterStreamingToolCallAggregator;
 import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException;
 import java.time.Duration;
+import java.util.List;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
+import tools.jackson.databind.ObjectMapper;
 
 class OpenRouterAutoConfigurationTests {
 
 	private static final String API_KEY_PROPERTY = "spring.ai.openrouter.api-key=test-key";
 
+	private static final String AGGREGATION_PREFIX = "spring.ai.openrouter.chat.tool-call-aggregation.";
+
 	private final ApplicationContextRunner contextRunner = new ApplicationContextRunner().withConfiguration(
 			AutoConfigurations.of(OpenRouterApiAutoConfiguration.class, OpenRouterChatAutoConfiguration.class));
 
-	@ParameterizedTest
-	@ValueSource(strings = { "0B", "-1B", "2147483647B", "2147483648B", "3GB" })
-	void rejectsUnsupportedBodySizesDuringBinding(String value) {
-		for (String property : new String[] { "max-response-body-size", "max-error-body-size" }) {
-			contextRunner
-				.withPropertyValues(API_KEY_PROPERTY, "spring.ai.openrouter.connection." + property + "=" + value)
-				.run(context -> {
-					assertThat(context).hasFailed();
-					assertThat(context.getStartupFailure()).hasRootCauseInstanceOf(IllegalArgumentException.class)
-						.hasStackTraceContaining("spring.ai.openrouter.connection." + property
-								+ " must be between 1 and 2147483646 bytes");
-				});
-		}
-	}
-
-	@Test
-	void createsApiAndChatModelWhenApiKeyIsConfigured() {
-		contextRunner.withPropertyValues(API_KEY_PROPERTY).run(context -> {
-			assertThat(context).hasSingleBean(OpenRouterApi.class);
-			assertThat(context).hasSingleBean(OpenRouterChatModel.class);
-		});
-	}
-
-	@Test
-	void bindsConnectionTimeoutProperty() {
-		contextRunner.withPropertyValues(API_KEY_PROPERTY, "spring.ai.openrouter.connection.timeout=45s")
-			.run(context -> {
-				assertThat(context).hasSingleBean(OpenRouterConnectionProperties.class);
-				assertThat(context.getBean(OpenRouterConnectionProperties.class).getTimeout())
-					.isEqualTo(java.time.Duration.ofSeconds(45));
-				assertThat(context).hasSingleBean(OpenRouterApi.class);
-			});
-	}
-
-	@Test
-	void bindsAndWiresResponseAndToolCallLimits() {
-		contextRunner
-			.withPropertyValues(API_KEY_PROPERTY, "spring.ai.openrouter.connection.max-response-body-size=96MB",
-					"spring.ai.openrouter.connection.max-error-body-size=32KB",
-					"spring.ai.openrouter.chat.tool-call-aggregation.max-size=2MB",
-					"spring.ai.openrouter.chat.tool-call-aggregation.max-chunks=200",
-					"spring.ai.openrouter.chat.tool-call-aggregation.max-duration=30s")
-			.run(context -> {
-				OpenRouterConnectionProperties connection = context.getBean(OpenRouterConnectionProperties.class);
-				assertThat(connection.getMaxResponseBodySize().toMegabytes()).isEqualTo(96);
-				assertThat(connection.getMaxErrorBodySize().toKilobytes()).isEqualTo(32);
-
-				OpenRouterChatProperties chat = context.getBean(OpenRouterChatProperties.class);
-				assertThat(chat.getToolCallAggregation().getMaxSize().toMegabytes()).isEqualTo(2);
-				assertThat(chat.getToolCallAggregation().getMaxChunks()).isEqualTo(200);
-				assertThat(chat.getToolCallAggregation().getMaxDuration()).isEqualTo(Duration.ofSeconds(30));
-
-				OpenRouterStreamingToolCallAggregator aggregator = (OpenRouterStreamingToolCallAggregator) org.springframework.test.util.ReflectionTestUtils
-					.getField(context.getBean(OpenRouterChatModel.class), "streamingToolCallAggregator");
-				assertThat(org.springframework.test.util.ReflectionTestUtils.getField(aggregator, "maxBytes"))
-					.isEqualTo(2L * 1024 * 1024);
-				assertThat(org.springframework.test.util.ReflectionTestUtils.getField(aggregator, "maxChunks"))
-					.isEqualTo(200);
-				assertThat(org.springframework.test.util.ReflectionTestUtils.getField(aggregator, "maxDuration"))
-					.isEqualTo(Duration.ofSeconds(30));
-			});
+	static Stream<Arguments> unsupportedBodySizes() {
+		return Stream.of("max-response-body-size", "max-error-body-size")
+			.flatMap(property -> Stream.of("0B", "-1B", "2147483647B", "2147483648B", "3GB")
+				.map(value -> Arguments.of(Named.of(property + "=" + value, property), value)));
 	}
 
 	@ParameterizedTest
-	@ValueSource(strings = { "max-size=1B", "max-chunks=1", "max-duration=1s" })
-	void appliesBoundLimitsToResponsesStreams(String setting) {
+	@MethodSource("unsupportedBodySizes")
+	void rejectsUnsupportedBodySizesDuringBinding(String property, String value) {
+		this.contextRunner
+			.withPropertyValues(API_KEY_PROPERTY, "spring.ai.openrouter.connection." + property + "=" + value)
+			.run(context -> {
+				assertThat(context).hasFailed();
+				assertThat(context.getStartupFailure()).hasRootCauseInstanceOf(IllegalArgumentException.class)
+					.hasStackTraceContaining(
+							"spring.ai.openrouter.connection." + property + " must be between 1 and 2147483646 bytes");
+			});
+	}
+
+	static Stream<Arguments> chatCompletionsAggregationLimits() {
+		return Stream.of(
+				Arguments.of(Named.of("max-size", "max-size=64B"),
+						OpenRouterLimitExceededException.Limit.STREAMING_TOOL_CALL_BYTES),
+				Arguments.of(Named.of("max-chunks", "max-chunks=1"),
+						OpenRouterLimitExceededException.Limit.STREAMING_TOOL_CALL_CHUNKS),
+				Arguments.of(Named.of("max-duration", "max-duration=1s"),
+						OpenRouterLimitExceededException.Limit.STREAMING_TOOL_CALL_DURATION));
+	}
+
+	@ParameterizedTest
+	@MethodSource("chatCompletionsAggregationLimits")
+	void aBoundToolCallAggregationLimitStopsAChatCompletionsStreamThatExceedsIt(String setting,
+			OpenRouterLimitExceededException.Limit expected) {
+		// One tool-call fragment larger than 64 bytes, then a finish chunk two seconds
+		// later: a second chunk, and more than the one second the call may stay
+		// incomplete.
+		OpenRouterApi api = mock(OpenRouterApi.class);
+		when(api.chatCompletionStream(any())).thenReturn(Flux.defer(() -> Flux.just(toolFragment("x".repeat(200)))
+			.concatWith(Mono.delay(Duration.ofSeconds(2)).map(ignored -> finishChunk()))));
+		this.contextRunner.withBean(OpenRouterApi.class, () -> api)
+			.withPropertyValues(API_KEY_PROPERTY, AGGREGATION_PREFIX + setting)
+			.run(context -> StepVerifier
+				.withVirtualTime(() -> context.getBean(OpenRouterChatModel.class)
+					.stream(new Prompt("synthetic", OpenRouterChatOptions.builder().model("synthetic").build())))
+				.thenAwait(Duration.ofSeconds(3))
+				.thenConsumeWhile(response -> true)
+				.expectErrorSatisfies(error -> assertThat(error)
+					.isInstanceOfSatisfying(OpenRouterLimitExceededException.class, failure -> {
+						assertThat(failure.getEndpoint()).isEqualTo("/chat/completions");
+						assertThat(failure.getLimit()).isEqualTo(expected);
+						assertThat(failure.getLimit().getProperty())
+							.isEqualTo(AGGREGATION_PREFIX + setting.split("=")[0]);
+					}))
+				.verify());
+	}
+
+	static Stream<Arguments> responsesAggregationLimits() {
+		return Stream.of(
+				Arguments.of(Named.of("max-size", "max-size=1B"),
+						OpenRouterLimitExceededException.Limit.RESPONSES_STATE_BYTES),
+				Arguments.of(Named.of("max-chunks", "max-chunks=1"),
+						OpenRouterLimitExceededException.Limit.RESPONSES_STATE_CHUNKS),
+				Arguments.of(Named.of("max-duration", "max-duration=1s"),
+						OpenRouterLimitExceededException.Limit.RESPONSES_STATE_DURATION));
+	}
+
+	@ParameterizedTest
+	@MethodSource("responsesAggregationLimits")
+	void appliesBoundLimitsToResponsesStreams(String setting, OpenRouterLimitExceededException.Limit expected) {
 		OpenRouterApi api = mock(OpenRouterApi.class);
 		when(api.responsesStream(any())).thenReturn(Flux.defer(() -> Flux
 			.just(new ResponsesStreamEvent("response.reasoning_text.delta", "synthetic", null, null, null))
 			.concatWith(Mono.delay(Duration.ofSeconds(2))
 				.map(ignored -> new ResponsesStreamEvent("response.completed", null, null, null, null)))));
 		this.contextRunner.withBean(OpenRouterApi.class, () -> api)
-			.withPropertyValues(API_KEY_PROPERTY, "spring.ai.openrouter.chat.tool-call-aggregation." + setting)
+			.withPropertyValues(API_KEY_PROPERTY, AGGREGATION_PREFIX + setting)
 			.run(context -> {
 				var options = OpenRouterChatOptions.builder()
 					.model("synthetic")
@@ -122,6 +132,7 @@ class OpenRouterAutoConfigurationTests {
 					.expectErrorSatisfies(error -> assertThat(error)
 						.isInstanceOfSatisfying(OpenRouterLimitExceededException.class, failure -> {
 							assertThat(failure.getEndpoint()).isEqualTo("/responses");
+							assertThat(failure.getLimit()).isEqualTo(expected);
 							assertThat(failure.getLimit().getProperty()).endsWith(setting.split("=")[0]);
 						}))
 					.verify();
@@ -154,96 +165,57 @@ class OpenRouterAutoConfigurationTests {
 	}
 
 	@ParameterizedTest
-	@ValueSource(strings = { "max-size=0B", "max-size=-1B", "max-choices=0", "max-choices=-1" })
-	void rejectsInvalidChatStateLimits(String setting) {
+	@CsvSource(delimiter = '|',
+			value = { "max-size=0B | Maximum Chat Completions state size must be greater than zero",
+					"max-size=-1B | Maximum Chat Completions state size must be greater than zero",
+					"max-choices=0 | Maximum Chat Completions active choices must be greater than zero",
+					"max-choices=-1 | Maximum Chat Completions active choices must be greater than zero" })
+	void rejectsInvalidChatStateLimits(String setting, String reason) {
 		this.contextRunner.withPropertyValues(API_KEY_PROPERTY, "spring.ai.openrouter.chat.streaming-state." + setting)
-			.run(context -> assertThat(context).hasFailed());
-	}
-
-	@Test
-	void chatStateDefaultsMatchMapperDefaults() {
-		var defaults = new OpenRouterChatProperties().getStreamingState();
-		assertThat(defaults.getMaxSize().toBytes())
-			.isEqualTo(OpenRouterStreamingResponseMapper.DEFAULT_MAX_STATE_BYTES);
-		assertThat(defaults.getMaxChoices()).isEqualTo(OpenRouterStreamingResponseMapper.DEFAULT_MAX_STATE_CHOICES);
-	}
-
-	@Test
-	void toolCallAggregationDefaultsMatchAggregatorDefaults() {
-		var defaults = new OpenRouterChatProperties().getToolCallAggregation();
-		assertThat(defaults.getMaxSize().toBytes()).isEqualTo(OpenRouterStreamingToolCallAggregator.DEFAULT_MAX_BYTES);
-		assertThat(defaults.getMaxChunks()).isEqualTo(OpenRouterStreamingToolCallAggregator.DEFAULT_MAX_CHUNKS);
-		assertThat(defaults.getMaxDuration()).isEqualTo(OpenRouterStreamingToolCallAggregator.DEFAULT_MAX_DURATION);
-	}
-
-	@Test
-	void injectsUserDefinedToolCallingManagerIntoChatModel() {
-		contextRunner.withUserConfiguration(ToolCallingManagerConfiguration.class)
-			.withPropertyValues(API_KEY_PROPERTY)
 			.run(context -> {
-				OpenRouterChatModel chatModel = context.getBean(OpenRouterChatModel.class);
-				assertThat(org.springframework.test.util.ReflectionTestUtils.getField(chatModel, "toolCallingManager"))
-					.isSameAs(context.getBean(org.springframework.ai.model.tool.ToolCallingManager.class));
+				assertThat(context).hasFailed();
+				assertThat(context.getStartupFailure()).rootCause()
+					.isInstanceOf(IllegalArgumentException.class)
+					.hasMessageContaining(reason);
 			});
 	}
 
 	@Test
-	void injectsUserDefinedObservationRegistryIntoChatModel() {
-		contextRunner.withUserConfiguration(ObservationRegistryConfiguration.class)
+	void unsetToolCallAggregationLimitsStillBoundAStreamAtTheDefaultSize() {
+		// No limit property is set: the first fragment is one byte over the one mebibyte
+		// default, so the default must have reached the aggregator.
+		OpenRouterApi api = mock(OpenRouterApi.class);
+		when(api.chatCompletionStream(any()))
+			.thenReturn(Flux.just(toolFragment("x".repeat(1024 * 1024 + 1)), finishChunk()));
+		this.contextRunner.withBean(OpenRouterApi.class, () -> api)
 			.withPropertyValues(API_KEY_PROPERTY)
 			.run(context -> {
-				OpenRouterChatModel chatModel = context.getBean(OpenRouterChatModel.class);
-				assertThat(org.springframework.test.util.ReflectionTestUtils.getField(chatModel, "observationRegistry"))
-					.isSameAs(context.getBean(io.micrometer.observation.ObservationRegistry.class));
+				StepVerifier
+					.create(context.getBean(OpenRouterChatModel.class)
+						.stream(new Prompt("synthetic", OpenRouterChatOptions.builder().model("synthetic").build())))
+					.thenConsumeWhile(response -> true)
+					.expectErrorSatisfies(
+							error -> assertThat(error).isInstanceOfSatisfying(OpenRouterLimitExceededException.class,
+									failure -> assertThat(failure.getLimit())
+										.isEqualTo(OpenRouterLimitExceededException.Limit.STREAMING_TOOL_CALL_BYTES)))
+					.verify();
 			});
 	}
 
-	@Test
-	void backsOffWhenUserDefinesOwnChatModel() {
-		contextRunner.withUserConfiguration(CustomChatModelConfiguration.class)
-			.withPropertyValues(API_KEY_PROPERTY)
-			.run(context -> {
-				assertThat(context).doesNotHaveBean(OpenRouterChatModel.class);
-				assertThat(context).hasSingleBean(ChatModel.class);
-			});
+	private static ChatCompletionChunk toolFragment(String arguments) {
+		return chunk(new Choice(0, null,
+				new Delta("assistant", null, null,
+						List.of(new ToolCall("call-1", "function", new FunctionCall("lookup", arguments), 0))),
+				null, null));
 	}
 
-	@Configuration(proxyBeanMethods = false)
-	static class ToolCallingManagerConfiguration {
-
-		@Bean
-		org.springframework.ai.tool.execution.ToolExecutionExceptionProcessor toolExecutionExceptionProcessor() {
-			return exception -> "custom failure";
-		}
-
-		@Bean
-		org.springframework.ai.model.tool.ToolCallingManager customToolCallingManager(
-				org.springframework.ai.tool.execution.ToolExecutionExceptionProcessor processor) {
-			return de.subhransu.openrouter.springai.chat.OpenRouterToolCallingManagers.withFailurePolicy(processor,
-					builder -> {
-					});
-		}
-
+	private static ChatCompletionChunk finishChunk() {
+		return chunk(new Choice(0, null, new Delta(null, null, null, null), "tool_calls", "tool_calls"));
 	}
 
-	@Configuration(proxyBeanMethods = false)
-	static class ObservationRegistryConfiguration {
-
-		@Bean
-		io.micrometer.observation.ObservationRegistry customObservationRegistry() {
-			return io.micrometer.observation.ObservationRegistry.create();
-		}
-
-	}
-
-	@Configuration(proxyBeanMethods = false)
-	static class CustomChatModelConfiguration {
-
-		@Bean
-		ChatModel customChatModel() {
-			return org.mockito.Mockito.mock(ChatModel.class);
-		}
-
+	private static ChatCompletionChunk chunk(Choice choice) {
+		return new ChatCompletionChunk("gen-1", "chat.completion.chunk", 123L, "synthetic", "synthetic",
+				List.of(choice), null, null);
 	}
 
 }

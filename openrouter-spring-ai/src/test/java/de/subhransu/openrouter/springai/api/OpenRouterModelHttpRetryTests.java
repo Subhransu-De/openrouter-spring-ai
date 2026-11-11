@@ -8,10 +8,11 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
+import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
+import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
 import de.subhransu.openrouter.springai.errors.OpenRouterHttpException;
 import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
-import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingModel;
@@ -22,6 +23,7 @@ import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -36,6 +38,8 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
 class OpenRouterModelHttpRetryTests {
+
+	private static final String PROVIDER_OVERLOADED = "provider_overloaded";
 
 	private static final String BASE_URL = "https://openrouter.test/api/v1";
 
@@ -83,6 +87,39 @@ class OpenRouterModelHttpRetryTests {
 	}
 
 	@Test
+	void retryAfterBeyondThePolicyTimeoutDeclinesTheModelRetryWithoutSleeping() {
+		// The same zero-delay policy retries a 429 without Retry-After (see the test
+		// above); the header makes the retry impossible within the timeout, so the model
+		// surfaces the 429 after exactly one request. The mock server accepts no second
+		// request, and nothing sleeps.
+		Fixture fixture = fixture();
+		fixture.server()
+			.expect(once(), requestTo(CHAT_COMPLETIONS))
+			.andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS).contentType(MediaType.APPLICATION_JSON)
+				.header("Retry-After", "1")
+				.body(error(429, "rate_limit_exceeded")));
+		RetryPolicy policy = RetryPolicy.builder()
+			.maxRetries(1)
+			.includes(TransientAiException.class)
+			.delay(Duration.ZERO)
+			.timeout(Duration.ofMillis(500))
+			.build();
+		OpenRouterChatModel model = OpenRouterChatModel.builder()
+			.openRouterApi(fixture.api())
+			.retryTemplate(new RetryTemplate(policy))
+			.build();
+
+		assertThatThrownBy(() -> model.call(chatPrompt(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS)))
+			.isInstanceOf(OpenRouterTransientApiException.class)
+			.satisfies(thrown -> {
+				OpenRouterHttpException exception = (OpenRouterHttpException) thrown;
+				assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+				assertThat(exception.getRetryAfter().delay()).isEqualTo(Duration.ofSeconds(1));
+			});
+		fixture.server().verify();
+	}
+
+	@Test
 	void retriesResponsesAfter502AndReturnsSuccess() {
 		Fixture fixture = fixture();
 		fixture.server()
@@ -105,7 +142,7 @@ class OpenRouterModelHttpRetryTests {
 
 	@ParameterizedTest
 	@ValueSource(strings = { "server_error", "rate_limit_exceeded", "timeout" })
-	void defaultPolicyRetriesTransientInBandResponsesFailure(String code) {
+	void retriesTransientInBandResponsesFailure(String code) {
 		Fixture fixture = fixture();
 		fixture.server()
 			.expect(once(), requestTo(BASE_URL + "/responses"))
@@ -113,7 +150,10 @@ class OpenRouterModelHttpRetryTests {
 		fixture.server()
 			.expect(once(), requestTo(BASE_URL + "/responses"))
 			.andRespond(withSuccess(RESPONSES_SUCCESS, MediaType.APPLICATION_JSON));
-		OpenRouterChatModel model = OpenRouterChatModel.builder().openRouterApi(fixture.api()).build();
+		OpenRouterChatModel model = OpenRouterChatModel.builder()
+			.openRouterApi(fixture.api())
+			.retryTemplate(retryTemplate(1))
+			.build();
 
 		assertThat(model.call(chatPrompt(OpenRouterRequestMode.OPENAI_RESPONSES)).getResult().getOutput().getText())
 			.isEqualTo("recovered");
@@ -123,12 +163,15 @@ class OpenRouterModelHttpRetryTests {
 	@ParameterizedTest
 	@ValueSource(strings = { "invalid_api_key", "invalid_request", "payment_required", "refusal",
 			"unsupported_parameter", "future_unknown_error" })
-	void defaultPolicyDoesNotRetryPermanentInBandResponsesFailure(String code) {
+	void doesNotRetryPermanentInBandResponsesFailure(String code) {
 		Fixture fixture = fixture();
 		fixture.server()
 			.expect(once(), requestTo(BASE_URL + "/responses"))
 			.andRespond(withSuccess(failedResponse(code), MediaType.APPLICATION_JSON));
-		OpenRouterChatModel model = OpenRouterChatModel.builder().openRouterApi(fixture.api()).build();
+		OpenRouterChatModel model = OpenRouterChatModel.builder()
+			.openRouterApi(fixture.api())
+			.retryTemplate(retryTemplate(1))
+			.build();
 
 		assertThatThrownBy(() -> model.call(chatPrompt(OpenRouterRequestMode.OPENAI_RESPONSES)))
 			.isInstanceOf(OpenRouterNonTransientApiException.class);
@@ -142,17 +185,19 @@ class OpenRouterModelHttpRetryTests {
 	}
 
 	@ParameterizedTest
-	@ValueSource(ints = { 429, 502, 503 })
-	void defaultPolicyRetriesTransientInBandChatCompletionFailure(int code) {
+	@CsvSource({ "429,rate_limit_exceeded", "502,provider_unavailable", "503,provider_unavailable" })
+	void retriesTransientInBandChatCompletionFailure(int code, String errorType) {
 		Fixture fixture = fixture();
 		fixture.server()
 			.expect(once(), requestTo(CHAT_COMPLETIONS))
-			.andRespond(withSuccess(error(code, code == 429 ? "rate_limit_exceeded" : "provider_unavailable"),
-					MediaType.APPLICATION_JSON));
+			.andRespond(withSuccess(error(code, errorType), MediaType.APPLICATION_JSON));
 		fixture.server()
 			.expect(once(), requestTo(CHAT_COMPLETIONS))
 			.andRespond(withSuccess(CHAT_SUCCESS, MediaType.APPLICATION_JSON));
-		OpenRouterChatModel model = OpenRouterChatModel.builder().openRouterApi(fixture.api()).build();
+		OpenRouterChatModel model = OpenRouterChatModel.builder()
+			.openRouterApi(fixture.api())
+			.retryTemplate(retryTemplate(1))
+			.build();
 
 		assertThat(
 				model.call(chatPrompt(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS)).getResult().getOutput().getText())
@@ -161,34 +206,44 @@ class OpenRouterModelHttpRetryTests {
 	}
 
 	@ParameterizedTest
-	@ValueSource(ints = { 400, 401, 402 })
-	void defaultPolicyDoesNotRetryPermanentInBandChatCompletionFailure(int code) {
+	@CsvSource({ "400,invalid_request,INVALID_REQUEST", "401,invalid_api_key,AUTHENTICATION",
+			"402,payment_required,BILLING_CREDITS" })
+	void doesNotRetryPermanentInBandChatCompletionFailure(int code, String errorType,
+			OpenRouterErrorCategory category) {
 		Fixture fixture = fixture();
 		fixture.server()
 			.expect(once(), requestTo(CHAT_COMPLETIONS))
-			.andRespond(withSuccess(error(code, code == 402 ? "payment_required" : "invalid_request"),
-					MediaType.APPLICATION_JSON));
-		OpenRouterChatModel model = OpenRouterChatModel.builder().openRouterApi(fixture.api()).build();
+			.andRespond(withSuccess(error(code, errorType), MediaType.APPLICATION_JSON));
+		OpenRouterChatModel model = OpenRouterChatModel.builder()
+			.openRouterApi(fixture.api())
+			.retryTemplate(retryTemplate(1))
+			.build();
 
 		assertThatThrownBy(() -> model.call(chatPrompt(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS)))
-			.isInstanceOf(OpenRouterApiException.class);
+			.isExactlyInstanceOf(OpenRouterApiException.class)
+			.isNotInstanceOf(TransientAiException.class)
+			.satisfies(thrown -> {
+				OpenRouterApiException exception = (OpenRouterApiException) thrown;
+				assertThat(exception.getCategory()).isEqualTo(category);
+				assertThat(exception.getErrorDetails().errorType()).isEqualTo(errorType);
+			});
 		fixture.server().verify();
 	}
 
 	@ParameterizedTest
-	@ValueSource(ints = { 429, 502, 503 })
-	void defaultPolicyRetriesTransientInBandImageFailure(int code) {
+	@CsvSource({ "429,rate_limit_exceeded", "502,provider_unavailable", "503,provider_unavailable" })
+	void retriesTransientInBandImageFailure(int code, String errorType) {
 		Fixture fixture = fixture();
 		fixture.server()
 			.expect(once(), requestTo(BASE_URL + "/images"))
-			.andRespond(withSuccess(error(code, code == 429 ? "rate_limit_exceeded" : "provider_unavailable"),
-					MediaType.APPLICATION_JSON));
+			.andRespond(withSuccess(error(code, errorType), MediaType.APPLICATION_JSON));
 		fixture.server()
 			.expect(once(), requestTo(BASE_URL + "/images"))
 			.andRespond(withSuccess(IMAGES_SUCCESS, MediaType.APPLICATION_JSON));
 		OpenRouterImageModel model = OpenRouterImageModel.builder()
 			.openRouterApi(fixture.api())
 			.defaultOptions(OpenRouterImageOptions.builder().model("test-image-model").build())
+			.retryTemplate(retryTemplate(1))
 			.build();
 
 		assertThat(model.call(new ImagePrompt("draw a circle")).getResult().getOutput().getB64Json())
@@ -197,7 +252,7 @@ class OpenRouterModelHttpRetryTests {
 	}
 
 	@Test
-	void defaultPolicyDoesNotRetryPermanentInBandImageFailure() {
+	void doesNotRetryPermanentInBandImageFailure() {
 		Fixture fixture = fixture();
 		fixture.server()
 			.expect(once(), requestTo(BASE_URL + "/images"))
@@ -205,10 +260,17 @@ class OpenRouterModelHttpRetryTests {
 		OpenRouterImageModel model = OpenRouterImageModel.builder()
 			.openRouterApi(fixture.api())
 			.defaultOptions(OpenRouterImageOptions.builder().model("test-image-model").build())
+			.retryTemplate(retryTemplate(1))
 			.build();
 
 		assertThatThrownBy(() -> model.call(new ImagePrompt("draw a circle")))
-			.isInstanceOf(OpenRouterApiException.class);
+			.isExactlyInstanceOf(OpenRouterApiException.class)
+			.isNotInstanceOf(TransientAiException.class)
+			.satisfies(thrown -> {
+				OpenRouterApiException exception = (OpenRouterApiException) thrown;
+				assertThat(exception.getCategory()).isEqualTo(OpenRouterErrorCategory.AUTHENTICATION);
+				assertThat(exception.getErrorDetails().errorType()).isEqualTo("invalid_api_key");
+			});
 		fixture.server().verify();
 	}
 
@@ -218,7 +280,7 @@ class OpenRouterModelHttpRetryTests {
 		fixture.server()
 			.expect(once(), requestTo(BASE_URL + "/embeddings"))
 			.andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE).contentType(MediaType.APPLICATION_JSON)
-				.body(error(503, "provider_overloaded")));
+				.body(error(503, PROVIDER_OVERLOADED)));
 		fixture.server()
 			.expect(once(), requestTo(BASE_URL + "/embeddings"))
 			.andRespond(withSuccess(EMBEDDINGS_SUCCESS, MediaType.APPLICATION_JSON));
@@ -236,7 +298,7 @@ class OpenRouterModelHttpRetryTests {
 
 	@ParameterizedTest
 	@ValueSource(ints = { 429, 502, 503 })
-	void defaultPolicyRetriesTransientInBandEmbeddingFailure(int code) {
+	void retriesTransientInBandEmbeddingFailure(int code) {
 		Fixture fixture = fixture();
 		String body = """
 				{"error":{"code":%d,"message":"synthetic embedding failure"},
@@ -251,10 +313,77 @@ class OpenRouterModelHttpRetryTests {
 		OpenRouterEmbeddingModel model = OpenRouterEmbeddingModel.builder()
 			.openRouterApi(fixture.api())
 			.defaultOptions(OpenRouterEmbeddingOptions.builder().model("test-embedding-model").build())
+			.retryTemplate(retryTemplate(1))
 			.build();
 
 		assertThat(model.embed("hello")).containsExactly(0.25f, -0.5f);
 		fixture.server().verify();
+	}
+
+	@ParameterizedTest
+	@CsvSource({ "400,invalid_request,INVALID_REQUEST", "401,invalid_api_key,AUTHENTICATION",
+			"402,payment_required,BILLING_CREDITS" })
+	void doesNotRetryEmbeddingHttpClientFailures(int status, String errorType, OpenRouterErrorCategory category) {
+		Fixture fixture = fixture();
+		fixture.server()
+			.expect(once(), requestTo(BASE_URL + "/embeddings"))
+			.andRespond(withStatus(HttpStatus.valueOf(status)).contentType(MediaType.APPLICATION_JSON)
+				.body(error(status, errorType)));
+		OpenRouterEmbeddingModel model = embeddingModel(fixture, 5);
+
+		assertThatThrownBy(() -> model.embed("hello")).isInstanceOf(OpenRouterNonTransientApiException.class)
+			.isNotInstanceOf(TransientAiException.class)
+			.satisfies(thrown -> {
+				OpenRouterHttpException exception = (OpenRouterHttpException) thrown;
+				assertThat(exception.getCategory()).isEqualTo(category);
+				assertThat(exception.getErrorDetails().errorType()).isEqualTo(errorType);
+			});
+		fixture.server().verify();
+	}
+
+	@Test
+	void doesNotRetryPermanentInBandEmbeddingFailure() {
+		Fixture fixture = fixture();
+		fixture.server()
+			.expect(once(), requestTo(BASE_URL + "/embeddings"))
+			.andRespond(withSuccess(error(401, "invalid_api_key"), MediaType.APPLICATION_JSON));
+		OpenRouterEmbeddingModel model = embeddingModel(fixture, 5);
+
+		assertThatThrownBy(() -> model.embed("hello")).isExactlyInstanceOf(OpenRouterApiException.class)
+			.isNotInstanceOf(TransientAiException.class)
+			.satisfies(thrown -> {
+				OpenRouterApiException exception = (OpenRouterApiException) thrown;
+				assertThat(exception.getCategory()).isEqualTo(OpenRouterErrorCategory.AUTHENTICATION);
+				assertThat(exception.getErrorDetails().errorType()).isEqualTo("invalid_api_key");
+			});
+		fixture.server().verify();
+	}
+
+	@Test
+	void embeddingRetryExhaustionSurfacesTheFinalTransientFailure() {
+		Fixture fixture = fixture();
+		fixture.server()
+			.expect(times(3), requestTo(BASE_URL + "/embeddings"))
+			.andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE).contentType(MediaType.APPLICATION_JSON)
+				.body(error(503, PROVIDER_OVERLOADED)));
+		OpenRouterEmbeddingModel model = embeddingModel(fixture, 2);
+
+		assertThatThrownBy(() -> model.embed("hello")).isInstanceOf(OpenRouterTransientApiException.class)
+			.satisfies(thrown -> {
+				OpenRouterHttpException exception = (OpenRouterHttpException) thrown;
+				assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+				assertThat(exception.getEndpoint()).isEqualTo("/embeddings");
+				assertThat(exception.getErrorDetails().errorType()).isEqualTo(PROVIDER_OVERLOADED);
+			});
+		fixture.server().verify();
+	}
+
+	private OpenRouterEmbeddingModel embeddingModel(Fixture fixture, long maxRetries) {
+		return OpenRouterEmbeddingModel.builder()
+			.openRouterApi(fixture.api())
+			.defaultOptions(OpenRouterEmbeddingOptions.builder().model("test-embedding-model").build())
+			.retryTemplate(retryTemplate(maxRetries))
+			.build();
 	}
 
 	@Test
@@ -263,7 +392,7 @@ class OpenRouterModelHttpRetryTests {
 		fixture.server()
 			.expect(once(), requestTo(BASE_URL + "/images"))
 			.andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE).contentType(MediaType.APPLICATION_JSON)
-				.body(error(503, "provider_overloaded")));
+				.body(error(503, PROVIDER_OVERLOADED)));
 		fixture.server()
 			.expect(once(), requestTo(BASE_URL + "/images"))
 			.andRespond(withSuccess(IMAGES_SUCCESS, MediaType.APPLICATION_JSON));
@@ -280,20 +409,25 @@ class OpenRouterModelHttpRetryTests {
 	}
 
 	@ParameterizedTest
-	@ValueSource(ints = { 400, 401, 402 })
-	void deterministicClientFailureIsAttemptedOnlyOnce(int status) {
+	@CsvSource({ "400,invalid_request,INVALID_REQUEST", "401,invalid_api_key,AUTHENTICATION",
+			"402,payment_required,BILLING_CREDITS" })
+	void chatHttpClientFailureIsAttemptedOnlyOnce(int status, String errorType, OpenRouterErrorCategory category) {
 		Fixture fixture = fixture();
 		fixture.server()
 			.expect(once(), requestTo(CHAT_COMPLETIONS))
 			.andRespond(withStatus(HttpStatus.valueOf(status)).contentType(MediaType.APPLICATION_JSON)
-				.body(error(status, status == 402 ? "payment_required" : "invalid_request")));
+				.body(error(status, errorType)));
 		OpenRouterChatModel model = OpenRouterChatModel.builder()
 			.openRouterApi(fixture.api())
 			.retryTemplate(retryTemplate(5))
 			.build();
 
 		assertThatThrownBy(() -> model.call(chatPrompt(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS)))
-			.isInstanceOf(OpenRouterNonTransientApiException.class);
+			.isInstanceOfSatisfying(OpenRouterNonTransientApiException.class, exception -> {
+				assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.valueOf(status));
+				assertThat(exception.getCategory()).isEqualTo(category);
+				assertThat(exception.getErrorDetails().errorType()).isEqualTo(errorType);
+			});
 		fixture.server().verify();
 	}
 
@@ -319,7 +453,7 @@ class OpenRouterModelHttpRetryTests {
 				OpenRouterHttpException exception = (OpenRouterHttpException) thrown;
 				assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
 				assertThat(exception.getEndpoint()).isEqualTo("/chat/completions");
-				assertThat(exception.getErrorDetails().errorType()).isEqualTo("provider_overloaded");
+				assertThat(exception.getErrorDetails().errorType()).isEqualTo(PROVIDER_OVERLOADED);
 				assertThat(exception.getErrorDetails().providerCode()).isEqualTo("capacity");
 				assertThat(exception.getResponseBody()).contains("provider still overloaded", "[REDACTED]")
 					.doesNotContain("sk-or-final-secret");

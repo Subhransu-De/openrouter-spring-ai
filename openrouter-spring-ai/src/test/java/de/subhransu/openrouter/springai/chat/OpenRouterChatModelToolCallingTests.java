@@ -3,6 +3,7 @@ package de.subhransu.openrouter.springai.chat;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -23,12 +24,18 @@ import de.subhransu.openrouter.springai.api.dto.ToolCall;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.ToolCallingAdvisor;
+import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -96,13 +103,9 @@ class OpenRouterChatModelToolCallingTests {
 		assertThat(captor.getAllValues())
 			.allSatisfy(sent -> assertThat(sent.tools()).extracting(tool -> tool.function().name())
 				.containsExactly("get_weather", "get_time"));
-		assertThat(captor.getAllValues().get(1).messages()).anySatisfy(message -> {
-			assertThat(message.role()).isEqualTo("tool");
-			assertThat(message.content()).isEqualTo("\"sunny\"");
-		});
 	}
 
-	@ParameterizedTest
+	@ParameterizedTest(name = "toolStrict={0}")
 	@ValueSource(booleans = { false, true })
 	void advisorExecutesToolsAndSendsResultsBackInChatCompletionsMode(boolean strict) {
 		OpenRouterApi api = mock(OpenRouterApi.class);
@@ -140,7 +143,7 @@ class OpenRouterChatModelToolCallingTests {
 		});
 	}
 
-	@ParameterizedTest
+	@ParameterizedTest(name = "toolStrict={0}")
 	@ValueSource(booleans = { false, true })
 	void advisorExecutesToolsAndSendsResultsBackInResponsesMode(boolean strict) {
 		OpenRouterApi api = mock(OpenRouterApi.class);
@@ -203,7 +206,51 @@ class OpenRouterChatModelToolCallingTests {
 	}
 
 	@Test
-	void toolsConfiguredAsModelDefaultsAreAdvertisedOnTheWire() {
+	void modelSurfacesResponsesToolCallsWithoutExecutingThem() {
+		// Same contract in Responses mode: the function_call item reaches the caller as a
+		// tool call, the provider is hit exactly once on the Responses endpoint, and the
+		// callback is never invoked.
+		OpenRouterApi api = mock(OpenRouterApi.class);
+		when(api.responses(any())).thenReturn(responsesResult(new ResponsesOutputItem("item-1", "function_call",
+				"completed", null, null, "call-1", "get_weather", BERLIN_ARGS, null)));
+		OpenRouterChatModel model = OpenRouterChatModel.builder().openRouterApi(api).build();
+
+		ChatResponse response = model.call(new Prompt(List.of(new UserMessage(WEATHER_PROMPT)),
+				OpenRouterChatOptions.builder()
+					.model("openai/gpt-5.4")
+					.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
+					.toolCallbacks(List.of(this.weatherTool))
+					.build()));
+
+		assertThat(response.hasToolCalls()).isTrue();
+		assertThat(response.getResult().getOutput().getToolCalls()).singleElement().satisfies(call -> {
+			assertThat(call.id()).isEqualTo("call-1");
+			assertThat(call.name()).isEqualTo("get_weather");
+			assertThat(call.arguments()).isEqualTo(BERLIN_ARGS);
+		});
+		assertThat(this.toolInvoked).isFalse();
+		verify(api, times(1)).responses(any());
+		verify(api, never()).chatCompletion(any());
+	}
+
+	static Stream<Arguments> toolSources() {
+		ToolCallback runtimeTool = FunctionToolCallback.builder("get_time", (Map<String, Object> input) -> "12:00")
+			.description("Current time")
+			.inputType(Map.class)
+			.build();
+		Function<List<Message>, Prompt> defaultsOnly = Prompt::new;
+		OpenRouterChatOptions runtimeOptions = OpenRouterChatOptions.builder()
+			.toolCallbacks(List.of(runtimeTool))
+			.build();
+		Function<List<Message>, Prompt> withRuntimeCallbacks = messages -> new Prompt(messages, runtimeOptions);
+		return Stream.of(Arguments.of(Named.of("model defaults only", defaultsOnly), "get_weather"), Arguments
+			.of(Named.of("runtime callbacks replace the defaults wholesale", withRuntimeCallbacks), "get_time"));
+	}
+
+	@ParameterizedTest
+	@MethodSource("toolSources")
+	void advertisedToolsFollowDefaultAndRuntimeMergeSemantics(Function<List<Message>, Prompt> promptFactory,
+			String expectedTool) {
 		OpenRouterApi api = mock(OpenRouterApi.class);
 		when(api.chatCompletion(any())).thenReturn(
 				chatCompletionResponse(new ChatMessage("assistant", "No tools needed.", null, null, null), "stop"));
@@ -212,39 +259,13 @@ class OpenRouterChatModelToolCallingTests {
 			.defaultOptions(
 					OpenRouterChatOptions.builder().model(MINI_MODEL).toolCallbacks(List.of(this.weatherTool)).build())
 			.build();
+		List<Message> messages = List.of(new UserMessage(WEATHER_PROMPT));
 
-		model.call(new Prompt(List.of(new UserMessage(WEATHER_PROMPT))));
-
-		ArgumentCaptor<ChatCompletionRequest> captor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
-		verify(api).chatCompletion(captor.capture());
-		assertThat(captor.getValue().tools()).hasSize(1);
-		assertThat(captor.getValue().tools().get(0).function().name()).isEqualTo("get_weather");
-	}
-
-	@Test
-	void runtimeToolCallbacksReplaceModelDefaultsOnTheWire() {
-		// Framework merge semantics: runtime tool callbacks replace the defaults
-		// wholesale, so the executing advisor sees exactly the advertised tools.
-		ToolCallback runtimeTool = FunctionToolCallback.builder("get_time", (Map<String, Object> input) -> "12:00")
-			.description("Current time")
-			.inputType(Map.class)
-			.build();
-		OpenRouterApi api = mock(OpenRouterApi.class);
-		when(api.chatCompletion(any()))
-			.thenReturn(chatCompletionResponse(new ChatMessage("assistant", "Done.", null, null, null), "stop"));
-		OpenRouterChatModel model = OpenRouterChatModel.builder()
-			.openRouterApi(api)
-			.defaultOptions(
-					OpenRouterChatOptions.builder().model(MINI_MODEL).toolCallbacks(List.of(this.weatherTool)).build())
-			.build();
-
-		model.call(new Prompt(List.of(new UserMessage(WEATHER_PROMPT)),
-				OpenRouterChatOptions.builder().toolCallbacks(List.of(runtimeTool)).build()));
+		model.call(promptFactory.apply(messages));
 
 		ArgumentCaptor<ChatCompletionRequest> captor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
 		verify(api).chatCompletion(captor.capture());
-		assertThat(captor.getValue().tools()).hasSize(1);
-		assertThat(captor.getValue().tools().get(0).function().name()).isEqualTo("get_time");
+		assertThat(captor.getValue().tools()).extracting(tool -> tool.function().name()).containsExactly(expectedTool);
 	}
 
 	private ResponsesResult responsesResult(ResponsesOutputItem item) {

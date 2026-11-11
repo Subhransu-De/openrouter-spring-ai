@@ -15,8 +15,10 @@ import de.subhransu.openrouter.springai.api.dto.ImagesRequest;
 import de.subhransu.openrouter.springai.api.dto.ImagesResponse;
 import de.subhransu.openrouter.springai.errors.OpenRouterHttpException;
 import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -24,6 +26,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.reactive.function.client.ClientRequest;
+import org.springframework.web.reactive.function.client.ClientResponse;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
 
 /**
  * Wire-contract tests for {@code POST /images}: endpoint path, method, headers and the
@@ -34,6 +40,10 @@ class OpenRouterApiImagesContractTests {
 	private static final String BASE_URL = "https://openrouter.test/api/v1";
 
 	private static final String IMAGES = BASE_URL + "/images";
+
+	private static final String REFERER = "https://app.example";
+
+	private static final String CATEGORIES = "translation,programming";
 
 	private static final String MODEL = "bytedance-seed/seedream-4.5";
 
@@ -54,6 +64,9 @@ class OpenRouterApiImagesContractTests {
 		OpenRouterApi api = OpenRouterApi.builder()
 			.apiKey("test-key")
 			.baseUrl(BASE_URL)
+			.httpReferer(REFERER)
+			.applicationTitle("My App")
+			.applicationCategories(CATEGORIES)
 			.restClientBuilder(restClientBuilder)
 			.build();
 		return new Fixture(api, server);
@@ -67,6 +80,9 @@ class OpenRouterApiImagesContractTests {
 			.andExpect(method(HttpMethod.POST))
 			.andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer test-key"))
 			.andExpect(header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE))
+			.andExpect(header("HTTP-Referer", REFERER))
+			.andExpect(header("X-OpenRouter-Title", "My App"))
+			.andExpect(header("X-OpenRouter-Categories", CATEGORIES))
 			.andExpect(jsonPath("$.model").value(MODEL))
 			.andExpect(jsonPath("$.prompt").value("a red panda wearing sunglasses"))
 			.andExpect(jsonPath("$.n").value(2))
@@ -108,6 +124,14 @@ class OpenRouterApiImagesContractTests {
 			.andExpect(jsonPath("$.prompt").value("minimal"))
 			.andExpect(jsonPath("$.n").doesNotExist())
 			.andExpect(jsonPath("$.size").doesNotExist())
+			.andExpect(jsonPath("$.resolution").doesNotExist())
+			.andExpect(jsonPath("$.aspect_ratio").doesNotExist())
+			.andExpect(jsonPath("$.quality").doesNotExist())
+			.andExpect(jsonPath("$.output_format").doesNotExist())
+			.andExpect(jsonPath("$.background").doesNotExist())
+			.andExpect(jsonPath("$.output_compression").doesNotExist())
+			.andExpect(jsonPath("$.seed").doesNotExist())
+			.andExpect(jsonPath("$.stream").doesNotExist())
 			.andExpect(jsonPath("$.input_references").doesNotExist())
 			.andExpect(jsonPath("$.provider").doesNotExist())
 			.andRespond(withSuccess(SUCCESS_BODY, MediaType.APPLICATION_JSON));
@@ -131,8 +155,46 @@ class OpenRouterApiImagesContractTests {
 
 		assertThatThrownBy(() -> api.images(request)).isInstanceOf(OpenRouterNonTransientApiException.class)
 			.hasMessageContaining("images request failed")
-			.satisfies(exception -> assertThat(((OpenRouterHttpException) exception).getResponseBody())
-				.contains("unsupported aspect_ratio"));
+			.satisfies(exception -> {
+				OpenRouterHttpException http = (OpenRouterHttpException) exception;
+				assertThat(http.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+				assertThat(http.getResponseBody()).contains("unsupported aspect_ratio");
+			});
+		fixture.server().verify();
+	}
+
+	@Test
+	void streamsToImagesEndpointWithAuthenticationAndAttributionHeaders() {
+		AtomicReference<ClientRequest> captured = new AtomicReference<>();
+		OpenRouterApi api = OpenRouterApi.builder()
+			.apiKey("test-key")
+			.baseUrl(BASE_URL)
+			.httpReferer(REFERER)
+			.applicationTitle("My App")
+			.applicationCategories(CATEGORIES)
+			.webClientBuilder(WebClient.builder().exchangeFunction(request -> {
+				captured.set(request);
+				return Mono.just(ClientResponse.create(HttpStatus.OK)
+					.header(HttpHeaders.CONTENT_TYPE, MediaType.TEXT_EVENT_STREAM_VALUE)
+					.body("data: [DONE]\n\n")
+					.build());
+			}))
+			.build();
+
+		api.imagesStream(new ImagesRequest(MODEL, "stream me", null, null, null, null, null, null, null, null, null,
+				true, null, null))
+			.collectList()
+			.block(Duration.ofSeconds(5));
+
+		ClientRequest request = captured.get();
+		assertThat(request.method()).isEqualTo(HttpMethod.POST);
+		assertThat(request.url()).hasToString(IMAGES);
+		HttpHeaders headers = request.headers();
+		assertThat(headers.getFirst(HttpHeaders.AUTHORIZATION)).isEqualTo("Bearer test-key");
+		assertThat(headers.getAccept()).containsExactly(MediaType.TEXT_EVENT_STREAM);
+		assertThat(headers.getFirst("HTTP-Referer")).isEqualTo(REFERER);
+		assertThat(headers.getFirst("X-OpenRouter-Title")).isEqualTo("My App");
+		assertThat(headers.getFirst("X-OpenRouter-Categories")).isEqualTo(CATEGORIES);
 	}
 
 	private record Fixture(OpenRouterApi api, MockRestServiceServer server) {

@@ -12,7 +12,9 @@ import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
+import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -34,47 +36,22 @@ class ResponsesOutputReconciliationTests {
 
 	private final ObjectMapper json = new ObjectMapper();
 
-	private final OpenRouterResponsesStreamingResponseMapper mapper = new OpenRouterResponsesStreamingResponseMapper();
+	private final OpenRouterResponsesStreamingResponseMapper mapper = new OpenRouterResponsesStreamingResponseMapper(
+			this.json, OpenRouterStreamingToolCallAggregator.DEFAULT_MAX_BYTES,
+			OpenRouterStreamingToolCallAggregator.DEFAULT_MAX_CHUNKS,
+			OpenRouterStreamingToolCallAggregator.DEFAULT_MAX_DURATION, OpenRouterDiagnosticSanitizer.keyless());
 
 	@Test
 	void terminalSnapshotReconcilesTextReasoningRefusalAndPendingToolsTogether() {
-		var call = event("""
-				{"type":"response.output_item.done","output_index":1,"item":{
-				"type":"function_call","status":"completed","call_id":"call-1","name":"lookup","arguments":"{}"}}
-				""");
-		var completed = terminal("completed", """
-				{"type":"message","content":[{"type":"output_text","text":"hello world"},
-				{"type":"refusal","refusal":"unavailable"}]},
-				{"type":"function_call","status":"completed","call_id":"call-1","name":"lookup","arguments":"{}"},
-				{"type":"reasoning","content":[{"type":"reasoning_text","text":"finished"}]}
-				""");
-		Flux<ChatResponse> responses = this.mapper.map(Flux.just(delta(0, 0, "hello"), call, event("""
-				{"type":"response.reasoning_text.delta","delta":"partial"}
-				"""), event("""
-				{"type":"response.refusal.delta","output_index":0,"content_index":1,"delta":"un"}
-				"""), completed));
-		for (int subscription = 0; subscription < 2; subscription++) {
-			StepVerifier.create(responses).assertNext(response -> {
-				assertThat(response.getResult().getOutput().getText()).isEqualTo("hello");
-				assertThat(response.getResult().getOutput().getToolCalls()).isEmpty();
-			})
-				.assertNext(response -> assertThat(response.getResult().getOutput().getToolCalls()).isEmpty())
-				.assertNext(response -> assertThat(response.getResult().getOutput().getMetadata())
-					.containsEntry(ReasoningMetadata.REASONING, "partial"))
-				.assertNext(response -> assertThat(response.getResult().getOutput().getMetadata())
-					.containsEntry(RefusalMetadata.REFUSAL, "un"))
-				.assertNext(response -> {
-					AssistantMessage message = response.getResult().getOutput();
-					assertThat(message.getText()).isEqualTo(" world");
-					assertThat(message.getToolCalls()).extracting(AssistantMessage.ToolCall::id)
-						.containsExactly("call-1");
-					assertThat(message.getMetadata()).containsEntry(ReasoningMetadata.REASONING, "finished")
-						.containsEntry(RefusalMetadata.REFUSAL, "unavailable")
-						.containsEntry(ReasoningMetadata.RESPONSES_OUTPUT_ITEMS, completed.response().output());
-					assertThat(response.getResult().getMetadata().getFinishReason()).isEqualTo("TOOL_CALLS");
-				})
-				.verifyComplete();
-		}
+		new Reconciliation().assertReconciled();
+	}
+
+	@Test
+	void aSecondSubscriptionReconcilesTheSameWayAsTheFirst() {
+		Reconciliation reconciliation = new Reconciliation();
+		reconciliation.responses.collectList().block(Duration.ofSeconds(5));
+
+		reconciliation.assertReconciled();
 	}
 
 	@ParameterizedTest
@@ -90,13 +67,12 @@ class ResponsesOutputReconciliationTests {
 		var responses = this.mapper
 			.map(Flux.just(delta(0, 0, "hello"), delta(0, 1, " "), delta(1, 0, "second"), terminal))
 			.collectList()
-			.block();
+			.block(Duration.ofSeconds(5));
 		assertThat(responses).extracting(response -> response.getResult().getOutput().getText())
 			.containsExactly("hello", "", "", " world \nsecond! last");
 		assertThat(
 				aggregate(Flux.just(delta(0, 0, "hello"), delta(0, 1, " "), delta(1, 0, "second"), terminal)).getText())
-			.isEqualTo(
-					new OpenRouterResponsesResponseMapper().map(terminal.response()).getResult().getOutput().getText());
+			.isEqualTo(ResponseMappers.responses().map(terminal.response()).getResult().getOutput().getText());
 	}
 
 	@Test
@@ -110,7 +86,7 @@ class ResponsesOutputReconciliationTests {
 				""");
 		assertThat(this.mapper.map(Flux.just(delta(0, 0, "hi"), done, done, delta(0, 1, "\n"), terminal))
 			.collectList()
-			.block()).extracting(response -> response.getResult().getOutput().getText())
+			.block(Duration.ofSeconds(5))).extracting(response -> response.getResult().getOutput().getText())
 			.containsExactly("hi", " ", "", "\n", "");
 		assertThat(aggregate(Flux.just(terminal)).getText()).isEqualTo("hi \n");
 	}
@@ -150,7 +126,7 @@ class ResponsesOutputReconciliationTests {
 				""");
 		assertThat(this.mapper.map(Flux.just(delta(0, 0, "first"), delta(1, 0, " second"), first, terminal))
 			.collectList()
-			.block()).extracting(response -> response.getResult().getOutput().getText())
+			.block(Duration.ofSeconds(5))).extracting(response -> response.getResult().getOutput().getText())
 			.containsExactly("first", "", " complete second", "");
 		var changed = terminal("completed", """
 				{"type":"message","content":[{"type":"output_text","text":"first complete extra"}]},
@@ -210,11 +186,9 @@ class ResponsesOutputReconciliationTests {
 					.formatted(format, format, format));
 		var item = new ResponsesStreamEvent(OUTPUT_ITEM_DONE, null, terminal.response().output().get(0), null, null,
 				null, null, null, null, null, 0, null);
-		var expected = new OpenRouterResponsesResponseMapper().map(terminal.response())
-			.getResult()
-			.getOutput()
-			.getMedia();
+		var expected = ResponseMappers.responses().map(terminal.response()).getResult().getOutput().getMedia();
 		assertMedia(media(Flux.just(terminal)), expected);
+		assertMedia(media(Flux.just(item)), expected.subList(0, 1));
 		assertMedia(media(Flux.just(item, item, terminal)), expected);
 		assertThat(expected).hasSize(3);
 		assertThat(expected.get(0).getData()).isEqualTo("data:image/" + format + ";base64,AQID");
@@ -231,18 +205,7 @@ class ResponsesOutputReconciliationTests {
 		assertMedia(model.stream(prompt)
 			.flatMapIterable(response -> response.getResult().getOutput().getMedia())
 			.collectList()
-			.block(), model.call(prompt).getResult().getOutput().getMedia());
-	}
-
-	@Test
-	void singleEventMappingPreservesStatelessImageDelivery() {
-		var terminal = terminal("completed", """
-				{"type":"image_generation_call","result":"AQID"}
-				""");
-		var item = new ResponsesStreamEvent(OUTPUT_ITEM_DONE, null, terminal.response().output().get(0), null, null);
-		assertThat(this.mapper.map(item).getResult().getOutput().getMedia()).hasSize(1);
-		assertThat(this.mapper.map(terminal).getResult().getOutput().getMedia()).isEmpty();
-		assertThat(media(Flux.just(terminal))).hasSize(1);
+			.block(Duration.ofSeconds(5)), model.call(prompt).getResult().getOutput().getMedia());
 	}
 
 	@Test
@@ -286,18 +249,19 @@ class ResponsesOutputReconciliationTests {
 	}
 
 	@Test
-	void cancellationAndOverlappingSubscriptionsKeepIndependentState() {
-		var terminal = terminal("completed", """
-				{"type":"message","content":[{"type":"output_text","text":"hello world"}]},
-				{"type":"image_generation_call","id":"i1","result":"AQID"}
-				""");
-		var image = new ResponsesStreamEvent(OUTPUT_ITEM_DONE, null, terminal.response().output().get(1), null, null,
-				null, null, null, null, null, 1, null);
+	void cancellingASubscriptionReleasesTheUpstream() {
 		AtomicBoolean cancelled = new AtomicBoolean();
-		var stream = this.mapper
-			.map(Flux.just(delta(0, 0, "hello"), image, terminal).doOnCancel(() -> cancelled.set(true)));
+		var stream = this.mapper.map(imageStreamEvents().doOnCancel(() -> cancelled.set(true)));
+
 		StepVerifier.create(stream).expectNextCount(2).thenCancel().verify();
+
 		assertThat(cancelled).isTrue();
+	}
+
+	@Test
+	void overlappingSubscriptionsKeepIndependentState() {
+		var stream = this.mapper.map(imageStreamEvents());
+
 		StepVerifier.create(Flux.zip(stream, stream)).assertNext(pair -> {
 			assertThat(pair.getT1().getResult().getOutput().getText()).isEqualTo("hello");
 			assertThat(pair.getT2().getResult().getOutput().getText()).isEqualTo("hello");
@@ -308,6 +272,26 @@ class ResponsesOutputReconciliationTests {
 			assertThat(pair.getT1().getResult().getOutput().getText()).isEqualTo(" world");
 			assertThat(pair.getT2().getResult().getOutput().getMedia()).isEmpty();
 		}).verifyComplete();
+	}
+
+	@Test
+	void aSubscriptionAfterACancelledOneStartsFromCleanState() {
+		var stream = this.mapper.map(imageStreamEvents());
+		StepVerifier.create(stream).expectNextCount(2).thenCancel().verify();
+
+		StepVerifier.create(stream.map(response -> response.getResult().getOutput().getText()))
+			.expectNext("hello", "", " world")
+			.verifyComplete();
+	}
+
+	private Flux<ResponsesStreamEvent> imageStreamEvents() {
+		var terminal = terminal("completed", """
+				{"type":"message","content":[{"type":"output_text","text":"hello world"}]},
+				{"type":"image_generation_call","id":"i1","result":"AQID"}
+				""");
+		var image = new ResponsesStreamEvent(OUTPUT_ITEM_DONE, null, terminal.response().output().get(1), null, null,
+				null, null, null, null, null, 1, null);
+		return Flux.just(delta(0, 0, "hello"), image, terminal);
 	}
 
 	private ResponsesStreamEvent delta(int output, int content, String text) {
@@ -334,13 +318,66 @@ class ResponsesOutputReconciliationTests {
 		return this.mapper.map(events)
 			.flatMapIterable(response -> response.getResult().getOutput().getMedia())
 			.collectList()
-			.block();
+			.block(Duration.ofSeconds(5));
 	}
 
 	private AssistantMessage aggregate(Flux<ResponsesStreamEvent> events) {
 		AtomicReference<ChatResponse> result = new AtomicReference<>();
 		new MessageAggregator().aggregate(this.mapper.map(events), result::set).blockLast();
 		return result.get().getResult().getOutput();
+	}
+
+	/**
+	 * Text, a pending tool call, reasoning and refusal reconciled against one terminal
+	 * snapshot.
+	 */
+	private final class Reconciliation {
+
+		private final ResponsesStreamEvent completed = terminal("completed", """
+				{"type":"message","content":[{"type":"output_text","text":"hello world"},
+				{"type":"refusal","refusal":"unavailable"}]},
+				{"type":"function_call","status":"completed","call_id":"call-1","name":"lookup","arguments":"{}"},
+				{"type":"reasoning","content":[{"type":"reasoning_text","text":"finished"}]}
+				""");
+
+		private final Flux<ChatResponse> responses;
+
+		Reconciliation() {
+			var call = event("""
+					{"type":"response.output_item.done","output_index":1,"item":{
+					"type":"function_call","status":"completed","call_id":"call-1","name":"lookup","arguments":"{}"}}
+					""");
+			this.responses = ResponsesOutputReconciliationTests.this.mapper
+				.map(Flux.just(delta(0, 0, "hello"), call, event("""
+						{"type":"response.reasoning_text.delta","delta":"partial"}
+						"""), event("""
+						{"type":"response.refusal.delta","output_index":0,"content_index":1,"delta":"un"}
+						"""), this.completed));
+		}
+
+		void assertReconciled() {
+			StepVerifier.create(this.responses).assertNext(response -> {
+				assertThat(response.getResult().getOutput().getText()).isEqualTo("hello");
+				assertThat(response.getResult().getOutput().getToolCalls()).isEmpty();
+			})
+				.assertNext(response -> assertThat(response.getResult().getOutput().getToolCalls()).isEmpty())
+				.assertNext(response -> assertThat(response.getResult().getOutput().getMetadata())
+					.containsEntry(ReasoningMetadata.REASONING, "partial"))
+				.assertNext(response -> assertThat(response.getResult().getOutput().getMetadata())
+					.containsEntry(RefusalMetadata.REFUSAL, "un"))
+				.assertNext(response -> {
+					AssistantMessage message = response.getResult().getOutput();
+					assertThat(message.getText()).isEqualTo(" world");
+					assertThat(message.getToolCalls()).extracting(AssistantMessage.ToolCall::id)
+						.containsExactly("call-1");
+					assertThat(message.getMetadata()).containsEntry(ReasoningMetadata.REASONING, "finished")
+						.containsEntry(RefusalMetadata.REFUSAL, "unavailable")
+						.containsEntry(ReasoningMetadata.RESPONSES_OUTPUT_ITEMS, this.completed.response().output());
+					assertThat(response.getResult().getMetadata().getFinishReason()).isEqualTo("TOOL_CALLS");
+				})
+				.verifyComplete();
+		}
+
 	}
 
 }

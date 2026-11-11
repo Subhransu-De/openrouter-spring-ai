@@ -14,6 +14,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.Arguments;
+import java.util.stream.Stream;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.ChatOptions;
@@ -65,24 +68,34 @@ class ChatClientOptionCompositionTests {
 		this.server.stop(0);
 	}
 
-	@ParameterizedTest
-	@ValueSource(booleans = { false, true })
-	void inheritedUnsupportedOptionsFailBeforeHttp(boolean streaming) {
+	@ParameterizedTest(name = "streaming={0}, runtime includeUsage={1}")
+	@MethodSource("streamingWithRuntimeIncludeUsage")
+	void inheritedIncludeUsageFailsBeforeHttp(boolean streaming, Boolean includeUsage) {
 		var defaults = OpenRouterChatOptions.builder().model("synthetic-model").includeUsage(true).build();
 		var client = ChatClient.builder(model(defaults)).build();
-		for (Boolean includeUsage : new Boolean[] { null, false }) {
-			var options = responses().includeUsage(includeUsage).build();
-			assertThatThrownBy(() -> invoke(client, options, streaming)).isInstanceOf(IllegalArgumentException.class)
-				.hasMessageContaining("includeUsage");
-		}
-		var seeded = ChatClient.builder(model(defaults.mutate().includeUsage(null).seed(7).build())).build();
-		assertThatThrownBy(() -> invoke(seeded, responses().seed(null).build(), streaming))
-			.isInstanceOf(IllegalArgumentException.class)
-			.hasMessageContaining("seed");
+		var options = responses().includeUsage(includeUsage).build();
+		assertThatThrownBy(() -> invoke(client, options, streaming)).isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("OPENAI_RESPONSES does not support includeUsage; unset it or use OPENAI_CHAT_COMPLETIONS");
 		assertThat(this.requests).isEmpty();
 	}
 
-	@ParameterizedTest
+	static Stream<Arguments> streamingWithRuntimeIncludeUsage() {
+		return Stream.of(false, true)
+			.flatMap(streaming -> Stream.of(Arguments.of(streaming, null), Arguments.of(streaming, false)));
+	}
+
+	@ParameterizedTest(name = "streaming={0}")
+	@ValueSource(booleans = { false, true })
+	void inheritedSeedFailsBeforeHttp(boolean streaming) {
+		var defaults = OpenRouterChatOptions.builder().model("synthetic-model").seed(7).build();
+		var seeded = ChatClient.builder(model(defaults)).build();
+		assertThatThrownBy(() -> invoke(seeded, responses().seed(null).build(), streaming))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("OPENAI_RESPONSES does not support seed; unset it or use OPENAI_CHAT_COMPLETIONS");
+		assertThat(this.requests).isEmpty();
+	}
+
+	@ParameterizedTest(name = "streaming={0}")
 	@ValueSource(booleans = { false, true })
 	void requestBuilderReplacesClientCustomizerButStillUsesModelDefaults(boolean streaming) {
 		var defaults = OpenRouterChatOptions.builder().model("synthetic-model").build();
@@ -95,7 +108,7 @@ class ChatClientOptionCompositionTests {
 		assertThat(this.requests.get(0).has("seed")).isFalse();
 	}
 
-	@ParameterizedTest
+	@ParameterizedTest(name = "streaming={0}")
 	@ValueSource(booleans = { false, true })
 	void modeNeutralDefaultsAllowBothEndpoints(boolean streaming) {
 		var client = ChatClient.builder(model(OpenRouterChatOptions.builder().model("synthetic-model").build()))
@@ -105,21 +118,17 @@ class ChatClientOptionCompositionTests {
 		assertThat(this.paths).containsExactly("/chat/completions", "/responses");
 		assertThat(this.requests)
 			.allSatisfy(request -> assertThat(request.path("model").stringValue()).isEqualTo("synthetic-model"));
+		assertThat(this.requests.get(0).at("/usage/include").asBoolean()).isTrue();
 		assertThat(this.requests.get(1).has("stream_options")).isFalse();
 		assertThat(this.requests.get(1).has("seed")).isFalse();
 	}
 
-	@ParameterizedTest
+	@ParameterizedTest(name = "streaming={0}")
 	@ValueSource(booleans = { false, true })
 	void rawPortableOptionsReplaceProviderDefaults(boolean streaming) {
 		var model = model(responses().model("default-model").build());
 		var prompt = new Prompt("synthetic", ChatOptions.builder().model("runtime-model").build());
-		if (streaming) {
-			model.stream(prompt).collectList().block(Duration.ofSeconds(10));
-		}
-		else {
-			model.call(prompt);
-		}
+		invoke(model, prompt, streaming);
 		assertThat(this.paths).containsExactly("/chat/completions");
 		assertThat(this.requests.get(0).path("model").stringValue()).isEqualTo("runtime-model");
 	}
@@ -130,6 +139,15 @@ class ChatClientOptionCompositionTests {
 
 	private static OpenRouterChatOptions.Builder responses() {
 		return OpenRouterChatOptions.builder().requestMode(OpenRouterRequestMode.OPENAI_RESPONSES);
+	}
+
+	private static void invoke(OpenRouterChatModel model, Prompt prompt, boolean streaming) {
+		if (streaming) {
+			model.stream(prompt).collectList().block(Duration.ofSeconds(10));
+		}
+		else {
+			model.call(prompt);
+		}
 	}
 
 	private static void invoke(ChatClient client, OpenRouterChatOptions options, boolean streaming) {

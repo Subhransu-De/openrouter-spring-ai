@@ -3,6 +3,7 @@ package de.subhransu.openrouter.springai.chat.mapper;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import de.subhransu.openrouter.springai.api.dto.ResponsesContent;
 import de.subhransu.openrouter.springai.api.dto.ResponsesOutputItem;
@@ -13,15 +14,19 @@ import de.subhransu.openrouter.springai.api.dto.StreamError;
 import de.subhransu.openrouter.springai.api.dto.Usage;
 import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
 import java.util.List;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
 
@@ -36,9 +41,9 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 
 	private final ObjectMapper objectMapper = new ObjectMapper();
 
-	private final OpenRouterResponsesResponseMapper responseMapper = new OpenRouterResponsesResponseMapper();
+	private final OpenRouterResponsesResponseMapper responseMapper = ResponseMappers.responses();
 
-	private final OpenRouterResponsesStreamingResponseMapper streamingMapper = new OpenRouterResponsesStreamingResponseMapper();
+	private final OpenRouterResponsesStreamingResponseMapper streamingMapper = ResponseMappers.responsesStreaming();
 
 	private final OpenRouterResponsesRequestMapper requestMapper = new OpenRouterResponsesRequestMapper(
 			new ObjectMapper());
@@ -47,7 +52,7 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 		return new ResponsesResult("resp-1", "response", 123L, "openai/gpt-5.4", status, output, usage, error);
 	}
 
-	private ResponsesOutputItem message(String text) {
+	private static ResponsesOutputItem message(String text) {
 		return new ResponsesOutputItem("item-msg", "message", "completed", "assistant",
 				List.of(new ResponsesContent("output_text", text)));
 	}
@@ -56,54 +61,36 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 		return de.subhransu.openrouter.springai.chat.OpenRouterChatOptions.builder().model("openai/gpt-5.4").build();
 	}
 
-	// ---------------------------------------------------------------------
-	// Sync result edge cases
-	// ---------------------------------------------------------------------
+	static Stream<Arguments> malformedOutputs() {
+		return Stream.of(Arguments.of(Named.of("null output", "null"), "OpenRouter response requires Responses output"),
+				Arguments.of(Named.of("null output item", "[null]"), "OpenRouter response requires output item"),
+				Arguments.of(Named.of("null message content part", "[{\"type\":\"message\",\"content\":[null]}]"),
+						"OpenRouter response requires message content"),
+				Arguments.of(
+						Named.of("function call without an id",
+								"[{\"type\":\"function_call\",\"name\":\"lookup\",\"arguments\":\"{}\"}]"),
+						"OpenRouter response requires a nonblank tool call id"),
+				Arguments.of(Named.of("function call with an empty name",
+						"[{\"type\":\"function_call\",\"call_id\":\"call-1\",\"name\":\"\",\"arguments\":\"{\\\"job\\\":\\\"a\\\"}{\\\"job\\\":\\\"b\\\"}\"}]"),
+						"OpenRouter response requires a nonblank tool call name"),
+				Arguments.of(Named.of("function call with a blank id",
+						"[{\"type\":\"function_call\",\"call_id\":\" \",\"name\":\"lookup\",\"arguments\":\"{}\"}]"),
+						"OpenRouter response requires a nonblank tool call id"));
+	}
 
 	@ParameterizedTest
-	@ValueSource(strings = { "[null]", "[{\"type\":\"message\",\"content\":[null]}]",
-			"[{\"type\":\"function_call\",\"name\":\"lookup\",\"arguments\":\"{}\"}]",
-			"[{\"type\":\"function_call\",\"call_id\":\"call-1\",\"name\":\"\",\"arguments\":\"{\\\"job\\\":\\\"a\\\"}{\\\"job\\\":\\\"b\\\"}\"}]",
-			"[{\"type\":\"function_call\",\"call_id\":\" \",\"name\":\"lookup\",\"arguments\":\"{}\"}]" })
-	void malformedOutputFailsConsistentlyInSyncAndStreaming(String output) {
+	@MethodSource("malformedOutputs")
+	void malformedOutputFailsConsistentlyInSyncAndStreaming(String output, String message) {
 		String json = "{\"status\":\"completed\",\"output\":" + output + "}";
 		ResponsesResult response = this.objectMapper.readValue(json, ResponsesResult.class);
-		assertThatThrownBy(() -> this.responseMapper.map(response)).isInstanceOf(OpenRouterProtocolException.class);
+		assertThatThrownBy(() -> this.responseMapper.map(response)).isInstanceOf(OpenRouterProtocolException.class)
+			.hasMessage(message);
 		ResponsesStreamEvent event = this.objectMapper
 			.readValue("{\"type\":\"response.completed\",\"response\":" + json + "}", ResponsesStreamEvent.class);
 		StepVerifier.create(this.streamingMapper.map(Flux.just(event)))
-			.expectError(OpenRouterProtocolException.class)
+			.expectErrorSatisfies(
+					error -> assertThat(error).isInstanceOf(OpenRouterProtocolException.class).hasMessage(message))
 			.verify();
-	}
-
-	@Test
-	void concatenatesTextAcrossMultipleMessageOutputItems() {
-		ChatResponse mapped = this.responseMapper
-			.map(result("completed", List.of(message("Hello "), message("world")), null, null));
-
-		assertThat(mapped.getResult().getOutput().getText()).isEqualTo("Hello world");
-	}
-
-	@Test
-	void ignoresReasoningOutputItemsWhenBuildingText() {
-		ResponsesOutputItem reasoning = new ResponsesOutputItem("item-r", "reasoning", "completed", "assistant",
-				List.of(new ResponsesContent("reasoning_text", "internal thoughts")));
-		ChatResponse mapped = this.responseMapper
-			.map(result("completed", List.of(reasoning, message("final")), null, null));
-
-		// Only message-type items contribute to the visible answer.
-		assertThat(mapped.getResult().getOutput().getText()).isEqualTo("final");
-	}
-
-	@Test
-	void mapsFunctionCallOutputItemsToToolCalls() {
-		ResponsesOutputItem functionCall = new ResponsesOutputItem("item-fc", "function_call", "completed", null, null,
-				"call-1", "get_weather", "{\"city\":\"Berlin\"}", null);
-		ChatResponse mapped = this.responseMapper.map(result("completed", List.of(functionCall), null, null));
-
-		assertThat(mapped.hasToolCalls()).isTrue();
-		assertThat(mapped.getResult().getMetadata().getFinishReason()).isEqualTo("TOOL_CALLS");
-		assertThat(mapped.getResult().getOutput().getToolCalls().get(0).id()).isEqualTo("call-1");
 	}
 
 	@Test
@@ -129,110 +116,12 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 				  "error": {"code":"server_error","message":"line one\\r\\nline two Bearer response-stream-secret"} }
 				""");
 
-		assertThatThrownBy(() -> this.streamingMapper.map(event))
+		assertThatThrownBy(() -> ResponseMappers.responsesEvent(event))
 			.isInstanceOfSatisfying(OpenRouterTransientApiException.class, exception -> {
 				assertThat(exception.getMessage()).isEqualTo("OpenRouter responses stream failed");
 				assertThat(exception.getErrorDetails().message()).isEqualTo("line one line two Bearer [REDACTED]");
 				assertThat(exception.getResponseBody()).doesNotContain("\r", "\n", "response-stream-secret");
 			});
-	}
-
-	@Test
-	void incompleteStatusMapsToIncompleteFinishReason() {
-		ChatResponse mapped = this.responseMapper.map(result("incomplete", List.of(message("partial")), null, null));
-
-		// "incomplete" is unknown to the finish-reason normalizer, so it passes through.
-		assertThat(mapped.getResult().getMetadata().getFinishReason()).isEqualTo("incomplete");
-		assertThat(mapped.getResult().getOutput().getText()).isEqualTo("partial");
-	}
-
-	@Test
-	void unknownOutputItemTypeContributesNoText() {
-		ResponsesOutputItem unknown = new ResponsesOutputItem("item-x", "web_search_call", "completed", null,
-				List.of(new ResponsesContent("output_text", "should be ignored")), null, null, null, null);
-		ChatResponse mapped = this.responseMapper
-			.map(result("completed", List.of(unknown, message("kept")), null, null));
-
-		assertThat(mapped.getResult().getOutput().getText()).isEqualTo("kept");
-	}
-
-	@Test
-	void outputItemWithMissingOptionalFieldsDoesNotFail() {
-		ResponsesOutputItem sparse = new ResponsesOutputItem(null, "message", null, null, null);
-		ChatResponse mapped = this.responseMapper.map(result("completed", List.of(sparse), null, null));
-
-		assertThat(mapped.getResult().getOutput().getText()).isEmpty();
-	}
-
-	@Test
-	void nullOutputArrayFailsValidation() {
-		assertThatThrownBy(() -> this.responseMapper.map(result("completed", null, null, null)))
-			.isInstanceOf(OpenRouterProtocolException.class);
-	}
-
-	@Test
-	void emptyOutputArrayMapsToEmptyText() {
-		ChatResponse mapped = this.responseMapper.map(result("completed", List.of(), null, null));
-
-		assertThat(mapped.getResult().getOutput().getText()).isEmpty();
-	}
-
-	// ---------------------------------------------------------------------
-	// Stream event variants
-	// ---------------------------------------------------------------------
-
-	@Test
-	void mapsReasoningTextDeltaUnderReasoningMetadata() throws Exception {
-		ChatResponse mapped = this.streamingMapper.map(streamEvent("""
-				{ "type": "response.reasoning_text.delta", "delta": "thinking" }
-				"""));
-
-		assertThat(mapped.getResult().getOutput().getText()).isEmpty();
-		assertThat(mapped.getResult().getMetadata().<String>get("openrouter.reasoning")).isEqualTo("thinking");
-	}
-
-	@Test
-	void mapsIncompleteStreamEventToReasonFromDetails() throws Exception {
-		ChatResponse mapped = this.streamingMapper.map(streamEvent(
-				"""
-						{
-						  "type": "response.incomplete",
-						  "response": {"status": "incomplete", "output": [], "incomplete_details": {"reason": "max_output_tokens"}}
-						}
-						"""));
-
-		// max_output_tokens normalizes to LENGTH.
-		assertThat(mapped.getResult().getMetadata().getFinishReason()).isEqualTo("LENGTH");
-	}
-
-	@Test
-	void unknownStreamEventTypeIsANoOp() throws Exception {
-		ChatResponse mapped = this.streamingMapper.map(streamEvent("""
-				{ "type": "response.some_future_event", "data": 123 }
-				"""));
-
-		assertThat(mapped.getResult().getOutput().getText()).isEmpty();
-		assertThat(mapped.getResult().getMetadata().getFinishReason()).isNull();
-		assertThat(mapped.hasToolCalls()).isFalse();
-	}
-
-	@Test
-	void completedEventExtractsUsageAndIdentity() throws Exception {
-		ChatResponse mapped = this.streamingMapper.map(streamEvent("""
-				{
-				  "type": "response.completed",
-				  "response": {
-				    "id": "resp-9",
-				    "model": "openai/gpt-5.4",
-				    "status": "completed",
-				    "output": [],
-				    "usage": {"input_tokens": 3, "output_tokens": 4, "total_tokens": 7}
-				  }
-				}
-				"""));
-
-		assertThat(mapped.getMetadata().getId()).isEqualTo("resp-9");
-		assertThat(mapped.getMetadata().getUsage().getTotalTokens()).isEqualTo(7);
 	}
 
 	// ---------------------------------------------------------------------
@@ -257,10 +146,98 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 		ResponsesRequest request = this.requestMapper.map(List.of(new UserMessage("hi"), toolOnly), options(), false,
 				List.of());
 
-		List<?> input = (List<?>) request.input();
 		// user message + one function_call item, no empty assistant text message.
+		JsonNode input = this.objectMapper.valueToTree(request.input());
 		assertThat(input).hasSize(2);
-		assertThat(input.get(1)).isInstanceOf(de.subhransu.openrouter.springai.api.dto.ResponsesFunctionCall.class);
+		assertThat(input.get(1).propertyNames()).containsExactlyInAnyOrder("type", "call_id", "name", "arguments");
+		assertThat(input.at("/1/type").asString()).isEqualTo("function_call");
+		assertThat(input.at("/1/call_id").asString()).isEqualTo("call-1");
+		assertThat(input.at("/1/name").asString()).isEqualTo("get_weather");
+		assertThat(input.at("/1/arguments").asString()).isEqualTo("{}");
+	}
+
+	@Test
+	void conversationWithToolRoundTripMapsEveryMessageKindToItsInputShape() {
+		AssistantMessage call = AssistantMessage.builder()
+			.content("checking")
+			.toolCalls(List.of(new AssistantMessage.ToolCall("call-1", "function", "get_weather", "{\"city\":\"x\"}")))
+			.build();
+		ToolResponseMessage result = ToolResponseMessage.builder()
+			.responses(List.of(new ToolResponseMessage.ToolResponse("call-1", "get_weather", "sunny")))
+			.build();
+		List<Message> messages = List.of(new SystemMessage("be brief"), new UserMessage("weather?"), call, result,
+				new AssistantMessage("done"));
+
+		ResponsesRequest request = this.requestMapper.map(messages, options(), false, List.of());
+
+		JsonNode input = this.objectMapper.valueToTree(request.input());
+		assertThat(request.instructions()).isEqualTo("be brief");
+		assertThat(input).isEqualTo(this.objectMapper.readTree("""
+				[{"type":"message","role":"user","content":[{"type":"input_text","text":"weather?"}]},
+				 {"type":"message","status":"completed","role":"assistant",
+				  "content":[{"type":"output_text","text":"checking"}]},
+				 {"type":"function_call","call_id":"call-1","name":"get_weather","arguments":"{\\"city\\":\\"x\\"}"},
+				 {"id":"fc_output_call-1","type":"function_call_output","call_id":"call-1","output":"sunny"},
+				 {"type":"message","status":"completed","role":"assistant",
+				  "content":[{"type":"output_text","text":"done"}]}]
+				"""));
+	}
+
+	static Stream<Arguments> outputShapes() {
+		var reasoning = new ResponsesOutputItem("item-r", "reasoning", "completed", "assistant",
+				List.of(new ResponsesContent("reasoning_text", "internal thoughts")));
+		var unknown = new ResponsesOutputItem("item-x", "web_search_call", "completed", null,
+				List.of(new ResponsesContent("output_text", "should be ignored")), null, null, null, null);
+		var sparse = new ResponsesOutputItem(null, "message", null, null, null);
+		return Stream.of(
+				Arguments.of(
+						Named.of("text across several message items", List.of(message("Hello "), message("world"))),
+						"Hello world", null),
+				Arguments.of(Named.of("reasoning item", List.of(reasoning, message("final"))), "final",
+						"internal thoughts"),
+				Arguments.of(Named.of("unknown item type", List.of(unknown, message("kept"))), "kept", null),
+				Arguments.of(Named.of("message item without optional fields", List.of(sparse)), "", null),
+				Arguments.of(Named.of("empty output", List.of()), "", null));
+	}
+
+	@ParameterizedTest
+	@MethodSource("outputShapes")
+	void outputItemsMapToVisibleTextAndReasoningMetadata(List<ResponsesOutputItem> output, String text,
+			String reasoning) {
+		ChatResponse mapped = this.responseMapper.map(result("completed", output, null, null));
+
+		assertThat(mapped.getResults()).singleElement().satisfies(generation -> {
+			assertThat(generation.getOutput().getText()).isEqualTo(text);
+			assertThat(generation.getOutput().getMetadata().get("openrouter.reasoning")).isEqualTo(reasoning);
+			assertThat(generation.getMetadata().getFinishReason()).isEqualTo("STOP");
+		});
+		assertThat(mapped.hasToolCalls()).isFalse();
+	}
+
+	static Stream<Arguments> singleStreamEvents() {
+		return Stream.of(Arguments.of(Named.of("reasoning text delta", """
+				{ "type": "response.reasoning_text.delta", "delta": "thinking" }
+				"""), "thinking", null),
+				Arguments.of(
+						Named.of("incomplete event with a reason",
+								"""
+										{
+										  "type": "response.incomplete",
+										  "response": {"status": "incomplete", "output": [], "incomplete_details": {"reason": "max_output_tokens"}}
+										}
+										"""),
+						null, "LENGTH"));
+	}
+
+	@ParameterizedTest
+	@MethodSource("singleStreamEvents")
+	void singleStreamEventsMapToReasoningMetadataAndFinishReason(String event, String reasoning, String finishReason)
+			throws Exception {
+		ChatResponse mapped = ResponseMappers.responsesEvent(streamEvent(event));
+
+		assertThat(mapped.getResult().getOutput().getText()).isEmpty();
+		assertThat(mapped.getResult().getMetadata().<String>get("openrouter.reasoning")).isEqualTo(reasoning);
+		assertThat(mapped.getResult().getMetadata().getFinishReason()).isEqualTo(finishReason);
 	}
 
 	@Test
@@ -271,7 +248,9 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 		ResponsesRequest request = this.requestMapper.map(messages, options(), false, List.of());
 
 		// The empty assistant turn adds no input item; only the user message remains.
-		assertThat((List<?>) request.input()).hasSize(1);
+		JsonNode input = this.objectMapper.valueToTree(request.input());
+		assertThat(input).hasSize(1);
+		assertThat(input.at("/0/role").asString()).isEqualTo("user");
 	}
 
 	private ResponsesStreamEvent streamEvent(String json) throws Exception {

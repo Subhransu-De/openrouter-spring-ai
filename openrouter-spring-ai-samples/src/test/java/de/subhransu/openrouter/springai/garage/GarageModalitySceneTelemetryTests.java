@@ -15,7 +15,6 @@ import de.subhransu.openrouter.springai.garage.evidence.GarageTelemetry;
 import de.subhransu.openrouter.springai.garage.scenes.ModalityBaysScene;
 import de.subhransu.openrouter.springai.garage.scenes.SceneContext;
 import de.subhransu.openrouter.springai.image.OpenRouterImageModel;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationHandler;
 import io.micrometer.observation.ObservationRegistry;
@@ -25,6 +24,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.ai.embedding.EmbeddingModel;
@@ -35,7 +35,13 @@ class GarageModalitySceneTelemetryTests {
 
   @TempDir Path output;
   private final GarageEvidence evidence = new GarageEvidence();
-  private final GarageTelemetry telemetry = new GarageTelemetry(new SimpleMeterRegistry(), this.evidence);
+  private final GarageTelemetryFixture fixture = new GarageTelemetryFixture(this.evidence);
+  private final GarageTelemetry telemetry = this.fixture.telemetry();
+
+  @AfterEach
+  void closeFixture() {
+    this.fixture.close();
+  }
 
   @Test
   void failedSceneWaitsForAsynchronousObservationCompletion() throws Exception {
@@ -84,6 +90,9 @@ class GarageModalitySceneTelemetryTests {
       assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
       completion.start();
       assertThat(stopping.await(5, TimeUnit.SECONDS)).isTrue();
+      // The scene thread is parked in onStop on the release latch, which no code signals until
+      // below, so the scene cannot finish here. The short bound only has to see that "not finished"
+      // state; it can fail only if the scene wrongly completes before the observation is stored.
       assertThatThrownBy(() -> result.get(100, TimeUnit.MILLISECONDS)).isInstanceOf(TimeoutException.class);
       release.countDown();
       result.get(5, TimeUnit.SECONDS);
@@ -111,7 +120,7 @@ class GarageModalitySceneTelemetryTests {
     ModalityBaysScene scene = new ModalityBaysScene(mock(EmbeddingModel.class), model);
     assertThatThrownBy(() -> scene.execute(context(ObservationRegistry.NOOP)))
         .isInstanceOf(IllegalStateException.class)
-        .hasMessageContaining("synthetic request failure", "Timed out waiting for all observations");
+        .hasMessageContainingAll("synthetic request failure", "Timed out waiting for all observations");
     assertThat(this.evidence.featureSnapshot()).singleElement().satisfies(feature ->
         assertThat(feature.get("complete")).isEqualTo(false));
   }

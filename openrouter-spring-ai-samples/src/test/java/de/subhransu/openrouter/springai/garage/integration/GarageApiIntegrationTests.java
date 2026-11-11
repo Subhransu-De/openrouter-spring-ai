@@ -2,10 +2,10 @@ package de.subhransu.openrouter.springai.garage.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import tools.jackson.databind.JsonNode;
 
 /** Run scheduling and per-run settings, observed at the OpenRouter wire. */
@@ -19,9 +19,11 @@ class GarageApiIntegrationTests extends MockedGarageIntegrationTest {
     OpenRouterMock.useScenario("routing-lane-slow");
     String active = start(ROUTING);
 
-    assertThat(this.mvc.post().uri("/api/runs").contentType(MediaType.APPLICATION_JSON).content(ROUTING))
+    assertThat(post("/api/runs", ROUTING))
         .hasStatus(HttpStatus.CONFLICT)
         .bodyJson().extractingPath("$.activeRun").isEqualTo(active);
+    assertThat(post("/api/runs", ROUTING)).bodyJson().extractingPath("$.detail")
+        .isEqualTo("Garage run " + active.substring("/api/runs/".length()) + " is still running");
     assertThat(this.mvc.get().uri(active + "/evidence")).hasStatus(HttpStatus.CONFLICT);
     assertThat(this.mvc.get().uri(active + "/report")).hasStatus(HttpStatus.CONFLICT);
 
@@ -48,23 +50,25 @@ class GarageApiIntegrationTests extends MockedGarageIntegrationTest {
     assertThat(next.path("provider").path("require_parameters").asBoolean()).isFalse();
   }
 
+  @ParameterizedTest(name = "{0}")
+  @ValueSource(strings = {
+      "{\"scenes\":[\"paint-shop\"]}",
+      "{\"full\":true,\"scenes\":[\"service-story\"]}",
+      "{\"capabilites\":[\"text\"]}",
+      "{\"capabilities\":[null]}",
+      "{\"capabilities\":[]}",
+      "{\"topic\":\" \"}",
+      "{\"scenes\":[\"recovery-road-test\"],\"requestModes\":[\"responses\"]}",
+      "{\"offlineContracts\":true,\"reasoningEffort\":\"\"}",
+      "{\"requestModes\":[\"chats\"]}"})
+  void invalidRunRequestsNeverReachOpenRouter(String invalid) {
+    assertThat(post("/api/runs", invalid)).hasStatus(HttpStatus.BAD_REQUEST);
+    assertThat(OpenRouterMock.server().getAllServeEvents()).isEmpty();
+  }
+
   @Test
-  void invalidRequestsNeverReachOpenRouter() {
-    for (String invalid : List.of(
-        "{\"scenes\":[\"paint-shop\"]}",
-        "{\"full\":true,\"scenes\":[\"service-story\"]}",
-        "{\"capabilites\":[\"text\"]}",
-        "{\"capabilities\":[null]}",
-        "{\"capabilities\":[]}",
-        "{\"topic\":\" \"}",
-        "{\"scenes\":[\"recovery-road-test\"],\"requestModes\":[\"responses\"]}",
-        "{\"offlineContracts\":true,\"reasoningEffort\":\"\"}",
-        "{\"requestModes\":[\"chats\"]}")) {
-      assertThat(this.mvc.post().uri("/api/runs").contentType(MediaType.APPLICATION_JSON).content(invalid))
-          .as(invalid).hasStatus(HttpStatus.BAD_REQUEST);
-    }
-    assertThat(this.mvc.post().uri("/api/sweeps").contentType(MediaType.APPLICATION_JSON).content("{}"))
-        .hasStatus(HttpStatus.BAD_REQUEST);
+  void anEmptySweepRequestNeverReachesOpenRouter() {
+    assertThat(post("/api/sweeps", "{}")).hasStatus(HttpStatus.BAD_REQUEST);
     assertThat(OpenRouterMock.server().getAllServeEvents()).isEmpty();
   }
 

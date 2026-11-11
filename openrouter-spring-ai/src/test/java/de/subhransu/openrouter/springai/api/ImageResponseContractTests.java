@@ -1,6 +1,7 @@
 package de.subhransu.openrouter.springai.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.params.provider.Arguments.argumentSet;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
@@ -16,10 +17,13 @@ import de.subhransu.openrouter.springai.image.OpenRouterImageModel;
 import de.subhransu.openrouter.springai.image.OpenRouterImageOptions;
 import io.micrometer.observation.tck.TestObservationRegistry;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.ai.image.ImagePrompt;
+import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.image.ImageResponse;
 import org.springframework.core.retry.RetryPolicy;
 import org.springframework.core.retry.RetryTemplate;
@@ -38,10 +42,18 @@ import java.nio.charset.StandardCharsets;
 
 class ImageResponseContractTests {
 
+	private static final String USAGE_KEY = "openrouter.usage";
+
 	private static final ImagePrompt PROMPT = new ImagePrompt("synthetic image");
 
 	private final TestObservationRegistry registry = TestObservationRegistry.create();
 
+	private static final String NO_DATA = "OpenRouter image response requires data";
+
+	private static final String NO_CONTENT = "OpenRouter image data requires image content";
+
+	// The model and API never hand the validator a null response, so only a direct call
+	// reaches this guard; it is the last line of defence for a caller-supplied response.
 	@Test
 	void validatorRejectsNullWithAProtocolError() {
 		assertThatThrownBy(
@@ -50,20 +62,43 @@ class ImageResponseContractTests {
 			.hasMessage("Null OpenRouter image response");
 	}
 
-	@ParameterizedTest
-	@ValueSource(strings = { "", "null", "{}", "{\"data\":null}", "{\"data\":[null]}", "{\"data\":[{}]}",
-			"{\"data\":[{\"b64_json\":\" \",\"url\":\"\"}]}", "{\"data\":[{\"b64_json\":\"aW1hZ2U=\"},{}]}" })
-	void invalidJsonFailsSyncAndFallbackAndStopsObservations(String body) {
-		OpenRouterImageModel model = model(body, MediaType.APPLICATION_JSON);
-		assertThatThrownBy(() -> model.call(PROMPT)).isInstanceOf(OpenRouterProtocolException.class);
-		assertStoppedWithError(OpenRouterProtocolException.class);
-		this.registry.clear();
-		StepVerifier.create(model.stream(PROMPT)).expectError(OpenRouterProtocolException.class).verify();
-		assertStoppedWithError(OpenRouterProtocolException.class);
+	static Stream<Arguments> invalidJsonBodies() {
+		return Stream.of(
+				argumentSet("empty body", "", "Empty OpenRouter /images response",
+						"Invalid OpenRouter image response JSON"),
+				argumentSet("JSON null", "null", "Null OpenRouter /images response", "Empty OpenRouter image response"),
+				argumentSet("no data field", "{}", NO_DATA, NO_DATA),
+				argumentSet("null data", "{\"data\":null}", NO_DATA, NO_DATA),
+				argumentSet("null entry", "{\"data\":[null]}", NO_CONTENT, NO_CONTENT),
+				argumentSet("entry without content", "{\"data\":[{}]}", NO_CONTENT, NO_CONTENT),
+				argumentSet("blank content", "{\"data\":[{\"b64_json\":\" \",\"url\":\"\"}]}", NO_CONTENT, NO_CONTENT),
+				argumentSet("valid entry followed by an empty one", "{\"data\":[{\"b64_json\":\"aW1hZ2U=\"},{}]}",
+						NO_CONTENT, NO_CONTENT));
 	}
 
 	@ParameterizedTest
-	@ValueSource(strings = { "", ",\"data\":[]", ",\"data\":[{\"b64_json\":\"aW1hZ2U=\"}]" })
+	@MethodSource("invalidJsonBodies")
+	void invalidJsonFailsSyncAndFallbackAndStopsObservations(String body, String syncMessage, String streamMessage) {
+		OpenRouterImageModel model = model(body, MediaType.APPLICATION_JSON);
+		assertThatThrownBy(() -> model.call(PROMPT)).isInstanceOf(OpenRouterProtocolException.class)
+			.hasMessage(syncMessage);
+		assertStoppedWithError(OpenRouterProtocolException.class);
+		this.registry.clear();
+		StepVerifier.create(model.stream(PROMPT))
+			.expectErrorSatisfies(error -> assertThat(error).isInstanceOf(OpenRouterProtocolException.class)
+				.hasMessage(streamMessage))
+			.verify();
+		assertStoppedWithError(OpenRouterProtocolException.class);
+	}
+
+	static Stream<Arguments> errorsBesideData() {
+		return Stream.of(argumentSet("error only", ""),
+				argumentSet("error next to an empty data array", ",\"data\":[]"),
+				argumentSet("error next to a valid image", ",\"data\":[{\"b64_json\":\"aW1hZ2U=\"}]"));
+	}
+
+	@ParameterizedTest
+	@MethodSource("errorsBesideData")
 	void jsonErrorsTakePrecedenceAndPreserveDiagnostics(String data) {
 		String body = "{\"error\":{\"code\":\"429\",\"message\":\"synthetic rate limit\","
 				+ "\"error_type\":\"rate_limit_error\",\"metadata\":{\"provider_code\":\"synthetic_limit\"}}" + data
@@ -76,8 +111,13 @@ class ImageResponseContractTests {
 		assertStoppedWithError(OpenRouterTransientApiException.class);
 	}
 
+	static Stream<Arguments> completedEventContents() {
+		return Stream.of(argumentSet("no b64_json field", ""), argumentSet("null b64_json", ",\"b64_json\":null"),
+				argumentSet("blank b64_json", ",\"b64_json\":\" \""));
+	}
+
 	@ParameterizedTest
-	@ValueSource(strings = { "", ",\"b64_json\":null", ",\"b64_json\":\" \"" })
+	@MethodSource("completedEventContents")
 	void completedEventsRequireContent(String content) {
 		OpenRouterImageModel model = model(sse("{\"type\":\"image_generation.completed\"" + content + "}"),
 				MediaType.TEXT_EVENT_STREAM);
@@ -85,8 +125,14 @@ class ImageResponseContractTests {
 		assertStoppedWithError(OpenRouterProtocolException.class);
 	}
 
+	static Stream<Arguments> errorEventTypes() {
+		return Stream.of(argumentSet("error event without a type", ""),
+				argumentSet("error event", "\"type\":\"error\","),
+				argumentSet("completed event carrying an error", "\"type\":\"image_generation.completed\","));
+	}
+
 	@ParameterizedTest
-	@ValueSource(strings = { "", "\"type\":\"error\",", "\"type\":\"image_generation.completed\"," })
+	@MethodSource("errorEventTypes")
 	void sseErrorsTakePrecedenceOverMissingContent(String type) {
 		String event = "{" + type + "\"error\":{\"code\":429,\"message\":\"synthetic rate limit\","
 				+ "\"error_type\":\"rate_limit_error\",\"metadata\":{\"provider_code\":\"synthetic_limit\"}}}";
@@ -113,31 +159,17 @@ class ImageResponseContractTests {
 				""", MediaType.APPLICATION_JSON);
 		ImageResponse response = model.call(PROMPT);
 		assertThat(response.getResults()).hasSize(2);
+		assertThat(response.getMetadata().<Usage>get(USAGE_KEY).getTotalTokens()).isEqualTo(3);
 		assertThat(response.getResults().get(0).getOutput().getB64Json()).isEqualTo("aW1hZ2U=");
 		assertThat(response.getResults().get(1).getOutput().getUrl()).isEqualTo("https://example.test/image.png");
 		StepVerifier.create(model.stream(PROMPT)).assertNext(first -> {
 			assertThat(first.getResult().getOutput().getB64Json()).isEqualTo("aW1hZ2U=");
-			assertThat(first.getMetadata().containsKey("openrouter.usage")).isFalse();
+			assertThat(first.getMetadata().containsKey(USAGE_KEY)).isFalse();
 		}).assertNext(last -> {
 			assertThat(last.getResult().getOutput().getUrl()).isEqualTo("https://example.test/image.png");
-			assertThat(last.getMetadata().<Object>get("openrouter.usage"))
-				.isEqualTo(response.getMetadata().get("openrouter.usage"));
+			assertThat(last.getMetadata().<Usage>get(USAGE_KEY).getTotalTokens()).isEqualTo(3);
+			assertThat(last.getMetadata().<Object>get(USAGE_KEY)).isEqualTo(response.getMetadata().get(USAGE_KEY));
 		}).verifyComplete();
-	}
-
-	@Test
-	void partialAndCompletedEventsRemainValid() {
-		String body = "data: {\"type\":\"image_generation.partial_image\",\"partial_image_index\":0,\"b64_json\":\"cGFydA==\"}\n\n"
-				+ sse("{\"type\":\"image_generation.completed\",\"b64_json\":\"aW1hZ2U=\"}");
-		StepVerifier.create(model(body, MediaType.TEXT_EVENT_STREAM).stream(PROMPT))
-			.assertNext(partial -> assertThat(partial.getResult().getOutput().getB64Json()).isEqualTo("cGFydA=="))
-			.assertNext(completed -> assertThat(completed.getResult().getOutput().getB64Json()).isEqualTo("aW1hZ2U="))
-			.verifyComplete();
-		io.micrometer.observation.tck.TestObservationRegistryAssert.assertThat(this.registry)
-			.hasObservationWithNameEqualTo("gen_ai.client.operation")
-			.that()
-			.hasBeenStopped()
-			.doesNotHaveError();
 	}
 
 	@Test

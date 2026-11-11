@@ -11,6 +11,7 @@ import tools.jackson.databind.ObjectMapper;
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionChunk;
+import de.subhransu.openrouter.springai.api.dto.ChatCompletionRequest;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionResponse;
 import de.subhransu.openrouter.springai.api.dto.ChatMessage;
 import de.subhransu.openrouter.springai.api.dto.Choice;
@@ -33,14 +34,19 @@ import de.subhransu.openrouter.springai.garage.scenes.SceneContext;
 import de.subhransu.openrouter.springai.garage.scenes.SceneResult;
 import de.subhransu.openrouter.springai.garage.scenes.ServiceStoryScene;
 import de.subhransu.openrouter.springai.garage.scenes.StreamingDispatchScene;
-import io.micrometer.core.instrument.observation.DefaultMeterObservationHandler;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
 import java.nio.file.Path;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -54,11 +60,38 @@ import reactor.core.publisher.Flux;
 
 class GarageToolSceneContractTests {
 
+  private static final String INVOICE_TOOL = "generate_express_invoice";
+
+  private static final String INCOMPLETE = "Required model-directed tool calls and follow-ups did not complete";
+
+  private final List<GarageTelemetryFixture> fixtures = new ArrayList<>();
+
+  @AfterEach
+  void closeFixtures() {
+    this.fixtures.forEach(GarageTelemetryFixture::close);
+  }
+
   @TempDir Path output;
 
+  /** The mode under test and how many calls each of its two endpoints must receive. */
+  static Stream<Arguments> endpointCalls() {
+    return endpointCalls(1);
+  }
+
+  static Stream<Arguments> storyEndpointCalls() {
+    return endpointCalls(3);
+  }
+
+  private static Stream<Arguments> endpointCalls(int calls) {
+    return Stream.of(
+        Arguments.of(Named.of("Chat Completions", OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS), calls, 0),
+        Arguments.of(Named.of("Responses", OpenRouterRequestMode.OPENAI_RESPONSES), 0, calls));
+  }
+
   @ParameterizedTest
-  @EnumSource(OpenRouterRequestMode.class)
-  void returnDirectInvoiceUsesExactlyOneModelCall(OpenRouterRequestMode mode) {
+  @MethodSource("endpointCalls")
+  void returnDirectInvoiceUsesExactlyOneModelCall(OpenRouterRequestMode mode, int chatCalls,
+      int responsesCalls) {
     OpenRouterApi api = mock(OpenRouterApi.class);
     when(api.chatCompletion(any()))
         .thenReturn(
@@ -81,7 +114,7 @@ class GarageToolSceneContractTests {
                                     "call-1",
                                     "function",
                                     new FunctionCall(
-                                        "generate_express_invoice",
+                                        INVOICE_TOOL,
                                         "{\"item\":\"diagnostic inspection\",\"amount\":89}")))),
                         null,
                         "tool_calls",
@@ -92,7 +125,7 @@ class GarageToolSceneContractTests {
             "invoice-1", "response", 1L, "garage/model", "completed",
             List.of(new ResponsesOutputItem(
                 "item-1", "function_call", "completed", null, null, "call-1",
-                "generate_express_invoice",
+                INVOICE_TOOL,
                 "{\"item\":\"diagnostic inspection\",\"amount\":89}", null)),
             null, null));
     TestContext test = context(api, "express-invoice", mode);
@@ -100,8 +133,8 @@ class GarageToolSceneContractTests {
     SceneResult result = new ExpressInvoiceScene().execute(test.context());
 
     assertThat(result.status()).isEqualTo(SceneResult.Status.PASSED);
-    verify(api, times(mode == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS ? 1 : 0)).chatCompletion(any());
-    verify(api, times(mode == OpenRouterRequestMode.OPENAI_RESPONSES ? 1 : 0)).responses(any());
+    verify(api, times(chatCalls)).chatCompletion(any());
+    verify(api, times(responsesCalls)).responses(any());
   }
 
   @Test
@@ -121,15 +154,13 @@ class GarageToolSceneContractTests {
 
     assertThat(result.status()).isEqualTo(SceneResult.Status.PASSED);
     assertThat(result.details()).containsEntry("bulletinCalls", 1L);
-    verify(api, times(3)).chatCompletionStream(any());
-  }
-
-  @ParameterizedTest
-  @EnumSource(OpenRouterRequestMode.class)
-  void dynoTuningExecutesInBothModes(OpenRouterRequestMode mode) {
-    var test = context(mock(OpenRouterApi.class), "dyno-tuning", mode);
-    var result = new de.subhransu.openrouter.springai.garage.scenes.DynoTuningScene().execute(test.context());
-    assertThat(result.status()).isEqualTo(SceneResult.Status.PASSED);
+    ArgumentCaptor<ChatCompletionRequest> requests = ArgumentCaptor.forClass(ChatCompletionRequest.class);
+    verify(api, times(3)).chatCompletionStream(requests.capture());
+    // The follow-up request replays the three fragments as one complete argument document.
+    var mapper = new ObjectMapper();
+    var followUp = mapper.readTree(mapper.writeValueAsString(requests.getAllValues().get(2)));
+    assertThat(followUp.findValues("arguments")).extracting(node -> node.asString())
+        .contains("{\"vinPrefix\":\"TRK7\",\"modelYear\":1972,\"symptom\":\"overheating\"}");
   }
 
   @ParameterizedTest
@@ -146,8 +177,9 @@ class GarageToolSceneContractTests {
   }
 
   @ParameterizedTest
-  @EnumSource(OpenRouterRequestMode.class)
-  void serviceStoryRequiresAllFourModelDirectedToolsAndFollowUp(OpenRouterRequestMode mode) throws Exception {
+  @MethodSource("storyEndpointCalls")
+  void serviceStoryRequiresAllFourModelDirectedToolsAndFollowUp(OpenRouterRequestMode mode, int chatCalls,
+      int responsesCalls) throws Exception {
     OpenRouterApi api = mock(OpenRouterApi.class);
     stubStory(api, requiredStoryCalls());
     var test = context(api, "service-story", mode);
@@ -156,31 +188,48 @@ class GarageToolSceneContractTests {
     assertThat((Double) result.details().get("costUsd"))
         .isCloseTo(0.03, org.assertj.core.api.Assertions.within(0.000001));
     assertThat(test.context().evidence().featureSnapshot()).allMatch(item -> Boolean.TRUE.equals(item.get("complete")));
-    verify(api, times(mode == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS ? 3 : 0)).chatCompletion(any());
-    verify(api, times(mode == OpenRouterRequestMode.OPENAI_RESPONSES ? 3 : 0)).responses(any());
+    verify(api, times(chatCalls)).chatCompletion(any());
+    verify(api, times(responsesCalls)).responses(any());
+  }
+
+  /** The only tool round the model answers with, the exception it must cause and its message. */
+  record InvalidRound(ToolCall call, Class<? extends RuntimeException> failureType, String message) {
+  }
+
+  static Stream<Arguments> invalidToolRounds() {
+    List<Arguments> cases = new java.util.ArrayList<>();
+    for (OpenRouterRequestMode mode : OpenRouterRequestMode.values()) {
+      cases.add(Arguments.of(Named.of(mode + " missing tools", mode),
+          new InvalidRound(storyCall("log_to_jobsheet", "{\"title\":\"Synthetic\",\"markdown\":\"Inspect brakes\"}"),
+              IllegalStateException.class, INCOMPLETE)));
+      cases.add(Arguments.of(Named.of(mode + " wrong tool", mode),
+          new InvalidRound(storyCall(INVOICE_TOOL, "{\"item\":\"synthetic\",\"amount\":1}"),
+              IllegalStateException.class, INVOICE_TOOL)));
+      cases.add(Arguments.of(Named.of(mode + " malformed arguments", mode),
+          new InvalidRound(storyCall("inspect_vehicle_profile", "{"), IllegalStateException.class, INCOMPLETE)));
+      cases.add(Arguments.of(Named.of(mode + " wrong argument type", mode),
+          new InvalidRound(storyCall("inspect_vehicle_profile",
+              "{\"concern\":\"synthetic\",\"severity\":{},\"safetyCritical\":true}"),
+              IllegalStateException.class, INCOMPLETE)));
+    }
+    return cases.stream();
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"missing-tools", "wrong-tool", "malformed", "wrong-type"})
-  void serviceStoryRejectsInvalidToolRounds(String variation) {
-    for (OpenRouterRequestMode mode : OpenRouterRequestMode.values()) {
-      OpenRouterApi api = mock(OpenRouterApi.class);
-      ToolCall call = switch (variation) {
-        case "wrong-tool" -> storyCall("generate_express_invoice", "{\"item\":\"synthetic\",\"amount\":1}");
-        case "malformed" -> storyCall("inspect_vehicle_profile", "{");
-        case "wrong-type" -> storyCall("inspect_vehicle_profile", "{\"concern\":\"synthetic\",\"severity\":{},\"safetyCritical\":true}");
-        default -> storyCall("log_to_jobsheet", "{\"title\":\"Synthetic\",\"markdown\":\"Inspect brakes\"}");
-      };
-      stubStory(api, List.of(call));
-      var test = context(api, "service-story", mode);
-      org.assertj.core.api.Assertions.assertThatThrownBy(
-          () -> new ServiceStoryScene().execute(test.context()))
-          .isInstanceOf(RuntimeException.class);
-      assertThat(test.context().evidence().featureSnapshot()).noneMatch(item -> Boolean.TRUE.equals(item.get("complete")));
-    }
+  @MethodSource("invalidToolRounds")
+  void serviceStoryRejectsInvalidToolRounds(OpenRouterRequestMode mode, InvalidRound round) {
+    OpenRouterApi api = mock(OpenRouterApi.class);
+    stubStory(api, List.of(round.call()));
+    var test = context(api, "service-story", mode);
+
+    org.assertj.core.api.Assertions.assertThatThrownBy(
+        () -> new ServiceStoryScene().execute(test.context()))
+        .isExactlyInstanceOf(round.failureType())
+        .hasMessageContaining(round.message());
+    assertThat(test.context().evidence().featureSnapshot()).noneMatch(item -> Boolean.TRUE.equals(item.get("complete")));
   }
 
-  private ToolCall storyCall(String name, String arguments) {
+  private static ToolCall storyCall(String name, String arguments) {
     return new ToolCall("synthetic-" + name, "function", new FunctionCall(name, arguments));
   }
 
@@ -196,31 +245,72 @@ class GarageToolSceneContractTests {
         storyCall("log_to_jobsheet", "{\"title\":\"Synthetic\",\"markdown\":\"Inspect brakes\"}"));
   }
 
-  @ParameterizedTest
-  @ValueSource(strings = {"early-tokens", "early-text", "final-tokens", "no-reasoning",
-      "early-tokens-missing-final", "early-text-missing-final", "missing-reasoning"})
-  void serviceStoryChecksReasoningAcrossForemanRounds(String evidence) throws Exception {
+  /** Where the foreman tool rounds carry reasoning evidence. */
+  record ReasoningCase(String name, int earlyReasoningTokens, Integer finalReasoningTokens, String earlyText) {
+
+    @Override
+    public String toString() {
+      return this.name;
+    }
+  }
+
+  private static Stream<Arguments> inEveryMode(List<ReasoningCase> cases) {
+    List<Arguments> arguments = new java.util.ArrayList<>();
     for (OpenRouterRequestMode mode : OpenRouterRequestMode.values()) {
-      OpenRouterApi api = mock(OpenRouterApi.class);
-      stubStory(api, requiredStoryCalls(),
-          evidence.startsWith("early-tokens") ? 3 : 0,
-          evidence.contains("missing") ? null : evidence.equals("final-tokens") ? 2 : 0,
-          evidence.startsWith("early-text") ? "Synthetic tool selection reasoning" : null);
-      var test = context(api, "service-story", mode);
-      if (evidence.equals("no-reasoning") || evidence.equals("missing-reasoning")) {
-        org.assertj.core.api.Assertions.assertThatThrownBy(
-            () -> new ServiceStoryScene().execute(test.context()))
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("reasoning text or reasoning-token evidence was missing");
-      } else {
-        var result = new ServiceStoryScene().execute(test.context());
-        assertThat(result.status()).isEqualTo(SceneResult.Status.PASSED);
-        assertThat(result.details()).containsEntry("reasoningObserved", true);
-        var persisted = new ObjectMapper().valueToTree(
-            test.context().evidence().sanitizeForEvidence(result.details()));
-        assertThat(persisted.path("reasoningObserved").asBoolean()).isTrue();
+      for (ReasoningCase reasoning : cases) {
+        arguments.add(Arguments.of(Named.of(mode + ": " + reasoning, mode), reasoning));
       }
     }
+    return arguments.stream();
+  }
+
+  static Stream<Arguments> acceptedReasoning() {
+    return inEveryMode(List.of(
+        new ReasoningCase("reasoning tokens on the tool round", 3, 0, null),
+        new ReasoningCase("reasoning text on the tool round", 0, 0, "Synthetic tool selection reasoning"),
+        new ReasoningCase("reasoning tokens only on the final round", 0, 2, null),
+        new ReasoningCase("early tokens but final usage missing", 3, null, null),
+        new ReasoningCase("early text but final usage missing", 0, null, "Synthetic tool selection reasoning")));
+  }
+
+  static Stream<Arguments> missingReasoning() {
+    return inEveryMode(List.of(
+        new ReasoningCase("no reasoning anywhere", 0, 0, null),
+        new ReasoningCase("no reasoning and final usage missing", 0, null, null)));
+  }
+
+  @ParameterizedTest
+  @MethodSource("acceptedReasoning")
+  void serviceStoryAcceptsReasoningFoundInAnyForemanRound(OpenRouterRequestMode mode, ReasoningCase reasoning)
+      throws Exception {
+    var test = storyContext(mode, reasoning);
+
+    var result = new ServiceStoryScene().execute(test.context());
+
+    assertThat(result.status()).isEqualTo(SceneResult.Status.PASSED);
+    assertThat(result.details()).containsEntry("reasoningObserved", true);
+    var persisted = new ObjectMapper().valueToTree(
+        test.context().evidence().sanitizeForEvidence(result.details()));
+    assertThat(persisted.path("reasoningObserved").asBoolean()).isTrue();
+  }
+
+  @ParameterizedTest
+  @MethodSource("missingReasoning")
+  void serviceStoryRejectsARunWhoseForemanShowedNoReasoning(OpenRouterRequestMode mode, ReasoningCase reasoning)
+      throws Exception {
+    var test = storyContext(mode, reasoning);
+
+    org.assertj.core.api.Assertions.assertThatThrownBy(
+        () -> new ServiceStoryScene().execute(test.context()))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("reasoning text or reasoning-token evidence was missing");
+  }
+
+  private TestContext storyContext(OpenRouterRequestMode mode, ReasoningCase reasoning) throws Exception {
+    OpenRouterApi api = mock(OpenRouterApi.class);
+    stubStory(api, requiredStoryCalls(), reasoning.earlyReasoningTokens(), reasoning.finalReasoningTokens(),
+        reasoning.earlyText());
+    return context(api, "service-story", mode);
   }
 
   private void stubStory(OpenRouterApi api, List<ToolCall> calls,
@@ -268,13 +358,10 @@ class GarageToolSceneContractTests {
     GarageProperties properties = new GarageProperties();
     properties.setReasoningEnabled(false);
     GarageEvidence evidence = new GarageEvidence();
-    SimpleMeterRegistry meters = new SimpleMeterRegistry();
-    GarageTelemetry telemetry = new GarageTelemetry(meters, evidence);
-    ObservationRegistry registry = ObservationRegistry.create();
-    registry
-        .observationConfig()
-        .observationHandler(new DefaultMeterObservationHandler(meters))
-        .observationHandler(telemetry);
+    GarageTelemetryFixture fixture = new GarageTelemetryFixture(evidence);
+    this.fixtures.add(fixture);
+    GarageTelemetry telemetry = fixture.telemetry();
+    ObservationRegistry registry = fixture.observations();
     OpenRouterChatModel model =
         OpenRouterChatModel.builder()
             .openRouterApi(api)

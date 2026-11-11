@@ -13,6 +13,7 @@ Notable changes in each release. The full notes for each release are on the [Rel
 - An embedding call or `dimensions()` probe with no model now fails with `IllegalArgumentException` before any request, as image calls already did. OpenRouter requires a model for embeddings, so these requests could not succeed. Set `spring.ai.openrouter.embedding.model`, pass a model in the request options, or set `spring.ai.model.embedding=none`.
 - A tool failure whose cause is not a `RuntimeException`, such as an `IOException` or an `Error`, now propagates from `OpenRouterToolExecutionExceptionProcessor` instead of becoming the fixed failure payload, and so does Spring Security's `ClientAuthorizationException` when it is on the classpath, as with Spring AI's default processor. Applications that relied on the payload for checked exceptions should catch them in the tool. See [Tool failure policy](docs/tool-calling.md#tool-failure-policy).
 - The auto-configuration classes are `final`. They were never supported API.
+- Production code that only tests used is removed from the core module: the no-argument constructors of the response mappers and the tool-call aggregator, the single-chunk and single-event `map` overloads of the streaming mappers, the single-response `OpenRouterEmbeddingResponseMapper.map` overload and `OpenRouterExceptionMessage.build`. They are implementation details, not supported API.
 
 ### Added
 

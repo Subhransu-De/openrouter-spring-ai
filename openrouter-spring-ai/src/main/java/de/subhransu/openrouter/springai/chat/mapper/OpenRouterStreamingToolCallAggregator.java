@@ -71,10 +71,6 @@ public final class OpenRouterStreamingToolCallAggregator {
 
 	private final Duration maxDuration;
 
-	public OpenRouterStreamingToolCallAggregator() {
-		this(new ObjectMapper(), DEFAULT_MAX_BYTES, DEFAULT_MAX_CHUNKS, DEFAULT_MAX_DURATION);
-	}
-
 	public OpenRouterStreamingToolCallAggregator(ObjectMapper objectMapper, long maxBytes, int maxChunks,
 			Duration maxDuration) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");

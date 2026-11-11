@@ -46,7 +46,7 @@ public final class GarageTelemetry implements ObservationHandler<Observation.Con
   private final List<Map<String, Object>> observations = new CopyOnWriteArrayList<>();
   private final Map<String, Integer> startedObservations = new ConcurrentHashMap<>();
 
-  public GarageTelemetry(SimpleMeterRegistry meterRegistry, GarageEvidence evidence) {
+  GarageTelemetry(SimpleMeterRegistry meterRegistry, GarageEvidence evidence) {
     this.meterRegistry = meterRegistry;
     this.evidence = evidence;
   }

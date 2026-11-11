@@ -11,9 +11,13 @@ import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.UnaryOperator;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -40,7 +44,7 @@ class ReasoningRoundTripTests {
 				  "tool_calls":[{"id":"call1","type":"function","function":{"name":"lookup","arguments":"{}"}}]
 				}}]}
 				""".formatted(DETAIL), ChatCompletionResponse.class);
-		ChatResponse response = new OpenRouterChatResponseMapper().map(wire);
+		ChatResponse response = ResponseMappers.chat().map(wire);
 		AssistantMessage assistant = response.getResult().getOutput();
 		JsonNode replay = chatRequest(assistant);
 		assertThat(replay.at("/messages/0/reasoning_details/0")).isEqualTo(this.mapper.readTree(DETAIL));
@@ -62,19 +66,22 @@ class ReasoningRoundTripTests {
 		ChatCompletionChunk last = chunk("""
 				{"tool_calls":[{"index":0,"function":{"arguments":"}"}}]}
 				""", "tool_calls");
-		Flux<ChatResponse> stream = new OpenRouterStreamingResponseMapper()
-			.map(new OpenRouterStreamingToolCallAggregator().aggregate(Flux.just(first, tool, last)));
-		for (int i = 0; i < 2; i++) {
-			AtomicReference<ChatResponse> result = new AtomicReference<>();
-			new MessageAggregator().aggregate(stream, result::set).blockLast();
-			AssistantMessage assistant = result.get().getResult().getOutput();
-			assertThat(assistant.getMetadata()).containsEntry(REASONING, "checking");
-			assertThat(chatRequest(assistant).at("/messages/0/reasoning_details/0"))
-				.isEqualTo(this.mapper.readTree(DETAIL));
-			assertThat(assistant.getToolCalls().get(0).arguments()).isEqualTo("{}");
-			assertThat(chatRequest(assistant).at("/messages/0/reasoning_details/1/data").asString())
-				.isEqualTo("during");
-		}
+		Flux<ChatResponse> stream = ResponseMappers
+			.chatStream(ResponseMappers.aggregator().aggregate(Flux.just(first, tool, last)));
+
+		assertStreamedReasoningSurvives(stream);
+		assertStreamedReasoningSurvives(stream);
+	}
+
+	private void assertStreamedReasoningSurvives(Flux<ChatResponse> stream) {
+		AtomicReference<ChatResponse> result = new AtomicReference<>();
+		new MessageAggregator().aggregate(stream, result::set).blockLast();
+		AssistantMessage assistant = result.get().getResult().getOutput();
+		assertThat(assistant.getMetadata()).containsEntry(REASONING, "checking");
+		assertThat(chatRequest(assistant).at("/messages/0/reasoning_details/0"))
+			.isEqualTo(this.mapper.readTree(DETAIL));
+		assertThat(assistant.getToolCalls().get(0).arguments()).isEqualTo("{}");
+		assertThat(chatRequest(assistant).at("/messages/0/reasoning_details/1/data").asString()).isEqualTo("during");
 	}
 
 	@Test
@@ -86,7 +93,7 @@ class ReasoningRoundTripTests {
 				""";
 		ResponsesResult wire = this.mapper.readValue("{\"status\":\"completed\",\"output\":[" + item + "]}",
 				ResponsesResult.class);
-		AssistantMessage sync = new OpenRouterResponsesResponseMapper().map(wire).getResult().getOutput();
+		AssistantMessage sync = ResponseMappers.responses().map(wire).getResult().getOutput();
 		assertThat(sync.getMetadata()).containsEntry(REASONING, "checking");
 		assertThat(responsesRequest(sync).at("/input/0")).isEqualTo(this.mapper.readTree(item));
 		ResponsesStreamEvent done = this.mapper
@@ -94,7 +101,7 @@ class ReasoningRoundTripTests {
 		AtomicReference<ChatResponse> aggregated = new AtomicReference<>();
 		new MessageAggregator()
 			.aggregate(
-					new OpenRouterResponsesStreamingResponseMapper()
+					ResponseMappers.responsesStreaming()
 						.map(Flux.just(done, new ResponsesStreamEvent("response.completed", null, null, wire, null))),
 					aggregated::set)
 			.blockLast();
@@ -119,9 +126,7 @@ class ReasoningRoundTripTests {
 						{"index":0,"delta":{"reasoning":"1","reasoning_details":[{"type":"reasoning.encrypted","data":"second"}]},"finish_reason":"stop"}]}
 						""",
 				ChatCompletionChunk.class);
-		List<ChatResponse> responses = new OpenRouterStreamingResponseMapper().map(Flux.just(first, last))
-			.collectList()
-			.block();
+		List<ChatResponse> responses = ResponseMappers.chatStream(Flux.just(first, last)).collectList().block();
 		assertThat(responses.get(0).getResults().get(0).getOutput().getMetadata()).containsEntry(REASONING, "a");
 		assertThat(responses.get(1).getResults().get(0).getOutput().getMetadata()).containsEntry(REASONING, "b2")
 			.doesNotContainKey("openrouter.reasoning_details");
@@ -142,20 +147,30 @@ class ReasoningRoundTripTests {
 				{"type":"response.output_item.done","item":{"type":"reasoning","id":"r1",
 				"summary":[{"type":"summary_text","text":"checking"}]}}
 				""", ResponsesStreamEvent.class);
-		Flux<ChatResponse> stream = new OpenRouterResponsesStreamingResponseMapper()
-			.map(Flux.just(first, second, done));
-		for (int i = 0; i < 2; i++) {
-			AtomicReference<ChatResponse> result = new AtomicReference<>();
-			new MessageAggregator().aggregate(stream, result::set).blockLast();
-			assertThat(result.get().getResult().getOutput().getMetadata()).containsEntry(REASONING, "checking");
-			assertThat(responsesRequest(result.get().getResult().getOutput()).at("/input/0/id").asString())
-				.isEqualTo("r1");
-		}
+		Flux<ChatResponse> stream = ResponseMappers.responsesStreaming().map(Flux.just(first, second, done));
+
+		assertAggregatedReasoningText(stream);
+		assertAggregatedReasoningText(stream);
+	}
+
+	private void assertAggregatedReasoningText(Flux<ChatResponse> stream) {
+		AtomicReference<ChatResponse> result = new AtomicReference<>();
+		new MessageAggregator().aggregate(stream, result::set).blockLast();
+		assertThat(result.get().getResult().getOutput().getMetadata()).containsEntry(REASONING, "checking");
+		assertThat(responsesRequest(result.get().getResult().getOutput()).at("/input/0/id").asString()).isEqualTo("r1");
+	}
+
+	static Stream<Arguments> interleavedStreams() {
+		UnaryOperator<Flux<ResponsesStreamEvent>> withoutTextDelta = events -> events;
+		UnaryOperator<Flux<ResponsesStreamEvent>> withTextDelta = events -> events.startWith(new ResponsesStreamEvent(
+				"response.output_text.delta", "checking", null, null, null, null, null, null, null, null, 1, 0));
+		return Stream.of(Arguments.of(Named.of("without a text delta", withoutTextDelta)),
+				Arguments.of(Named.of("with a text delta first", withTextDelta)));
 	}
 
 	@ParameterizedTest
-	@ValueSource(booleans = { false, true })
-	void responsesReplayPreservesInterleavedOutputOrder(boolean textDelta) {
+	@MethodSource("interleavedStreams")
+	void responsesReplayPreservesInterleavedOutputOrder(UnaryOperator<Flux<ResponsesStreamEvent>> textDelta) {
 		String output = """
 				[{"type":"reasoning","id":"r1","encrypted_content":"synthetic-first"},
 				 {"type":"message","id":"m1","role":"assistant","content":[{"type":"output_text","text":"checking","annotations":[]}]},
@@ -164,42 +179,41 @@ class ReasoningRoundTripTests {
 				""";
 		ResponsesResult wire = this.mapper.readValue("{\"status\":\"completed\",\"output\":" + output + "}",
 				ResponsesResult.class);
-		AssistantMessage sync = new OpenRouterResponsesResponseMapper().map(wire).getResult().getOutput();
+		AssistantMessage sync = ResponseMappers.responses().map(wire).getResult().getOutput();
 		assertOrderedReplay(sync, output);
-		Flux<ResponsesStreamEvent> events = Flux.range(0, wire.output().size())
+		Flux<ResponsesStreamEvent> events = textDelta.apply(Flux.range(0, wire.output().size())
 			.map(index -> new ResponsesStreamEvent("response.output_item.done", null, wire.output().get(index), null,
-					null, null, null, null, null, null, index, null));
-		if (textDelta) {
-			events = events.startWith(new ResponsesStreamEvent("response.output_text.delta", "checking", null, null,
-					null, null, null, null, null, null, 1, 0));
-		}
+					null, null, null, null, null, null, index, null)));
 		Flux<ResponsesStreamEvent> stream = events
 			.concatWithValues(new ResponsesStreamEvent("response.completed", null, null, wire, null));
 		AtomicReference<ChatResponse> result = new AtomicReference<>();
-		new MessageAggregator().aggregate(new OpenRouterResponsesStreamingResponseMapper().map(stream), result::set)
-			.blockLast();
+		new MessageAggregator().aggregate(ResponseMappers.responsesStreaming().map(stream), result::set).blockLast();
 		assertThat(result.get().getResult().getOutput().getText()).isEqualTo("checking");
 		assertOrderedReplay(result.get().getResult().getOutput(), output);
 	}
 
-	@Test
-	void streamedDetailsAssembleTextAndSummaryButKeepEncryptedBlobsOpaque() {
-		ChatCompletionChunk first = chunk(
-				"""
-						{"reasoning_details":[{"type":"reasoning.text","index":0,"text":"check","signature":null,"future":{"flag":true}}],
-						 "tool_calls":[{"id":"call1","index":0,"type":"function","function":{"name":"lookup","arguments":"{}"}}]}
-						""",
-				null);
-		ChatCompletionChunk second = chunk("""
+	private static final String PLAIN_DETAILS_FIRST = """
+			{"reasoning_details":[{"type":"reasoning.text","index":0,"text":"check","signature":null,"future":{"flag":true}}]}
+			""";
+
+	private static final String TOOL_DETAILS_FIRST = """
+			{"reasoning_details":[{"type":"reasoning.text","index":0,"text":"check","signature":null,"future":{"flag":true}}],
+			 "tool_calls":[{"id":"call1","index":0,"type":"function","function":{"name":"lookup","arguments":"{}"}}]}
+			""";
+
+	private List<ChatCompletionChunk> detailChunks(String firstDelta) {
+		return List.of(chunk(firstDelta, null), chunk("""
 				{"reasoning_details":[{"type":"reasoning.text","index":0,"text":"ing"},
 				{"type":"reasoning.text","index":0,"signature":"synthetic-signature"},
 				{"type":"reasoning.summary","index":0,"summary":"sum"}]}
-				""", null);
-		ChatCompletionChunk last = chunk("""
+				""", null), chunk("""
 				{"reasoning_details":[{"type":"reasoning.summary","index":0,"summary":"mary"},
 				{"type":"reasoning.encrypted","index":0,"id":"a","data":"synthetic-a"},
 				{"type":"reasoning.encrypted","index":0,"id":"b","data":"synthetic-b"}]}
-				""", "tool_calls");
+				""", "tool_calls"));
+	}
+
+	private void assertDetailsAssembled(Flux<ChatCompletionChunk> chunks) {
 		JsonNode expected = this.mapper.readTree(
 				"""
 						[{"type":"reasoning.text","index":0,"text":"checking","signature":"synthetic-signature","future":{"flag":true}},
@@ -207,32 +221,35 @@ class ReasoningRoundTripTests {
 						 {"type":"reasoning.encrypted","index":0,"id":"a","data":"synthetic-a"},
 						 {"type":"reasoning.encrypted","index":0,"id":"b","data":"synthetic-b"}]
 						""");
-		for (boolean bufferTools : List.of(false, true)) {
-			ChatCompletionChunk initial = bufferTools ? first
-					: chunk("{\"reasoning_details\":"
-							+ this.mapper.writeValueAsString(first.choices().get(0).delta().reasoningDetails()) + "}",
-							null);
-			Flux<ChatCompletionChunk> chunks = Flux.just(initial, second, last);
-			if (bufferTools) {
-				chunks = new OpenRouterStreamingToolCallAggregator().aggregate(chunks);
-			}
-			AtomicReference<ChatResponse> result = new AtomicReference<>();
-			new MessageAggregator().aggregate(new OpenRouterStreamingResponseMapper().map(chunks), result::set)
-				.blockLast();
-			assertThat(chatRequest(result.get().getResult().getOutput()).at("/messages/0/reasoning_details"))
-				.isEqualTo(expected);
-		}
-		assertThat(first.choices().get(0).delta().reasoningDetails().get(0).get("text").asString()).isEqualTo("check");
+		AtomicReference<ChatResponse> result = new AtomicReference<>();
+		new MessageAggregator().aggregate(ResponseMappers.chatStream(chunks), result::set).blockLast();
+		assertThat(chatRequest(result.get().getResult().getOutput()).at("/messages/0/reasoning_details"))
+			.isEqualTo(expected);
+	}
+
+	@Test
+	void streamedDetailsAssembleTextAndSummaryButKeepEncryptedBlobsOpaque() {
+		assertDetailsAssembled(Flux.fromIterable(detailChunks(PLAIN_DETAILS_FIRST)));
+	}
+
+	@Test
+	void streamedDetailsSurviveToolCallBuffering() {
+		var chunks = detailChunks(TOOL_DETAILS_FIRST);
+
+		assertDetailsAssembled(ResponseMappers.aggregator().aggregate(Flux.fromIterable(chunks)));
+
+		assertThat(chunks.get(0).choices().get(0).delta().reasoningDetails().get(0).get("text").asString())
+			.as("buffering does not edit the caller's chunk")
+			.isEqualTo("check");
 	}
 
 	private void assertOrderedReplay(AssistantMessage assistant, String output) {
 		JsonNode replay = responsesRequest(assistant).at("/input");
-		JsonNode expected = this.mapper.readTree(output);
-		assertThat(replay.size()).isEqualTo(expected.size() + 1);
-		for (int i = 0; i < expected.size(); i++) {
-			assertThat(replay.get(i)).isEqualTo(expected.get(i));
-		}
-		assertThat(replay.get(expected.size()).get("type").asString()).isEqualTo("function_call_output");
+		List<JsonNode> expected = this.mapper.readTree(output).valueStream().toList();
+		List<JsonNode> actual = replay.valueStream().toList();
+		assertThat(actual).hasSize(expected.size() + 1);
+		assertThat(actual.subList(0, expected.size())).containsExactlyElementsOf(expected);
+		assertThat(actual.get(expected.size()).get("type").asString()).isEqualTo("function_call_output");
 	}
 
 	private ChatCompletionChunk chunk(String delta, String finish) {

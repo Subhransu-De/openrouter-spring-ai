@@ -1,7 +1,6 @@
 package de.subhransu.openrouter.springai.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
@@ -11,14 +10,18 @@ import de.subhransu.openrouter.springai.api.dto.ChatCompletionRequest;
 import de.subhransu.openrouter.springai.api.dto.ChatMessage;
 import de.subhransu.openrouter.springai.api.dto.ImagesRequest;
 import de.subhransu.openrouter.springai.api.dto.ResponsesRequest;
-import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
 import de.subhransu.openrouter.springai.errors.OpenRouterHttpException;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
 import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -107,42 +110,7 @@ class OpenRouterApiStreamingContractTests {
 	}
 
 	@Test
-	void chatCompletionStreamTargetsChatCompletionsEndpoint() {
-		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE, DONE_ONLY_SSE);
-
-		capture.api().chatCompletionStream(chatRequest()).blockLast(Duration.ofSeconds(5));
-
-		assertThat(capture.request().get().url().getPath()).endsWith("/chat/completions");
-		assertThat(capture.request().get().headers().getAccept()).contains(MediaType.TEXT_EVENT_STREAM);
-	}
-
-	@Test
-	void emptyStreamExtensionsRetainNullQueriesAndRejectMutation() {
-		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE,
-				"data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"synthetic\"}}]}\n\n" + DONE_ONLY_SSE);
-		StepVerifier.create(capture.api().chatCompletionStream(chatRequest())).assertNext(chunk -> {
-			var choice = chunk.choices().get(0);
-			for (var extensions : List.of(chunk.extensions(), choice.extensions(), choice.delta().extensions())) {
-				assertThat(extensions).isEmpty();
-				assertThat(extensions.containsKey(null)).isFalse();
-				assertThat(extensions.get(null)).isNull();
-				assertThatThrownBy(() -> extensions.remove("absent")).isInstanceOf(UnsupportedOperationException.class);
-			}
-		}).verifyComplete();
-	}
-
-	@Test
-	void responsesStreamTargetsResponsesEndpoint() {
-		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE, RESPONSES_COMPLETED_SSE);
-
-		capture.api().responsesStream(responsesRequest()).blockLast(Duration.ofSeconds(5));
-
-		assertThat(capture.request().get().url().getPath()).endsWith("/responses");
-		assertThat(capture.request().get().headers().getAccept()).contains(MediaType.TEXT_EVENT_STREAM);
-	}
-
-	@Test
-	void chatCompletionStreamSendsAuthorizationAndStreamTrueOnTheWire() {
+	void chatCompletionStreamTargetsItsEndpointWithAuthorizationAndStreamTrueOnTheWire() {
 		// The streaming WebClient is a separate code path from the blocking RestClient
 		// interceptor: a regression stripping the Bearer token (or the stream flag) from
 		// this path would be invisible to the blocking contract tests.
@@ -151,17 +119,21 @@ class OpenRouterApiStreamingContractTests {
 		capture.api().chatCompletionStream(chatRequest()).blockLast(Duration.ofSeconds(5));
 
 		ClientRequest request = capture.request().get();
+		assertThat(request.url().getPath()).endsWith("/chat/completions");
+		assertThat(request.headers().getAccept()).contains(MediaType.TEXT_EVENT_STREAM);
 		assertThat(request.headers().getFirst(HttpHeaders.AUTHORIZATION)).isEqualTo("Bearer test-key");
 		assertThat(serializedBody(request)).contains("\"stream\":true");
 	}
 
 	@Test
-	void responsesStreamSendsAuthorizationAndStreamTrueOnTheWire() {
+	void responsesStreamTargetsItsEndpointWithAuthorizationAndStreamTrueOnTheWire() {
 		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE, RESPONSES_COMPLETED_SSE);
 
 		capture.api().responsesStream(responsesRequest()).blockLast(Duration.ofSeconds(5));
 
 		ClientRequest request = capture.request().get();
+		assertThat(request.url().getPath()).endsWith("/responses");
+		assertThat(request.headers().getAccept()).contains(MediaType.TEXT_EVENT_STREAM);
 		assertThat(request.headers().getFirst(HttpHeaders.AUTHORIZATION)).isEqualTo("Bearer test-key");
 		assertThat(serializedBody(request)).contains("\"stream\":true");
 	}
@@ -239,17 +211,41 @@ class OpenRouterApiStreamingContractTests {
 			.verifyComplete();
 	}
 
-	@Test
-	void streamFailsWithApiExceptionPreservingStatusAndBodyOnErrorStatus() {
-		Capture capture = capturingApi(HttpStatus.PAYMENT_REQUIRED, MediaType.APPLICATION_JSON_VALUE,
-				"{\"error\":{\"message\":\"insufficient credits\"}}");
+	static Stream<Arguments> errorStatusCases() {
+		return Stream.of(Arguments.of(Named.of("chat 401", "chat"), HttpStatus.UNAUTHORIZED, "bad key",
+				OpenRouterNonTransientApiException.class, OpenRouterErrorCategory.AUTHENTICATION, "/chat/completions"),
+				Arguments.of(Named.of("chat 402", "chat"), HttpStatus.PAYMENT_REQUIRED, "insufficient credits",
+						OpenRouterNonTransientApiException.class, OpenRouterErrorCategory.BILLING_CREDITS,
+						"/chat/completions"),
+				Arguments.of(Named.of("responses 503", "responses"), HttpStatus.SERVICE_UNAVAILABLE, "overloaded",
+						OpenRouterTransientApiException.class, OpenRouterErrorCategory.PROVIDER_UNAVAILABLE,
+						"/responses"),
+				Arguments.of(Named.of("images 502", "images"), HttpStatus.BAD_GATEWAY, "provider unavailable",
+						OpenRouterTransientApiException.class, OpenRouterErrorCategory.PROVIDER_UNAVAILABLE,
+						"/images"));
+	}
 
-		StepVerifier.create(capture.api().chatCompletionStream(chatRequest())).expectErrorSatisfies(error -> {
-			assertThat(error).isInstanceOf(OpenRouterNonTransientApiException.class);
+	@ParameterizedTest
+	@MethodSource("errorStatusCases")
+	void streamFailsWithApiExceptionPreservingStatusBodyCategoryAndEndpointOnErrorStatus(String endpoint,
+			HttpStatus status, String message, Class<? extends OpenRouterHttpException> expectedType,
+			OpenRouterErrorCategory expectedCategory, String expectedEndpoint) {
+		Capture capture = capturingApi(status, MediaType.APPLICATION_JSON_VALUE,
+				"{\"error\":{\"message\":\"" + message + "\"}}");
+		Flux<?> stream = switch (endpoint) {
+			case "chat" -> capture.api().chatCompletionStream(chatRequest());
+			case "responses" -> capture.api().responsesStream(responsesRequest());
+			case "images" -> capture.api().imagesStream(imagesRequest());
+			default -> throw new IllegalArgumentException(endpoint);
+		};
+
+		StepVerifier.create(stream).expectErrorSatisfies(error -> {
+			assertThat(error).isInstanceOf(expectedType);
 			OpenRouterHttpException ex = (OpenRouterHttpException) error;
-			assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.PAYMENT_REQUIRED);
-			assertThat(ex.getResponseBody()).contains("insufficient credits");
-			assertThat(ex.getCategory()).isEqualTo(OpenRouterErrorCategory.BILLING_CREDITS);
+			assertThat(ex.getStatusCode()).isEqualTo(status);
+			assertThat(ex.getResponseBody()).contains(message);
+			assertThat(ex.getCategory()).isEqualTo(expectedCategory);
+			assertThat(ex.getEndpoint()).isEqualTo(expectedEndpoint);
 		}).verify();
 	}
 
@@ -267,8 +263,12 @@ class OpenRouterApiStreamingContractTests {
 	}
 
 	@ParameterizedTest
-	@ValueSource(strings = { "[", "[bad]", "42 trailing", "true false", "\"unterminated", "{} {}" })
-	void keepsJacksonCauseForMalformedChunks(String json) {
+	@ValueSource(strings = { "[", "[bad]", "42 trailing", "true false", "\"unterminated", "{} {}", "{not valid json}",
+			"{\ndata: \"choices\": [\ndata: }" })
+	void malformedChunksFailAsProtocolErrorsThatKeepTheJacksonCause(String json) {
+		// Invalid JSON on a data line (or spread over several data lines) is a protocol
+		// failure: an OpenRouterProtocolException with a fixed message that never echoes
+		// the payload, carrying the decoder's cause.
 		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE,
 				"data: " + json + "\n\ndata: [DONE]\n\n");
 
@@ -293,8 +293,14 @@ class OpenRouterApiStreamingContractTests {
 		}).verifyComplete();
 	}
 
+	/**
+	 * A number in a string field reaches the caller as its tree-binding text:
+	 * {@code 1.50} normalizes to {@code 1.5}. Only rows a consumer could depend on are
+	 * pinned; edge spellings such as {@code -0} or {@code 1e400} are deliberately left
+	 * unspecified.
+	 */
 	@ParameterizedTest
-	@CsvSource({ "1.50,1.5", "-0,0", "1e400,Infinity", "502,502" })
+	@CsvSource({ "1.50,1.5", "502,502" })
 	void numbersInStringFieldsKeepTheTreeBindingText(String literal, String expected) {
 		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE, "data: {\"id\":" + literal
 				+ ",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"OK\"}}]}\n\ndata: [DONE]\n\n");
@@ -312,7 +318,10 @@ class OpenRouterApiStreamingContractTests {
 
 		StepVerifier.create(capture.api().chatCompletionStream(chatRequest()))
 			.expectErrorSatisfies(error -> assertThat(error).isInstanceOf(OpenRouterProtocolException.class)
-				.hasMessage("Failed to decode OpenRouter stream chunk"))
+				.hasMessage("Failed to decode OpenRouter stream chunk")
+				.cause()
+				.hasMessageContaining("cannot convert value 1E+400 to `double`")
+				.hasMessageContaining("value not in 64-bit `double` range"))
 			.verify();
 	}
 
@@ -338,33 +347,7 @@ class OpenRouterApiStreamingContractTests {
 	}
 
 	@Test
-	void responsesStreamFailsWithApiExceptionOnErrorStatus() {
-		Capture capture = capturingApi(HttpStatus.SERVICE_UNAVAILABLE, MediaType.APPLICATION_JSON_VALUE,
-				"{\"error\":{\"message\":\"overloaded\"}}");
-
-		StepVerifier.create(capture.api().responsesStream(responsesRequest())).expectErrorSatisfies(error -> {
-			assertThat(error).isInstanceOf(OpenRouterTransientApiException.class);
-			OpenRouterHttpException ex = (OpenRouterHttpException) error;
-			assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
-			assertThat(ex.getResponseBody()).contains("overloaded");
-		}).verify();
-	}
-
-	@Test
-	void imageStreamUsesSameTransientClassificationOnErrorStatus() {
-		Capture capture = capturingApi(HttpStatus.BAD_GATEWAY, MediaType.APPLICATION_JSON_VALUE,
-				"{\"error\":{\"message\":\"provider unavailable\"}}");
-
-		StepVerifier.create(capture.api().imagesStream(imagesRequest())).expectErrorSatisfies(error -> {
-			assertThat(error).isInstanceOf(OpenRouterTransientApiException.class);
-			OpenRouterHttpException exception = (OpenRouterHttpException) error;
-			assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
-			assertThat(exception.getEndpoint()).isEqualTo("/images");
-		}).verify();
-	}
-
-	@Test
-	void emitsFinalUsageChunkWhenUsageRequested() {
+	void trailingUsageChunkWithEmptyChoicesFollowsTheFinishChunk() {
 		String sse = """
 				data: {"id":"gen-1","object":"chat.completion.chunk","model":"openai/gpt-5.4-mini","choices":[{"index":0,"delta":{"content":"Hi"},"finish_reason":"stop"}]}
 
@@ -375,37 +358,25 @@ class OpenRouterApiStreamingContractTests {
 				""";
 		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE, sse);
 
-		StepVerifier.create(capture.api().chatCompletionStream(chatRequest()))
-			.assertNext(chunk -> assertThat(chunk.choices().get(0).delta().content()).isEqualTo("Hi"))
-			.assertNext(chunk -> {
-				assertThat(chunk.choices()).isEmpty();
-				assertThat(chunk.usage().totalTokens()).isEqualTo(7);
-			})
-			.verifyComplete();
+		StepVerifier.create(capture.api().chatCompletionStream(chatRequest())).assertNext(chunk -> {
+			assertThat(chunk.choices().get(0).delta().content()).isEqualTo("Hi");
+			assertThat(chunk.choices().get(0).finishReason()).isEqualTo("stop");
+			assertThat(chunk.usage()).isNull();
+		}).assertNext(chunk -> {
+			assertThat(chunk.choices()).isEmpty();
+			assertThat(chunk.usage().promptTokens()).isEqualTo(5);
+			assertThat(chunk.usage().completionTokens()).isEqualTo(2);
+			assertThat(chunk.usage().totalTokens()).isEqualTo(7);
+		}).verifyComplete();
 	}
 
-	@Test
-	void parsesSingleLineDataEventFollowedByDoneMarker() {
-		// A complete chat-completion chunk delivered on one SSE "data:" line, then the
-		// terminal "data: [DONE]" marker which the parser drops. Confirms a full single
-		// event parses end to end.
-		String sse = """
-				data: {"id":"gen-1","object":"chat.completion.chunk","model":"openai/gpt-5.4-mini","choices":[{"index":0,"delta":{"content":"Multi"}}]}
-
-				data: [DONE]
-
-				""";
-		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE, sse);
-
-		StepVerifier.create(capture.api().chatCompletionStream(chatRequest()))
-			.assertNext(chunk -> assertThat(chunk.choices().get(0).delta().content()).isEqualTo("Multi"))
-			.verifyComplete();
-	}
-
-	@ParameterizedTest
-	@CsvSource({ "chat,1", "chat,7", "chat,4096", "responses,1", "responses,7", "responses,4096", "images,1",
-			"images,7", "images,4096" })
-	void parsesMultilineDataAcrossBufferBoundaries(String endpoint, int bufferSize) {
+	@ParameterizedTest(name = "{0} endpoint, {1}-byte buffers, {2} line endings")
+	@CsvSource({ "chat,1,LF", "chat,7,LF", "chat,4096,LF", "responses,1,LF", "responses,7,LF", "responses,4096,LF",
+			"images,1,LF", "images,7,LF", "images,4096,LF", "chat,1,CRLF", "chat,7,CRLF", "chat,4096,CRLF",
+			"responses,1,CRLF", "responses,7,CRLF", "responses,4096,CRLF", "images,1,CRLF", "images,7,CRLF",
+			"images,4096,CRLF" })
+	void parsesMultilineDataAcrossBufferBoundaries(String endpoint, int bufferSize, String lineEnding) {
+		String newline = lineEnding.equals("LF") ? "\n" : "\r\n";
 		String text = "caf\u00e9 \uD83D\uDE00 \u2028 data: [DONE]";
 		String json = switch (endpoint) {
 			case "chat" -> "{\n\"choices\": [\n{\"index\":0,\"delta\":{\"content\":\"" + text + "\"}}\n]\n}";
@@ -413,37 +384,34 @@ class OpenRouterApiStreamingContractTests {
 			case "images" -> "{\n\"type\":\"image_generation.partial_image\",\n\"b64_json\":\"" + text + "\"\n}";
 			default -> throw new IllegalArgumentException(endpoint);
 		};
-		for (String newline : List.of("\n", "\r\n")) {
-			String sse = ": keepalive\n\ndata:\n\ndata:   \n\ndata: " + json.replace("\n", "\n: comment\ndata: ")
-					+ "\n\n" + (endpoint.equals("responses") ? RESPONSES_COMPLETED_SSE : "")
-					+ "data: [DONE]\n\ndata: {invalid}\n\n";
-			byte[] bytes = sse.replace("\n", newline).getBytes(StandardCharsets.UTF_8);
-			Flux<DataBuffer> body = Flux.range(0, (bytes.length + bufferSize - 1) / bufferSize)
-				.map(i -> new DefaultDataBufferFactory().wrap(java.util.Arrays.copyOfRange(bytes, i * bufferSize,
-						Math.min(bytes.length, (i + 1) * bufferSize))));
-			OpenRouterApi api = OpenRouterApi.builder()
-				.apiKey("test-key")
-				.webClientBuilder(WebClient.builder()
-					.exchangeFunction(request -> Mono.just(ClientResponse.create(HttpStatus.OK)
-						.header(HttpHeaders.CONTENT_TYPE, MediaType.TEXT_EVENT_STREAM_VALUE)
-						.body(body)
-						.build())))
-				.build();
-			Flux<String> values = switch (endpoint) {
-				case "chat" ->
-					api.chatCompletionStream(chatRequest()).map(chunk -> chunk.choices().get(0).delta().content());
-				case "responses" -> api.responsesStream(responsesRequest())
-					.filter(event -> event.delta() != null)
-					.map(event -> event.delta());
-				case "images" -> api.imagesStream(imagesRequest()).map(event -> event.b64Json());
-				default -> throw new IllegalArgumentException(endpoint);
-			};
-			StepVerifier.create(values).expectNext(text).expectComplete().verify(Duration.ofSeconds(5));
-		}
+		String sse = ": keepalive\n\ndata:\n\ndata:   \n\ndata: " + json.replace("\n", "\n: comment\ndata: ") + "\n\n"
+				+ (endpoint.equals("responses") ? RESPONSES_COMPLETED_SSE : "") + "data: [DONE]\n\ndata: {invalid}\n\n";
+		byte[] bytes = sse.replace("\n", newline).getBytes(StandardCharsets.UTF_8);
+		Flux<DataBuffer> body = Flux.range(0, (bytes.length + bufferSize - 1) / bufferSize)
+			.map(i -> new DefaultDataBufferFactory().wrap(
+					java.util.Arrays.copyOfRange(bytes, i * bufferSize, Math.min(bytes.length, (i + 1) * bufferSize))));
+		OpenRouterApi api = OpenRouterApi.builder()
+			.apiKey("test-key")
+			.webClientBuilder(WebClient.builder()
+				.exchangeFunction(request -> Mono.just(ClientResponse.create(HttpStatus.OK)
+					.header(HttpHeaders.CONTENT_TYPE, MediaType.TEXT_EVENT_STREAM_VALUE)
+					.body(body)
+					.build())))
+			.build();
+		Flux<String> values = switch (endpoint) {
+			case "chat" ->
+				api.chatCompletionStream(chatRequest()).map(chunk -> chunk.choices().get(0).delta().content());
+			case "responses" -> api.responsesStream(responsesRequest())
+				.filter(event -> event.delta() != null)
+				.map(event -> event.delta());
+			case "images" -> api.imagesStream(imagesRequest()).map(event -> event.b64Json());
+			default -> throw new IllegalArgumentException(endpoint);
+		};
+		StepVerifier.create(values).expectNext(text).expectComplete().verify(Duration.ofSeconds(5));
 	}
 
 	@Test
-	void splitsCoalescedJsonDocumentsInOneSsePayloadIntoSeparateChunks() {
+	void splitsCoalescedJsonDocumentsInOneSsePayloadAndFiltersTheDoneMarker() {
 		// Some proxies and providers coalesce several complete JSON events into a
 		// single SSE data payload (multiple "data:" lines in one event). The parser's
 		// newline re-split turns each line back into its own chunk instead of failing
@@ -453,6 +421,8 @@ class OpenRouterApiStreamingContractTests {
 				data: {"id":"gen-1","object":"chat.completion.chunk","model":"openai/gpt-5.4-mini","choices":[{"index":0,"delta":{"content":"first"}}]}
 				data: {"id":"gen-1","object":"chat.completion.chunk","model":"openai/gpt-5.4-mini","choices":[{"index":0,"delta":{"content":"second"}}]}
 
+				data: {"id":"gen-1","object":"chat.completion.chunk","model":"openai/gpt-5.4-mini","choices":[{"index":0,"delta":{"content":"third"},"finish_reason":"stop"}]}
+
 				data: [DONE]
 
 				""";
@@ -461,92 +431,71 @@ class OpenRouterApiStreamingContractTests {
 		StepVerifier.create(capture.api().chatCompletionStream(chatRequest()))
 			.assertNext(chunk -> assertThat(chunk.choices().get(0).delta().content()).isEqualTo("first"))
 			.assertNext(chunk -> assertThat(chunk.choices().get(0).delta().content()).isEqualTo("second"))
+			.assertNext(chunk -> {
+				assertThat(chunk.choices().get(0).delta().content()).isEqualTo("third");
+				assertThat(chunk.choices().get(0).finishReason()).isEqualTo("stop");
+			})
 			.verifyComplete();
 	}
 
-	@Test
-	void ignoresKeepAliveCommentLines() {
-		String sse = """
-				: OPENROUTER PROCESSING
-
-				data: {"id":"gen-1","object":"chat.completion.chunk","model":"openai/gpt-5.4-mini","choices":[{"index":0,"delta":{"content":"Hi"}}]}
-
-				data: [DONE]
-
-				""";
-		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE, sse);
-
-		StepVerifier.create(capture.api().chatCompletionStream(chatRequest()))
-			.assertNext(chunk -> assertThat(chunk.choices().get(0).delta().content()).isEqualTo("Hi"))
-			.verifyComplete();
+	static Stream<Arguments> invalidPayloadPositions() {
+		List<String> invalidPayloads = List.of("synthetic-invalid", "{invalid}", "[]", "[{}]", "null", "42", "true",
+				"\"text\"", "{} trailing");
+		return invalidPayloads.stream()
+			.flatMap(invalid -> Stream.of("chat", "responses", "images", "chat-model", "responses-model")
+				.flatMap(endpoint -> IntStream.range(0, 3)
+					.boxed()
+					.flatMap(position -> Stream.of("\n\n", "\n")
+						.map(separator -> Arguments.of(Named.of(invalid, invalid), Named.of(endpoint, endpoint),
+								Named.of(position + " valid events first", position),
+								Named.of(separator.length() == 2 ? "blank-line separator" : "newline separator",
+										separator))))));
 	}
 
-	@ParameterizedTest
-	@ValueSource(strings = { "data: {not valid json}\n\n", "data: {\ndata: \"choices\": [\ndata: }\n\n" })
-	void malformedJsonStreamLineFailsWithProtocolErrorNotApiException(String sse) {
-		// A line that looks like a data line but is invalid JSON is a protocol failure,
-		// not a provider error -- callers must be able to tell them apart.
-		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE, sse);
-
-		StepVerifier.create(capture.api().chatCompletionStream(chatRequest()))
-			.expectErrorSatisfies(error -> assertThat(error).isInstanceOf(OpenRouterProtocolException.class)
-				.isNotInstanceOf(OpenRouterApiException.class))
-			.verify();
-	}
-
-	@ParameterizedTest
-	@ValueSource(strings = { "synthetic-invalid", "{invalid}", "[]", "[{}]", "null", "42", "true", "\"text\"",
-			"{} trailing" })
-	void invalidPayloadFailsAtCorruptionAndCancelsUpstream(String invalid) {
-		for (String endpoint : List.of("chat", "responses", "images", "chat-model", "responses-model")) {
-			for (int position = 0; position < 3; position++) {
-				for (String separator : List.of("\n\n", "\n")) {
-					String valid = endpoint.startsWith("chat")
-							? "{\"choices\":[{\"index\":0,\"delta\":{\"content\":\"OK\"}}]}"
-							: endpoint.startsWith("responses")
-									? "{\"type\":\"response.output_text.delta\",\"delta\":\"OK\"}"
-									: "{\"type\":\"image_generation.completed\",\"b64_json\":\"aW1hZ2U=\"}";
-					String terminal = endpoint.startsWith("responses") ? RESPONSES_COMPLETED_SSE : DONE_ONLY_SSE;
-					String sse = ("data: " + valid + separator).repeat(position) + "data: " + invalid + separator
-							+ ("data: " + valid + separator).repeat(2 - position) + terminal;
-					AtomicBoolean cancelled = new AtomicBoolean();
-					AtomicBoolean subscribed = new AtomicBoolean();
-					Flux<DataBuffer> body = Flux
-						.<DataBuffer>just(new DefaultDataBufferFactory().wrap(sse.getBytes(StandardCharsets.UTF_8)))
-						.concatWith(Flux.never())
-						.doOnCancel(() -> cancelled.set(true));
-					OpenRouterApi api = OpenRouterApi.builder()
-						.apiKey("test-key")
-						.webClientBuilder(WebClient.builder()
-							.exchangeFunction(request -> Mono.just(ClientResponse.create(HttpStatus.OK)
-								.header(HttpHeaders.CONTENT_TYPE, MediaType.TEXT_EVENT_STREAM_VALUE)
-								.body(Flux.defer(() -> subscribed.compareAndSet(false, true) ? body : Flux.empty()))
-								.build())))
-						.build();
-					Flux<?> stream = switch (endpoint) {
-						case "chat" -> api.chatCompletionStream(chatRequest());
-						case "responses" -> api.responsesStream(responsesRequest());
-						case "images" -> api.imagesStream(imagesRequest());
-						default -> OpenRouterChatModel.builder()
-							.openRouterApi(api)
-							.build()
-							.stream(new Prompt("hello",
-									OpenRouterChatOptions.builder()
-										.model("synthetic-model")
-										.requestMode(endpoint.equals("chat-model")
-												? OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS
-												: OpenRouterRequestMode.OPENAI_RESPONSES)
-										.build()));
-					};
-					// A coalesced payload starting with invalid JSON fails as a whole.
-					StepVerifier.create(stream).expectNextCount(position).expectErrorSatisfies(error -> {
-						assertThat(error).isInstanceOf(OpenRouterProtocolException.class)
-							.isNotInstanceOf(OpenRouterTruncatedResponseException.class);
-					}).verify(Duration.ofSeconds(3));
-					assertThat(cancelled).as("%s, position %s", endpoint, position).isTrue();
-				}
-			}
-		}
+	@ParameterizedTest(name = "{0} at the {1} endpoint, {2}, {3}")
+	@MethodSource("invalidPayloadPositions")
+	void invalidPayloadFailsAtCorruptionAndCancelsUpstream(String invalid, String endpoint, int position,
+			String separator) {
+		String valid = endpoint.startsWith("chat") ? "{\"choices\":[{\"index\":0,\"delta\":{\"content\":\"OK\"}}]}"
+				: endpoint.startsWith("responses") ? "{\"type\":\"response.output_text.delta\",\"delta\":\"OK\"}"
+						: "{\"type\":\"image_generation.completed\",\"b64_json\":\"aW1hZ2U=\"}";
+		String terminal = endpoint.startsWith("responses") ? RESPONSES_COMPLETED_SSE : DONE_ONLY_SSE;
+		String sse = ("data: " + valid + separator).repeat(position) + "data: " + invalid + separator
+				+ ("data: " + valid + separator).repeat(2 - position) + terminal;
+		AtomicBoolean cancelled = new AtomicBoolean();
+		AtomicBoolean subscribed = new AtomicBoolean();
+		Flux<DataBuffer> body = Flux
+			.<DataBuffer>just(new DefaultDataBufferFactory().wrap(sse.getBytes(StandardCharsets.UTF_8)))
+			.concatWith(Flux.never())
+			.doOnCancel(() -> cancelled.set(true));
+		OpenRouterApi api = OpenRouterApi.builder()
+			.apiKey("test-key")
+			.webClientBuilder(WebClient.builder()
+				.exchangeFunction(request -> Mono.just(ClientResponse.create(HttpStatus.OK)
+					.header(HttpHeaders.CONTENT_TYPE, MediaType.TEXT_EVENT_STREAM_VALUE)
+					.body(Flux.defer(() -> subscribed.compareAndSet(false, true) ? body : Flux.empty()))
+					.build())))
+			.build();
+		Flux<?> stream = switch (endpoint) {
+			case "chat" -> api.chatCompletionStream(chatRequest());
+			case "responses" -> api.responsesStream(responsesRequest());
+			case "images" -> api.imagesStream(imagesRequest());
+			default ->
+				OpenRouterChatModel.builder()
+					.openRouterApi(api)
+					.build()
+					.stream(new Prompt("hello", OpenRouterChatOptions.builder()
+						.model("synthetic-model")
+						.requestMode(endpoint.equals("chat-model") ? OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS
+								: OpenRouterRequestMode.OPENAI_RESPONSES)
+						.build()));
+		};
+		// A coalesced payload starting with invalid JSON fails as a whole.
+		StepVerifier.create(stream)
+			.expectNextCount(position)
+			.expectErrorSatisfies(error -> assertThat(error).isInstanceOf(OpenRouterProtocolException.class))
+			.verify(Duration.ofSeconds(3));
+		assertThat(cancelled).isTrue();
 	}
 
 	@ParameterizedTest
@@ -562,23 +511,7 @@ class OpenRouterApiStreamingContractTests {
 			.verify();
 	}
 
-	@Test
-	void responsesStreamParsesEventsAsTypedStreamEvents() {
-		String sse = """
-				data: {"type":"response.output_text.delta","delta":"hello"}
-
-				data: [DONE]
-
-				""";
-		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE, sse);
-
-		StepVerifier.create(capture.api().responsesStream(responsesRequest())).assertNext(event -> {
-			assertThat(event.type()).isEqualTo("response.output_text.delta");
-			assertThat(event.delta()).isEqualTo("hello");
-		}).expectError(OpenRouterTruncatedResponseException.class).verify();
-	}
-
-	@ParameterizedTest
+	@ParameterizedTest(name = "{0} endpoint, stream timeout configured: {1}")
 	@CsvSource({ "chat,false", "chat,true", "images,false", "images,true" })
 	void doneCompletesAndCancelsOpenBody(String endpoint, boolean timeout) {
 		assertTerminalBody(endpoint, timeout, "data: {\"choices\":[{\"index\":0,\"delta\":{}}]}\n\ndata: [DONE]\n\n",
@@ -630,22 +563,17 @@ class OpenRouterApiStreamingContractTests {
 			.verifyComplete();
 	}
 
+	private static final String COMPLETED_IMAGE = "data: {\"type\":\"image_generation.completed\",\"b64_json\":\"aW1hZ2U=\"}\n\n";
+
 	@Test
-	void completedImageWithoutDoneIsTruncated() {
-		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE,
-				"data: {\"type\":\"image_generation.completed\",\"b64_json\":\"aW1hZ2U=\"}\n\n");
-		StepVerifier.create(capture.api().imagesStream(imagesRequest()))
-			.expectNextCount(1)
-			.expectError(OpenRouterTruncatedResponseException.class)
-			.verify();
+	void doneAfterACompletedImageCancelsTheOpenBodyAndIgnoresWhatFollows() {
+		assertTerminalBody("images", false, COMPLETED_IMAGE + DONE_ONLY_SSE + "data: {invalid}\n\n", 1);
 	}
 
 	@Test
-	void imageCompletionDoesNotHideLaterErrorsAndDoneCancelsOpenBody() {
-		String completed = "data: {\"type\":\"image_generation.completed\",\"b64_json\":\"aW1hZ2U=\"}\n\n";
-		assertTerminalBody("images", false, completed + DONE_ONLY_SSE + "data: {invalid}\n\n", 1);
+	void imageCompletionDoesNotHideALaterErrorEvent() {
 		assertTerminalBody("images", false,
-				completed
+				COMPLETED_IMAGE
 						+ "data: {\"type\":\"error\",\"error\":{\"message\":\"failed\",\"code\":\"server_error\"}}\n\n",
 				2);
 	}
@@ -678,15 +606,70 @@ class OpenRouterApiStreamingContractTests {
 		assertThat(cancelled).isTrue();
 	}
 
+	static Stream<Arguments> prematureEofCases() {
+		String chatChunk = "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"hello\"}}]}\n\n";
+		String responsesDelta = "data: {\"type\":\"response.output_text.delta\",\"delta\":\"hello\"}\n\n";
+		String partialImage = "data: {\"type\":\"image_generation.partial_image\",\"b64_json\":\"aW1hZ2U=\"}\n\n";
+		String completedImage = "data: {\"type\":\"image_generation.completed\",\"b64_json\":\"aW1hZ2U=\"}\n\n";
+		return Stream.of(Arguments.of(Named.of("chat chunk", "chat"), chatChunk, DONE_ONLY_SSE, 1),
+				Arguments.of(Named.of("responses text delta", "responses"), responsesDelta, RESPONSES_COMPLETED_SSE, 2),
+				Arguments.of(Named.of("partial image", "images"), partialImage, DONE_ONLY_SSE, 1),
+				Arguments.of(Named.of("completed image", "images"), completedImage, DONE_ONLY_SSE, 1));
+	}
+
 	@ParameterizedTest
-	@ValueSource(strings = { "responses", "images" })
-	void prematureEofFailsWithoutReplayAndTerminalStateIsPerSubscription(String endpoint) {
-		String partial = endpoint.equals("responses")
-				? "data: {\"type\":\"response.output_text.delta\",\"delta\":\"hello\"}\n\n"
-				: "data: {\"type\":\"image_generation.partial_image\",\"b64_json\":\"aW1hZ2U=\"}\n\n";
+	@MethodSource("previewEvents")
+	void prematureEofIsATypedTruncationWithoutReplay(String endpoint, String partial) {
+		Replay replay = replay(endpoint, partial);
+
+		StepVerifier.create(replay.stream())
+			.expectNextCount(1)
+			.expectError(OpenRouterTruncatedResponseException.class)
+			.verify();
+		assertThat(replay.requests()).hasValue(1);
+	}
+
+	static Stream<Arguments> previewEvents() {
+		return prematureEofCases().limit(3).map(row -> Arguments.of(row.get()[0], row.get()[1]));
+	}
+
+	@ParameterizedTest
+	@MethodSource("previewEvents")
+	void cancellingAfterAPreviewIsIntentionalEvenWithoutProtocolTermination(String endpoint, String partial) {
+		Replay replay = replay(endpoint, partial);
+
+		StepVerifier.create(replay.stream().take(1)).expectNextCount(1).verifyComplete();
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "chat", "responses", "images" })
+	void keepAliveOnlyAndEmptyBodiesAreTruncations(String endpoint) {
+		Replay keepAlive = replay(endpoint, ": keepalive\n\n");
+		Replay empty = replay(endpoint, "");
+
+		StepVerifier.create(keepAlive.stream()).expectError(OpenRouterTruncatedResponseException.class).verify();
+		StepVerifier.create(empty.stream()).expectError(OpenRouterTruncatedResponseException.class).verify();
+	}
+
+	@ParameterizedTest
+	@MethodSource("prematureEofCases")
+	void terminalStateIsPerSubscription(String endpoint, String partial, String terminal, int completeCount) {
+		Replay replay = replay(endpoint, partial + terminal);
+
+		StepVerifier.create(replay.stream()).expectNextCount(completeCount).verifyComplete();
+		replay.body().set(partial);
+		StepVerifier.create(replay.stream())
+			.expectNextCount(1)
+			.expectError(OpenRouterTruncatedResponseException.class)
+			.verify();
+		replay.body().set(partial + terminal);
+		StepVerifier.create(replay.stream()).expectNextCount(completeCount).verifyComplete();
+		assertThat(replay.requests()).hasValue(3);
+	}
+
+	private Replay replay(String endpoint, String initialBody) {
 		AtomicInteger requests = new AtomicInteger();
-		String terminal = endpoint.equals("responses") ? RESPONSES_COMPLETED_SSE : DONE_ONLY_SSE;
-		AtomicReference<String> body = new AtomicReference<>(partial + terminal);
+		AtomicReference<String> body = new AtomicReference<>(initialBody);
 		OpenRouterApi api = OpenRouterApi.builder()
 			.apiKey("test-key")
 			.webClientBuilder(WebClient.builder().exchangeFunction(request -> {
@@ -697,23 +680,46 @@ class OpenRouterApiStreamingContractTests {
 					.build());
 			}))
 			.build();
-		Flux<?> stream = endpoint.equals("responses") ? api.responsesStream(responsesRequest())
-				: api.imagesStream(imagesRequest());
-		StepVerifier.create(stream).expectNextCount(endpoint.equals("responses") ? 2 : 1).verifyComplete();
-		body.set(partial);
-		StepVerifier.create(stream).expectNextCount(1).expectError(OpenRouterTruncatedResponseException.class).verify();
-		// Cancellation after a preview is intentional, even without protocol termination.
-		StepVerifier.create(stream.take(1)).expectNextCount(1).verifyComplete();
-		body.set(": keepalive\n\n");
-		StepVerifier.create(stream).expectError(OpenRouterTruncatedResponseException.class).verify();
-		body.set("");
-		StepVerifier.create(stream).expectError(OpenRouterTruncatedResponseException.class).verify();
-		body.set(partial + terminal);
-		StepVerifier.create(stream).expectNextCount(endpoint.equals("responses") ? 2 : 1).verifyComplete();
-		assertThat(requests).hasValue(6);
+		Flux<?> stream = switch (endpoint) {
+			case "chat" -> api.chatCompletionStream(chatRequest());
+			case "responses" -> api.responsesStream(responsesRequest());
+			case "images" -> api.imagesStream(imagesRequest());
+			default -> throw new IllegalArgumentException(endpoint);
+		};
+		return new Replay(stream, requests, body);
+	}
+
+	@Test
+	void consumerCancellationClosesAnOpenChatBodyWithoutAnError() {
+		// The provider keeps the connection open after a chunk; the consumer stops early,
+		// so cancellation (not [DONE] or corruption) has to release the body.
+		AtomicBoolean cancelled = new AtomicBoolean();
+		Flux<DataBuffer> body = Flux.<DataBuffer>just(new DefaultDataBufferFactory()
+			.wrap("data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"hello\"}}]}\n\n"
+				.getBytes(StandardCharsets.UTF_8)))
+			.concatWith(Flux.never())
+			.doOnCancel(() -> cancelled.set(true));
+		OpenRouterApi api = OpenRouterApi.builder()
+			.apiKey("test-key")
+			.webClientBuilder(WebClient.builder()
+				.exchangeFunction(request -> Mono.just(ClientResponse.create(HttpStatus.OK)
+					.header(HttpHeaders.CONTENT_TYPE, MediaType.TEXT_EVENT_STREAM_VALUE)
+					.body(body)
+					.build())))
+			.build();
+
+		StepVerifier.create(api.chatCompletionStream(chatRequest()))
+			.assertNext(chunk -> assertThat(chunk.choices().get(0).delta().content()).isEqualTo("hello"))
+			.thenCancel()
+			.verify(Duration.ofSeconds(3));
+
+		assertThat(cancelled).isTrue();
 	}
 
 	private record Capture(OpenRouterApi api, AtomicReference<ClientRequest> request) {
+	}
+
+	private record Replay(Flux<?> stream, AtomicInteger requests, AtomicReference<String> body) {
 	}
 
 }

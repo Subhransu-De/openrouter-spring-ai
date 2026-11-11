@@ -10,20 +10,30 @@ import de.subhransu.openrouter.springai.api.dto.ChatMessage;
 import de.subhransu.openrouter.springai.api.dto.Choice;
 import de.subhransu.openrouter.springai.api.dto.ChoiceError;
 import de.subhransu.openrouter.springai.api.dto.Usage;
-import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
 import de.subhransu.openrouter.springai.chat.OpenRouterUsage;
 import de.subhransu.openrouter.springai.chat.errors.OpenRouterNonTransientChoiceException;
 import de.subhransu.openrouter.springai.chat.errors.OpenRouterChoiceFailure;
 import de.subhransu.openrouter.springai.chat.errors.OpenRouterTransientChoiceException;
+import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
-import de.subhransu.openrouter.springai.internal.Retries;
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.mockito.ArgumentMatchers;
+import org.mockito.Mockito;
+import org.springframework.ai.chat.prompt.Prompt;
+import reactor.core.publisher.Flux;
+import reactor.test.StepVerifier;
+import de.subhransu.openrouter.springai.api.OpenRouterApi;
+import de.subhransu.openrouter.springai.api.dto.Delta;
+import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -43,9 +53,8 @@ class OpenRouterChatResponseFixtureMapperTests {
 
 	private final ObjectMapper objectMapper = new ObjectMapper();
 
-	private final OpenRouterChatResponseMapper responseMapper = new OpenRouterChatResponseMapper();
-
-	private final OpenRouterStreamingResponseMapper streamingMapper = new OpenRouterStreamingResponseMapper();
+	private final OpenRouterChatResponseMapper responseMapper = new OpenRouterChatResponseMapper(
+			OpenRouterDiagnosticSanitizer.keyless());
 
 	@ParameterizedTest(name = "blocking native failure {0} -> {1}")
 	@CsvSource({ "error, UNKNOWN", "insufficient_system_resources, PROVIDER_UNAVAILABLE",
@@ -89,24 +98,6 @@ class OpenRouterChatResponseFixtureMapperTests {
 			.isInstanceOfSatisfying(OpenRouterNonTransientChoiceException.class, exception -> {
 				assertThat(exception.getCategory()).isEqualTo(OpenRouterErrorCategory.UNKNOWN);
 				assertThat(exception.getErrorDetails().errorType()).isEqualTo("future_error");
-			});
-	}
-
-	@ParameterizedTest(name = "streaming native failure {0} -> {1}")
-	@CsvSource({ "error, UNKNOWN", "insufficient_system_resources, PROVIDER_UNAVAILABLE",
-			"insufficient_quota, BILLING_CREDITS" })
-	void streamingNativeFailureReasonsRaiseTypedFailures(String nativeReason, OpenRouterErrorCategory category) {
-		Choice choice = new Choice(0, null,
-				new de.subhransu.openrouter.springai.api.dto.Delta("assistant", "partial", null, null), nativeReason,
-				nativeReason);
-		ChatCompletionChunk chunk = new ChatCompletionChunk("gen-native", "chat.completion.chunk", 1L, "m", "p",
-				List.of(choice), null, null);
-
-		assertThatThrownBy(() -> this.streamingMapper.map(chunk)).isInstanceOf(OpenRouterChoiceFailure.class)
-			.satisfies(thrown -> {
-				OpenRouterChoiceFailure failure = (OpenRouterChoiceFailure) thrown;
-				assertThat(failure.getCategory()).isEqualTo(category);
-				assertThat(failure.getErrorDetails().nativeFinishReason()).isEqualTo(nativeReason);
 			});
 	}
 
@@ -198,91 +189,100 @@ class OpenRouterChatResponseFixtureMapperTests {
 			});
 	}
 
-	@Test
-	void symbolicTransientCodeWithoutMetadataRaisesTransientFailure() {
-		ChatCompletionResponse response = choiceErrorResponse("server_error", Map.of());
+	static Stream<Arguments> symbolicChoiceCodes() {
+		return Stream.of(
+				Arguments.of(Named.of("transient symbolic code", "server_error"), Map.<String, Object>of(),
+						OpenRouterTransientChoiceException.class, null),
+				Arguments.of(Named.of("deterministic symbolic code", "invalid_request_error"), Map.<String, Object>of(),
+						OpenRouterNonTransientChoiceException.class, null),
+				Arguments.of(Named.of("metadata error type beats a transient code", "server_error"),
+						Map.<String, Object>of("error_type", "invalid_request"),
+						OpenRouterNonTransientChoiceException.class, "invalid_request"),
+				Arguments.of(Named.of("upper-case transient code is normalized", "SERVER_ERROR"),
+						Map.<String, Object>of(), OpenRouterTransientChoiceException.class, null));
+	}
 
-		assertThatThrownBy(() -> this.responseMapper.map(response))
-			.isInstanceOfSatisfying(OpenRouterTransientChoiceException.class, exception -> {
-				assertThat(exception.getErrorDetails().code()).isEqualTo("server_error");
-				assertThat(exception.getErrorDetails().errorType()).isNull();
-			});
+	@ParameterizedTest
+	@MethodSource("symbolicChoiceCodes")
+	void symbolicChoiceCodesClassifyTheFailure(String code, Map<String, Object> metadata,
+			Class<? extends OpenRouterChoiceFailure> failureType, String errorType) {
+		ChatCompletionResponse response = choiceErrorResponse(code, metadata);
+
+		assertThatThrownBy(() -> this.responseMapper.map(response)).isInstanceOf(failureType).satisfies(thrown -> {
+			var details = ((OpenRouterChoiceFailure) thrown).getErrorDetails();
+			assertThat(details.code()).isEqualTo(code);
+			assertThat(details.errorType()).isEqualTo(errorType);
+		});
+	}
+
+	@ParameterizedTest(name = "streaming native failure {0} -> {1}")
+	@CsvSource({ "error, UNKNOWN", "insufficient_system_resources, PROVIDER_UNAVAILABLE",
+			"insufficient_quota, BILLING_CREDITS" })
+	void streamingNativeFailureReasonsRaiseTypedFailures(String nativeReason, OpenRouterErrorCategory category) {
+		Choice choice = new Choice(0, null, new Delta("assistant", "partial", null, null), nativeReason, nativeReason);
+		ChatCompletionChunk chunk = new ChatCompletionChunk("gen-native", "chat.completion.chunk", 1L, "m", "p",
+				List.of(choice), null, null);
+		OpenRouterApi api = Mockito.mock(OpenRouterApi.class);
+		Mockito.when(api.chatCompletionStream(ArgumentMatchers.any())).thenReturn(Flux.just(chunk));
+		OpenRouterChatModel model = OpenRouterChatModel.builder()
+			.openRouterApi(api)
+			.retryTemplate(new RetryTemplate(RetryPolicy.builder().maxRetries(0).build()))
+			.build();
+
+		StepVerifier.create(model.stream(new Prompt("synthetic")))
+			.expectErrorSatisfies(
+					thrown -> assertThat(thrown).isInstanceOfSatisfying(OpenRouterChoiceFailure.class, failure -> {
+						assertThat(failure.getCategory()).isEqualTo(category);
+						assertThat(failure.getErrorDetails().nativeFinishReason()).isEqualTo(nativeReason);
+					}))
+			.verify();
 	}
 
 	@Test
-	void symbolicDeterministicCodeWithoutMetadataRaisesNonTransientFailure() {
-		ChatCompletionResponse response = choiceErrorResponse("invalid_request_error", Map.of());
+	void missingContentMapsToAnEmptyAssistantMessage() {
+		ChatCompletionResponse response = new ChatCompletionResponse("gen-1", "chat.completion", 1L, "m", "p",
+				List.of(new Choice(0, new ChatMessage("assistant", null, null, null, null), null, "stop", "stop")),
+				null);
 
-		assertThatThrownBy(() -> this.responseMapper.map(response))
-			.isInstanceOfSatisfying(OpenRouterNonTransientChoiceException.class, exception -> {
-				assertThat(exception.getErrorDetails().code()).isEqualTo("invalid_request_error");
-				assertThat(exception.getErrorDetails().errorType()).isNull();
-			});
+		ChatResponse mapped = this.responseMapper.map(response);
+
+		assertThat(mapped.getResult().getOutput().getText()).isEmpty();
+		assertThat(mapped.getResult().getOutput().getToolCalls()).isEmpty();
+		assertThat(mapped.getResult().getOutput().getMedia()).isEmpty();
+		assertThat(mapped.getResult().getMetadata().getFinishReason()).isEqualTo("STOP");
 	}
 
 	@Test
-	void metadataErrorTypeTakesPrecedenceOverSymbolicTransientCode() {
-		ChatCompletionResponse response = choiceErrorResponse("server_error", Map.of("error_type", "invalid_request"));
-
-		assertThatThrownBy(() -> this.responseMapper.map(response)).isInstanceOfSatisfying(
-				OpenRouterNonTransientChoiceException.class,
-				exception -> assertThat(exception.getErrorDetails().errorType()).isEqualTo("invalid_request"));
-	}
-
-	@Test
-	void normalizedSymbolicTransientCodeRaisesTransientFailure() {
-		ChatCompletionResponse response = choiceErrorResponse("SERVER_ERROR", Map.of());
-
-		assertThatThrownBy(() -> this.responseMapper.map(response)).isInstanceOfSatisfying(
-				OpenRouterTransientChoiceException.class,
-				exception -> assertThat(exception.getErrorDetails().category())
-					.isEqualTo(OpenRouterErrorCategory.PROVIDER_UNAVAILABLE));
-	}
-
-	@Test
-	void transientChoiceFailureParticipatesInSpringAiRetryPolicy() throws IOException {
+	void modelRetriesATransientChoiceFailureAndReturnsTheSuccessfulResponse() throws IOException {
 		ChatCompletionResponse failed = parseFixture("chat-completion-choice-error.json", ChatCompletionResponse.class);
 		ChatCompletionResponse successful = parseFixture("chat-completion-success.json", ChatCompletionResponse.class);
-		AtomicInteger attempts = new AtomicInteger();
+		OpenRouterApi api = Mockito.mock(OpenRouterApi.class);
+		Mockito.when(api.chatCompletion(ArgumentMatchers.any())).thenReturn(failed, successful);
+		OpenRouterChatModel model = OpenRouterChatModel.builder()
+			.openRouterApi(api)
+			.retryTemplate(transientRetryTemplate(2))
+			.build();
 
-		ChatResponse response = Retries.invoke(transientRetryTemplate(2), () -> {
-			if (attempts.incrementAndGet() == 1) {
-				return this.responseMapper.map(failed);
-			}
-			return this.responseMapper.map(successful);
-		});
+		ChatResponse response = model.call(new Prompt("synthetic"));
 
-		assertThat(attempts).hasValue(2);
+		Mockito.verify(api, Mockito.times(2)).chatCompletion(ArgumentMatchers.any());
 		assertThat(response.getResult().getOutput().getText()).isEqualTo("The capital of France is Paris.");
 	}
 
 	@Test
-	void deterministicChoiceFailureIsNotRetried() throws IOException {
+	void modelDoesNotRetryADeterministicChoiceFailure() throws IOException {
 		ChatCompletionResponse failed = parseFixture("chat-completion-mixed-choice-error.json",
 				ChatCompletionResponse.class);
-		AtomicInteger attempts = new AtomicInteger();
+		OpenRouterApi api = Mockito.mock(OpenRouterApi.class);
+		Mockito.when(api.chatCompletion(ArgumentMatchers.any())).thenReturn(failed);
+		OpenRouterChatModel model = OpenRouterChatModel.builder()
+			.openRouterApi(api)
+			.retryTemplate(transientRetryTemplate(2))
+			.build();
 
-		assertThatThrownBy(() -> Retries.invoke(transientRetryTemplate(2), () -> {
-			attempts.incrementAndGet();
-			return this.responseMapper.map(failed);
-		})).isInstanceOf(OpenRouterNonTransientChoiceException.class);
-		assertThat(attempts).hasValue(1);
-	}
-
-	@Test
-	void partialOutputInDiagnosticsIsBounded() {
-		String partial = "x".repeat(600);
-		ChoiceError error = new ChoiceError("502", "Provider disconnected",
-				Map.of("error_type", "provider_unavailable"));
-		ChatCompletionResponse response = new ChatCompletionResponse("gen-long", "chat.completion", 1L, "m", "p", List
-			.of(new Choice(0, new ChatMessage("assistant", partial, null, null, null), null, "error", "error", error)),
-				null);
-
-		assertThatThrownBy(() -> this.responseMapper.map(response))
-			.isInstanceOfSatisfying(OpenRouterTransientChoiceException.class, exception -> {
-				assertThat(exception.getErrorDetails().partialOutput()).hasSize(503).endsWith("...");
-				assertThat(exception.getErrorDetails().partialOutputTruncated()).isTrue();
-			});
+		assertThatThrownBy(() -> model.call(new Prompt("synthetic")))
+			.isInstanceOf(OpenRouterNonTransientChoiceException.class);
+		Mockito.verify(api, Mockito.times(1)).chatCompletion(ArgumentMatchers.any());
 	}
 
 	@Test
@@ -304,6 +304,7 @@ class OpenRouterChatResponseFixtureMapperTests {
 					.doesNotContain(tailMarker);
 				assertThat(exception.getErrorDetails().message()).hasSize(1003).endsWith("...");
 				assertThat(exception.getErrorDetails().partialOutput()).hasSize(503).endsWith("...");
+				assertThat(exception.getErrorDetails().partialOutputTruncated()).isTrue();
 			});
 	}
 
@@ -357,31 +358,6 @@ class OpenRouterChatResponseFixtureMapperTests {
 	}
 
 	@Test
-	void mapsToolCallFixture() throws IOException {
-		ChatCompletionResponse response = parseFixture("chat-completion-tool-call.json", ChatCompletionResponse.class);
-
-		ChatResponse mapped = this.responseMapper.map(response);
-
-		assertThat(mapped.hasToolCalls()).isTrue();
-		// The id is echoed back to the provider as tool_call_id on the follow-up turn
-		// and the arguments feed tool execution -- both must survive the mapping.
-		assertThat(mapped.getResult().getOutput().getToolCalls().get(0).id()).isEqualTo("call-1");
-		assertThat(mapped.getResult().getOutput().getToolCalls().get(0).name()).isEqualTo("get_weather");
-		assertThat(mapped.getResult().getOutput().getToolCalls().get(0).arguments()).isEqualTo("{\"city\":\"Berlin\"}");
-		assertThat(mapped.getResult().getMetadata().getFinishReason()).isEqualTo("TOOL_CALLS");
-	}
-
-	@Test
-	void mapsStreamingChunkFixtureWithReasoningAndUnknownFields() throws IOException {
-		ChatCompletionChunk chunk = parseFixture("chat-completion-chunk.json", ChatCompletionChunk.class);
-
-		ChatResponse mapped = this.streamingMapper.map(chunk);
-
-		assertThat(mapped.getResult().getOutput().getText()).isEqualTo("Hello");
-		assertThat(mapped.getResult().getMetadata().<String>get("openrouter.reasoning")).isEqualTo("warming up");
-	}
-
-	@Test
 	void usageJsonAliasesForResponsesApiNamesDeserialize() {
 		// The Responses API reports usage as input_tokens/output_tokens (and
 		// cached_tokens instead of cache_read_input_tokens); @JsonAlias maps them onto
@@ -395,51 +371,9 @@ class OpenRouterChatResponseFixtureMapperTests {
 		assertThat(usage.cachedTokens()).isEqualTo(2);
 	}
 
-	@Test
-	void mapsFinalStreamingUsageChunkFixture() throws IOException {
-		ChatCompletionChunk chunk = parseFixture("chat-completion-chunk-usage.json", ChatCompletionChunk.class);
-
-		ChatResponse mapped = this.streamingMapper.map(chunk);
-
-		assertThat(mapped.getResults()).isEmpty();
-		assertThat(mapped.getMetadata().getUsage().getTotalTokens()).isEqualTo(26);
-	}
-
-	@Test
-	void streamingErrorChunkFixtureRaisesApiException() throws IOException {
-		ChatCompletionChunk chunk = parseFixture("chat-completion-chunk-error.json", ChatCompletionChunk.class);
-
-		assertThatThrownBy(() -> this.streamingMapper.map(chunk)).isInstanceOfSatisfying(OpenRouterApiException.class,
-				exception -> {
-					assertThat(exception.getMessage()).isEqualTo("OpenRouter chat completion stream failed");
-					assertThat(exception.getErrorDetails().message())
-						.isEqualTo("The upstream provider returned an error");
-				});
-	}
-
 	// ---------------------------------------------------------------------
 	// In-memory edge cases that complement the fixtures
 	// ---------------------------------------------------------------------
-
-	@Test
-	void nullMessageIsRejected() {
-		ChatCompletionResponse response = new ChatCompletionResponse("gen-1", "chat.completion", 1L, "m", "p",
-				List.of(new Choice(0, null, null, "stop", "stop")), null);
-
-		assertThatThrownBy(() -> this.responseMapper.map(response))
-			.isInstanceOf(de.subhransu.openrouter.springai.errors.OpenRouterProtocolException.class);
-	}
-
-	@Test
-	void nullContentMapsToEmptyText() {
-		ChatCompletionResponse response = new ChatCompletionResponse("gen-1", "chat.completion", 1L, "m", "p",
-				List.of(new Choice(0, new ChatMessage("assistant", null, null, null, null), null, "stop", "stop")),
-				null);
-
-		ChatResponse mapped = this.responseMapper.map(response);
-
-		assertThat(mapped.getResult().getOutput().getText()).isEmpty();
-	}
 
 	@Test
 	void mapsStructuredContentPartsToTextAndMedia() throws IOException {
@@ -453,28 +387,6 @@ class OpenRouterChatResponseFixtureMapperTests {
 			assertThat(media.getMimeType()).isEqualTo(MimeTypeUtils.IMAGE_JPEG);
 			assertThat(media.getData()).isEqualTo("data:image/jpeg;base64,aW1hZ2U=");
 		});
-	}
-
-	@Test
-	void missingFinishReasonPassesThroughAsNull() {
-		ChatCompletionResponse response = new ChatCompletionResponse("gen-1", "chat.completion", 1L, "m", "p",
-				List.of(new Choice(0, new ChatMessage("assistant", "hi", null, null, null), null, null, null)), null);
-
-		ChatResponse mapped = this.responseMapper.map(response);
-
-		assertThat(mapped.getResult().getMetadata().getFinishReason()).isNull();
-	}
-
-	@Test
-	void unknownFinishReasonPassesThroughVerbatim() {
-		ChatCompletionResponse response = new ChatCompletionResponse("gen-1", "chat.completion", 1L, "m", "p",
-				List.of(new Choice(0, new ChatMessage("assistant", "hi", null, null, null), null, "guardrail_triggered",
-						"guardrail_triggered")),
-				null);
-
-		ChatResponse mapped = this.responseMapper.map(response);
-
-		assertThat(mapped.getResult().getMetadata().getFinishReason()).isEqualTo("guardrail_triggered");
 	}
 
 	@Test

@@ -71,6 +71,7 @@ If a mode does not support an option, preserve or add explicit validation rather
 - Do not copy private prompts, account responses, logs, or credentials into fixtures or committed evidence.
 - Run the Garage live harness only when live API use is authorized. Confirm its output location and keep generated reports and service records outside the repository.
 - Never print an API key or place it in a command argument, documentation, or a commit. Use the existing environment-based configuration.
+- Write no production code that only tests use, and widen no access for a test. Reach behavior through the API that production callers use. The build checks this with the `TestOnlyProductionCodeTests` rule in each of the three code modules; fix a finding instead of excluding it.
 - Use synthetic regression cases to reproduce a protocol defect; preserve no private live payload in the repository.
 
 ## Code style

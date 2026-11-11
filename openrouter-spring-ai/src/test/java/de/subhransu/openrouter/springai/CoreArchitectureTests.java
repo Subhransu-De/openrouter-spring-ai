@@ -18,6 +18,15 @@ import com.tngtech.archunit.lang.ConditionEvents;
 import com.tngtech.archunit.lang.SimpleConditionEvent;
 import com.tngtech.archunit.library.dependencies.SlicesRuleDefinition;
 
+/**
+ * Architecture rules over the production classes of this module. ArchUnit caches an
+ * import per location set, so every rule class in this module should declare exactly this
+ * {@code @AnalyzeClasses} location set and reuse the one import instead of paying for
+ * another. {@code TestOnlyProductionCodeTests} is the one deliberate exception: it must
+ * see this module's test classes to tell production callers from test callers, so it
+ * declares its own location set and pays for that second import.
+ * {@code ArchitectureRuleTests} proves each rule against fixture classes.
+ */
 @AnalyzeClasses(packages = "de.subhransu.openrouter.springai", importOptions = ImportOption.DoNotIncludeTests.class)
 class CoreArchitectureTests {
 
@@ -33,14 +42,16 @@ class CoreArchitectureTests {
 		.resideInAPackage("..api..")
 		.should()
 		.dependOnClassesThat()
-		.resideInAPackage("..chat..");
+		.resideInAPackage("..chat..")
+		.because("the HTTP client layer sits below the chat models");
 
 	@ArchTest
 	static final ArchRule api_must_not_depend_on_spring_ai = noClasses().that()
 		.resideInAPackage("..api..")
 		.should()
 		.dependOnClassesThat()
-		.resideInAPackage("org.springframework.ai..");
+		.resideInAPackage("org.springframework.ai..")
+		.because("the HTTP client layer must stay independent of Spring AI");
 
 	@ArchTest
 	static final ArchRule only_api_may_use_http_clients = noClasses().that()
@@ -48,7 +59,8 @@ class CoreArchitectureTests {
 		.should()
 		.dependOnClassesThat()
 		.resideInAnyPackage("org.springframework.web.client..", "org.springframework.web.reactive.function.client..",
-				"org.springframework.http.codec..");
+				"org.springframework.http.codec..")
+		.because("HTTP client access belongs in the api package");
 
 	@ArchTest
 	static final ArchRule mappers_are_the_wire_to_spring_ai_seam = noClasses()
@@ -95,7 +107,8 @@ class CoreArchitectureTests {
 	static final ArchRule core_packages_must_not_form_cycles = SlicesRuleDefinition.slices()
 		.matching("de.subhransu.openrouter.springai.(*)..")
 		.should()
-		.beFreeOfCycles();
+		.beFreeOfCycles()
+		.because("acyclic core packages keep the module layering explicit");
 
 	private static ArchCondition<JavaClass> tolerateUnknownJsonFields() {
 		return new ArchCondition<>("be annotated with @JsonIgnoreProperties(ignoreUnknown = true)") {

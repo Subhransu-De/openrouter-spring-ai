@@ -432,7 +432,7 @@ public final class GarageModalityBays {
     return decoded.getWidth() > 0 && decoded.getHeight() > 0;
   }
 
-  static boolean hasWebpSignature(byte[] bytes) {
+  private static boolean hasWebpSignature(byte[] bytes) {
     return bytes.length > 20
         && bytes[0] == 'R'
         && bytes[1] == 'I'

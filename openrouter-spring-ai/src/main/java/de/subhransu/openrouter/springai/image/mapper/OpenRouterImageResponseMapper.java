@@ -23,10 +23,6 @@ public final class OpenRouterImageResponseMapper {
 
 	private final OpenRouterDiagnosticSanitizer sanitizer;
 
-	public OpenRouterImageResponseMapper() {
-		this(OpenRouterDiagnosticSanitizer.keyless());
-	}
-
 	public OpenRouterImageResponseMapper(OpenRouterDiagnosticSanitizer sanitizer) {
 		this.sanitizer = sanitizer;
 	}

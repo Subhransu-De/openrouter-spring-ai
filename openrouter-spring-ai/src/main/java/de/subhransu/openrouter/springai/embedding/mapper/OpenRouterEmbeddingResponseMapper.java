@@ -17,17 +17,8 @@ public final class OpenRouterEmbeddingResponseMapper {
 
 	private final OpenRouterDiagnosticSanitizer sanitizer;
 
-	public OpenRouterEmbeddingResponseMapper() {
-		this(OpenRouterDiagnosticSanitizer.keyless());
-	}
-
 	public OpenRouterEmbeddingResponseMapper(OpenRouterDiagnosticSanitizer sanitizer) {
 		this.sanitizer = sanitizer;
-	}
-
-	public EmbeddingResponse map(EmbeddingsResponse response) {
-		var data = response.data();
-		return map(response, data == null ? 0 : data.size(), null);
 	}
 
 	public EmbeddingResponse map(EmbeddingsResponse response, int inputCount, @Nullable Integer dimensions) {

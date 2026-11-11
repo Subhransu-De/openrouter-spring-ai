@@ -1,62 +1,74 @@
 package de.subhransu.openrouter.springai.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.test.web.client.ExpectedCount.once;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import de.subhransu.openrouter.springai.api.dto.ResponsesRequest;
 import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.http.client.ClientHttpRequestFactory;
+import org.springframework.mock.http.client.MockClientHttpRequest;
+import org.springframework.mock.http.client.MockClientHttpResponse;
 import org.springframework.web.client.RestClient;
 
 class OpenRouterApiTests {
 
+	private static final String RESPONSE_BODY = """
+			{
+			  "id": "resp-2",
+			  "object": "response",
+			  "created_at": 123,
+			  "model": "openai/gpt-5.4",
+			  "status": "completed",
+			  "output": [
+			    {
+			      "type": "message",
+			      "role": "assistant",
+			      "content": [{"type": "output_text", "text": "ok"}]
+			    }
+			  ],
+			  "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2}
+			}
+			""";
+
 	@Test
 	void leavesCallerRequestFactoryUntouchedWhenTimeoutIsSet() {
-		// The core never configures the RestClient's request factory (that is the
-		// auto-configuration's
-		// job). MockRestServiceServer installs its own factory; if a configured timeout
-		// clobbered it,
-		// the mock server would never see the request and verify() would fail.
-		RestClient.Builder restClientBuilder = RestClient.builder();
-		MockRestServiceServer server = MockRestServiceServer.bindTo(restClientBuilder).build();
+		// The core never configures the RestClient's request factory; that is the
+		// auto-configuration's job. The configured timeout only guards streaming gaps.
+		AtomicInteger requests = new AtomicInteger();
+		ClientHttpRequestFactory factory = (uri, method) -> {
+			requests.incrementAndGet();
+			MockClientHttpRequest request = new MockClientHttpRequest(method, uri);
+			MockClientHttpResponse response = new MockClientHttpResponse(RESPONSE_BODY.getBytes(StandardCharsets.UTF_8),
+					HttpStatus.OK);
+			response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+			request.setResponse(response);
+			return request;
+		};
 		OpenRouterApi api = OpenRouterApi.builder()
 			.apiKey("test-key")
 			.baseUrl("https://openrouter.test/api/v1")
-			.restClientBuilder(restClientBuilder)
-			.timeout(java.time.Duration.ofSeconds(30))
+			.restClientBuilder(RestClient.builder().requestFactory(factory))
+			.timeout(Duration.ofSeconds(30))
 			.build();
 
-		server.expect(once(), requestTo("https://openrouter.test/api/v1/responses")).andRespond(withSuccess("""
-				{
-				  "id": "resp-2",
-				  "object": "response",
-				  "created_at": 123,
-				  "model": "openai/gpt-5.4",
-				  "status": "completed",
-				  "output": [
-				    {
-				      "type": "message",
-				      "role": "assistant",
-				      "content": [{"type": "output_text", "text": "ok"}]
-				    }
-				  ],
-				  "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2}
-				}
-				""", MediaType.APPLICATION_JSON));
+		ResponsesResult result = api.responses(request());
 
-		ResponsesResult result = api.responses(ResponsesRequest.builder()
+		assertThat(result.id()).isEqualTo("resp-2");
+		assertThat(requests).hasValue(1);
+	}
+
+	private static ResponsesRequest request() {
+		return ResponsesRequest.builder()
 			.model("openai/gpt-5.4")
 			.input("hello")
 			.maxOutputTokens(128)
 			.stream(false)
-			.build());
-
-		assertThat(result.id()).isEqualTo("resp-2");
-		server.verify();
+			.build();
 	}
 
 }

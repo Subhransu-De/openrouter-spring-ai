@@ -12,6 +12,7 @@ import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationRegistry;
 import io.micrometer.observation.tck.TestObservationRegistry;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
@@ -92,11 +93,27 @@ class OpenRouterToolExecutionExceptionProcessorTests {
 	@Test
 	void customRendererIsAnExplicitOptInForDetailedProviderOutput() {
 		ToolExecutionException exception = nestedFailure();
+		List<ToolExecutionException> rendered = new ArrayList<>();
 		OpenRouterToolExecutionExceptionProcessor processor = new OpenRouterToolExecutionExceptionProcessor(
-				ObservationRegistry.NOOP,
-				failure -> failure.getCause().getMessage() + ": " + failure.getCause().getCause().getMessage());
+				ObservationRegistry.NOOP, failure -> {
+					rendered.add(failure);
+					return "{\"detail\":\"" + failure.getCause().getCause().getMessage() + "\"}";
+				});
 
-		assertThat(processor.process(exception)).contains(SECRET, NESTED_DETAIL);
+		// The renderer receives the original exception, and its result, not the safe
+		// default, becomes the provider-visible tool result.
+		assertThat(processor.process(exception)).isEqualTo("{\"detail\":\"" + NESTED_DETAIL + "\"}")
+			.isNotEqualTo(OpenRouterToolExecutionExceptionProcessor.DEFAULT_FAILURE_PAYLOAD);
+		assertThat(rendered).singleElement().isSameAs(exception);
+	}
+
+	@Test
+	void rendererThatReturnsNullIsRejected() {
+		OpenRouterToolExecutionExceptionProcessor processor = new OpenRouterToolExecutionExceptionProcessor(
+				ObservationRegistry.NOOP, failure -> null);
+
+		assertThatThrownBy(() -> processor.process(nestedFailure())).isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("failurePayloadRenderer must not return null");
 	}
 
 	@Test

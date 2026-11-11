@@ -26,10 +26,6 @@ public final class OpenRouterChatResponseMapper {
 
 	private final OpenRouterChoiceErrorExceptionFactory choiceErrorExceptionFactory;
 
-	public OpenRouterChatResponseMapper() {
-		this(OpenRouterDiagnosticSanitizer.keyless());
-	}
-
 	public OpenRouterChatResponseMapper(OpenRouterDiagnosticSanitizer sanitizer) {
 		this.sanitizer = sanitizer;
 		this.choiceErrorExceptionFactory = new OpenRouterChoiceErrorExceptionFactory(sanitizer);

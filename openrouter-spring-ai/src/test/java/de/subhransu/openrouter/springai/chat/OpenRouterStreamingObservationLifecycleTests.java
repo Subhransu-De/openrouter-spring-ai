@@ -9,7 +9,12 @@ import static org.mockito.Mockito.when;
 
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
+import de.subhransu.openrouter.springai.api.dto.ChatCompletionChunk;
+import de.subhransu.openrouter.springai.api.dto.ChatCompletionResponse;
+import de.subhransu.openrouter.springai.api.dto.ImagesResponse;
 import de.subhransu.openrouter.springai.api.dto.ImagesStreamEvent;
+import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
+import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
 import de.subhransu.openrouter.springai.image.OpenRouterImageModel;
 import de.subhransu.openrouter.springai.image.OpenRouterImageOptions;
 import io.micrometer.observation.Observation;
@@ -33,7 +38,9 @@ import org.springframework.ai.image.observation.ImageModelObservationContext;
 import org.springframework.ai.image.ImagePrompt;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
+import reactor.test.StepVerifierOptions;
 import reactor.util.context.Context;
+import tools.jackson.databind.ObjectMapper;
 
 class OpenRouterStreamingObservationLifecycleTests {
 
@@ -81,13 +88,8 @@ class OpenRouterStreamingObservationLifecycleTests {
 	void portableOptionValidationIsDeferredAndObservedPerSubscription() {
 		Flux<?> stream = chatModel().stream(invalidPortablePrompt());
 		assertThat(this.starts).isEmpty();
-		for (int subscription = 1; subscription <= 2; subscription++) {
-			StepVerifier.create(stream).expectError(IllegalArgumentException.class).verify();
-			assertThat(this.starts).hasSize(subscription).doesNotHaveDuplicates();
-			assertThat(this.stops).containsExactlyElementsOf(this.starts);
-			assertThat(this.errors).hasSize(subscription);
-			assertThat(this.starts.get(subscription - 1).getError()).isSameAs(this.errors.get(subscription - 1));
-		}
+		verifyFailedSubscription(stream, 1);
+		verifyFailedSubscription(stream, 2);
 		verifyNoInteractions(this.api);
 	}
 
@@ -99,6 +101,19 @@ class OpenRouterStreamingObservationLifecycleTests {
 		assertThat(this.stops).containsExactlyElementsOf(this.starts);
 		assertThat(this.errors).containsExactly(this.starts.get(0).getError());
 		verifyNoInteractions(this.api);
+	}
+
+	private void verifyFailedSubscription(Flux<?> stream, int subscription) {
+		StepVerifier.create(stream, StepVerifierOptions.create().scenarioName("subscription " + subscription))
+			.expectError(IllegalArgumentException.class)
+			.verify();
+		assertThat(this.starts).as("subscription %d starts", subscription)
+			.hasSize(subscription)
+			.doesNotHaveDuplicates();
+		assertThat(this.stops).as("subscription %d stops", subscription).containsExactlyElementsOf(this.starts);
+		assertThat(this.errors).as("subscription %d errors", subscription).hasSize(subscription);
+		assertThat(this.starts.get(subscription - 1).getError()).as("subscription %d error identity", subscription)
+			.isSameAs(this.errors.get(subscription - 1));
 	}
 
 	private Prompt invalidPortablePrompt() {
@@ -115,13 +130,8 @@ class OpenRouterStreamingObservationLifecycleTests {
 	void mappingFailuresAreObservedPerSubscription(Path path) {
 		Flux<?> stream = stream(path, true);
 		assertThat(this.starts).isEmpty();
-		for (int subscription = 1; subscription <= 2; subscription++) {
-			StepVerifier.create(stream).expectError(IllegalArgumentException.class).verify();
-			assertThat(this.starts).hasSize(subscription).doesNotHaveDuplicates();
-			assertThat(this.stops).containsExactlyElementsOf(this.starts);
-			assertThat(this.errors).hasSize(subscription);
-			assertThat(this.starts.get(subscription - 1).getError()).isSameAs(this.errors.get(subscription - 1));
-		}
+		verifyFailedSubscription(stream, 1);
+		verifyFailedSubscription(stream, 2);
 		verifyNoInteractions(this.api);
 	}
 
@@ -143,14 +153,7 @@ class OpenRouterStreamingObservationLifecycleTests {
 	@ParameterizedTest
 	@EnumSource(Path.class)
 	void synchronousMappingFailuresHaveTheSameLifecycle(Path path) {
-		assertThatThrownBy(() -> {
-			if (path == Path.IMAGE) {
-				imageModel().call(imagePrompt(true));
-			}
-			else {
-				chatModel().call(chatPrompt(path, true));
-			}
-		}).isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> callSynchronously(path, true)).isInstanceOf(IllegalArgumentException.class);
 		assertThat(this.starts).hasSize(1);
 		assertThat(this.stops).containsExactlyElementsOf(this.starts);
 		assertThat(this.errors).containsExactly(this.starts.get(0).getError());
@@ -159,16 +162,39 @@ class OpenRouterStreamingObservationLifecycleTests {
 
 	@ParameterizedTest
 	@EnumSource(Path.class)
+	void synchronousCompletionStartsAndStopsOnceWithoutError(Path path) {
+		ObjectMapper mapper = new ObjectMapper();
+		when(this.api.chatCompletion(any())).thenReturn(mapper.readValue("""
+				{"choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}
+				""", ChatCompletionResponse.class));
+		when(this.api.responses(any())).thenReturn(mapper.readValue("""
+				{"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"ok"}]}]}
+				""", ResponsesResult.class));
+		when(this.api.images(any()))
+			.thenReturn(mapper.readValue("{\"data\":[{\"b64_json\":\"AQID\"}]}", ImagesResponse.class));
+
+		callSynchronously(path, false);
+
+		assertThat(this.starts).hasSize(1);
+		assertThat(this.stops).containsExactlyElementsOf(this.starts);
+		assertThat(this.errors).isEmpty();
+	}
+
+	@ParameterizedTest
+	@EnumSource(Path.class)
 	void completionPreservesReactiveParentAndStopsOnce(Path path) {
-		when(this.api.chatCompletionStream(any())).thenReturn(Flux.empty());
-		when(this.api.responsesStream(any())).thenReturn(Flux.empty());
+		when(this.api.chatCompletionStream(any())).thenReturn(Flux.just(new ObjectMapper().readValue(
+				"{\"choices\":[{\"index\":0,\"delta\":{\"content\":\"A\"},\"finish_reason\":\"stop\"}]}",
+				ChatCompletionChunk.class)));
+		when(this.api.responsesStream(any()))
+			.thenReturn(Flux.just(new ResponsesStreamEvent("response.output_text.delta", "A", null, null, null)));
 		when(this.api.imagesStream(any())).thenReturn(
 				Flux.just(new ImagesStreamEvent(ImagesStreamEvent.COMPLETED, null, "AQID", null, null, null, null)));
 		Observation parent = Observation.start("parent", this.registry);
 		try {
 			StepVerifier
 				.create(stream(path, false).contextWrite(Context.of(ObservationThreadLocalAccessor.KEY, parent)))
-				.expectNextCount(path == Path.IMAGE ? 1 : 0)
+				.expectNextCount(1)
 				.verifyComplete();
 			assertThat(this.starts).hasSize(1);
 			assertThat(this.starts.get(0).getParentObservation()).isSameAs(parent);
@@ -203,6 +229,13 @@ class OpenRouterStreamingObservationLifecycleTests {
 		assertThat(this.starts).hasSize(1);
 		assertThat(this.stops).containsExactlyElementsOf(this.starts);
 		assertThat(this.errors).containsExactly(failure);
+	}
+
+	private void callSynchronously(Path path, boolean invalid) {
+		switch (path) {
+			case IMAGE -> imageModel().call(imagePrompt(invalid));
+			case CHAT_COMPLETIONS, RESPONSES -> chatModel().call(chatPrompt(path, invalid));
+		}
 	}
 
 	private Flux<?> stream(Path path, boolean invalid) {

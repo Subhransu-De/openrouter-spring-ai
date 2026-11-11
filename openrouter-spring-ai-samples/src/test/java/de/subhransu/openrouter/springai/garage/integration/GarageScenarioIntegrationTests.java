@@ -66,7 +66,7 @@ class GarageScenarioIntegrationTests extends MockedGarageIntegrationTest {
         new SadPath("service-story-malformed-arguments", SERVICE_CHAT, "service-story", CHAT_MODE, CHECK,
             "inspect_vehicle_profile did not complete"),
         new SadPath("service-story-unknown-tool", SERVICE_CHAT, "service-story", CHAT_MODE, CHECK,
-            "No ToolCallback found for tool name: replace_engine"),
+            "replace_engine"),
         new SadPath("service-story-reused-call-id", SERVICE_CHAT, "service-story", CHAT_MODE, CHECK,
             "Tool call ID was missing or reused"),
         new SadPath("service-story-missing-cost", SERVICE_CHAT, "service-story", CHAT_MODE, CHECK,
@@ -157,35 +157,27 @@ class GarageScenarioIntegrationTests extends MockedGarageIntegrationTest {
 
     JsonNode run = runToCompletion(sadPath.request());
 
+    List<JsonNode> scenes = new ArrayList<>();
+    run.path("scenes").forEach(scenes::add);
+    List<JsonNode> targeted = scenes.stream().filter(scene -> isTargeted(sadPath, scene)).toList();
+    List<JsonNode> untargeted = scenes.stream().filter(scene -> !isTargeted(sadPath, scene)).toList();
     assertThat(run.path("status").asString()).isEqualTo("FAILED");
-    run.path("scenes").forEach(scene -> {
-      boolean targeted = sadPath.scene().equals(scene.path("sceneId").asString())
-          && (ANY_MODE.equals(sadPath.mode()) || sadPath.mode().equals(scene.path("requestMode").asString()));
+    assertThat(targeted).as("scenes targeted by " + sadPath.scenario()).isNotEmpty().allSatisfy(scene -> {
+      assertThat(scene.path("status").asString()).as("status of the targeted scene").isEqualTo("FAILED");
+      assertThat(scene.path("reason").asString()).as("failure reason code").isEqualTo(sadPath.code());
+    });
+    assertThat(untargeted).as("scenes the sad path does not target").allSatisfy(scene -> {
       assertThat(scene.path("status").asString())
           .as(scene.path("sceneId").asString() + " in " + scene.path("requestMode").asString())
-          .isEqualTo(targeted ? "FAILED" : "PASSED");
-      if (targeted) {
-        assertThat(scene.path("reason").asString()).as("failure reason code").isEqualTo(sadPath.code());
-      } else {
-        assertThat(scene.path("reason").isNull()).as("passing scene has no reason").isTrue();
-      }
+          .isEqualTo("PASSED");
+      assertThat(scene.path("reason").isNull()).as("passing scene has no reason").isTrue();
     });
+    // The run summary and the evidence carry only the reason code, because failure messages can hold
+    // provider text and are redacted from everything the Garage publishes. The message reaches only
+    // the log, so the human-readable reason is checked there.
     assertThat(failureLines(output, sadPath.scene())).as("logged failure reasons")
         .anyMatch(line -> line.contains(sadPath.reason()));
     assertThat(OpenRouterMock.unmatched()).as("requests the mock could not answer").isEmpty();
-  }
-
-  @ParameterizedTest(name = "{0}")
-  @MethodSource("edgeCases")
-  void anEdgeCaseStillPasses(EdgeCase edgeCase, CapturedOutput output) {
-    OpenRouterMock.useScenario(edgeCase.scenario());
-
-    JsonNode run = runToCompletion(edgeCase.request());
-
-    assertThat(run.path("status").asString()).as(String.join("\n", failureLines(output, ""))).isEqualTo("PASSED");
-    assertThat(run.path("scenes")).allSatisfy(scene -> assertThat(scene.path("status").asString())
-        .isEqualTo("PASSED"));
-    assertThat(OpenRouterMock.unmatched()).isEmpty();
   }
 
   private static List<String> failureLines(CapturedOutput output, String scene) {
@@ -196,6 +188,24 @@ class GarageScenarioIntegrationTests extends MockedGarageIntegrationTest {
       }
     }
     return lines;
+  }
+
+  private static boolean isTargeted(SadPath sadPath, JsonNode scene) {
+    return sadPath.scene().equals(scene.path("sceneId").asString())
+        && (ANY_MODE.equals(sadPath.mode()) || sadPath.mode().equals(scene.path("requestMode").asString()));
+  }
+
+  @ParameterizedTest(name = "{0}")
+  @MethodSource("edgeCases")
+  void anEdgeCaseStillPasses(EdgeCase edgeCase) {
+    OpenRouterMock.useScenario(edgeCase.scenario());
+
+    JsonNode run = runToCompletion(edgeCase.request());
+
+    assertThat(run.path("status").asString()).as("scenes: " + run.path("scenes")).isEqualTo("PASSED");
+    assertThat(run.path("scenes")).allSatisfy(scene -> assertThat(scene.path("status").asString())
+        .isEqualTo("PASSED"));
+    assertThat(OpenRouterMock.unmatched()).isEmpty();
   }
 
   private static String text(String scene, String mode) {

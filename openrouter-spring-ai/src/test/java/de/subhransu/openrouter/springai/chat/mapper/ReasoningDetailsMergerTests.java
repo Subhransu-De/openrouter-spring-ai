@@ -14,22 +14,26 @@ class ReasoningDetailsMergerTests {
 
 	private final ObjectMapper mapper = new ObjectMapper();
 
-	@ParameterizedTest
-	@ValueSource(strings = { "null", "42", "{}", "[]", "true" })
+	@ParameterizedTest(name = "text payload {0} is kept as provider data")
+	@ValueSource(strings = { "42", "{}", "[]", "true" })
 	void nonTextPayloadsArePreservedWithoutDiscardingProviderData(String payload) {
 		JsonNode text = this.mapper.readTree("{\"type\":\"reasoning.text\",\"text\":\"first\"}");
 		JsonNode other = this.mapper.readTree("{\"type\":\"reasoning.text\",\"text\":" + payload + "}");
-		if (other.path("text").isNull()) {
-			assertThat(ReasoningDetailsMerger.merge(List.of(text), List.of(other))).containsExactly(text);
-			assertThat(ReasoningDetailsMerger.merge(List.of(other), List.of(text))).containsExactly(text);
-		}
-		else {
-			assertThat(ReasoningDetailsMerger.merge(List.of(text), List.of(other))).containsExactly(text, other);
-			assertThat(ReasoningDetailsMerger.merge(List.of(other), List.of(text))).containsExactly(other, text);
-		}
+
+		assertThat(ReasoningDetailsMerger.merge(List.of(text), List.of(other))).containsExactly(text, other);
+		assertThat(ReasoningDetailsMerger.merge(List.of(other), List.of(text))).containsExactly(other, text);
 	}
 
-	@ParameterizedTest
+	@Test
+	void nullTextPayloadIsDroppedInEitherOrder() {
+		JsonNode text = this.mapper.readTree("{\"type\":\"reasoning.text\",\"text\":\"first\"}");
+		JsonNode other = this.mapper.readTree("{\"type\":\"reasoning.text\",\"text\":null}");
+
+		assertThat(ReasoningDetailsMerger.merge(List.of(text), List.of(other))).containsExactly(text);
+		assertThat(ReasoningDetailsMerger.merge(List.of(other), List.of(text))).containsExactly(text);
+	}
+
+	@ParameterizedTest(name = "conflict {0} starts a new block")
 	@ValueSource(strings = { "\"id\":\"different\"", "\"index\":1", "\"signature\":\"different\"",
 			"\"future\":{\"flag\":false}" })
 	void conflictingIdentityOrOpaqueMetadataStartsANewBlock(String conflict) {

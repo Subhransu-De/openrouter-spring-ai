@@ -9,62 +9,81 @@ import tools.jackson.databind.node.ObjectNode;
 import de.subhransu.openrouter.springai.api.dto.StreamError;
 import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
 import de.subhransu.openrouter.springai.api.errors.OpenRouterApiExceptionFactory;
-import java.util.List;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.Named;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 
 class OpenRouterErrorEnvelopeTests {
 
+	private static final String RATE_LIMIT_ERROR = "rate_limit_error";
+
 	private final OpenRouterHttpExceptionFactory httpFactory = new OpenRouterHttpExceptionFactory(new ObjectMapper(),
 			null);
 
-	@ParameterizedTest(name = "[{index}] root [{0}], nested [{1}], metadata [{2}] -> {3} {4}")
-	@CsvSource(value = { "rate_limit_error|NULL|NULL|rate_limit_error|RATE_LIMIT",
-			"NULL|authentication|NULL|authentication|AUTHENTICATION", "NULL|NULL|timeout|timeout|TIMEOUT",
-			"authentication|rate_limit_error|timeout|authentication|AUTHENTICATION",
-			"' '|rate_limit_error|authentication|rate_limit_error|RATE_LIMIT",
-			"NULL|' '|permission_denied|permission_denied|AUTHORIZATION",
-			"RATE_LIMIT_ERROR|NULL|NULL|RATE_LIMIT_ERROR|RATE_LIMIT",
-			"future_error|rate_limit_error|timeout|future_error|UNKNOWN", "NULL|NULL|NULL|NULL|PROVIDER_UNAVAILABLE" },
-			delimiter = '|', nullValues = "NULL")
-	void bothFactoriesApplyTheSameErrorTypePrecedence(@Nullable String root, @Nullable String nested,
-			@Nullable String metadataType, @Nullable String expectedType, OpenRouterErrorCategory expectedCategory) {
-		ObjectNode metadata = JsonNodeFactory.instance.objectNode().put("provider_code", "upstream-503");
-		if (metadataType != null) {
-			metadata.put("error_type", metadataType);
-		}
-		ObjectNode error = JsonNodeFactory.instance.objectNode().put("code", "503").put("message", "failure");
-		if (nested != null) {
-			error.put("error_type", nested);
-		}
-		error.set("metadata", metadata);
-		ObjectNode body = JsonNodeFactory.instance.objectNode();
-		if (root != null) {
-			body.put("error_type", root);
-		}
-		body.set("error", error);
+	static Stream<Arguments> precedenceRows() {
+		return Stream.of(row(RATE_LIMIT_ERROR, null, null, RATE_LIMIT_ERROR, OpenRouterErrorCategory.RATE_LIMIT),
+				row(null, "authentication", null, "authentication", OpenRouterErrorCategory.AUTHENTICATION),
+				row(null, null, "timeout", "timeout", OpenRouterErrorCategory.TIMEOUT),
+				row("authentication", RATE_LIMIT_ERROR, "timeout", "authentication",
+						OpenRouterErrorCategory.AUTHENTICATION),
+				row(" ", RATE_LIMIT_ERROR, "authentication", RATE_LIMIT_ERROR, OpenRouterErrorCategory.RATE_LIMIT),
+				row(null, " ", "permission_denied", "permission_denied", OpenRouterErrorCategory.AUTHORIZATION),
+				row("RATE_LIMIT_ERROR", null, null, "RATE_LIMIT_ERROR", OpenRouterErrorCategory.RATE_LIMIT),
+				row("future_error", RATE_LIMIT_ERROR, "timeout", "future_error", OpenRouterErrorCategory.UNKNOWN),
+				row(null, null, null, null, OpenRouterErrorCategory.PROVIDER_UNAVAILABLE));
+	}
 
-		String json = body.toString();
+	private static Arguments row(@Nullable String root, @Nullable String nested, @Nullable String metadataType,
+			@Nullable String expectedType, OpenRouterErrorCategory expectedCategory) {
+		return Arguments.of(Named.of("root=%s, nested=%s, metadata=%s".formatted(root, nested, metadataType),
+				new Precedence(root, nested, metadataType)), expectedType, expectedCategory);
+	}
 
+	private static void assertPrecedence(OpenRouterErrorDetails details, Precedence input,
+			@Nullable String expectedType, OpenRouterErrorCategory expectedCategory) {
+		assertThat(details.errorType()).isEqualTo(expectedType);
+		assertThat(details.category()).isEqualTo(expectedCategory);
+		assertThat(details.code()).isEqualTo("503");
+		assertThat(details.message()).isEqualTo("failure");
+		assertThat(details.providerCode()).isEqualTo("upstream-503");
+		assertThat(details.metadata()).isEqualTo(input.metadata());
+	}
+
+	@ParameterizedTest
+	@MethodSource("precedenceRows")
+	void httpFactoryAppliesTheErrorTypePrecedence(Precedence input, @Nullable String expectedType,
+			OpenRouterErrorCategory expectedCategory) {
 		OpenRouterHttpException http = (OpenRouterHttpException) this.httpFactory.create("/responses",
-				HttpStatusCode.valueOf(503), HttpHeaders.EMPTY, json);
+				HttpStatusCode.valueOf(503), HttpHeaders.EMPTY, input.json());
+
+		assertPrecedence(http.getErrorDetails(), input, expectedType, expectedCategory);
+	}
+
+	@ParameterizedTest
+	@MethodSource("precedenceRows")
+	void truncatedBodyFactoryAppliesTheErrorTypePrecedence(Precedence input, @Nullable String expectedType,
+			OpenRouterErrorCategory expectedCategory) {
+		String json = input.json();
 		OpenRouterHttpException truncated = this.httpFactory.createErrorBodyLimit("/responses",
 				HttpStatusCode.valueOf(503), json.substring(0, json.length() - 1), 10, 11);
-		OpenRouterApiException inBand = OpenRouterApiExceptionFactory.create("fallback", json,
-				new StreamError("503", "failure", metadata, nested), root, OpenRouterDiagnosticSanitizer.keyless());
 
-		for (OpenRouterErrorDetails details : List.of(http.getErrorDetails(), truncated.getErrorDetails(),
-				inBand.getErrorDetails())) {
-			assertThat(details.errorType()).isEqualTo(expectedType);
-			assertThat(details.category()).isEqualTo(expectedCategory);
-			assertThat(details.code()).isEqualTo("503");
-			assertThat(details.message()).isEqualTo("failure");
-			assertThat(details.providerCode()).isEqualTo("upstream-503");
-			assertThat(details.metadata()).isEqualTo(metadata);
-		}
+		assertPrecedence(truncated.getErrorDetails(), input, expectedType, expectedCategory);
+	}
+
+	@ParameterizedTest
+	@MethodSource("precedenceRows")
+	void inBandFactoryAppliesTheErrorTypePrecedence(Precedence input, @Nullable String expectedType,
+			OpenRouterErrorCategory expectedCategory) {
+		OpenRouterApiException inBand = OpenRouterApiExceptionFactory.create("fallback", input.json(),
+				new StreamError("503", "failure", input.metadata(), input.nested()), input.root(),
+				OpenRouterDiagnosticSanitizer.keyless());
+
+		assertPrecedence(inBand.getErrorDetails(), input, expectedType, expectedCategory);
 		assertThat(inBand.getStatusCode()).isEqualTo(HttpStatusCode.valueOf(503));
 	}
 
@@ -80,6 +99,32 @@ class OpenRouterErrorEnvelopeTests {
 		assertThat(http.getCategory()).isEqualTo(OpenRouterErrorCategory.RATE_LIMIT);
 		assertThat(inBand.getErrorDetails().errorType()).isNull();
 		assertThat(inBand.getCategory()).isEqualTo(OpenRouterErrorCategory.UNKNOWN);
+	}
+
+	private record Precedence(@Nullable String root, @Nullable String nested, @Nullable String metadataType) {
+
+		ObjectNode metadata() {
+			ObjectNode metadata = JsonNodeFactory.instance.objectNode().put("provider_code", "upstream-503");
+			if (this.metadataType != null) {
+				metadata.put("error_type", this.metadataType);
+			}
+			return metadata;
+		}
+
+		String json() {
+			ObjectNode error = JsonNodeFactory.instance.objectNode().put("code", "503").put("message", "failure");
+			if (this.nested != null) {
+				error.put("error_type", this.nested);
+			}
+			error.set("metadata", metadata());
+			ObjectNode body = JsonNodeFactory.instance.objectNode();
+			if (this.root != null) {
+				body.put("error_type", this.root);
+			}
+			body.set("error", error);
+			return body.toString();
+		}
+
 	}
 
 }

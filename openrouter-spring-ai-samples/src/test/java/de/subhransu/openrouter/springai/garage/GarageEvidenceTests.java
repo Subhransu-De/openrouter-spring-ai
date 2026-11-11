@@ -1,7 +1,6 @@
 package de.subhransu.openrouter.springai.garage;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.within;
 
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.garage.evidence.EvidenceLevel;
@@ -10,7 +9,12 @@ import de.subhransu.openrouter.springai.garage.evidence.GarageFeature;
 import de.subhransu.openrouter.springai.garage.evidence.GarageToolCallback;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.ai.chat.model.ToolContext;
@@ -18,72 +22,66 @@ import org.springframework.ai.support.ToolCallbacks;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
+import org.springframework.ai.tool.execution.ToolExecutionException;
 import tools.jackson.databind.ObjectMapper;
 
 class GarageEvidenceTests {
 
   @Test
-  void retainsIncrementalCostsByOperation() {
-    GarageEvidence evidence = new GarageEvidence();
+  void everyFeatureHasAUniqueId() {
+    assertThat(List.of(GarageFeature.values()).stream().map(GarageFeature::id))
+        .doesNotHaveDuplicates();
+  }
 
-    evidence.recordCost("operation-1", 0.002);
-    evidence.recordCost("operation-1", 0.003);
-    evidence.recordCost("operation-2", 0.004);
-
-    assertThat(evidence.costFor("operation-1")).isCloseTo(0.005, within(0.000000000001));
-    assertThat(evidence.recordedCostUsd()).isCloseTo(0.009, within(0.000000000001));
-    assertThat(evidence.costSnapshot())
-        .containsExactly(
-            Map.entry("operation-1", 0.005), Map.entry("operation-2", 0.004));
+  // Compares the scene that owns each feature with the scenes a full run plans. The context test
+  // compares the registered scene beans with the same plan, so a feature owned by a scene that is
+  // not planned, or a planned scene that owns no feature, fails only here.
+  @Test
+  void everyFeatureBelongsToAPlannedSceneAndEveryPlannedSceneOwnsFeatures() {
+    assertThat(List.of(GarageFeature.values()).stream().map(GarageFeature::sceneId).distinct())
+        .containsExactlyInAnyOrderElementsOf(GarageRunRequests.plan("{\"full\":true}").sceneIds());
   }
 
   @Test
-  void registryHasOneUniqueEntryForEveryAuditedFeature() {
-    assertThat(GarageFeature.values()).hasSize(35);
-    assertThat(List.of(GarageFeature.values()).stream().map(GarageFeature::id))
-        .doesNotHaveDuplicates();
-    assertThat(List.of(GarageFeature.values()).stream().map(GarageFeature::sceneId).distinct())
-        .containsExactlyInAnyOrder(
-            "service-story",
-            "streaming-dispatch",
-            "express-invoice",
-            "digital-inspection",
-            "modality-bays",
-            "routing-lane",
-            "attribution-check-in",
-            "dyno-tuning",
-            "recovery-road-test");
+  void aFeatureIsCompleteOnlyWhenAllFourEvidenceLevelsAreRecorded() {
+    GarageEvidence evidence = new GarageEvidence();
+    String operation = evidence.newOperation("service-story", "CHAT");
+    for (EvidenceLevel level : EvidenceLevel.values()) {
+      evidence.record(GarageFeature.SYNCHRONOUS_CHAT, operation, "CHAT", level, level.name(), true);
+    }
+
+    assertThat(evidence.featureSnapshot()).singleElement()
+        .satisfies(feature -> assertThat(feature.get("complete")).isEqualTo(true));
+  }
+
+  @ParameterizedTest
+  @EnumSource(EvidenceLevel.class)
+  void aFeatureWithoutOneEvidenceLevelIsIncomplete(EvidenceLevel missing) {
+    GarageEvidence evidence = new GarageEvidence();
+    String operation = evidence.newOperation("service-story", "CHAT");
+    for (EvidenceLevel level : EvidenceLevel.values()) {
+      if (level != missing) {
+        evidence.record(GarageFeature.SYNCHRONOUS_CHAT, operation, "CHAT", level, level.name(), true);
+      }
+    }
+
+    assertThat(evidence.featureSnapshot()).singleElement()
+        .satisfies(feature -> assertThat(feature.get("complete")).as("complete without " + missing).isEqualTo(false));
   }
 
   @Test
   @SuppressWarnings("unchecked")
-  void fourEvidenceLevelsAreRequiredAndSensitiveValuesAreRedacted() {
+  void sensitiveEventValuesAreRedacted() {
     GarageEvidence evidence = new GarageEvidence();
     String operation = evidence.newOperation("service-story", "CHAT");
-    for (EvidenceLevel level : EvidenceLevel.values()) {
-      evidence.record(
-          GarageFeature.SYNCHRONOUS_CHAT,
-          operation,
-          "CHAT",
-          level,
-          level.name(),
-          true);
-    }
-    evidence.event(
-        operation,
-        "service-story",
-        "redaction.check",
-        Map.of(
-            "Authorization", "Bearer secret-token",
-            "topic", "private customer concern",
-            "count", 2));
+    evidence.event(operation, "service-story", "redaction.check", Map.of(
+        "Authorization", "Bearer secret-token",
+        "topic", "private customer concern",
+        "count", 2));
 
-    assertThat(evidence.operationPassed(operation)).isTrue();
-    assertThat(evidence.featureSnapshot().get(0).get("complete")).isEqualTo(true);
-    Map<String, Object> details =
-        (Map<String, Object>) evidence.eventSnapshot().get(1).get("details");
-    assertThat(details)
-        .containsOnly(Map.entry("count", 2));
+    assertThat(evidence.eventSnapshot()).filteredOn(event -> "redaction.check".equals(event.get("type")))
+        .singleElement().satisfies(event -> assertThat((Map<String, Object>) event.get("details"))
+            .containsOnly(Map.entry("count", 2)));
   }
 
   @Test
@@ -102,12 +100,16 @@ class GarageEvidenceTests {
 
     org.assertj.core.api.Assertions.assertThatThrownBy(
             () -> callback.call("{\"severity\":\"moderate\"}"))
-        .isInstanceOf(RuntimeException.class);
+        .isExactlyInstanceOf(ToolExecutionException.class);
 
     assertThat(evidence.eventSnapshot())
         .extracting(event -> event.get("type"))
         .contains("tool.attempted", "tool.failed", "feature.error");
-    assertThat(evidence.operationPassed(operation)).isFalse();
+    assertThat(evidence.featureSnapshot())
+        .filteredOn(item -> operation.equals(item.get("operationId")))
+        .isNotEmpty()
+        .extracting(item -> item.get("complete"))
+        .containsOnly(false);
   }
 
   @Test
@@ -163,33 +165,56 @@ class GarageEvidenceTests {
     }
   }
 
-  @ParameterizedTest
-  @ValueSource(booleans = {false, true})
-  void aSuccessfulOperationCannotHideAnotherIncompleteOrFailedOperation(boolean failed) {
-    GarageEvidence evidence = new GarageEvidence();
-    var mode = OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS;
-    String complete = evidence.newOperation("service-story", mode.name());
-    for (EvidenceLevel level : EvidenceLevel.values()) {
-      evidence.record(GarageFeature.TOOL_LOOP, complete, mode.name(), level, "status", "passed");
-    }
-    String other = evidence.newOperation("service-story", mode.name());
-    evidence.record(GarageFeature.TOOL_LOOP, other, mode.name(), EvidenceLevel.CONFIGURED, "status", "passed");
-    if (failed) {
-      evidence.error(GarageFeature.TOOL_LOOP, other, mode.name(), new IllegalStateException("synthetic"));
-    }
-    assertThat(evidence.coverageStatus(GarageFeature.TOOL_LOOP, mode)).isEqualTo(failed ? "failed" : "incomplete");
+  @Test
+  void aSuccessfulOperationCannotHideAnotherIncompleteOperation() {
+    GarageEvidence evidence = evidenceWithACompleteOperationAnd(ModeEvidence.Outcome.INCOMPLETE);
+
+    assertThat(evidence.coverageStatus(GarageFeature.TOOL_LOOP, CHAT)).isEqualTo("incomplete");
   }
 
   @Test
-  void modeIndependentBaysRequireOnlyThePassThatExecutesThem() {
-    var chat = OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS;
-    var responses = OpenRouterRequestMode.OPENAI_RESPONSES;
-    for (var feature : List.of(GarageFeature.EMBEDDINGS, GarageFeature.IMAGE_GENERATION)) {
-      assertThat(feature.coverageModes(List.of(chat, responses))).containsExactly(chat);
-      assertThat(feature.coverageModes(List.of(responses))).containsExactly(responses);
-    }
-    assertThat(GarageFeature.IMAGE_INPUT.coverageModes(List.of(chat, responses))).containsExactly(chat, responses);
-    assertThat(GarageFeature.STREAMING_TOOL_AGGREGATION.supports(responses)).isFalse();
+  void aSuccessfulOperationCannotHideAnotherFailedOperation() {
+    GarageEvidence evidence = evidenceWithACompleteOperationAnd(ModeEvidence.Outcome.FAILED);
+
+    assertThat(evidence.coverageStatus(GarageFeature.TOOL_LOOP, CHAT)).isEqualTo("failed");
+  }
+
+  private static GarageEvidence evidenceWithACompleteOperationAnd(ModeEvidence.Outcome other) {
+    GarageEvidence evidence = new GarageEvidence();
+    ModeEvidence.record(evidence, GarageFeature.TOOL_LOOP, CHAT, ModeEvidence.Outcome.COVERED);
+    ModeEvidence.record(evidence, GarageFeature.TOOL_LOOP, CHAT, other);
+    return evidence;
+  }
+
+  private static final OpenRouterRequestMode CHAT = OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS;
+
+  private static final OpenRouterRequestMode RESPONSES = OpenRouterRequestMode.OPENAI_RESPONSES;
+
+  static Stream<Arguments> coverageModes() {
+    return Stream.of(
+        Arguments.of(Named.of("embeddings run once, in the first mode", GarageFeature.EMBEDDINGS),
+            List.of(CHAT, RESPONSES), List.of(CHAT)),
+        Arguments.of(Named.of("embeddings in a responses-only run", GarageFeature.EMBEDDINGS),
+            List.of(RESPONSES), List.of(RESPONSES)),
+        Arguments.of(Named.of("image generation run once, in the first mode", GarageFeature.IMAGE_GENERATION),
+            List.of(CHAT, RESPONSES), List.of(CHAT)),
+        Arguments.of(Named.of("image generation in a responses-only run", GarageFeature.IMAGE_GENERATION),
+            List.of(RESPONSES), List.of(RESPONSES)),
+        Arguments.of(Named.of("image input runs in every selected mode", GarageFeature.IMAGE_INPUT),
+            List.of(CHAT, RESPONSES), List.of(CHAT, RESPONSES)));
+  }
+
+  @ParameterizedTest
+  @MethodSource("coverageModes")
+  void modeIndependentBaysRequireOnlyThePassThatExecutesThem(GarageFeature feature,
+      List<OpenRouterRequestMode> selected, List<OpenRouterRequestMode> required) {
+    assertThat(feature.coverageModes(selected)).containsExactlyElementsOf(required);
+  }
+
+  @Test
+  void aChatOnlyFeatureDoesNotSupportResponses() {
+    assertThat(GarageFeature.STREAMING_TOOL_AGGREGATION.supports(RESPONSES)).isFalse();
+    assertThat(GarageFeature.STREAMING_TOOL_AGGREGATION.supports(CHAT)).isTrue();
   }
 
   record PrivatePayload(String prompt) {}

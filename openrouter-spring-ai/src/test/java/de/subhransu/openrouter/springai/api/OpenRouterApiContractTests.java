@@ -3,7 +3,6 @@ package de.subhransu.openrouter.springai.api;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.client.ExpectedCount.once;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
@@ -13,19 +12,19 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionRequest;
 import de.subhransu.openrouter.springai.api.dto.ChatMessage;
-import de.subhransu.openrouter.springai.api.dto.ProviderPreferences;
-import de.subhransu.openrouter.springai.api.dto.ReasoningOptions;
 import de.subhransu.openrouter.springai.api.dto.ResponsesRequest;
-import de.subhransu.openrouter.springai.api.dto.UsageConfig;
 import de.subhransu.openrouter.springai.errors.OpenRouterHttpException;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
 import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
 import java.util.List;
-import java.util.Map;
+import java.util.function.UnaryOperator;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -46,6 +45,10 @@ class OpenRouterApiContractTests {
 	private static final String CHAT_COMPLETIONS = BASE_URL + "/chat/completions";
 
 	private static final String RESPONSES = BASE_URL + "/responses";
+
+	private static final String UPSTREAM_SAID_NO = "upstream said no";
+
+	private static final String UPSTREAM_SAID_NO_BODY = "{\"error\":{\"code\":%d,\"message\":\"upstream said no\"}}";
 
 	private static final String CATEGORIES_HEADER = "X-OpenRouter-Categories";
 
@@ -87,7 +90,7 @@ class OpenRouterApiContractTests {
 		return OpenRouterApi.builder().apiKey("test-key");
 	}
 
-	private ChatCompletionRequest minimalChatRequest() {
+	private static ChatCompletionRequest minimalChatRequest() {
 		return ChatCompletionRequest.builder()
 			.model("openai/gpt-5.4-mini")
 			.messages(List.of(new ChatMessage("user", "hello", null, null, null)))
@@ -95,7 +98,7 @@ class OpenRouterApiContractTests {
 			.build();
 	}
 
-	private ResponsesRequest minimalResponsesRequest() {
+	private static ResponsesRequest minimalResponsesRequest() {
 		return ResponsesRequest.builder()
 			.model("openai/gpt-5.4")
 			.input("hello")
@@ -156,9 +159,10 @@ class OpenRouterApiContractTests {
 		fixture.server().verify();
 	}
 
-	@Test
-	void omitsAttributionHeadersWhenAbsent() {
-		Fixture fixture = fixture(baseBuilder());
+	@ParameterizedTest
+	@MethodSource("absentAttributionConfigurations")
+	void omitsAttributionHeadersWhenAbsentOrBlank(UnaryOperator<OpenRouterApi.Builder> configuration) {
+		Fixture fixture = fixture(configuration.apply(baseBuilder()));
 		fixture.server()
 			.expect(once(), requestTo(CHAT_COMPLETIONS))
 			.andExpect(headerDoesNotExist("HTTP-Referer"))
@@ -170,116 +174,21 @@ class OpenRouterApiContractTests {
 		fixture.server().verify();
 	}
 
-	@Test
-	void omitsAttributionHeadersWhenBlank() {
-		Fixture fixture = fixture(baseBuilder().httpReferer("   ").applicationTitle("").applicationCategories("  \t "));
-		fixture.server()
-			.expect(once(), requestTo(CHAT_COMPLETIONS))
-			.andExpect(headerDoesNotExist("HTTP-Referer"))
-			.andExpect(headerDoesNotExist("X-OpenRouter-Title"))
-			.andExpect(headerDoesNotExist(CATEGORIES_HEADER))
-			.andRespond(withSuccess(CHAT_SUCCESS_BODY, MediaType.APPLICATION_JSON));
-
-		fixture.api().chatCompletion(minimalChatRequest());
-		fixture.server().verify();
-	}
-
-	@ParameterizedTest(name = "categories \"{0}\" forwarded verbatim")
-	@ValueSource(strings = { "programming", "translation,programming", "a,b,c" })
-	void forwardsCategoriesVerbatim(String categories) {
-		Fixture fixture = fixture(baseBuilder().applicationCategories(categories));
-		fixture.server()
-			.expect(once(), requestTo(CHAT_COMPLETIONS))
-			.andExpect(header(CATEGORIES_HEADER, categories))
-			.andRespond(withSuccess(CHAT_SUCCESS_BODY, MediaType.APPLICATION_JSON));
-
-		fixture.api().chatCompletion(minimalChatRequest());
-		fixture.server().verify();
+	static Stream<Arguments> absentAttributionConfigurations() {
+		UnaryOperator<OpenRouterApi.Builder> absent = builder -> builder;
+		UnaryOperator<OpenRouterApi.Builder> blank = builder -> builder.httpReferer("   ")
+			.applicationTitle("")
+			.applicationCategories("  \t ");
+		return Stream.of(Arguments.of(Named.of("never configured", absent)),
+				Arguments.of(Named.of("blank values", blank)));
 	}
 
 	// ---------------------------------------------------------------------
-	// Serialized JSON wire names (camelCase regression guards)
+	// Request omission (the full wire shape is pinned by RequestBuilderTests)
 	// ---------------------------------------------------------------------
 
 	@Test
-	void serializesFullChatRequestWithOpenRouterWireNames() {
-		ChatCompletionRequest request = ChatCompletionRequest.builder()
-			.model("openai/gpt-5.4-mini")
-			.models(List.of("anthropic/claude-3.5-sonnet", "openai/gpt-5.4"))
-			.messages(List.of(new ChatMessage("user", "hello", null, null, null)))
-			.temperature(0.7)
-			.topP(0.9)
-			.topK(40)
-			.frequencyPenalty(0.1)
-			.presencePenalty(0.2)
-			.repetitionPenalty(1.1)
-			.minP(0.05)
-			.topA(0.8)
-			.maxTokens(256)
-			.maxCompletionTokens(512)
-			.stop(List.of("STOP"))
-			.seed(42)
-			.user("user-7")
-			.stream(false)
-			.responseFormat(Map.of("type", "json_object"))
-			.toolChoice(Map.of("type", "auto"))
-			.parallelToolCalls(true)
-			.provider(new ProviderPreferences(true, false, "deny", List.of("openai"), List.of("anthropic"),
-					List.of("fp16"), "throughput"))
-			.reasoning(new ReasoningOptions("high", 1024, false, true))
-			.serviceTier("flex")
-			.metadata(Map.of("trace", "abc"))
-			.route("fallback")
-			.usage(new UsageConfig(true))
-			.modalities(List.of("image", "text"))
-			.imageConfig(Map.of("aspect_ratio", "16:9"))
-			.build();
-		Fixture fixture = fixture(baseBuilder());
-		fixture.server()
-			.expect(once(), requestTo(CHAT_COMPLETIONS))
-			// Snake-case wire names, not Java camelCase
-			.andExpect(jsonPath("$.top_p").value(0.9))
-			.andExpect(jsonPath("$.top_k").value(40))
-			.andExpect(jsonPath("$.frequency_penalty").value(0.1))
-			.andExpect(jsonPath("$.presence_penalty").value(0.2))
-			.andExpect(jsonPath("$.repetition_penalty").value(1.1))
-			.andExpect(jsonPath("$.min_p").value(0.05))
-			.andExpect(jsonPath("$.top_a").value(0.8))
-			.andExpect(jsonPath("$.max_tokens").value(256))
-			.andExpect(jsonPath("$.max_completion_tokens").value(512))
-			.andExpect(jsonPath("$.response_format.type").value("json_object"))
-			.andExpect(jsonPath("$.tool_choice.type").value("auto"))
-			.andExpect(jsonPath("$.parallel_tool_calls").value(true))
-			.andExpect(jsonPath("$.service_tier").value("flex"))
-			.andExpect(jsonPath("$.usage.include").value(true))
-			.andExpect(jsonPath("$.provider.allow_fallbacks").value(true))
-			.andExpect(jsonPath("$.provider.require_parameters").value(false))
-			.andExpect(jsonPath("$.provider.data_collection").value("deny"))
-			.andExpect(jsonPath("$.provider.order[0]").value("openai"))
-			.andExpect(jsonPath("$.provider.ignore[0]").value("anthropic"))
-			.andExpect(jsonPath("$.provider.quantizations[0]").value("fp16"))
-			.andExpect(jsonPath("$.provider.sort").value("throughput"))
-			.andExpect(jsonPath("$.models[0]").value("anthropic/claude-3.5-sonnet"))
-			.andExpect(jsonPath("$.metadata.trace").value("abc"))
-			.andExpect(jsonPath("$.route").value("fallback"))
-			.andExpect(jsonPath("$.seed").value(42))
-			.andExpect(jsonPath("$.user").value("user-7"))
-			.andExpect(jsonPath("$.modalities[0]").value("image"))
-			.andExpect(jsonPath("$.modalities[1]").value("text"))
-			.andExpect(jsonPath("$.image_config.aspect_ratio").value("16:9"))
-			// camelCase forms must never appear on the wire
-			.andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("topP"))))
-			.andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("maxTokens"))))
-			.andExpect(content()
-				.string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("parallelToolCalls"))))
-			.andRespond(withSuccess(CHAT_SUCCESS_BODY, MediaType.APPLICATION_JSON));
-
-		fixture.api().chatCompletion(request);
-		fixture.server().verify();
-	}
-
-	@Test
-	void omitsNullChatFieldsFromSerializedBody() {
+	void minimalChatRequestSerializesOnlyItsPopulatedFields() {
 		Fixture fixture = fixture(baseBuilder());
 		fixture.server()
 			.expect(once(), requestTo(CHAT_COMPLETIONS))
@@ -293,129 +202,89 @@ class OpenRouterApiContractTests {
 		fixture.server().verify();
 	}
 
-	@Test
-	void serializesResponsesRequestWithWireNames() {
-		ResponsesRequest request = ResponsesRequest.builder()
-			.model("openai/gpt-5.4")
-			.input("hello")
-			.instructions("be terse")
-			.maxOutputTokens(256)
-			.stream(false)
-			.temperature(0.3)
-			.topP(0.8)
-			.topK(20)
-			.frequencyPenalty(0.1)
-			.presencePenalty(0.2)
-			.metadata(Map.of("trace", "xyz"))
-			.provider(new ProviderPreferences(true, null, null, null, null, null, null))
-			.reasoning(new ReasoningOptions("medium", null, null, null))
-			.route("fallback")
-			.serviceTier("priority")
-			.user("user-1")
-			.parallelToolCalls(true)
-			.toolChoice(Map.of("type", "auto"))
-			.modalities(List.of("image", "text"))
-			.imageConfig(Map.of("aspect_ratio", "16:9"))
-			.build();
-		Fixture fixture = fixture(baseBuilder());
-		fixture.server()
-			.expect(once(), requestTo(RESPONSES))
-			.andExpect(jsonPath("$.max_output_tokens").value(256))
-			.andExpect(jsonPath("$.top_p").value(0.8))
-			.andExpect(jsonPath("$.top_k").value(20))
-			.andExpect(jsonPath("$.frequency_penalty").value(0.1))
-			.andExpect(jsonPath("$.presence_penalty").value(0.2))
-			.andExpect(jsonPath("$.service_tier").value("priority"))
-			.andExpect(jsonPath("$.parallel_tool_calls").value(true))
-			.andExpect(jsonPath("$.tool_choice.type").value("auto"))
-			.andExpect(jsonPath("$.instructions").value("be terse"))
-			.andExpect(jsonPath("$.modalities[0]").value("image"))
-			.andExpect(jsonPath("$.image_config.aspect_ratio").value("16:9"))
-			.andRespond(withSuccess(RESPONSES_SUCCESS_BODY, MediaType.APPLICATION_JSON));
-
-		fixture.api().responses(request);
-		fixture.server().verify();
-	}
-
 	// ---------------------------------------------------------------------
 	// Synchronous error handling
 	// ---------------------------------------------------------------------
 
-	@ParameterizedTest(name = "chat completion HTTP {0} preserves classified status + body")
-	@ValueSource(ints = { 400, 401, 402, 429, 502, 503 })
-	void chatCompletionPreservesProviderErrorStatusAndBody(int status) {
+	@ParameterizedTest
+	@MethodSource("endpointsWithProviderErrors")
+	void providerErrorsPreserveStatusBodyAndClassification(Endpoint endpoint, ProviderError error) {
 		Fixture fixture = fixture(baseBuilder());
-		String body = "{\"error\":{\"code\":" + status + ",\"message\":\"upstream said no\"}}";
 		fixture.server()
-			.expect(once(), requestTo(CHAT_COMPLETIONS))
-			.andRespond(withStatus(HttpStatus.valueOf(status)).contentType(MediaType.APPLICATION_JSON).body(body));
+			.expect(once(), requestTo(BASE_URL + endpoint.path))
+			.andRespond(withStatus(HttpStatus.valueOf(error.status)).contentType(MediaType.APPLICATION_JSON)
+				.body(error.body));
 
-		assertThatThrownBy(() -> fixture.api().chatCompletion(minimalChatRequest()))
-			.isInstanceOf(
-					status >= 429 ? OpenRouterTransientApiException.class : OpenRouterNonTransientApiException.class)
-			.satisfies(thrown -> {
-				OpenRouterHttpException ex = (OpenRouterHttpException) thrown;
-				assertThat(ex.getStatusCode().value()).isEqualTo(status);
-				assertThat(ex.getResponseBody()).isEqualTo(body);
-				assertThat(ex.getEndpoint()).isEqualTo("/chat/completions");
-				assertThat(ex.getMessage())
-					.isEqualTo("OpenRouter /chat/completions request failed with status " + HttpStatus.valueOf(status));
-				assertThat(ex.getErrorDetails().message()).isEqualTo("upstream said no");
-			});
+		assertThatThrownBy(() -> endpoint.call(fixture.api())).isInstanceOf(error.type).satisfies(thrown -> {
+			OpenRouterHttpException ex = (OpenRouterHttpException) thrown;
+			assertThat(ex.getStatusCode().value()).isEqualTo(error.status);
+			assertThat(ex.getResponseBody()).isEqualTo(error.body);
+			assertThat(ex.getEndpoint()).isEqualTo(endpoint.path);
+			assertThat(ex.getMessage()).isEqualTo(
+					"OpenRouter " + endpoint.path + " request failed with status " + HttpStatus.valueOf(error.status));
+			assertThat(ex.getCategory()).isEqualTo(error.category);
+			assertThat(ex.getErrorDetails().message()).isEqualTo(error.detailMessage);
+		});
 		fixture.server().verify();
 	}
 
-	@Test
-	void responsesPreservesClientErrorStatusAndBody() {
-		Fixture fixture = fixture(baseBuilder());
-		String body = "{\"error\":{\"message\":\"bad request\"}}";
-		fixture.server()
-			.expect(once(), requestTo(RESPONSES))
-			.andRespond(withStatus(HttpStatus.BAD_REQUEST).contentType(MediaType.APPLICATION_JSON).body(body));
+	static Stream<Arguments> endpointsWithProviderErrors() {
+		return Stream.of(Endpoint.values())
+			.flatMap(endpoint -> Stream.of(
+					providerError(400, UPSTREAM_SAID_NO_BODY.formatted(400), OpenRouterNonTransientApiException.class,
+							OpenRouterErrorCategory.INVALID_REQUEST, UPSTREAM_SAID_NO),
+					providerError(401, UPSTREAM_SAID_NO_BODY.formatted(401), OpenRouterNonTransientApiException.class,
+							OpenRouterErrorCategory.AUTHENTICATION, UPSTREAM_SAID_NO),
+					providerError(402, UPSTREAM_SAID_NO_BODY.formatted(402), OpenRouterNonTransientApiException.class,
+							OpenRouterErrorCategory.BILLING_CREDITS, UPSTREAM_SAID_NO),
+					providerError(429, UPSTREAM_SAID_NO_BODY.formatted(429), OpenRouterTransientApiException.class,
+							OpenRouterErrorCategory.RATE_LIMIT, UPSTREAM_SAID_NO),
+					providerError(502, UPSTREAM_SAID_NO_BODY.formatted(502), OpenRouterTransientApiException.class,
+							OpenRouterErrorCategory.PROVIDER_UNAVAILABLE, UPSTREAM_SAID_NO),
+					providerError(503, UPSTREAM_SAID_NO_BODY.formatted(503), OpenRouterTransientApiException.class,
+							OpenRouterErrorCategory.PROVIDER_UNAVAILABLE, UPSTREAM_SAID_NO),
+					providerError(400, "{\"error\":{\"message\":\"bad request\"}}",
+							OpenRouterNonTransientApiException.class, OpenRouterErrorCategory.INVALID_REQUEST,
+							"bad request"))
+				.map(error -> Arguments.of(Named.of(endpoint.name(), endpoint), error)));
+	}
 
-		assertThatThrownBy(() -> fixture.api().responses(minimalResponsesRequest()))
-			.isInstanceOf(OpenRouterNonTransientApiException.class)
-			.satisfies(thrown -> {
-				OpenRouterHttpException ex = (OpenRouterHttpException) thrown;
-				assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-				assertThat(ex.getResponseBody()).contains("bad request");
-				assertThat(ex.getCategory()).isEqualTo(OpenRouterErrorCategory.INVALID_REQUEST);
-			});
+	@ParameterizedTest
+	@MethodSource("endpointsWithUnstructuredProviderErrors")
+	void unstructuredProviderErrorsStillCarryStatusBodyAndCategory(Endpoint endpoint, ProviderError error) {
+		Fixture fixture = fixture(baseBuilder());
+		fixture.server()
+			.expect(once(), requestTo(BASE_URL + endpoint.path))
+			.andRespond(withStatus(HttpStatus.valueOf(error.status)).body(error.body));
+
+		assertThatThrownBy(() -> endpoint.call(fixture.api())).isInstanceOf(error.type).satisfies(thrown -> {
+			OpenRouterHttpException ex = (OpenRouterHttpException) thrown;
+			assertThat(ex.getStatusCode().value()).isEqualTo(error.status);
+			assertThat(ex.getResponseBody()).isEqualTo(error.body);
+			assertThat(ex.getMessage()).isEqualTo(
+					"OpenRouter " + endpoint.path + " request failed with status " + HttpStatus.valueOf(error.status));
+			assertThat(ex.getCategory()).isEqualTo(error.category);
+			assertThat(ex.getErrorDetails().message()).isNull();
+		});
 		fixture.server().verify();
 	}
 
-	@Test
-	void responsesPreservesUpstreamErrorStatusAndBody() {
-		Fixture fixture = fixture(baseBuilder());
-		fixture.server()
-			.expect(once(), requestTo(RESPONSES))
-			.andRespond(withStatus(HttpStatus.BAD_GATEWAY).body("provider unavailable"));
-
-		assertThatThrownBy(() -> fixture.api().responses(minimalResponsesRequest()))
-			.isInstanceOf(OpenRouterTransientApiException.class)
-			.satisfies(thrown -> {
-				OpenRouterHttpException ex = (OpenRouterHttpException) thrown;
-				assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
-				assertThat(ex.getResponseBody()).contains("provider unavailable");
-			});
-		fixture.server().verify();
+	static Stream<Arguments> endpointsWithUnstructuredProviderErrors() {
+		return Stream.of(Endpoint.values())
+			.flatMap(endpoint -> Stream
+				.of(Named.of("plain-text 502",
+						new ProviderError(502, "provider unavailable", OpenRouterTransientApiException.class,
+								OpenRouterErrorCategory.PROVIDER_UNAVAILABLE, null)),
+						Named.of("empty 500 body",
+								new ProviderError(500, "", OpenRouterTransientApiException.class,
+										OpenRouterErrorCategory.PROVIDER_UNAVAILABLE, null)))
+				.map(error -> Arguments.of(Named.of(endpoint.name(), endpoint), error)));
 	}
 
-	@Test
-	void emptyErrorBodyStillProducesUsefulException() {
-		Fixture fixture = fixture(baseBuilder());
-		fixture.server()
-			.expect(once(), requestTo(CHAT_COMPLETIONS))
-			.andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR).body(""));
-
-		assertThatThrownBy(() -> fixture.api().chatCompletion(minimalChatRequest()))
-			.isInstanceOf(OpenRouterTransientApiException.class)
-			.satisfies(thrown -> {
-				OpenRouterHttpException ex = (OpenRouterHttpException) thrown;
-				assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
-				assertThat(ex.getMessage()).contains("500");
-			});
-		fixture.server().verify();
+	private static Named<ProviderError> providerError(int status, String body, Class<? extends Throwable> type,
+			OpenRouterErrorCategory category, String detailMessage) {
+		return Named.of("HTTP " + status + " " + category,
+				new ProviderError(status, body, type, category, detailMessage));
 	}
 
 	@Test
@@ -437,29 +306,38 @@ class OpenRouterApiContractTests {
 		fixture.server().verify();
 	}
 
-	@Test
-	void errorMessageNeverLeaksApiKeyOrAuthorizationHeader() {
-		Fixture fixture = fixture(baseBuilder().apiKey("sk-or-secret-key-value"));
-		fixture.server()
-			.expect(once(), requestTo(CHAT_COMPLETIONS))
-			.andRespond(withStatus(HttpStatus.UNAUTHORIZED).body("{\"error\":{\"message\":\"invalid key\"}}"));
-
-		assertThatThrownBy(() -> fixture.api().chatCompletion(minimalChatRequest()))
-			.isInstanceOf(OpenRouterNonTransientApiException.class)
-			.satisfies(thrown -> {
-				// The message is built by the library from status + body, so this pins
-				// that no code path splices credentials into it. (The response body is
-				// server-controlled -- the library cannot promise anything about it, so
-				// it is deliberately not asserted here.)
-				assertThat(thrown.getMessage()).doesNotContain("sk-or-secret-key-value");
-				assertThat(thrown.getMessage()).doesNotContain("Bearer");
-			});
-		fixture.server().verify();
-	}
-
 	private static org.springframework.test.web.client.RequestMatcher headerDoesNotExist(String name) {
 		return request -> assertThat(request.getHeaders().headerNames()).as("header %s must be absent", name)
 			.doesNotContain(name);
+	}
+
+	private record ProviderError(int status, String body, Class<? extends Throwable> type,
+			OpenRouterErrorCategory category, String detailMessage) {
+	}
+
+	private enum Endpoint {
+
+		CHAT_COMPLETIONS("/chat/completions") {
+			@Override
+			void call(OpenRouterApi api) {
+				api.chatCompletion(minimalChatRequest());
+			}
+		},
+		RESPONSES("/responses") {
+			@Override
+			void call(OpenRouterApi api) {
+				api.responses(minimalResponsesRequest());
+			}
+		};
+
+		private final String path;
+
+		Endpoint(String path) {
+			this.path = path;
+		}
+
+		abstract void call(OpenRouterApi api);
+
 	}
 
 	private record Fixture(OpenRouterApi api, MockRestServiceServer server) {

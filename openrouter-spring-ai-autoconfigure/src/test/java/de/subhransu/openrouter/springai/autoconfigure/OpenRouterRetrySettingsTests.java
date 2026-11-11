@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.ai.retry.TransientAiException;
 import org.springframework.ai.retry.autoconfigure.SpringAiRetryAutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -29,32 +30,32 @@ class OpenRouterRetrySettingsTests {
 	@ParameterizedTest
 	@ValueSource(strings = { "spring.ai.retry.on-http-codes=429", "spring.ai.retry.exclude-on-http-codes=500",
 			"spring.ai.retry.on-client-errors=true" })
-	void reportsErrorClassificationKeysThatDoNotApply(String property, CapturedOutput output) {
+	void warnsAboutErrorClassificationKeysThatDoNotApplyWhenNoOtherProviderReadsThem(String property,
+			CapturedOutput output) {
+		// The narrower selectors such as spring.ai.model.ocr stay unset, as in a
+		// single-provider application, and no other provider is on the classpath.
 		this.contextRunner.withPropertyValues(property).run(context -> {
 			assertThat(context).hasNotFailed();
 			String key = property.substring(0, property.indexOf('='));
-			assertThat(output).contains(key + " " + WARNING);
-		});
-	}
-
-	@Test
-	void warnsWhenNoOtherProviderReadsTheKeys(CapturedOutput output) {
-		// The narrower selectors such as spring.ai.model.ocr stay unset, as in a
-		// single-provider application; no other provider is on the classpath.
-		this.contextRunner.withPropertyValues("spring.ai.retry.on-http-codes=429").run(context -> {
-			assertThat(context).hasNotFailed();
-			assertThat(output).containsPattern("WARN .*" + WARNING);
+			assertThat(output).containsPattern("WARN .*" + key + " " + WARNING);
 		});
 	}
 
 	@ParameterizedTest
-	@ValueSource(strings = { "org.springframework.ai.model.mistralai.autoconfigure.MistralAiOcrAutoConfiguration",
+	@ValueSource(strings = { "org.springframework.ai.model.deepseek.autoconfigure.DeepSeekChatAutoConfiguration",
+			"org.springframework.ai.model.elevenlabs.autoconfigure.ElevenLabsAutoConfiguration",
+			"org.springframework.ai.model.mistralai.autoconfigure.MistralAiChatAutoConfiguration",
+			"org.springframework.ai.model.mistralai.autoconfigure.MistralAiEmbeddingAutoConfiguration",
+			"org.springframework.ai.model.mistralai.autoconfigure.MistralAiModerationAutoConfiguration",
+			"org.springframework.ai.model.mistralai.autoconfigure.MistralAiOcrAutoConfiguration",
 			"org.springframework.ai.model.ollama.autoconfigure.OllamaApiAutoConfiguration" })
 	void onlyInformsWhenAnotherProviderReadsTheKeys(String autoConfiguration, CapturedOutput output) {
 		// A provider whose auto-configuration passes Spring AI's error handler to its
 		// client is active, so a warning would be noise. The auto-configuration does not
 		// prove that its client reads the keys, because its client factory can back off
-		// for an application's own client, so the message only says they may.
+		// for an application's own client, so the message only says they may. The bean
+		// name is the class name because Boot registers an imported auto-configuration
+		// under it, which is how the check finds another provider.
 		this.contextRunner.withBean(autoConfiguration, Object.class, Object::new)
 			.withPropertyValues("spring.ai.retry.on-http-codes=429")
 			.run(context -> {
@@ -64,22 +65,17 @@ class OpenRouterRetrySettingsTests {
 			});
 	}
 
+	/**
+	 * The list of providers that read the keys is written by hand from the Spring AI
+	 * release named here. A test cannot find a provider that is not on the classpath, so
+	 * a new release fails this test until its provider auto-configurations have been
+	 * reread and this version is updated.
+	 */
 	@Test
-	void bootRegistersAutoConfigurationsUnderTheirClassName() {
-		// The level check relies on this naming to see which providers are active.
-		this.contextRunner.run(context -> assertThat(
-				context.getBeanFactory().containsBeanDefinition(SpringAiRetryAutoConfiguration.class.getName()))
-			.isTrue());
-	}
-
-	@Test
-	void errorHandlerConsumersWereCheckedForThisSpringAiLine() {
-		// The level check names the Spring AI 2.0 auto-configurations that pass the error
-		// handler to a client. A new minor release can add or rename one.
-		assertThat(SpringAiRetryAutoConfiguration.class.getPackage().getImplementationVersion())
-			.as("Re-check OpenRouterApiAutoConfiguration.ERROR_HANDLER_CONSUMERS against the new Spring AI "
-					+ "auto-configurations, then update this version")
-			.startsWith("2.0.");
+	void theListWasReviewedAgainstThisSpringAiRelease() {
+		assertThat(TransientAiException.class.getPackage().getImplementationVersion())
+			.as("Spring AI release; review ERROR_HANDLER_CONSUMERS in OpenRouterApiAutoConfiguration")
+			.isEqualTo("2.0.2");
 	}
 
 	@Test

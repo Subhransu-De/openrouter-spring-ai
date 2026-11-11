@@ -6,11 +6,11 @@ import org.junit.jupiter.api.Test;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.HexFormat;
-import java.util.List;
 import java.util.Locale;
 import java.util.stream.Stream;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import tools.jackson.databind.ObjectMapper;
@@ -18,6 +18,8 @@ import tools.jackson.databind.ObjectMapper;
 class OpenRouterExceptionMessageTests {
 
 	private static final String SYNTHETIC_KEY = "synthetic-Key+/=_9";
+
+	private static final String NON_ASCII_KEY = "synthetic-\u2603-\uD83D\uDE80";
 
 	@ParameterizedTest
 	@MethodSource("encodedEchoes")
@@ -28,39 +30,59 @@ class OpenRouterExceptionMessageTests {
 
 	@ParameterizedTest
 	@MethodSource("encodedEchoes")
-	void retainedHttpBodiesAndDetailsRedactEncodedKeys(String echo) {
+	void wholeHttpBodiesAndDetailsRedactEncodedKeys(String echo) {
 		var factory = new OpenRouterHttpExceptionFactory(new ObjectMapper(), SYNTHETIC_KEY);
-		String body = "{\"error\":{\"message\":\"echo " + echo + "\",\"metadata\":{\"echo\":\"" + echo + "\"}}}";
+		String body = echoBody(echo);
 		var whole = (OpenRouterHttpException) factory.create("/chat/completions", HttpStatus.UNAUTHORIZED,
 				HttpHeaders.EMPTY, body);
+
+		assertRedactedRetainedBody(whole, body, echo);
+	}
+
+	@ParameterizedTest
+	@MethodSource("encodedEchoes")
+	void truncatedHttpBodiesAndDetailsRedactEncodedKeys(String echo) {
+		var factory = new OpenRouterHttpExceptionFactory(new ObjectMapper(), SYNTHETIC_KEY);
+		String body = echoBody(echo);
 		var truncated = factory.createErrorBodyLimit("/images", HttpStatus.UNAUTHORIZED, body, 1024, 1025);
-		for (OpenRouterHttpException error : List.of(whole, truncated)) {
-			assertThat(error.getResponseBody()).isEqualTo(body.replace(echo, "[REDACTED]"));
-			assertThat(error.getErrorDetails().message()).isEqualTo("echo [REDACTED]");
-			assertThat(error.getErrorDetails().metadata().path("echo").stringValue()).isEqualTo("[REDACTED]");
-			assertThat(error.toString()).doesNotContain(echo, SYNTHETIC_KEY);
-		}
+
+		assertRedactedRetainedBody(truncated, body, echo);
+	}
+
+	private static String echoBody(String echo) {
+		return "{\"error\":{\"message\":\"echo " + echo + "\",\"metadata\":{\"echo\":\"" + echo + "\"}}}";
+	}
+
+	private static void assertRedactedRetainedBody(OpenRouterHttpException error, String body, String echo) {
+		assertThat(error.getResponseBody()).isEqualTo(body.replace(echo, "[REDACTED]"));
+		assertThat(error.getErrorDetails().message()).isEqualTo("echo [REDACTED]");
+		assertThat(error.getErrorDetails().metadata().path("echo").stringValue()).isEqualTo("[REDACTED]");
+		assertThat(error.toString()).doesNotContain(echo, SYNTHETIC_KEY);
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "ordinary %2f path \\u0041 text", "synthetic-key+/=_9", "synthetic-Key%2B%2F%3D_8",
+			"partial synthetic-Key" })
+	void unrelatedEncodedTextAndDifferentKeyCaseRemainUnchanged(String text) {
+		assertThat(OpenRouterDiagnosticSanitizer.forApiKey(SYNTHETIC_KEY).sanitize(text)).isEqualTo(text);
 	}
 
 	@Test
-	void unrelatedEncodedTextAndDifferentKeyCaseRemainUnchanged() {
-		for (String text : List.of("ordinary %2f path \\u0041 text", SYNTHETIC_KEY.toLowerCase(Locale.ROOT),
-				"synthetic-Key%2B%2F%3D_8", "partial synthetic-Key")) {
-			assertThat(OpenRouterDiagnosticSanitizer.forApiKey(SYNTHETIC_KEY).sanitize(text)).isEqualTo(text);
-		}
+	void blankKeyRedactsNothing() {
 		assertThat(OpenRouterDiagnosticSanitizer.forApiKey(" ").sanitize("ordinary encoded text"))
 			.isEqualTo("ordinary encoded text");
 	}
 
-	@Test
-	void nonAsciiKeysMatchUtf8PercentAndUtf16JsonEscapes() {
-		String key = "synthetic-\u2603-\uD83D\uDE80";
-		String unicode = "synthetic-\\u2603-\\uD83D\\uDE80";
-		for (String echo : List.of(key, unicode, URLEncoder.encode(key, StandardCharsets.UTF_8),
-				"synthetic-\\u2603-%F0%9f%9A%80")) {
-			assertThat(OpenRouterDiagnosticSanitizer.forApiKey(key).sanitize("echo " + echo))
-				.isEqualTo("echo [REDACTED]");
-		}
+	@ParameterizedTest
+	@MethodSource("nonAsciiKeyEchoes")
+	void nonAsciiKeysMatchUtf8PercentAndUtf16JsonEscapes(String echo) {
+		assertThat(OpenRouterDiagnosticSanitizer.forApiKey(NON_ASCII_KEY).sanitize("echo " + echo))
+			.isEqualTo("echo [REDACTED]");
+	}
+
+	static Stream<String> nonAsciiKeyEchoes() {
+		return Stream.of(NON_ASCII_KEY, "synthetic-\\u2603-\\uD83D\\uDE80",
+				URLEncoder.encode(NON_ASCII_KEY, StandardCharsets.UTF_8), "synthetic-\\u2603-%F0%9f%9A%80");
 	}
 
 	private static Stream<String> encodedEchoes() {
@@ -95,19 +117,6 @@ class OpenRouterExceptionMessageTests {
 			.startsWith("first line second line [31m Bearer [REDACTED] api_key=[REDACTED]")
 			.endsWith("...")
 			.doesNotContain("\r", "\n", "\u001B", "secret-token", "another-secret");
-	}
-
-	@Test
-	void hostMessageNeverIncludesTheProviderDiagnostic() {
-		assertThat(OpenRouterExceptionMessage.build("OpenRouter request failed", "provider\r\ninjected"))
-			.isEqualTo("OpenRouter request failed");
-	}
-
-	@Test
-	void hostMessageIsPreservedWhenItMatchesTheProviderDiagnostic() {
-		String hostMessage = "Unauthorized";
-
-		assertThat(OpenRouterExceptionMessage.build(hostMessage, "Unauthorized")).isSameAs(hostMessage);
 	}
 
 }

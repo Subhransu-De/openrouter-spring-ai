@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import tools.jackson.databind.JsonNode;
 
 /** Model compatibility sweeps started over HTTP against the OpenRouter mock. */
@@ -22,8 +23,8 @@ class GarageSweepIntegrationTests extends MockedGarageIntegrationTest {
     List<JsonNode> requests = OpenRouterMock.requests("/embeddings");
     assertThat(requests).hasSize(2).allSatisfy(request ->
         assertThat(request.path("input").size()).isEqualTo(3));
-    assertThat(requests.get(0).path("provider").path("order").isMissingNode()
-        || requests.get(0).path("provider").path("order").isEmpty()).isTrue();
+    // An unpinned entry sends no provider order (a missing node and an empty array both have size 0).
+    assertThat(requests.get(0).path("provider").path("order").size()).isZero();
     assertThat(requests.get(1).path("provider").path("order").toString()).isEqualTo("[\"openai\"]");
     assertThat(requests.get(1).path("provider").path("allow_fallbacks").asBoolean(true)).isFalse();
   }
@@ -73,5 +74,23 @@ class GarageSweepIntegrationTests extends MockedGarageIntegrationTest {
     assertThat(requests.get(0).path("aspect_ratio").asString()).isEqualTo("16:9");
     assertThat(requests.get(0).path("output_format").asString()).isEqualTo("png");
     assertThat(requests.get(1).path("model").asString()).isEqualTo("garage/does-not-exist");
+  }
+
+  @Test
+  void aSweepFailedByTheProviderStillServesItsDocumentAndNoOtherFile() {
+    OpenRouterMock.useScenario("embeddings-guardrail-blocked");
+
+    String location = startSweep("{\"embeddingModels\": [\"openai/text-embedding-3-small\"]}");
+    JsonNode run = awaitFinished(location);
+
+    assertThat(run.path("status").asString()).isEqualTo("FAILED");
+    assertThat(run.path("message").asString()).isEqualTo("1 sweep entries failed");
+    JsonNode entry = JSON.readTree(file(location, "sweeps/embedding")).path("results").get(0);
+    assertThat(entry.path("status").asString()).isEqualTo("failed");
+    assertThat(entry.path("error").asString()).isNotBlank();
+    // The sweep ran no scenes and no image sweep: those documents do not exist.
+    for (String missing : List.of("sweeps/image", "evidence", "report")) {
+      assertThat(this.mvc.get().uri(location + "/" + missing)).as(missing).hasStatus(HttpStatus.NOT_FOUND);
+    }
   }
 }

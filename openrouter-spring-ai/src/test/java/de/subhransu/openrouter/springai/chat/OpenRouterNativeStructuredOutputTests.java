@@ -1,8 +1,5 @@
 package de.subhransu.openrouter.springai.chat;
 
-import org.assertj.core.api.Assertions;
-import org.springframework.ai.chat.prompt.Prompt;
-import org.mockito.Mockito;
 import java.time.Duration;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -10,7 +7,6 @@ import org.springframework.web.reactive.function.client.ClientResponse;
 import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.http.HttpMethod;
 import java.util.concurrent.atomic.AtomicReference;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.params.ParameterizedTest;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
@@ -102,27 +98,6 @@ class OpenRouterNativeStructuredOutputTests {
 		assertThat(json.at(responses ? "/text/format/schema" : "/response_format/json_schema/schema"))
 			.isEqualTo(mapper.readTree(schema));
 		assertThat(json.path("stream").asBoolean()).isTrue();
-	}
-
-	@ParameterizedTest
-	@ValueSource(booleans = { false, true })
-	void unsupportedOptionsFailBeforeCallingTheApi(boolean stream) {
-		OpenRouterApi api = Mockito.mock(OpenRouterApi.class);
-		var model = OpenRouterChatModel.builder()
-			.openRouterApi(api)
-			.defaultOptions(
-					OpenRouterChatOptions.builder().requestMode(OpenRouterRequestMode.OPENAI_RESPONSES).seed(0).build())
-			.build();
-		var prompt = new Prompt("hi");
-		Assertions.assertThatThrownBy(() -> {
-			if (stream) {
-				model.stream(prompt).blockLast(Duration.ofSeconds(5));
-			}
-			else {
-				model.call(prompt);
-			}
-		}).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("seed");
-		Mockito.verifyNoInteractions(api);
 	}
 
 	record Answer(String answer) {

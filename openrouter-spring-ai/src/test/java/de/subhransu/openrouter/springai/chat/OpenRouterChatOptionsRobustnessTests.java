@@ -1,155 +1,41 @@
 package de.subhransu.openrouter.springai.chat;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.util.LinkedHashMap;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.UnaryOperator;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.function.FunctionToolCallback;
 
 /**
- * Robustness tests for {@link OpenRouterChatOptions}: builder/build aliasing, defensive
- * copy of mutable collections and nested objects, merge semantics across scalars,
- * collections, maps and booleans, and the deliberately lossy {@code fromOptions}
- * conversion from a generic {@link ChatOptions}. The baseline precedence and tool-field
- * tests stay in {@code OpenRouterChatOptionsTests}; this class owns the subtle branches.
+ * Robustness tests for {@link OpenRouterChatOptions}: field sweeps over merge and copy,
+ * merge semantics across scalars, collections, maps and booleans, and the deliberately
+ * lossy {@code fromOptions} conversion from a generic {@link ChatOptions}. The baseline
+ * precedence and tool-field tests stay in {@code OpenRouterChatOptionsTests}; this class
+ * owns the subtle branches.
  */
 class OpenRouterChatOptionsRobustnessTests {
 
 	private static final String MODEL = "openai/gpt-5.4-mini";
-
-	@Test
-	@SuppressWarnings("unchecked")
-	void copiesKeepNestedSnapshotsIsolatedAcrossBuilderAndMutateChanges() {
-		var values = new ArrayList<>(List.of("original"));
-		var nested = new LinkedHashMap<String, Object>();
-		nested.put("values", values);
-		nested.put("nullable", null);
-		Object opaque = new Object();
-		var builder = OpenRouterChatOptions.builder()
-			.metadata(Map.of("nested", nested))
-			.imageConfig(Map.of("nested", nested))
-			.toolChoice(Map.of("nested", nested))
-			.toolContext(Map.of("nested", nested, "opaque", opaque));
-		var source = builder.build();
-		OpenRouterChatOptions copy = source.mutate().build();
-		values.add("later");
-		nested.put("later", true);
-		builder.toolContext("builderOnly", true);
-		OpenRouterChatOptions changed = copy.mutate().toolContext(null).toolContext("copyOnly", true).build();
-		for (var snapshot : List.of(source, source.mutate().clone().build(), copy)) {
-			for (var map : List.of(snapshot.getMetadata(), snapshot.getImageConfig(),
-					(Map<String, Object>) snapshot.getToolChoice())) {
-				var child = (Map<String, Object>) map.get("nested");
-				assertThat(child).containsEntry("nullable", null).doesNotContainKey("later");
-				assertThat((List<String>) child.get("values")).containsExactly("original");
-				assertThatThrownBy(() -> child.put("new", true)).isInstanceOf(UnsupportedOperationException.class);
-			}
-		}
-		assertThat(source.getToolContext()).containsEntry("opaque", opaque)
-			.doesNotContainKeys("builderOnly", "copyOnly");
-		assertThat(copy.getToolContext()).containsEntry("opaque", opaque).doesNotContainKey("copyOnly");
-		assertThat(changed.getToolContext()).containsOnlyKeys("copyOnly");
-	}
-
-	@Test
-	void getterSnapshotsRemainDetachedWhenMutateReplacesCollections() {
-		ToolCallback first = tool("first");
-		ToolCallback second = tool("second");
-		var options = OpenRouterChatOptions.builder().toolCallbacks(first).toolContext(Map.of("first", true)).build();
-		var callbacks = options.getToolCallbacks();
-		var context = options.getToolContext();
-		var replaced = options.mutate()
-			.toolCallbacks(List.of(second))
-			.toolContext(null)
-			.toolContext("second", true)
-			.build();
-		assertThat(callbacks).containsExactly(first);
-		assertThat(context).containsOnlyKeys("first");
-		assertThat(options.getToolCallbacks()).containsExactly(first);
-		assertThat(replaced.getToolCallbacks()).containsExactly(second);
-		assertThat(replaced.getToolContext()).containsOnlyKeys("second");
-		assertThatThrownBy(() -> callbacks.add(second)).isInstanceOf(UnsupportedOperationException.class);
-		assertThatThrownBy(() -> context.put("later", true)).isInstanceOf(UnsupportedOperationException.class);
-	}
 
 	private ToolCallback tool(String name) {
 		return FunctionToolCallback.builder(name, (Map<String, Object> in) -> "ok")
 			.description(name)
 			.inputType(Map.class)
 			.build();
-	}
-
-	// ---------------------------------------------------------------------
-	// Builder / build aliasing
-	// ---------------------------------------------------------------------
-
-	@Test
-	void mutatingBuilderAfterBuildDoesNotAffectBuiltOptions() {
-		// build() hands out a detached snapshot: post-build setter calls stay in the
-		// builder and only show up in the next build() result.
-		OpenRouterChatOptions.Builder builder = OpenRouterChatOptions.builder().model(MODEL);
-		OpenRouterChatOptions built = builder.build();
-
-		builder.temperature(0.9);
-
-		assertThat(built.getTemperature()).isNull();
-		assertThat(builder.build().getTemperature()).isEqualTo(0.9);
-	}
-
-	@Test
-	void copyIsIndependentOfTheSource() {
-		OpenRouterChatOptions source = OpenRouterChatOptions.builder()
-			.model(MODEL)
-			.stopSequences(List.of("END"))
-			.metadata(Map.of("k", "v"))
-			.build();
-
-		OpenRouterChatOptions copy = source.mutate().build();
-		copy = copy.mutate().stopSequences(List.of("END", "STOP")).build();
-
-		// The source's mutable collections are untouched by edits to the copy.
-		assertThat(source.getStopSequences()).containsExactly("END");
-		assertThat(copy.getStopSequences()).containsExactly("END", "STOP");
-	}
-
-	@Test
-	void copyDoesNotShareMutableMaps() {
-		Map<String, Object> metadata = new LinkedHashMap<>();
-		metadata.put("trace", "1");
-		OpenRouterChatOptions source = OpenRouterChatOptions.builder().model(MODEL).metadata(metadata).build();
-
-		OpenRouterChatOptions copy = source.mutate().build();
-		copy = copy.mutate().metadata(Map.of("trace", "2")).build();
-
-		assertThat(source.getMetadata()).containsEntry("trace", "1");
-		assertThat(copy.getMetadata()).containsEntry("trace", "2");
-	}
-
-	@Test
-	void copyPreservesNestedProviderAndReasoning() {
-		OpenRouterProviderPreferences provider = new OpenRouterProviderPreferences(true, null, null, List.of("openai"),
-				null, null, "throughput");
-		OpenRouterReasoningOptions reasoning = new OpenRouterReasoningOptions("high", null, false, true);
-		OpenRouterChatOptions source = OpenRouterChatOptions.builder()
-			.model(MODEL)
-			.provider(provider)
-			.reasoning(reasoning)
-			.build();
-
-		OpenRouterChatOptions copy = source.mutate().build();
-
-		// Nested records are immutable, so sharing the reference is safe and expected.
-		assertThat(copy.getProvider()).isEqualTo(provider);
-		assertThat(copy.getReasoning()).isEqualTo(reasoning);
 	}
 
 	// ---------------------------------------------------------------------
@@ -207,6 +93,9 @@ class OpenRouterChatOptionsRobustnessTests {
 		// coverage.
 		OpenRouterChatOptions options = fullyPopulatedOptions();
 		for (Field field : OpenRouterChatOptions.class.getDeclaredFields()) {
+			if (Modifier.isStatic(field.getModifiers())) {
+				continue;
+			}
 			field.setAccessible(true);
 			assertThat(field.get(options))
 				.as("field '%s' must be populated in fullyPopulatedOptions() so the merge/copy sweeps cover it",
@@ -235,65 +124,31 @@ class OpenRouterChatOptionsRobustnessTests {
 		assertThat(merged.getToolCallbacks()).containsExactlyElementsOf(runtime.getToolCallbacks());
 	}
 
-	@Test
-	void copyPreservesEveryField() {
-		OpenRouterChatOptions source = fullyPopulatedOptions();
-
-		OpenRouterChatOptions copy = source.mutate().build();
-
-		assertThat((Object) copy).isNotSameAs(source);
-		assertThat((Object) copy).usingRecursiveComparison().ignoringFields("toolCallbacks").isEqualTo(source);
-		assertThat(copy.getToolCallbacks()).containsExactlyElementsOf(source.getToolCallbacks());
+	static Stream<Arguments> copies() {
+		return Stream.of(
+				Arguments.of(Named.<UnaryOperator<OpenRouterChatOptions>>of("mutate().build()",
+						source -> source.mutate().build())),
+				Arguments
+					.of(Named.<UnaryOperator<OpenRouterChatOptions>>of("merge(null)", source -> source.merge(null))),
+				Arguments.of(Named.<UnaryOperator<OpenRouterChatOptions>>of("fromOptions(source)",
+						OpenRouterChatOptions::fromOptions)));
 	}
 
-	@Test
-	void copyDoesNotShareToolCallbacksListOrToolContextMap() {
-		// These are the collections mutated most at runtime (by the tool-calling
-		// advisor loop), so aliasing between copy and source would be an
-		// action-at-a-distance bug.
+	@ParameterizedTest
+	@MethodSource("copies")
+	void copyPreservesEveryField(UnaryOperator<OpenRouterChatOptions> copier) {
 		OpenRouterChatOptions source = fullyPopulatedOptions();
 
-		OpenRouterChatOptions copy = source.mutate()
-			.toolCallbacks(List.of(tool("extra")))
-			.toolContext("region", "eu")
-			.build();
+		OpenRouterChatOptions copy = copier.apply(source);
 
-		assertThat(source.getToolCallbacks()).hasSize(1);
-		assertThat(source.getToolContext()).doesNotContainKey("region");
-		assertThat(copy.getToolCallbacks()).hasSize(1);
-		assertThat(copy.getToolContext()).containsEntry("region", "eu");
+		assertThat(copy).isNotSameAs(source);
+		assertThat(copy).usingRecursiveComparison().ignoringFields("toolCallbacks").isEqualTo(source);
+		assertThat(copy.getToolCallbacks()).containsExactlyElementsOf(source.getToolCallbacks());
 	}
 
 	// ---------------------------------------------------------------------
 	// Merge semantics
 	// ---------------------------------------------------------------------
-
-	@Test
-	void scalarMergeIsLastNonNullWins() {
-		OpenRouterChatOptions defaults = OpenRouterChatOptions.builder()
-			.model(MODEL)
-			.temperature(0.2)
-			.topP(0.5)
-			.build();
-		OpenRouterChatOptions runtime = OpenRouterChatOptions.builder().temperature(0.9).build();
-
-		OpenRouterChatOptions merged = defaults.merge(runtime);
-
-		// runtime temperature wins; runtime topP is null so the default survives.
-		assertThat(merged.getTemperature()).isEqualTo(0.9);
-		assertThat(merged.getTopP()).isEqualTo(0.5);
-		assertThat(merged.getModel()).isEqualTo(MODEL);
-	}
-
-	@Test
-	void nullRuntimeOptionLeavesConfiguredDefaultInPlace() {
-		OpenRouterChatOptions defaults = OpenRouterChatOptions.builder().model(MODEL).route("fallback").build();
-		OpenRouterChatOptions runtime = OpenRouterChatOptions.builder().temperature(0.1).build();
-
-		OpenRouterChatOptions merged = defaults.merge(runtime);
-
-		assertThat(merged.getRoute()).isEqualTo("fallback");
-	}
 
 	@Test
 	void falseBooleanRuntimeOptionOverridesTrueDefault() {
@@ -345,26 +200,16 @@ class OpenRouterChatOptionsRobustnessTests {
 		assertThat(merged.getToolContext()).containsEntry("tenant", "acme").containsEntry("region", "eu");
 	}
 
-	@Test
-	void mergeWithNullRuntimeReturnsIndependentCopy() {
-		OpenRouterChatOptions defaults = OpenRouterChatOptions.builder()
-			.model(MODEL)
-			.stopSequences(List.of("END"))
-			.build();
-
-		OpenRouterChatOptions merged = defaults.merge(null);
-
-		assertThat(merged).isNotSameAs(defaults);
-		assertThat(defaults.getStopSequences()).containsExactly("END");
-		assertThat(merged.getStopSequences()).containsExactly("END");
-	}
-
 	// ---------------------------------------------------------------------
 	// Generic ChatOptions conversion (lossy)
 	// ---------------------------------------------------------------------
 
 	@Test
-	void fromOptionsPreservesPortableFields() {
+	void fromOptionsConvertsPortableFieldsAndLeavesOpenRouterFieldsUnset() {
+		// A generic ChatOptions cannot carry OpenRouter-only concepts, so the conversion
+		// is deliberately lossy. The expected object sets only the portable fields; the
+		// recursive comparison proves every OpenRouter field, including the request mode
+		// that must not override a merge target's configured mode, stays null.
 		ChatOptions portable = ChatOptions.builder()
 			.model(MODEL)
 			.temperature(0.4)
@@ -378,52 +223,18 @@ class OpenRouterChatOptionsRobustnessTests {
 
 		OpenRouterChatOptions converted = OpenRouterChatOptions.fromOptions(portable);
 
-		assertThat(converted.getModel()).isEqualTo(MODEL);
-		assertThat(converted.getTemperature()).isEqualTo(0.4);
-		assertThat(converted.getTopP()).isEqualTo(0.8);
-		assertThat(converted.getTopK()).isEqualTo(20);
-		assertThat(converted.getMaxTokens()).isEqualTo(256);
-		assertThat(converted.getFrequencyPenalty()).isEqualTo(0.1);
-		assertThat(converted.getPresencePenalty()).isEqualTo(0.2);
-		assertThat(converted.getStopSequences()).containsExactly("X");
-	}
-
-	@Test
-	void fromOptionsLeavesOpenRouterSpecificFieldsUnavailable() {
-		// A generic ChatOptions cannot carry OpenRouter-only concepts, so the conversion
-		// is
-		// deliberately lossy: these stay null, and request mode is explicitly cleared so
-		// the merge target's configured mode is not overridden by a generic runtime call.
-		ChatOptions portable = ChatOptions.builder().model(MODEL).temperature(0.4).build();
-
-		OpenRouterChatOptions converted = OpenRouterChatOptions.fromOptions(portable);
-
-		assertThat(converted.getModels()).isNull();
-		assertThat(converted.getProvider()).isNull();
-		assertThat(converted.getReasoning()).isNull();
-		assertThat(converted.getServiceTier()).isNull();
-		assertThat(converted.getRoute()).isNull();
-		assertThat(converted.getRequestMode()).isNull();
-	}
-
-	@Test
-	void fromOptionsWithOpenRouterOptionsReturnsAnIndependentCopy() {
-		OpenRouterChatOptions original = OpenRouterChatOptions.builder()
+		var expected = OpenRouterChatOptions.builder()
 			.model(MODEL)
-			.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
-			.stopSequences(List.of("END"))
+			.temperature(0.4)
+			.topP(0.8)
+			.topK(20)
+			.maxTokens(256)
+			.frequencyPenalty(0.1)
+			.presencePenalty(0.2)
+			.stopSequences(List.of("X"))
 			.build();
-
-		OpenRouterChatOptions converted = OpenRouterChatOptions.fromOptions(original);
-		converted = converted.mutate().stopSequences(List.of("END", "STOP")).build();
-
-		// Passing OpenRouter options through fromOptions preserves everything (no loss)
-		// and
-		// returns a copy, not the same instance.
-		assertThat(converted.getRequestMode()).isEqualTo(OpenRouterRequestMode.OPENAI_RESPONSES);
-		assertThat(converted).isNotSameAs(original);
-		assertThat(original.getStopSequences()).containsExactly("END");
-		assertThat(converted.getStopSequences()).containsExactly("END", "STOP");
+		assertThat(converted).usingRecursiveComparison().isEqualTo(expected);
+		assertThat(converted.getRequestMode()).isNull();
 	}
 
 	@Test

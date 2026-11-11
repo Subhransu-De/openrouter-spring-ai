@@ -1,6 +1,7 @@
 package de.subhransu.openrouter.springai.garage;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -8,17 +9,27 @@ import static org.mockito.Mockito.when;
 
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterUsage;
+import de.subhransu.openrouter.springai.image.OpenRouterImageGenerationMetadata;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Base64;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.ai.chat.metadata.ChatResponseMetadata;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.image.Image;
+import org.springframework.ai.image.ImageGeneration;
 import org.springframework.ai.image.ImageModel;
 import org.springframework.ai.image.ImagePrompt;
 import org.springframework.ai.image.ImageResponse;
@@ -26,45 +37,76 @@ import org.springframework.ai.image.ImageResponseMetadata;
 
 class GarageModalityBaysTests {
 
+  private static final String VALID_SVG =
+      "<svg xmlns='http://www.w3.org/2000/svg' width='1' height='1'><rect width='1' height='1'/></svg>";
+
+  // A one-pixel lossy WebP.
+  private static final byte[] WEBP = Base64.getDecoder().decode("UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA");
+
+  @TempDir Path output;
+
   @Test
-  void validatesSvgDocumentsWithoutResolvingExternalEntities() throws Exception {
-    GarageModalityBays bays = new GarageModalityBays(
-        null, null, null, Path.of("target"), "embedding", "vision", "image", null, null);
-    String valid = "<svg xmlns='http://www.w3.org/2000/svg' width='1' height='1'><rect width='1' height='1'/></svg>";
-    assertThat(bays.recordDimensions(new LinkedHashMap<>(),
-        valid.getBytes(java.nio.charset.StandardCharsets.UTF_8), "image/svg+xml")).isTrue();
-    for (String invalid : List.of("", "arbitrary text", "<svg", "<html/>", "<svg/>",
-        "<!DOCTYPE svg [<!ENTITY x SYSTEM 'file:///synthetic-do-not-read'>]><svg xmlns='http://www.w3.org/2000/svg'>&x;</svg>")) {
-      assertThat(bays.recordDimensions(new LinkedHashMap<>(),
-          invalid.getBytes(java.nio.charset.StandardCharsets.UTF_8), "image/svg+xml")).isFalse();
-    }
+  void aValidSvgDocumentPassesAsAVectorImage() {
+    Map<String, Object> probe = paintBay(VALID_SVG.getBytes(StandardCharsets.UTF_8), "image/svg+xml");
+
+    assertThat(probe).containsEntry("status", "passed").containsEntry("dimensions", "vector");
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"arbitrary text", "<svg", "<html/>", "<svg/>",
+      "<!DOCTYPE svg [<!ENTITY x SYSTEM 'file:///synthetic-do-not-read'>]><svg xmlns='http://www.w3.org/2000/svg'>&x;</svg>"})
+  void invalidSvgFailsWithoutResolvingExternalEntities(String invalid) {
+    Map<String, Object> probe = paintBay(invalid.getBytes(StandardCharsets.UTF_8), "image/svg+xml");
+
+    assertThat(probe).containsEntry("status", "failed")
+        .containsEntry("error", "generated image was empty or could not be decoded");
   }
 
   @Test
-  void rejectsAWebpHeaderWithoutImageData() {
-    byte[] webp = {'R', 'I', 'F', 'F', 4, 0, 0, 0, 'W', 'E', 'B', 'P'};
+  void aWebpImageIsDecodedToItsPixelDimensions() {
+    Map<String, Object> probe = paintBay(WEBP, "image/webp");
 
-    assertThat(GarageModalityBays.hasWebpSignature(webp)).isFalse();
-    assertThat(
-            GarageModalityBays.hasWebpSignature(
-                new byte[] {'R', 'I', 'F', 'F', 4, 0, 0, 0, 'N', 'O', 'P', 'E'}))
-        .isFalse();
-    assertThat(GarageModalityBays.hasWebpSignature(new byte[0])).isFalse();
+    assertThat(probe).containsEntry("status", "passed").containsEntry("width", 1).containsEntry("height", 1);
+  }
+
+  static Stream<Arguments> undecodableWebpContainers() {
+    byte[] corrupt = WEBP.clone();
+    corrupt[4] = 0;
+    return Stream.of(
+        Arguments.of(Named.of("truncated", java.util.Arrays.copyOf(WEBP, WEBP.length - 1))),
+        Arguments.of(Named.of("corrupt length", corrupt)),
+        Arguments.of(Named.of("header only", new byte[] {'R', 'I', 'F', 'F', 4, 0, 0, 0, 'W', 'E', 'B', 'P'})),
+        Arguments.of(Named.of("not WebP", new byte[] {'R', 'I', 'F', 'F', 4, 0, 0, 0, 'N', 'O', 'P', 'E'})));
+  }
+
+  @ParameterizedTest
+  @MethodSource("undecodableWebpContainers")
+  void anUndecodableWebpContainerFailsTheBay(byte[] container) {
+    Map<String, Object> probe = paintBay(container, "image/webp");
+
+    assertThat(probe).containsEntry("status", "failed")
+        .containsEntry("error", "generated image was empty or could not be decoded")
+        .doesNotContainKeys("width", "height");
   }
 
   @Test
-  void decodesWebpPixelsAndRejectsTruncatedContainers() throws Exception {
-    byte[] webp = Base64.getDecoder().decode(
-        "UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA");
-    GarageModalityBays bays = new GarageModalityBays(
-        null, null, null, Path.of("target"), "embedding", "vision", "image", null, null);
-    Map<String, Object> probe = new LinkedHashMap<>();
-    assertThat(bays.recordDimensions(probe, webp, "image/webp")).isTrue();
-    assertThat(probe).containsEntry("width", 1).containsEntry("height", 1);
-    assertThat(bays.recordDimensions(new LinkedHashMap<>(),
-        java.util.Arrays.copyOf(webp, webp.length - 1), "image/webp")).isFalse();
-    webp[4] = 0;
-    assertThat(bays.recordDimensions(new LinkedHashMap<>(), webp, "image/webp")).isFalse();
+  void anEmptyPayloadFailsAsMissingImageData() {
+    Map<String, Object> probe = paintBay(new byte[0], "image/webp");
+
+    assertThat(probe).containsEntry("status", "failed")
+        .containsEntry("error", "image response carried no base64 image data");
+  }
+
+  /** Runs the image API bay against a model that returns the given image. */
+  private Map<String, Object> paintBay(byte[] image, String mediaType) {
+    ImageModel imageModel = mock(ImageModel.class);
+    ImageGeneration generation = new ImageGeneration(new Image(null, Base64.getEncoder().encodeToString(image)),
+        new OpenRouterImageGenerationMetadata(mediaType, null));
+    when(imageModel.call(any(ImagePrompt.class)))
+        .thenReturn(new ImageResponse(List.of(generation), new ImageResponseMetadata()));
+    GarageModalityBays bays = new GarageModalityBays(null, null, imageModel, this.output, "embedding", "vision",
+        "image", null, null);
+    return bays.runPaintBay("webp decoding");
   }
 
   @Test
@@ -82,7 +124,7 @@ class GarageModalityBaysTests {
     Map<String, Object> probe = bays.runPaintBay("cost accounting");
 
     assertThat(probe.get("status")).isEqualTo("failed");
-    assertThat(GarageCosts.usageMaps(probe)).isEqualTo(0.03);
+    assertThat(GarageCosts.usageMaps(probe)).isCloseTo(0.03, within(1e-12));
   }
 
   @Test
@@ -100,7 +142,7 @@ class GarageModalityBaysTests {
     Map<String, Object> probe = bays.runChatPaintBay("cost accounting");
 
     assertThat(probe.get("status")).isEqualTo("failed");
-    assertThat(GarageCosts.usageMaps(probe)).isEqualTo(0.04);
+    assertThat(GarageCosts.usageMaps(probe)).isCloseTo(0.04, within(1e-12));
   }
 
   @Test

@@ -20,7 +20,8 @@ class GarageReasoningReplayIntegrationTests extends MockedGarageIntegrationTest 
 
   private static final ObjectMapper JSON = new ObjectMapper();
 
-  record Format(String scenario, String mode) {
+  /** One scenario, the request mode that runs it and where its follow-up request carries the replay. */
+  record Format(String scenario, String mode, String endpoint, String conversation, String followUpMarker) {
 
     @Override
     public String toString() {
@@ -30,12 +31,12 @@ class GarageReasoningReplayIntegrationTests extends MockedGarageIntegrationTest 
 
   static Stream<Format> formats() {
     return Stream.of(
-        new Format("service-story-gemini-reasoning", "chat"),
-        new Format("service-story-anthropic-reasoning", "chat"),
-        new Format("service-story-openai-reasoning", "chat"),
-        new Format("service-story-responses-gemini-reasoning", "responses"),
-        new Format("service-story-responses-anthropic-reasoning", "responses"),
-        new Format("service-story-responses-openai-reasoning", "responses"));
+        new Format("service-story-gemini-reasoning", "chat", "/chat/completions", "messages", "\"tool_call_id\":\"call_inspect\""),
+        new Format("service-story-anthropic-reasoning", "chat", "/chat/completions", "messages", "\"tool_call_id\":\"call_inspect\""),
+        new Format("service-story-openai-reasoning", "chat", "/chat/completions", "messages", "\"tool_call_id\":\"call_inspect\""),
+        new Format("service-story-responses-gemini-reasoning", "responses", "/responses", "input", "\"function_call_output\""),
+        new Format("service-story-responses-anthropic-reasoning", "responses", "/responses", "input", "\"function_call_output\""),
+        new Format("service-story-responses-openai-reasoning", "responses", "/responses", "input", "\"function_call_output\""));
   }
 
   @ParameterizedTest(name = "{0}")
@@ -47,15 +48,12 @@ class GarageReasoningReplayIntegrationTests extends MockedGarageIntegrationTest 
         "{\"scenes\":[\"service-story\"],\"requestModes\":[\"" + format.mode() + "\"]}");
 
     assertThat(run.path("status").asString()).isEqualTo("PASSED");
-    boolean chat = "chat".equals(format.mode());
-    JsonNode followUp = OpenRouterMock.requests(chat ? "/chat/completions" : "/responses").stream()
-        .filter(request -> chat
-            ? request.path("messages").toString().contains("\"tool_call_id\":\"call_inspect\"")
-            : request.path("input").toString().contains("\"function_call_output\""))
+    JsonNode followUp = OpenRouterMock.requests(format.endpoint()).stream()
+        .filter(request -> request.path(format.conversation()).toString().contains(format.followUpMarker()))
         .findFirst().orElseThrow();
     List<String> opaque = opaqueValues(format.scenario());
     assertThat(opaque).as("fixture opaque values").isNotEmpty();
-    String replayed = (chat ? followUp.path("messages") : followUp.path("input")).toString();
+    String replayed = followUp.path(format.conversation()).toString();
     assertThat(replayed).as("follow-up request").contains(opaque);
     assertThat(OpenRouterMock.unmatched()).isEmpty();
   }

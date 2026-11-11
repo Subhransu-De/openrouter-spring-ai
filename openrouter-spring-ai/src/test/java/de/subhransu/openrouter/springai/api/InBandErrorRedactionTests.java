@@ -21,7 +21,6 @@ import de.subhransu.openrouter.springai.image.OpenRouterImageModel;
 import de.subhransu.openrouter.springai.image.OpenRouterImageOptions;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +29,7 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.image.ImagePrompt;
@@ -71,7 +71,7 @@ class InBandErrorRedactionTests {
 				() -> chatModel(blocking(CHAT_COMPLETIONS, json(Map.of("error", error(echo)))), false).call(PROMPT));
 
 		assertThat(failure).isExactlyInstanceOf(OpenRouterApiException.class);
-		assertRedacted(failure, echo);
+		assertApiRedacted(failure, echo);
 	}
 
 	@ParameterizedTest
@@ -81,7 +81,7 @@ class InBandErrorRedactionTests {
 				chatModel(streaming(json(Map.of("error", error(echo)))), false).stream(PROMPT));
 
 		assertThat(failure).isExactlyInstanceOf(OpenRouterApiException.class);
-		assertRedacted(failure, echo);
+		assertApiRedacted(failure, echo);
 	}
 
 	@ParameterizedTest
@@ -95,7 +95,7 @@ class InBandErrorRedactionTests {
 					.call(PROMPT));
 
 		assertThat(failure).isInstanceOf(OpenRouterChoiceFailure.class);
-		assertRedacted(failure, echo);
+		assertChoiceRedacted(failure, echo);
 	}
 
 	@ParameterizedTest
@@ -107,7 +107,7 @@ class InBandErrorRedactionTests {
 				chatModel(streaming(json(Map.of("id", "gen-1", "choices", List.of(choice)))), false).stream(PROMPT));
 
 		assertThat(failure).isInstanceOf(OpenRouterChoiceFailure.class);
-		assertRedacted(failure, echo);
+		assertChoiceRedacted(failure, echo);
 	}
 
 	@ParameterizedTest
@@ -118,7 +118,7 @@ class InBandErrorRedactionTests {
 					.call(PROMPT));
 
 		assertThat(failure).isInstanceOf(OpenRouterHttpException.class);
-		assertRedacted(failure, echo);
+		assertHttpRedacted(failure, echo);
 	}
 
 	@ParameterizedTest
@@ -128,7 +128,7 @@ class InBandErrorRedactionTests {
 				chatModel(streaming(json(Map.of("type", "error", "error", error(echo)))), true).stream(PROMPT));
 
 		assertThat(failure).isInstanceOf(OpenRouterHttpException.class);
-		assertRedacted(failure, echo);
+		assertHttpRedacted(failure, echo);
 	}
 
 	@ParameterizedTest
@@ -143,7 +143,7 @@ class InBandErrorRedactionTests {
 		Throwable failure = catchThrowable(() -> model.embed("synthetic input"));
 
 		assertThat(failure).isExactlyInstanceOf(OpenRouterApiException.class);
-		assertRedacted(failure, echo);
+		assertApiRedacted(failure, echo);
 	}
 
 	@ParameterizedTest
@@ -153,7 +153,7 @@ class InBandErrorRedactionTests {
 				() -> imageModel(blocking("/images", json(Map.of("error", error(echo))))).call(imagePrompt()));
 
 		assertThat(failure).isExactlyInstanceOf(OpenRouterApiException.class);
-		assertRedacted(failure, echo);
+		assertApiRedacted(failure, echo);
 	}
 
 	@ParameterizedTest
@@ -163,7 +163,7 @@ class InBandErrorRedactionTests {
 				imageModel(streaming(json(Map.of("type", "error", "error", error(echo))))).stream(imagePrompt()));
 
 		assertThat(failure).isExactlyInstanceOf(OpenRouterApiException.class);
-		assertRedacted(failure, echo);
+		assertApiRedacted(failure, echo);
 	}
 
 	@ParameterizedTest
@@ -174,7 +174,7 @@ class InBandErrorRedactionTests {
 				chatModel(streaming(json(Map.of("type", "response.failed", "response", failed))), true).stream(PROMPT));
 
 		assertThat(failure).isInstanceOf(OpenRouterHttpException.class);
-		assertRedacted(failure, echo);
+		assertHttpRedacted(failure, echo);
 	}
 
 	@Test
@@ -211,20 +211,24 @@ class InBandErrorRedactionTests {
 		assertThat(details.partialOutput()).isEqualTo("y".repeat(400) + " [REDACTED] " + "z".repeat(75) + "...");
 	}
 
-	@ParameterizedTest
-	@MethodSource("echoes")
-	void responsesIncompleteToolRound(String echo) {
-		Map<String, Object> result = incompleteToolRound(echo);
-		Throwable blocking = catchThrowable(() -> chatModel(blocking("/responses", json(result)), true).call(PROMPT));
-		Throwable streamed = streamFailure(
-				chatModel(streaming(json(Map.of("type", "response.incomplete", "response", result))), true)
-					.stream(PROMPT));
+	private static Stream<Arguments> echoesOnBothTransports() {
+		return echoes().flatMap(echo -> Stream.of(Arguments.of(echo, Named.of("blocking", false)),
+				Arguments.of(echo, Named.of("streamed", true))));
+	}
 
-		for (Throwable failure : List.of(blocking, streamed)) {
-			assertThat(failure).isExactlyInstanceOf(OpenRouterTruncatedResponseException.class);
-			assertThat(failure.getMessage()).doesNotContain(echo, KEY)
-				.endsWith("item status=[REDACTED], incomplete reason=upstream [REDACTED]");
-		}
+	@ParameterizedTest(name = "{0}, {1}")
+	@MethodSource("echoesOnBothTransports")
+	void responsesIncompleteToolRound(String echo, boolean streamed) {
+		Map<String, Object> result = incompleteToolRound(echo);
+		Throwable failure = streamed
+				? streamFailure(
+						chatModel(streaming(json(Map.of("type", "response.incomplete", "response", result))), true)
+							.stream(PROMPT))
+				: catchThrowable(() -> chatModel(blocking("/responses", json(result)), true).call(PROMPT));
+
+		assertThat(failure).isExactlyInstanceOf(OpenRouterTruncatedResponseException.class);
+		assertThat(failure.getMessage()).doesNotContain(echo, KEY)
+			.endsWith("item status=[REDACTED], incomplete reason=upstream [REDACTED]");
 	}
 
 	@ParameterizedTest
@@ -235,7 +239,7 @@ class InBandErrorRedactionTests {
 					.stream(imagePrompt()));
 
 		assertThat(failure).isExactlyInstanceOf(OpenRouterApiException.class);
-		assertRedacted(failure, echo);
+		assertApiRedacted(failure, echo);
 	}
 
 	@Test
@@ -289,29 +293,30 @@ class InBandErrorRedactionTests {
 				Map.of("provider_code", echo, "raw", "{\"auth\":\"" + echo + "\"}", "nested", List.of(echo)));
 	}
 
-	private static void assertRedacted(Throwable failure, String echo) {
+	private static void assertApiRedacted(Throwable failure, String echo) {
+		OpenRouterApiException api = (OpenRouterApiException) failure;
+		OpenRouterErrorDetails details = api.getErrorDetails();
+		assertThat(details).isNotNull();
+		assertNoEcho(failure, echo, details.message(), api.getResponseBody(), details);
+	}
+
+	private static void assertHttpRedacted(Throwable failure, String echo) {
+		OpenRouterHttpException http = (OpenRouterHttpException) failure;
+		OpenRouterErrorDetails details = http.getErrorDetails();
+		assertThat(details).isNotNull();
+		assertNoEcho(failure, echo, details.message(), http.getResponseBody(), details);
+	}
+
+	private static void assertChoiceRedacted(Throwable failure, String echo) {
+		OpenRouterChoiceErrorDetails details = ((OpenRouterChoiceFailure) failure).getErrorDetails();
+		assertThat(details).isNotNull();
+		assertThat(details.partialOutput()).isEqualTo("partial [REDACTED]");
+		assertNoEcho(failure, echo, details.message(), details);
+	}
+
+	private static void assertNoEcho(Throwable failure, String echo, @Nullable String message,
+			@Nullable Object... retained) {
 		assertThat(failure.toString()).doesNotContain(echo, KEY);
-		List<@Nullable Object> retained = new ArrayList<>();
-		@Nullable String message = null;
-		if (failure instanceof OpenRouterHttpException http) {
-			retained.add(http.getResponseBody());
-			retained.add(http.getErrorDetails());
-			OpenRouterErrorDetails details = http.getErrorDetails();
-			message = details != null ? details.message() : null;
-		}
-		if (failure instanceof OpenRouterApiException api) {
-			retained.add(api.getResponseBody());
-			retained.add(api.getErrorDetails());
-			OpenRouterErrorDetails details = api.getErrorDetails();
-			message = details != null ? details.message() : null;
-		}
-		if (failure instanceof OpenRouterChoiceFailure choice) {
-			OpenRouterChoiceErrorDetails details = choice.getErrorDetails();
-			retained.add(details);
-			message = details != null ? details.message() : null;
-			assertThat(details).isNotNull();
-			assertThat(details.partialOutput()).isEqualTo("partial [REDACTED]");
-		}
 		assertThat(message).isEqualTo("upstream rejected [REDACTED]");
 		assertThat(retained).isNotEmpty().allSatisfy(value -> {
 			assertThat(value).isNotNull();

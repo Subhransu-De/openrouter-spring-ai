@@ -2,9 +2,10 @@ package de.subhransu.openrouter.springai.chat.mapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /**
  * Pins the normalization of OpenRouter / OpenAI finish-reason strings to Spring AI's
@@ -21,22 +22,13 @@ class FinishReasonMapperTests {
 	}
 
 	@ParameterizedTest(name = "[{index}] unknown \"{0}\" passes through verbatim")
-	@CsvSource({ "failed", "incomplete", "error", "guardrail_triggered" })
+	@ValueSource(strings = { "failed", "incomplete", "error", "guardrail_triggered", "   " })
+	@NullSource
 	void passesUnknownFinishReasonsThroughVerbatim(String input) {
 		// Unknown provider-specific reasons are surfaced unchanged so callers can react
 		// to
 		// new states without a library upgrade.
 		assertThat(FinishReasonMapper.map(input)).isEqualTo(input);
-	}
-
-	@Test
-	void nullInputPassesThrough() {
-		assertThat(FinishReasonMapper.map(null)).isNull();
-	}
-
-	@Test
-	void blankInputPassesThrough() {
-		assertThat(FinishReasonMapper.map("   ")).isEqualTo("   ");
 	}
 
 }

@@ -1,19 +1,22 @@
 package de.subhransu.openrouter.springai.autoconfigure;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
+import de.subhransu.openrouter.springai.api.OpenRouterApi;
+import de.subhransu.openrouter.springai.api.dto.ContentPart;
+import de.subhransu.openrouter.springai.api.dto.ImagesRequest;
 import de.subhransu.openrouter.springai.image.OpenRouterImageModel;
 import de.subhransu.openrouter.springai.image.OpenRouterImageOptions;
-import io.micrometer.observation.ObservationRegistry;
 import org.junit.jupiter.api.Test;
-import org.springframework.ai.image.ImageModel;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
 import org.springframework.ai.image.ImagePrompt;
-import org.springframework.ai.image.ImageResponse;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.test.util.ReflectionTestUtils;
 
 class OpenRouterImageAutoConfigurationTests {
 
@@ -23,16 +26,47 @@ class OpenRouterImageAutoConfigurationTests {
 			AutoConfigurations.of(OpenRouterApiAutoConfiguration.class, OpenRouterImageAutoConfiguration.class));
 
 	@Test
-	void createsImageModelWhenApiKeyIsConfigured() {
-		this.contextRunner.withPropertyValues(API_KEY_PROPERTY).run(context -> {
-			assertThat(context).hasSingleBean(OpenRouterImageModel.class);
-			assertThat(context).hasSingleBean(ImageModel.class);
-		});
+	void withoutPropertiesTheImageModelSendsNoOptionalFields() {
+		OpenRouterApi api = SyntheticModels.succeedingApi();
+		this.contextRunner.withBean(OpenRouterApi.class, () -> api)
+			.withPropertyValues(API_KEY_PROPERTY, "spring.ai.openrouter.image.model=synthetic/image")
+			.run(context -> {
+				context.getBean(OpenRouterImageModel.class).call(new ImagePrompt("a synthetic prompt"));
+
+				ArgumentCaptor<ImagesRequest> request = ArgumentCaptor.forClass(ImagesRequest.class);
+				verify(api).images(request.capture());
+				ImagesRequest sent = request.getValue();
+				assertThat(sent.model()).isEqualTo("synthetic/image");
+				assertThat(sent)
+					.extracting(ImagesRequest::n, ImagesRequest::aspectRatio, ImagesRequest::resolution,
+							ImagesRequest::quality, ImagesRequest::outputFormat, ImagesRequest::background,
+							ImagesRequest::outputCompression, ImagesRequest::seed, ImagesRequest::size,
+							ImagesRequest::inputReferences, ImagesRequest::provider)
+					.containsOnlyNulls();
+			});
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "width=1024", "height=576" })
+	void aSizeWithOnlyOneDimensionIsRejectedBeforeAnyRequest(String property) {
+		OpenRouterApi api = SyntheticModels.succeedingApi();
+		this.contextRunner.withBean(OpenRouterApi.class, () -> api)
+			.withPropertyValues(API_KEY_PROPERTY, "spring.ai.openrouter.image.model=synthetic/image",
+					"spring.ai.openrouter.image." + property)
+			.run(context -> {
+				OpenRouterImageModel model = context.getBean(OpenRouterImageModel.class);
+
+				assertThatThrownBy(() -> model.call(new ImagePrompt("a synthetic prompt")))
+					.isInstanceOf(IllegalArgumentException.class)
+					.hasMessageContaining("Both width and height must be set");
+				verifyNoInteractions(api);
+			});
 	}
 
 	@Test
-	void bindsImageOptionsFromProperties() {
-		this.contextRunner
+	void boundImagePropertiesBecomeDefaultsAndReachTheRequest() {
+		OpenRouterApi api = SyntheticModels.succeedingApi();
+		this.contextRunner.withBean(OpenRouterApi.class, () -> api)
 			.withPropertyValues(API_KEY_PROPERTY, "spring.ai.openrouter.image.model=bytedance-seed/seedream-4.5",
 					"spring.ai.openrouter.image.n=2", "spring.ai.openrouter.image.aspect-ratio=16:9",
 					"spring.ai.openrouter.image.resolution=2K", "spring.ai.openrouter.image.quality=high",
@@ -44,8 +78,7 @@ class OpenRouterImageAutoConfigurationTests {
 					"spring.ai.openrouter.image.provider-options.style=natural")
 			.run(context -> {
 				OpenRouterImageModel imageModel = context.getBean(OpenRouterImageModel.class);
-				OpenRouterImageOptions options = (OpenRouterImageOptions) ReflectionTestUtils.getField(imageModel,
-						"defaultOptions");
+				OpenRouterImageOptions options = imageModel.getOptions();
 				assertThat(options.getModel()).isEqualTo("bytedance-seed/seedream-4.5");
 				assertThat(options.getN()).isEqualTo(2);
 				assertThat(options.getAspectRatio()).isEqualTo("16:9");
@@ -59,60 +92,24 @@ class OpenRouterImageAutoConfigurationTests {
 				assertThat(options.getHeight()).isEqualTo(576);
 				assertThat(options.getInputReferences()).containsExactly("https://example.com/input.png");
 				assertThat(options.getProviderOptions()).containsEntry("style", "natural");
+
+				imageModel.call(new ImagePrompt("a synthetic prompt"));
+				ArgumentCaptor<ImagesRequest> request = ArgumentCaptor.forClass(ImagesRequest.class);
+				verify(api).images(request.capture());
+				ImagesRequest sent = request.getValue();
+				assertThat(sent.model()).isEqualTo("bytedance-seed/seedream-4.5");
+				assertThat(sent.n()).isEqualTo(2);
+				assertThat(sent.aspectRatio()).isEqualTo("16:9");
+				assertThat(sent.resolution()).isEqualTo("2K");
+				assertThat(sent.quality()).isEqualTo("high");
+				assertThat(sent.outputFormat()).isEqualTo("webp");
+				assertThat(sent.background()).isEqualTo("transparent");
+				assertThat(sent.outputCompression()).isEqualTo(80);
+				assertThat(sent.seed()).isEqualTo(42);
+				assertThat(sent.size()).isEqualTo("1024x576");
+				assertThat(sent.inputReferences()).containsExactly(ContentPart.image("https://example.com/input.png"));
+				assertThat(sent.provider()).containsEntry("style", "natural");
 			});
-	}
-
-	@Test
-	void disablesImageModelWhenAnotherProviderIsSelected() {
-		this.contextRunner.withPropertyValues(API_KEY_PROPERTY, "spring.ai.model.image=other")
-			.run(context -> assertThat(context).doesNotHaveBean(OpenRouterImageModel.class));
-	}
-
-	@Test
-	void backsOffWhenUserDefinesOwnImageModel() {
-		this.contextRunner.withUserConfiguration(CustomImageModelConfiguration.class)
-			.withPropertyValues(API_KEY_PROPERTY)
-			.run(context -> {
-				assertThat(context).doesNotHaveBean(OpenRouterImageModel.class);
-				assertThat(context).hasSingleBean(ImageModel.class);
-			});
-	}
-
-	@Test
-	void injectsUserDefinedObservationRegistryIntoImageModel() {
-		this.contextRunner.withUserConfiguration(ObservationRegistryConfiguration.class)
-			.withPropertyValues(API_KEY_PROPERTY)
-			.run(context -> {
-				OpenRouterImageModel imageModel = context.getBean(OpenRouterImageModel.class);
-				assertThat(ReflectionTestUtils.getField(imageModel, "observationRegistry"))
-					.isSameAs(context.getBean(ObservationRegistry.class));
-			});
-	}
-
-	@Configuration(proxyBeanMethods = false)
-	static class CustomImageModelConfiguration {
-
-		@Bean
-		ImageModel customImageModel() {
-			return new ImageModel() {
-
-				@Override
-				public ImageResponse call(ImagePrompt prompt) {
-					throw new UnsupportedOperationException();
-				}
-			};
-		}
-
-	}
-
-	@Configuration(proxyBeanMethods = false)
-	static class ObservationRegistryConfiguration {
-
-		@Bean
-		ObservationRegistry observationRegistry() {
-			return ObservationRegistry.create();
-		}
-
 	}
 
 }

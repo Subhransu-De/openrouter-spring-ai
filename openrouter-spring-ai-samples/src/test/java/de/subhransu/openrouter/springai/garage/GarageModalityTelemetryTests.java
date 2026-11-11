@@ -1,6 +1,7 @@
 package de.subhransu.openrouter.springai.garage;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -17,16 +18,14 @@ import de.subhransu.openrouter.springai.garage.evidence.GarageEvidence;
 import de.subhransu.openrouter.springai.garage.evidence.GarageTelemetry;
 import de.subhransu.openrouter.springai.image.OpenRouterImageModel;
 import de.subhransu.openrouter.springai.image.OpenRouterImageOptions;
-import io.micrometer.core.instrument.observation.DefaultMeterObservationHandler;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationRegistry;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.ai.embedding.EmbeddingRequest;
 import org.springframework.ai.image.ImagePrompt;
 import org.springframework.core.retry.RetryTemplate;
@@ -40,15 +39,15 @@ class GarageModalityTelemetryTests {
   private static final String PRIVATE = "synthetic-private-payload";
   private static final String SCENE = "modality-bays";
   private final GarageEvidence evidence = new GarageEvidence();
-  private final SimpleMeterRegistry meters = new SimpleMeterRegistry();
-  private final GarageTelemetry telemetry = new GarageTelemetry(this.meters, this.evidence);
-  private final ObservationRegistry registry = ObservationRegistry.create();
+  private final GarageTelemetryFixture fixture = new GarageTelemetryFixture(this.evidence);
+  private final SimpleMeterRegistry meters = this.fixture.meters();
+  private final GarageTelemetry telemetry = this.fixture.telemetry();
+  private final ObservationRegistry registry = this.fixture.observations();
   private final OpenRouterApi api = mock(OpenRouterApi.class);
 
-  GarageModalityTelemetryTests() {
-    this.registry.observationConfig()
-        .observationHandler(new DefaultMeterObservationHandler(this.meters))
-        .observationHandler(this.telemetry);
+  @AfterEach
+  void closeFixture() {
+    this.fixture.close();
   }
 
   @Test
@@ -71,33 +70,44 @@ class GarageModalityTelemetryTests {
     assertThat(((Map<?, ?>) completed(embeddings).get("usage")).get("totalTokens")).isEqualTo(3);
     assertThat(completed(embeddings).get("error")).isEqualTo(Map.of());
     assertThat(completed(images).get("error")).isEqualTo(Map.of());
-    assertThat(this.evidence.recordedCostUsd()).isEqualTo(0.02);
+    assertThat(this.evidence.recordedCostUsd()).isCloseTo(0.02, within(1e-12));
     assertThat(this.meters.find("gen_ai.client.operation").timers()).hasSize(2)
         .allSatisfy(timer -> assertThat(timer.count()).isEqualTo(1));
     assertSanitized();
   }
 
-  @ParameterizedTest
-  @ValueSource(strings = {"embedding", "image", "image-stream"})
-  void failedCallsCompleteAndDoNotLeakErrorPayloads(String modality) {
+  @Test
+  void aFailedEmbeddingCallCompletesAndDoesNotLeakItsErrorPayload() {
     IllegalStateException failure = new IllegalStateException(PRIVATE);
     when(this.api.embeddings(any())).thenThrow(failure);
+
+    assertFailureIsCompletedAndSanitized(failure, "embedding", () -> embeddingModel().call(embeddingRequest()));
+  }
+
+  @Test
+  void aFailedImageCallCompletesAndDoesNotLeakItsErrorPayload() {
+    IllegalStateException failure = new IllegalStateException(PRIVATE);
     when(this.api.images(any())).thenThrow(failure);
+
+    assertFailureIsCompletedAndSanitized(failure, "image", () -> imageModel().call(imagePrompt()));
+  }
+
+  @Test
+  void aFailedImageStreamCompletesAndDoesNotLeakItsErrorPayload() {
+    IllegalStateException failure = new IllegalStateException(PRIVATE);
     when(this.api.imagesStream(any())).thenReturn(Flux.error(failure));
+
+    assertFailureIsCompletedAndSanitized(failure, "image",
+        () -> imageModel().stream(imagePrompt()).collectList().block(Duration.ofSeconds(2)));
+  }
+
+  private void assertFailureIsCompletedAndSanitized(IllegalStateException failure, String modality,
+      Supplier<Object> call) {
     String operation = operation();
 
-    assertThatThrownBy(() -> this.telemetry.observeOperation(operation, SCENE, () -> {
-      if ("embedding".equals(modality)) {
-        return embeddingModel().call(embeddingRequest());
-      }
-      if ("image".equals(modality)) {
-        return imageModel().call(imagePrompt());
-      }
-      return imageModel().stream(imagePrompt()).collectList().block(Duration.ofSeconds(2));
-    })).isSameAs(failure);
+    assertThatThrownBy(() -> this.telemetry.observeOperation(operation, SCENE, call::get)).isSameAs(failure);
 
-    assertThat(completed(operation)).containsEntry("modality",
-        "embedding".equals(modality) ? "embedding" : "image");
+    assertThat(completed(operation)).containsEntry("modality", modality);
     assertThat(completed(operation).get("error")).isEqualTo(Map.of("type", failure.getClass().getName()));
     assertThat(this.evidence.recordedCostUsd()).isZero();
     assertSanitized();
@@ -124,7 +134,7 @@ class GarageModalityTelemetryTests {
       });
       assertThat(completed(first)).containsEntry("modality", "image").containsEntry("count", 1);
       assertThat(this.telemetry.observationsFor(second)).isEmpty();
-      assertThat(this.evidence.costFor(first)).isEqualTo(0.01);
+      assertThat(this.evidence.costFor(first)).isCloseTo(0.01, within(1e-12));
       assertThat(this.evidence.costFor(second)).isZero();
     } finally {
       subscription.dispose();
@@ -133,22 +143,29 @@ class GarageModalityTelemetryTests {
   }
 
   @Test
-  void cancellationCompletesAndScopeRestoresAfterFailure() {
+  void cancellingAnImageStreamCompletesItsObservationWithoutUsage() {
     when(this.api.imagesStream(any())).thenReturn(Flux.never());
     String operation = operation();
     Disposable subscription = this.telemetry.observeOperation(operation, SCENE,
         () -> imageModel().stream(imagePrompt()).subscribe());
     subscription.dispose();
-    assertThat(completed(operation)).containsEntry("modality", "image").doesNotContainKey("usage");
 
+    assertThat(completed(operation)).containsEntry("modality", "image").doesNotContainKey("usage");
+    assertSanitized();
+  }
+
+  @Test
+  void aFailingScopeDoesNotAttributeLaterCallsToTheOperation() {
+    String operation = operation();
     assertThatThrownBy(() -> this.telemetry.observeOperation(operation, SCENE, () -> {
       throw new IllegalStateException(PRIVATE);
     })).isInstanceOf(IllegalStateException.class);
+
     when(this.api.images(any())).thenReturn(new ImagesResponse(1L, List.of(), null));
     imageModel().call(imagePrompt());
-    assertThat(this.telemetry.observationsFor(operation)).hasSize(1);
-    assertThat(this.telemetry.observationSnapshot()).hasSize(2);
-    assertThat(this.telemetry.supportsContext(new Observation.Context())).isFalse();
+
+    assertThat(this.telemetry.observationsFor(operation)).isEmpty();
+    assertThat(this.telemetry.observationSnapshot()).hasSize(1);
   }
 
   private Map<String, Object> completed(String operation) {

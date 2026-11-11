@@ -8,6 +8,9 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -42,6 +45,9 @@ abstract class MockedGarageIntegrationTest {
 
   @Autowired MockMvcTester mvc;
 
+  /** Runs this test started, so a failing test cannot leave one active for the next test. */
+  private final List<String> started = new ArrayList<>();
+
   @DynamicPropertySource
   static void mockOpenRouter(DynamicPropertyRegistry registry) {
     registry.add("spring.ai.openrouter.base-url", OpenRouterMock::baseUrl);
@@ -54,18 +60,39 @@ abstract class MockedGarageIntegrationTest {
     OpenRouterMock.reset();
   }
 
+  /**
+   * The Garage runs one run at a time in a singleton shared by every test in the cached
+   * context. Wait for each run this test started, whether the test passed or failed, so the
+   * next test never meets a 409 from a leftover run.
+   */
+  @AfterEach
+  void leaveNoActiveRun() {
+    this.started.forEach(this::awaitFinished);
+    this.started.clear();
+  }
+
   String start(String requestJson) {
-    MvcTestResult started = this.mvc.post().uri("/api/runs")
-        .contentType(MediaType.APPLICATION_JSON).content(requestJson).exchange();
-    assertThat(started).as(requestJson).hasStatus(HttpStatus.ACCEPTED);
-    return started.getResponse().getHeader("Location");
+    return accepted("/api/runs", requestJson);
   }
 
   String startSweep(String requestJson) {
-    MvcTestResult started = this.mvc.post().uri("/api/sweeps")
+    return accepted("/api/sweeps", requestJson);
+  }
+
+  /** Posts a request and tracks the run it starts, if any, for {@link #leaveNoActiveRun()}. */
+  MvcTestResult post(String uri, String requestJson) {
+    MvcTestResult result = this.mvc.post().uri(uri)
         .contentType(MediaType.APPLICATION_JSON).content(requestJson).exchange();
-    assertThat(started).as(requestJson).hasStatus(HttpStatus.ACCEPTED);
-    return started.getResponse().getHeader("Location");
+    if (result.getResponse().getStatus() == HttpStatus.ACCEPTED.value()) {
+      this.started.add(result.getResponse().getHeader("Location"));
+    }
+    return result;
+  }
+
+  private String accepted(String uri, String requestJson) {
+    MvcTestResult result = post(uri, requestJson);
+    assertThat(result).as(requestJson).hasStatus(HttpStatus.ACCEPTED);
+    return result.getResponse().getHeader("Location");
   }
 
   JsonNode run(String location) {

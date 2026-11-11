@@ -20,8 +20,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.HttpHeaders;
@@ -60,32 +63,23 @@ class OpenRouterApiMapperTests {
 
 	@ParameterizedTest
 	@EnumSource(Path.class)
-	void suppliedMapperEncodesAndDecodesEveryEndpoint(Path path) {
-		var transport = new Transport(path, false);
-		ObjectMapper mapper = customizedMapper();
-		String result = invoke(path, transport.api(mapper), request(path, false));
-		assertThat(result).isEqualTo("decoded");
-		assertThat(new ObjectMapper().readTree(transport.body.get()).path("model").stringValue()).isEqualTo("encoded");
-		assertThat(transport.headers.get().getFirst("HTTP-Referer")).isEqualTo("https://app.invalid");
-		assertThat(transport.headers.get().getFirst("X-OpenRouter-Title")).isEqualTo("synthetic-app");
-		assertThat(transport.headers.get().getFirst("X-OpenRouter-Categories")).isEqualTo("synthetic");
-	}
-
-	@ParameterizedTest
-	@EnumSource(Path.class)
-	void suppliedMapperOverridesBuilderJsonConvertersAndCodecs(Path path) {
+	void suppliedMapperEncodesAndDecodesEveryEndpointAndOverridesBuilderJsonConvertersAndCodecs(Path path) {
 		var transport = new Transport(path, false);
 		transport.customizeBuilderJson();
 		String result = invoke(path, transport.api(customizedMapper()), request(path, false));
 		assertThat(new ObjectMapper().readTree(transport.body.get()).path("model").stringValue()).isEqualTo("encoded");
 		assertThat(result).isEqualTo("decoded");
 		assertThat(transport.headers.get().getContentType()).isEqualTo(MediaType.APPLICATION_JSON);
+		assertThat(transport.headers.get().getFirst("HTTP-Referer")).isEqualTo("https://app.invalid");
 		assertThat(transport.headers.get().getFirst("X-OpenRouter-Title")).isEqualTo("synthetic-app");
+		assertThat(transport.headers.get().getFirst("X-OpenRouter-Categories")).isEqualTo("synthetic");
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "application/json", "application/vnd.synthetic+json", "application/x-ndjson" })
 	void suppliedMapperOverridesBuilderDecoderForImageFallback(String contentType) {
+		var defaults = new Transport(Path.IMAGES_JSON, false, MediaType.parseMediaType(contentType));
+		assertThat(invoke(Path.IMAGES_JSON, defaults.api(null), request(Path.IMAGES_JSON, false))).isEqualTo("wire");
 		var transport = new Transport(Path.IMAGES_JSON, false, MediaType.parseMediaType(contentType));
 		transport.customizeBuilderJson();
 		StepVerifier
@@ -101,22 +95,25 @@ class OpenRouterApiMapperTests {
 		transport.customizeBuilderJson();
 		String result = invoke(path, transport.api(null), request(path, false));
 		assertThat(new ObjectMapper().readTree(transport.body.get()).path("model").stringValue()).isEqualTo("builder");
-		assertThat(result).isEqualTo(path == Path.IMAGES_JSON ? "builder" : "wire");
+		assertThat(result).isEqualTo(path.resultDecodedByTheBuilderCodecs());
 	}
 
-	@ParameterizedTest
-	@ValueSource(strings = { "application/json", "application/vnd.synthetic+json", "application/x-ndjson" })
-	void suppliedMapperKeepsImageFallbackJsonMediaTypes(String contentType) {
-		var defaults = new Transport(Path.IMAGES_JSON, false, MediaType.parseMediaType(contentType));
-		assertThat(invoke(Path.IMAGES_JSON, defaults.api(null), request(Path.IMAGES_JSON, false))).isEqualTo("wire");
-		var transport = new Transport(Path.IMAGES_JSON, false, MediaType.parseMediaType(contentType));
-		assertThat(invoke(Path.IMAGES_JSON, transport.api(customizedMapper()), request(Path.IMAGES_JSON, false)))
-			.isEqualTo("decoded");
+	private static Stream<Arguments> pathsWith(MapperChoice... mappers) {
+		return Arrays.stream(Path.values())
+			.flatMap(path -> Arrays.stream(mappers).map(mapper -> Arguments.of(path, mapper)));
 	}
 
-	@ParameterizedTest
-	@EnumSource(Path.class)
-	void defaultRequestBytesMatchTheHistoricalTransport(Path path) {
+	static Stream<Arguments> historicalTransportCases() {
+		return pathsWith(MapperChoice.BUILDER_DEFAULT, MapperChoice.PLAIN);
+	}
+
+	static Stream<Arguments> serializationFailureCases() {
+		return pathsWith(MapperChoice.BUILDER_DEFAULT, MapperChoice.CUSTOMIZED);
+	}
+
+	@ParameterizedTest(name = "{0} with {1} mapper")
+	@MethodSource("historicalTransportCases")
+	void defaultRequestBytesMatchTheHistoricalTransport(Path path, MapperChoice mapperChoice) {
 		Object request = request(path, false);
 		var legacy = new Transport(path, false);
 		if (path.streaming()) {
@@ -137,24 +134,22 @@ class OpenRouterApiMapperTests {
 				.body(request)
 				.exchange((outgoing, incoming) -> null);
 		}
-		for (ObjectMapper mapper : Arrays.asList(null, new ObjectMapper())) {
-			var transport = new Transport(path, false);
-			invoke(path, transport.api(mapper), request);
-			assertThat(transport.body.get()).as(path + " mapper=" + (mapper != null))
-				.containsExactly(legacy.body.get());
-		}
+		var transport = new Transport(path, false);
+
+		invoke(path, transport.api(mapperChoice.create()), request);
+
+		assertThat(transport.body.get()).containsExactly(legacy.body.get());
 	}
 
-	@ParameterizedTest
-	@EnumSource(Path.class)
-	void serializationFailuresSendNoBytes(Path path) {
-		for (ObjectMapper mapper : Arrays.asList(null, customizedMapper())) {
-			var transport = new Transport(path, true);
-			transport.customizeBuilderJson();
-			assertThatThrownBy(() -> invoke(path, transport.api(mapper), request(path, true)))
-				.hasStackTraceContaining("synthetic serialization failure");
-			assertThat(transport.sentBytes).hasValue(0);
-		}
+	@ParameterizedTest(name = "{0} with {1} mapper")
+	@MethodSource("serializationFailureCases")
+	void serializationFailuresSendNoBytes(Path path, MapperChoice mapperChoice) {
+		var transport = new Transport(path, true);
+		transport.customizeBuilderJson();
+
+		assertThatThrownBy(() -> invoke(path, transport.api(mapperChoice.create()), request(path, true)))
+			.hasStackTraceContaining("synthetic serialization failure");
+		assertThat(transport.sentBytes).hasValue(0);
 	}
 
 	private static ObjectMapper customizedMapper() {
@@ -326,6 +321,14 @@ class OpenRouterApiMapperTests {
 			return ordinal() >= CHAT_STREAM.ordinal();
 		}
 
+		/**
+		 * The image JSON fallback decodes with the builder's codecs even when no mapper
+		 * is supplied; every other endpoint uses the library's own decoding.
+		 */
+		private String resultDecodedByTheBuilderCodecs() {
+			return this == IMAGES_JSON ? "builder" : "wire";
+		}
+
 		private String uri() {
 			return switch (this) {
 				case CHAT, CHAT_STREAM -> "/chat/completions";
@@ -363,6 +366,20 @@ class OpenRouterApiMapperTests {
 			generator.writeStartObject();
 			generator.writeStringProperty("partial", "x".repeat(32768));
 			throw new IllegalStateException("synthetic serialization failure");
+		}
+
+	}
+
+	enum MapperChoice {
+
+		BUILDER_DEFAULT, PLAIN, CUSTOMIZED;
+
+		private ObjectMapper create() {
+			return switch (this) {
+				case BUILDER_DEFAULT -> null;
+				case PLAIN -> new ObjectMapper();
+				case CUSTOMIZED -> customizedMapper();
+			};
 		}
 
 	}

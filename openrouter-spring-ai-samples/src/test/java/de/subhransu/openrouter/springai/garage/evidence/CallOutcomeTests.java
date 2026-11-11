@@ -6,7 +6,12 @@ import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import java.util.List;
 import java.util.concurrent.TimeoutException;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.metadata.ChatGenerationMetadata;
 import org.springframework.ai.chat.metadata.ChatResponseMetadata;
@@ -23,15 +28,17 @@ class CallOutcomeTests {
         ChatResponseMetadata.builder().usage(new DefaultUsage(10, completionTokens)).build());
   }
 
-  @Test
-  void aLengthFinishIsTruncated() {
-    assertThat(CallOutcome.of(reply("LENGTH", 5), null)).isEqualTo("truncated");
+  static Stream<Arguments> truncatedReplies() {
+    var limit = OpenRouterChatOptions.builder().maxCompletionTokens(2048).build();
+    return Stream.of(
+        Arguments.of(Named.of("a LENGTH finish", reply("LENGTH", 5)), null),
+        Arguments.of(Named.of("a STOP that used every allowed token", reply("STOP", 2048)), limit));
   }
 
-  @Test
-  void aStopThatUsedEveryAllowedTokenIsTruncated() {
-    var options = OpenRouterChatOptions.builder().maxCompletionTokens(2048).build();
-    assertThat(CallOutcome.of(reply("STOP", 2048), options)).isEqualTo("truncated");
+  @ParameterizedTest
+  @MethodSource("truncatedReplies")
+  void aReplyCutOffByTheTokenLimitIsTruncated(ChatResponse reply, OpenRouterChatOptions options) {
+    assertThat(CallOutcome.of(reply, options)).isEqualTo("truncated");
   }
 
   @Test

@@ -16,18 +16,28 @@ import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
 import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingModel;
 import de.subhransu.openrouter.springai.image.OpenRouterImageModel;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationHandler;
 import io.micrometer.observation.ObservationRegistry;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.ai.chat.observation.ChatModelMeterObservationHandler;
 import org.springframework.ai.chat.observation.ChatModelObservationConvention;
+import org.springframework.ai.chat.observation.DefaultChatModelObservationConvention;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.embedding.observation.EmbeddingModelMeterObservationHandler;
+import org.springframework.ai.embedding.observation.DefaultEmbeddingModelObservationConvention;
 import org.springframework.ai.embedding.observation.EmbeddingModelObservationConvention;
 import org.springframework.ai.image.ImagePrompt;
+import org.springframework.ai.image.observation.DefaultImageModelObservationConvention;
 import org.springframework.ai.image.observation.ImageModelObservationConvention;
 import org.springframework.ai.image.observation.ImageModelPromptContentObservationHandler;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
+import org.springframework.boot.test.context.assertj.AssertableApplicationContext;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -37,6 +47,7 @@ import org.springframework.context.annotation.Configuration;
  * context uses classpath auto-configuration, just as a consuming Boot application does,
  * and supplies only the external OpenRouter transport boundary.
  */
+@ExtendWith(OutputCaptureExtension.class)
 class OpenRouterObservationAutoConfigurationTests {
 
 	private static final String CHAT_MODEL = "openai/gpt-5.4-mini";
@@ -56,7 +67,7 @@ class OpenRouterObservationAutoConfigurationTests {
 				"spring.ai.openrouter.image.model=" + IMAGE_MODEL, "spring.ai.image.observations.log-prompt=true");
 
 	@Test
-	void starterInstallsHandlersAndRecordsStandardMetersForEveryModelType() {
+	void starterInstallsHandlersAndRecordsStandardMetersForEveryModelType(CapturedOutput output) {
 		this.contextRunner.run(context -> {
 			assertThat(context).hasNotFailed();
 			assertThat(context).hasSingleBean(ObservationRegistry.class);
@@ -65,14 +76,7 @@ class OpenRouterObservationAutoConfigurationTests {
 			assertThat(context).hasSingleBean(EmbeddingModelMeterObservationHandler.class);
 			assertThat(context).hasSingleBean(ImageModelPromptContentObservationHandler.class);
 
-			OpenRouterApi api = context.getBean(OpenRouterApi.class);
-			when(api.chatCompletion(any())).thenReturn(chatResponse());
-			when(api.embeddings(any())).thenReturn(embeddingResponse());
-			when(api.images(any())).thenReturn(imageResponse());
-
-			context.getBean(OpenRouterChatModel.class).call(new Prompt("hello"));
-			context.getBean(OpenRouterEmbeddingModel.class).embed("hello");
-			context.getBean(OpenRouterImageModel.class).call(new ImagePrompt("a red panda"));
+			callEveryModel(context);
 
 			MeterRegistry meters = context.getBean(MeterRegistry.class);
 			assertDurationMeter(meters, CHAT_MODEL);
@@ -83,6 +87,8 @@ class OpenRouterObservationAutoConfigurationTests {
 			assertTokenMeter(meters, CHAT_MODEL, "total", 5.0);
 			assertTokenMeter(meters, EMBEDDING_MODEL, "input", 4.0);
 			assertTokenMeter(meters, EMBEDDING_MODEL, "total", 4.0);
+			// log-prompt=true makes the standard handler write the image prompt.
+			assertThat(output).contains("Image Model Prompt Content").contains("a red panda");
 		});
 	}
 
@@ -94,11 +100,16 @@ class OpenRouterObservationAutoConfigurationTests {
 			assertThat(context.getBean(ChatModelMeterObservationHandler.class))
 				.isSameAs(context.getBean("customChatModelMeterObservationHandler"));
 			assertThat(context).hasSingleBean(EmbeddingModelMeterObservationHandler.class);
-			assertThat(context.getBean(EmbeddingModelMeterObservationHandler.class))
-				.isSameAs(context.getBean("customEmbeddingModelMeterObservationHandler"));
 			assertThat(context).hasSingleBean(ImageModelPromptContentObservationHandler.class);
-			assertThat(context.getBean(ImageModelPromptContentObservationHandler.class))
-				.isSameAs(context.getBean("customImageModelPromptContentObservationHandler"));
+
+			callEveryModel(context);
+
+			// A second, standard handler would count every call twice.
+			MeterRegistry meters = context.getBean(MeterRegistry.class);
+			assertDurationMeter(meters, CHAT_MODEL);
+			assertDurationMeter(meters, EMBEDDING_MODEL);
+			assertTokenMeter(meters, CHAT_MODEL, "total", 5.0);
+			assertTokenMeter(meters, EMBEDDING_MODEL, "total", 4.0);
 		});
 	}
 
@@ -106,13 +117,23 @@ class OpenRouterObservationAutoConfigurationTests {
 	void customObservationConventionsStillOverrideModelDefaults() {
 		this.contextRunner.withUserConfiguration(CustomConventionConfiguration.class).run(context -> {
 			assertThat(context).hasNotFailed();
-			assertThat(context.getBean(OpenRouterChatModel.class)).extracting("observationConvention")
-				.isSameAs(context.getBean(ChatModelObservationConvention.class));
-			assertThat(context.getBean(OpenRouterEmbeddingModel.class)).extracting("observationConvention")
-				.isSameAs(context.getBean(EmbeddingModelObservationConvention.class));
-			assertThat(context.getBean(OpenRouterImageModel.class)).extracting("observationConvention")
-				.isSameAs(context.getBean(ImageModelObservationConvention.class));
+
+			callEveryModel(context);
+
+			assertThat(context.getBean(StartedObservations.class).names()).containsExactlyInAnyOrder(
+					"custom.chat.operation", "custom.embedding.operation", "custom.image.operation");
 		});
+	}
+
+	private static void callEveryModel(AssertableApplicationContext context) {
+		OpenRouterApi api = context.getBean(OpenRouterApi.class);
+		when(api.chatCompletion(any())).thenReturn(chatResponse());
+		when(api.embeddings(any())).thenReturn(embeddingResponse());
+		when(api.images(any())).thenReturn(imageResponse());
+
+		context.getBean(OpenRouterChatModel.class).call(new Prompt("hello"));
+		context.getBean(OpenRouterEmbeddingModel.class).embed("hello");
+		context.getBean(OpenRouterImageModel.class).call(new ImagePrompt("a red panda"));
 	}
 
 	private static void assertDurationMeter(MeterRegistry meters, String model) {
@@ -188,17 +209,60 @@ class OpenRouterObservationAutoConfigurationTests {
 
 		@Bean
 		ChatModelObservationConvention chatModelObservationConvention() {
-			return mock(ChatModelObservationConvention.class);
+			return new DefaultChatModelObservationConvention() {
+				@Override
+				public String getName() {
+					return "custom.chat.operation";
+				}
+			};
 		}
 
 		@Bean
 		EmbeddingModelObservationConvention embeddingModelObservationConvention() {
-			return mock(EmbeddingModelObservationConvention.class);
+			return new DefaultEmbeddingModelObservationConvention() {
+				@Override
+				public String getName() {
+					return "custom.embedding.operation";
+				}
+			};
 		}
 
 		@Bean
 		ImageModelObservationConvention imageModelObservationConvention() {
-			return mock(ImageModelObservationConvention.class);
+			return new DefaultImageModelObservationConvention() {
+				@Override
+				public String getName() {
+					return "custom.image.operation";
+				}
+			};
+		}
+
+		@Bean
+		StartedObservations startedObservations() {
+			return new StartedObservations();
+		}
+
+	}
+
+	/**
+	 * Records the name of every observation that starts, in the context's registry.
+	 */
+	static final class StartedObservations implements ObservationHandler<Observation.Context> {
+
+		private final List<String> names = new CopyOnWriteArrayList<>();
+
+		@Override
+		public boolean supportsContext(Observation.Context context) {
+			return true;
+		}
+
+		@Override
+		public void onStart(Observation.Context context) {
+			this.names.add(context.getName());
+		}
+
+		List<String> names() {
+			return List.copyOf(this.names);
 		}
 
 	}

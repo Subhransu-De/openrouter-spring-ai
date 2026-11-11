@@ -1,5 +1,8 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
+import static de.subhransu.openrouter.springai.chat.mapper.StreamingMapperSupport.chatMapper;
+import static de.subhransu.openrouter.springai.chat.mapper.StreamingMapperSupport.map;
+import static de.subhransu.openrouter.springai.chat.mapper.StreamingMapperSupport.mapFirst;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -20,7 +23,12 @@ import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.ai.chat.model.ChatResponse;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
@@ -36,8 +44,7 @@ class OpenRouterStreamingResponseMapperTests {
 		ChatCompletionChunk chunk = new ObjectMapper().readValue("""
 				{"choices":[{"index":0,"delta":{"content":"text"}},null]}
 				""", ChatCompletionChunk.class);
-		assertThatThrownBy(() -> new OpenRouterStreamingResponseMapper(1, 1).map(chunk))
-			.isInstanceOf(OpenRouterProtocolException.class)
+		assertThatThrownBy(() -> mapFirst(chatMapper(1, 1), chunk)).isInstanceOf(OpenRouterProtocolException.class)
 			.hasMessage("OpenRouter response requires choice");
 	}
 
@@ -46,29 +53,21 @@ class OpenRouterStreamingResponseMapperTests {
 		ChatCompletionChunk chunk = new ObjectMapper().readValue("""
 				{"choices":[null,{"index":1,"error":{"code":"502","message":"synthetic"}}]}
 				""", ChatCompletionChunk.class);
-		assertThatThrownBy(() -> new OpenRouterStreamingResponseMapper(1, 1).map(chunk)).isInstanceOfSatisfying(
+		assertThatThrownBy(() -> mapFirst(chatMapper(1, 1), chunk)).isInstanceOfSatisfying(
 				OpenRouterTransientChoiceException.class,
 				error -> assertThat(error.getErrorDetails().choiceIndex()).isEqualTo(1));
 	}
 
 	@Test
-	void mapsContentDeltaChunk() {
-		ChatCompletionChunk chunk = new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, MODEL, "openai",
-				List.of(new Choice(0, null, new Delta("assistant", "hello", null, null), null, null)), null, null);
-
-		ChatResponse mapped = new OpenRouterStreamingResponseMapper().map(chunk);
-
-		assertThat(mapped.getResult().getOutput().getText()).isEqualTo("hello");
-		assertThat(mapped.getMetadata().getId()).isEqualTo("gen-1");
-	}
-
-	@Test
-	void preservesWireChoiceIndexInGenerationMetadata() {
+	void mapsContentDeltaChunkWithWireChoiceIndex() {
 		ChatCompletionChunk chunk = new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, MODEL, "openai",
 				List.of(new Choice(7, null, new Delta("assistant", "hello", null, null), null, null)), null, null);
 
-		ChatResponse mapped = new OpenRouterStreamingResponseMapper().map(chunk);
+		ChatResponse mapped = mapFirst(chatMapper(), chunk);
 
+		assertThat(mapped.getResult().getOutput().getText()).isEqualTo("hello");
+		assertThat(mapped.getMetadata().getId()).isEqualTo("gen-1");
+		assertThat(mapped.getMetadata().getModel()).isEqualTo(MODEL);
 		assertThat(mapped.getResult().getMetadata().<Integer>get("openrouter.choice_index")).isEqualTo(7);
 	}
 
@@ -84,7 +83,7 @@ class OpenRouterStreamingResponseMapperTests {
 						"tool_calls", "tool_calls")),
 				null, null);
 
-		ChatResponse mapped = new OpenRouterStreamingResponseMapper().map(chunk);
+		ChatResponse mapped = mapFirst(chatMapper(), chunk);
 
 		assertThat(mapped.hasToolCalls()).isTrue();
 		assertThat(mapped.getResult().getOutput().getToolCalls().get(0).id()).isEqualTo("call-9");
@@ -100,8 +99,7 @@ class OpenRouterStreamingResponseMapperTests {
 				new StreamError("server_error",
 						"Provider disconnected unexpectedly\r\nforged\u001B[31m Bearer stream-secret"));
 
-		assertThatThrownBy(() -> new OpenRouterStreamingResponseMapper().map(chunk))
-			.isInstanceOf(OpenRouterApiException.class)
+		assertThatThrownBy(() -> mapFirst(chatMapper(), chunk)).isInstanceOf(OpenRouterApiException.class)
 			.hasMessage("OpenRouter chat completion stream failed")
 			.satisfies(thrown -> {
 				OpenRouterApiException ex = (OpenRouterApiException) thrown;
@@ -120,9 +118,14 @@ class OpenRouterStreamingResponseMapperTests {
 		ChatCompletionChunk chunk = new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, MODEL, "openai", null, null,
 				new StreamError("server_error", null));
 
-		assertThatThrownBy(() -> new OpenRouterStreamingResponseMapper().map(chunk))
-			.isInstanceOf(OpenRouterApiException.class)
-			.hasMessage("OpenRouter chat completion stream failed");
+		assertThatThrownBy(() -> mapFirst(chatMapper(), chunk)).isInstanceOfSatisfying(OpenRouterApiException.class,
+				exception -> {
+					assertThat(exception).hasMessage("OpenRouter chat completion stream failed");
+					assertThat(exception.getErrorDetails().code()).isEqualTo("server_error");
+					assertThat(exception.getErrorDetails().message())
+						.isEqualTo("OpenRouter chat completion stream failed");
+					assertThat(exception.getStatusCode().value()).isEqualTo(500);
+				});
 	}
 
 	@Test
@@ -132,11 +135,11 @@ class OpenRouterStreamingResponseMapperTests {
 				 "error_type":"authentication"}}
 				""", ChatCompletionChunk.class);
 
-		assertThatThrownBy(() -> new OpenRouterStreamingResponseMapper().map(chunk))
-			.isInstanceOfSatisfying(OpenRouterApiException.class, exception -> {
-				assertThat(exception.getCategory()).isEqualTo(OpenRouterErrorCategory.AUTHENTICATION);
-				assertThat(exception.getErrorDetails().message()).isEqualTo("{\"detail\":\"invalid key\"}");
-			});
+		assertThatThrownBy(() -> mapFirst(chatMapper(), chunk)).isInstanceOfSatisfying(OpenRouterApiException.class,
+				exception -> {
+					assertThat(exception.getCategory()).isEqualTo(OpenRouterErrorCategory.AUTHENTICATION);
+					assertThat(exception.getErrorDetails().message()).isEqualTo("{\"detail\":\"invalid key\"}");
+				});
 	}
 
 	@Test
@@ -146,12 +149,12 @@ class OpenRouterStreamingResponseMapperTests {
 				 "error_type":{"kind":"authentication"}}}
 				""", ChatCompletionChunk.class);
 
-		assertThatThrownBy(() -> new OpenRouterStreamingResponseMapper().map(chunk))
-			.isInstanceOfSatisfying(OpenRouterApiException.class, exception -> {
-				assertThat(exception.getCategory()).isEqualTo(OpenRouterErrorCategory.UNKNOWN);
-				assertThat(exception.getErrorDetails().code()).isEqualTo("invalid_api_key");
-				assertThat(exception.getErrorDetails().errorType()).isEqualTo("{\"kind\":\"authentication\"}");
-			});
+		assertThatThrownBy(() -> mapFirst(chatMapper(), chunk)).isInstanceOfSatisfying(OpenRouterApiException.class,
+				exception -> {
+					assertThat(exception.getCategory()).isEqualTo(OpenRouterErrorCategory.UNKNOWN);
+					assertThat(exception.getErrorDetails().code()).isEqualTo("invalid_api_key");
+					assertThat(exception.getErrorDetails().errorType()).isEqualTo("{\"kind\":\"authentication\"}");
+				});
 	}
 
 	@Test
@@ -162,7 +165,7 @@ class OpenRouterStreamingResponseMapperTests {
 			.of(new Choice(0, null, new Delta("assistant", "partial output", null, null), "error", "error", error)),
 				null, null);
 
-		assertThatThrownBy(() -> new OpenRouterStreamingResponseMapper().map(chunk))
+		assertThatThrownBy(() -> mapFirst(chatMapper(), chunk))
 			.isInstanceOfSatisfying(OpenRouterTransientChoiceException.class, exception -> {
 				assertThat(exception.getErrorDetails().choiceIndex()).isZero();
 				assertThat(exception.getErrorDetails().partialOutput()).isEqualTo("partial output");
@@ -170,103 +173,84 @@ class OpenRouterStreamingResponseMapperTests {
 			});
 	}
 
-	@Test
-	void includesEarlierStreamedTextInChoiceErrorDiagnostics() {
-		ChatCompletionChunk partial = new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, MODEL, "openai",
-				List.of(new Choice(0, null, new Delta("assistant", "partial output", null, null), null, null)), null,
-				null);
-		ChoiceError error = new ChoiceError("502", "Provider disconnected",
-				Map.of("error_type", "provider_unavailable"));
-		ChatCompletionChunk failed = new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, MODEL, "openai",
-				List.of(new Choice(0, null, new Delta(null, "", null, null), "error", "error", error)), null, null);
+	static Stream<Arguments> truncationCases() {
+		String x498 = "x".repeat(498);
+		String x499 = "x".repeat(499);
+		String x500 = "x".repeat(500);
+		return Stream.of(Arguments.of(Named.of("whitespace only", ""), "", null, false),
+				Arguments.of(Named.of("whitespace-only prefix then text", ""), " \t\nnext", "next", false),
+				Arguments.of(Named.of("498 chars", x498), "", x498, false),
+				Arguments.of(Named.of("499 chars", x499), "", x499, false),
+				Arguments.of(Named.of("exactly 500 chars", x500), "", x500, false),
+				Arguments.of(Named.of("501 chars", "x".repeat(501)), "", x500 + "...", true),
+				Arguments.of(Named.of("600 chars", "x".repeat(600)), "", x500 + "...", true),
+				Arguments.of(Named.of("cut inside the failing text", x498), " \t\nnext", x498 + " n...", true),
+				Arguments.of(Named.of("cut right after a space", x499), "\u00e9\uD83D\uDE00", x499 + " ...", true),
+				Arguments.of(Named.of("cut before a surrogate pair", x498), "\u00e9\uD83D\uDE00", x498 + " \u00e9...",
+						true),
+				Arguments.of(Named.of("4096 chars in each chunk", "x".repeat(4096)), "x".repeat(4096), x500 + "...",
+						true));
+	}
 
-		StepVerifier.create(new OpenRouterStreamingResponseMapper().map(Flux.just(partial, failed)))
-			.assertNext(response -> assertThat(response.getResult().getOutput().getText()).isEqualTo("partial output"))
-			.expectErrorSatisfies(thrown -> {
-				assertThat(thrown).isInstanceOf(OpenRouterTransientChoiceException.class);
-				OpenRouterTransientChoiceException exception = (OpenRouterTransientChoiceException) thrown;
-				assertThat(exception.getErrorDetails().partialOutput()).isEqualTo("partial output");
-			})
+	@ParameterizedTest
+	@MethodSource("truncationCases")
+	void earlierStreamedTextShapesBoundedChoiceErrorDiagnostics(String prefix, String tail, String expectedPartial,
+			boolean expectedTruncated) {
+		String earlier = prefix + " \t\r\n";
+		var first = new ChatCompletionChunk(null, null, null, null, null,
+				List.of(new Choice(0, null, new Delta(null, earlier, null, null), null, null)), null, null);
+		var failure = new ChatCompletionChunk(null, null, null, null, null, List.of(new Choice(0, null,
+				new Delta(null, tail, null, null), "error", null, new ChoiceError("502", "synthetic", Map.of()))), null,
+				null);
+
+		StepVerifier.create(map(chatMapper(), Flux.just(first, failure)))
+			.assertNext(response -> assertThat(response.getResult().getOutput().getText()).isEqualTo(earlier))
+			.expectErrorSatisfies(error -> assertThat(error)
+				.isInstanceOfSatisfying(OpenRouterTransientChoiceException.class, exception -> {
+					assertThat(exception.getErrorDetails().partialOutput()).isEqualTo(expectedPartial);
+					assertThat(exception.getErrorDetails().partialOutputTruncated()).isEqualTo(expectedTruncated);
+				}))
 			.verify();
 	}
 
-	@Test
-	void boundsAccumulatedStreamedTextInChoiceErrorDiagnostics() {
-		String partialOutput = "x".repeat(600);
-		ChatCompletionChunk partial = new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, MODEL, "openai",
-				List.of(new Choice(0, null, new Delta("assistant", partialOutput, null, null), null, null)), null,
-				null);
-		ChoiceError error = new ChoiceError("503", "Provider disconnected",
-				Map.of("error_type", "provider_unavailable"));
-		ChatCompletionChunk failed = new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, MODEL, "openai",
-				List.of(new Choice(0, null, new Delta(null, "", null, null), "error", "error", error)), null, null);
+	private static final String REDACTION_KEY = "K".repeat(9);
 
-		StepVerifier.create(new OpenRouterStreamingResponseMapper().map(Flux.just(partial, failed)))
-			.expectNextCount(1)
-			.expectErrorSatisfies(thrown -> {
-				assertThat(thrown).isInstanceOf(OpenRouterTransientChoiceException.class);
-				OpenRouterTransientChoiceException exception = (OpenRouterTransientChoiceException) thrown;
-				assertThat(exception.getErrorDetails().partialOutput()).hasSize(503).endsWith("...");
-				assertThat(exception.getErrorDetails().partialOutputTruncated()).isTrue();
-			})
-			.verify();
-	}
-
-	@Test
-	void truncationPreservesWhitespaceAndSplitBoundaryDiagnostics() {
-		for (int size : List.of(0, 498, 499, 500, 501, 600, 4096)) {
-			for (String tail : List.of("", " \t\n", " \t\nnext", "é😀", "x".repeat(4096))) {
-				String earlier = "x".repeat(size) + " \t\r\n";
-				String normalized = (earlier + tail).replaceAll("\\s+", " ").trim();
-				boolean truncated = normalized.length() > OpenRouterChoiceErrorExceptionFactory.MAX_DIAGNOSTIC_LENGTH;
-				String expected = truncated ? normalized.substring(0, 500) + "..." : normalized;
-				var first = new ChatCompletionChunk(null, null, null, null, null,
-						List.of(new Choice(0, null, new Delta(null, earlier, null, null), null, null)), null, null);
-				var failure = new ChatCompletionChunk(null, null, null, null, null,
-						List.of(new Choice(0, null, new Delta(null, tail, null, null), "error", null,
-								new ChoiceError("502", "synthetic", Map.of()))),
-						null, null);
-				StepVerifier.create(new OpenRouterStreamingResponseMapper().map(Flux.just(first, failure)))
-					.expectNextCount(1)
-					.expectErrorSatisfies(error -> assertThat(error)
-						.isInstanceOfSatisfying(OpenRouterTransientChoiceException.class, exception -> {
-							assertThat(exception.getErrorDetails().partialOutput())
-								.isEqualTo(expected.isEmpty() ? null : expected);
-							assertThat(exception.getErrorDetails().partialOutputTruncated()).isEqualTo(truncated);
-						}))
-					.verify();
-			}
-		}
-	}
-
-	@Test
-	void streamPartialOutputMatchesBlockingCutsAfterRedaction() {
+	static Stream<Arguments> redactedCutCases() {
 		// A nine-character key grows by one into "[REDACTED]".
-		String key = "K".repeat(9);
+		return Stream.of(
+				Arguments.of(
+						Named.of("redaction expands the text past the cut",
+								"a".repeat(489) + REDACTION_KEY + "\uD83D\uDE00" + "z".repeat(20)),
+						"a".repeat(489) + "[REDACTED]...", true),
+				Arguments.of(
+						Named.of("redacted key at the start",
+								REDACTION_KEY + " " + "a".repeat(489) + " " + "z".repeat(20)),
+						"[REDACTED] " + "a".repeat(489) + "...", true),
+				Arguments.of(Named.of("cut lands inside a surrogate pair",
+						"a".repeat(499) + "\uD83D\uDE00" + "z".repeat(20)), "a".repeat(499) + "...", true),
+				Arguments.of(Named.of("leading Unicode whitespace is dropped", "\u2003".repeat(500) + "text"), "text",
+						false));
+	}
+
+	@ParameterizedTest
+	@MethodSource("redactedCutCases")
+	void streamPartialOutputMatchesBlockingCutsAfterRedaction(String content, String expectedPartial,
+			boolean expectedTruncated) {
 		OpenRouterStreamingResponseMapper mapper = new OpenRouterStreamingResponseMapper(
 				OpenRouterStreamingResponseMapper.DEFAULT_MAX_STATE_BYTES,
 				OpenRouterStreamingResponseMapper.DEFAULT_MAX_STATE_CHOICES,
-				OpenRouterDiagnosticSanitizer.forApiKey(key));
-		String expanded = "a".repeat(489) + key + "\uD83D\uDE00" + "z".repeat(20);
-		String exact = key + " " + "a".repeat(489) + " " + "z".repeat(20);
-		String split = "a".repeat(499) + "\uD83D\uDE00" + "z".repeat(20);
-		String blank = "\u2003".repeat(500) + "text";
-		Map<String, String> expected = Map.of(expanded, "a".repeat(489) + "[REDACTED]...", exact,
-				"[REDACTED] " + "a".repeat(489) + "...", split, "a".repeat(499) + "...", blank, "text");
-		for (String content : List.of(expanded, exact, split, blank)) {
-			var failure = new ChatCompletionChunk(null, null, null, null, null,
-					List.of(new Choice(0, null, new Delta(null, content, null, null), "error", null,
-							new ChoiceError("502", "synthetic", Map.of()))),
-					null, null);
-			StepVerifier.create(mapper.map(Flux.just(failure)))
-				.expectErrorSatisfies(error -> assertThat(error)
-					.isInstanceOfSatisfying(OpenRouterTransientChoiceException.class, exception -> {
-						assertThat(exception.getErrorDetails().partialOutput()).isEqualTo(expected.get(content));
-						assertThat(exception.getErrorDetails().partialOutputTruncated())
-							.isEqualTo(!content.equals(blank));
-					}))
-				.verify();
-		}
+				OpenRouterDiagnosticSanitizer.forApiKey(REDACTION_KEY));
+		var failure = new ChatCompletionChunk(null, null, null, null, null, List.of(new Choice(0, null,
+				new Delta(null, content, null, null), "error", null, new ChoiceError("502", "synthetic", Map.of()))),
+				null, null);
+
+		StepVerifier.create(map(mapper, Flux.just(failure)))
+			.expectErrorSatisfies(error -> assertThat(error)
+				.isInstanceOfSatisfying(OpenRouterTransientChoiceException.class, exception -> {
+					assertThat(exception.getErrorDetails().partialOutput()).isEqualTo(expectedPartial);
+					assertThat(exception.getErrorDetails().partialOutputTruncated()).isEqualTo(expectedTruncated);
+				}))
+			.verify();
 	}
 
 	@Test
@@ -278,43 +262,59 @@ class OpenRouterStreamingResponseMapperTests {
 		ChatCompletionChunk chunk = new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, MODEL, "openai",
 				List.of(successful, failed), null, null);
 
-		assertThatThrownBy(() -> new OpenRouterStreamingResponseMapper().map(chunk)).isInstanceOfSatisfying(
+		assertThatThrownBy(() -> mapFirst(chatMapper(), chunk)).isInstanceOfSatisfying(
 				OpenRouterNonTransientChoiceException.class,
 				exception -> assertThat(exception.getErrorDetails().choiceIndex()).isEqualTo(1));
 	}
 
 	@Test
-	void nullDeltaProducesEmptyText() {
+	void nullDeltaProducesEmptyTextAndNoFinishReason() {
 		ChatCompletionChunk chunk = new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, MODEL, "openai",
 				List.of(new Choice(0, null, null, null, null)), null, null);
 
-		ChatResponse mapped = new OpenRouterStreamingResponseMapper().map(chunk);
+		ChatResponse mapped = mapFirst(chatMapper(), chunk);
 
+		assertThat(mapped.getResults()).hasSize(1);
 		assertThat(mapped.getResult().getOutput().getText()).isEmpty();
+		assertThat(mapped.getResult().getOutput().getToolCalls()).isEmpty();
+		assertThat(mapped.getResult().getMetadata().getFinishReason()).isNull();
 	}
 
 	@Test
-	void surfacesReasoningDeltaUnderReasoningMetadataKey() {
-		ChatCompletionChunk chunk = new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, "openai/gpt-oss-120b",
-				"openai", List.of(new Choice(0, null, new Delta("assistant", "", "thinking aloud", null), null, null)),
-				null, null);
+	void surfacesReasoningDeltasPerChunkAndAccumulatesThemOnTheMessage() {
+		ChatCompletionChunk first = new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, "openai/gpt-oss-120b",
+				"openai", List.of(new Choice(0, null, new Delta("assistant", "", "thinking ", null), null, null)), null,
+				null);
+		ChatCompletionChunk second = new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, "openai/gpt-oss-120b",
+				"openai", List.of(new Choice(0, null, new Delta("assistant", "", "aloud", null), null, null)), null,
+				null);
 
-		ChatResponse mapped = new OpenRouterStreamingResponseMapper().map(chunk);
-
-		assertThat(mapped.getResult().getMetadata().<String>get("openrouter.reasoning")).isEqualTo("thinking aloud");
+		StepVerifier.create(map(chatMapper(), Flux.just(first, second))).assertNext(response -> {
+			assertThat(response.getResult().getMetadata().<String>get("openrouter.reasoning")).isEqualTo("thinking ");
+			assertThat(response.getResult().getOutput().getMetadata()).containsEntry(ReasoningMetadata.REASONING,
+					"thinking ");
+		}).assertNext(response -> {
+			assertThat(response.getResult().getMetadata().<String>get("openrouter.reasoning")).isEqualTo("aloud");
+			assertThat(response.getResult().getOutput().getMetadata()).containsEntry(ReasoningMetadata.REASONING,
+					"thinking aloud");
+		}).verifyComplete();
 	}
 
 	@Test
 	void terminalChunkWithoutTextDeltaDoesNotRepeatPriorText() {
-		// A finish_reason-only terminal chunk carries an empty delta; mapping it must not
-		// re-emit any earlier streamed content.
+		ChatCompletionChunk earlier = new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, MODEL, "openai",
+				List.of(new Choice(0, null, new Delta("assistant", "prior text", null, null), null, null)), null, null);
+		// A finish_reason-only terminal chunk carries an empty delta.
 		ChatCompletionChunk terminal = new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, MODEL, "openai",
 				List.of(new Choice(0, null, new Delta("assistant", null, null, null), "stop", "stop")), null, null);
 
-		ChatResponse mapped = new OpenRouterStreamingResponseMapper().map(terminal);
-
-		assertThat(mapped.getResult().getOutput().getText()).isEmpty();
-		assertThat(mapped.getResult().getMetadata().getFinishReason()).isEqualTo("STOP");
+		StepVerifier.create(map(chatMapper(), Flux.just(earlier, terminal)))
+			.assertNext(response -> assertThat(response.getResult().getOutput().getText()).isEqualTo("prior text"))
+			.assertNext(response -> {
+				assertThat(response.getResult().getOutput().getText()).isEmpty();
+				assertThat(response.getResult().getMetadata().getFinishReason()).isEqualTo("STOP");
+			})
+			.verifyComplete();
 	}
 
 	@Test
@@ -322,7 +322,7 @@ class OpenRouterStreamingResponseMapperTests {
 		ChatCompletionChunk usageChunk = new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, MODEL, "openai",
 				List.of(), new Usage(5, 2, 7, null, null, null, null, null, null), null);
 
-		ChatResponse mapped = new OpenRouterStreamingResponseMapper().map(usageChunk);
+		ChatResponse mapped = mapFirst(chatMapper(), usageChunk);
 
 		assertThat(mapped.getResults()).isEmpty();
 		assertThat(mapped.getMetadata().getUsage().getTotalTokens()).isEqualTo(7);

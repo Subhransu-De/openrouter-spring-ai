@@ -33,6 +33,7 @@ class OpenRouterExtensionPropertiesTests {
 					.valueToTree(new OpenRouterChatRequestMapper(json).map(List.of(), options, false, List.of()));
 				assertThat(wire.get("logprobs").isBoolean()).isTrue();
 				assertThat(wire.get("logprobs").asBoolean()).isFalse();
+				assertThat(wire.get("prompt_cache_key").asString()).isEqualTo("synthetic");
 				assertThat(wire.get("provider").get("zdr").asBoolean()).isFalse();
 				assertThat(wire.get("provider").get("sort").get("by").asString()).isEqualTo("latency");
 				assertThat(wire.get("provider").get("only").get(0).asString()).isEqualTo("synthetic-provider");
@@ -45,7 +46,7 @@ class OpenRouterExtensionPropertiesTests {
 	}
 
 	@Test
-	void transformsBindFromIndexedAndEmptyProperties() {
+	void transformsBindFromIndexedProperties() {
 		var json = new ObjectMapper();
 		this.runner.withPropertyValues("spring.ai.openrouter.chat.extra-body.[transforms][0]=middle-out")
 			.run(context -> {
@@ -55,6 +56,11 @@ class OpenRouterExtensionPropertiesTests {
 				assertThat(wire.get("transforms").isArray()).isTrue();
 				assertThat(wire.get("transforms").get(0).asString()).isEqualTo("middle-out");
 			});
+	}
+
+	@Test
+	void transformsBindFromAnEmptyProperty() {
+		var json = new ObjectMapper();
 		this.runner.withPropertyValues("spring.ai.openrouter.chat.extra-body.[transforms]=").run(context -> {
 			var options = context.getBean(OpenRouterChatProperties.class).toOptions();
 			var wire = json

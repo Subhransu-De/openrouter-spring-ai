@@ -19,7 +19,18 @@ import de.subhransu.openrouter.springai.api.dto.ResponsesRequest;
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterChatRequestMapper;
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterResponsesRequestMapper;
 import java.util.List;
+import org.junit.jupiter.params.provider.CsvSource;
 import java.util.Map;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.atomic.AtomicReference;
+import de.subhransu.openrouter.springai.api.OpenRouterApi;
+import org.springframework.http.MediaType;
+import org.springframework.mock.http.client.MockClientHttpRequest;
+import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.web.client.RestClient;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
@@ -37,10 +48,6 @@ import org.springframework.ai.tool.definition.ToolDefinition;
  * of scope (separate issues).
  */
 class OpenRouterChatRequestSerializationTests {
-
-	private static final String FALLBACK_MODEL = "anthropic/claude-3.5-sonnet";
-
-	private static final String PARALLEL_TOOL_CALLS = "parallel_tool_calls";
 
 	private static final String MAX_OUTPUT_TOKENS = "max_output_tokens";
 
@@ -66,6 +73,21 @@ class OpenRouterChatRequestSerializationTests {
 		return this.objectMapper.valueToTree(request);
 	}
 
+	private JsonNode serialize(Wire wire, OpenRouterChatOptions options) {
+		return serialize(wire, options, List.of());
+	}
+
+	private JsonNode serialize(Wire wire, OpenRouterChatOptions options, List<ToolDefinition> tools) {
+		List<Message> messages = List.of(new UserMessage("hello"));
+		return wire == Wire.CHAT ? serializeChat(options, messages, tools)
+				: serializeResponses(options, messages, tools);
+	}
+
+	static Stream<Arguments> wires() {
+		return Stream.of(Arguments.of(Named.of("chat completions", Wire.CHAT)),
+				Arguments.of(Named.of("responses", Wire.RESPONSES)));
+	}
+
 	private OpenRouterChatOptions.Builder base() {
 		return OpenRouterChatOptions.builder().model("openai/gpt-5.4-mini");
 	}
@@ -84,147 +106,19 @@ class OpenRouterChatRequestSerializationTests {
 	}
 
 	// ---------------------------------------------------------------------
-	// Core sampling and identity options
-	// ---------------------------------------------------------------------
-
-	@Test
-	void serializesModelAndModelsFallbackList() {
-		JsonNode json = serializeChat(base().models(List.of(FALLBACK_MODEL, "openai/gpt-5.4")).build());
-
-		assertThat(json.path("model").stringValue()).isEqualTo("openai/gpt-5.4-mini");
-		assertThat(json.path("models").isArray()).isTrue();
-		assertThat(json.path("models").get(0).stringValue()).isEqualTo(FALLBACK_MODEL);
-		assertThat(json.path("models").get(1).stringValue()).isEqualTo("openai/gpt-5.4");
-	}
-
-	@Test
-	void serializesSamplingScalarsUnderSnakeCaseNames() {
-		JsonNode json = serializeChat(base().temperature(0.7)
-			.topP(0.9)
-			.topK(40)
-			.frequencyPenalty(0.1)
-			.presencePenalty(0.2)
-			.repetitionPenalty(1.1)
-			.minP(0.05)
-			.topA(0.8)
-			.seed(42)
-			.maxTokens(256)
-			.maxCompletionTokens(512)
-			.stopSequences(List.of("STOP", "END"))
-			.user("user-7")
-			.build());
-
-		assertThat(json.path("temperature").asDouble()).isEqualTo(0.7);
-		assertThat(json.path("top_p").asDouble()).isEqualTo(0.9);
-		assertThat(json.path("top_k").asInt()).isEqualTo(40);
-		assertThat(json.path("frequency_penalty").asDouble()).isEqualTo(0.1);
-		assertThat(json.path("presence_penalty").asDouble()).isEqualTo(0.2);
-		assertThat(json.path("repetition_penalty").asDouble()).isEqualTo(1.1);
-		assertThat(json.path("min_p").asDouble()).isEqualTo(0.05);
-		assertThat(json.path("top_a").asDouble()).isEqualTo(0.8);
-		assertThat(json.path("seed").asInt()).isEqualTo(42);
-		assertThat(json.path("max_tokens").asInt()).isEqualTo(256);
-		assertThat(json.path("max_completion_tokens").asInt()).isEqualTo(512);
-		assertThat(json.path("stop").get(0).stringValue()).isEqualTo("STOP");
-		assertThat(json.path("user").stringValue()).isEqualTo("user-7");
-		// Camel-case forms must never leak.
-		assertThat(json.has("topP")).isFalse();
-		assertThat(json.has("maxTokens")).isFalse();
-		assertThat(json.has("frequencyPenalty")).isFalse();
-	}
-
-	@Test
-	void serializesStreamFlagAndUsageInclude() {
-		ChatCompletionRequest streamed = this.chatMapper.map(List.of(new UserMessage("hi")),
-				base().includeUsage(true).build(), true, List.of());
-		JsonNode json = this.objectMapper.valueToTree(streamed);
-
-		assertThat(json.path("stream").asBoolean()).isTrue();
-		assertThat(json.path("usage").path("include").asBoolean()).isTrue();
-	}
-
-	// ---------------------------------------------------------------------
 	// Response format / structured output
 	// ---------------------------------------------------------------------
 
-	@Test
-	void serializesExplicitResponseFormat() {
-		JsonNode json = serializeChat(base().responseFormat(OpenRouterResponseFormat.jsonObject()).build());
-
-		assertThat(json.path("response_format").path("type").stringValue()).isEqualTo("json_object");
-	}
-
-	@Test
-	void serializesTypedJsonSchemaResponseFormatWithNameAndStrict() {
-		String schema = """
-				{
-					"type": "object",
-					"properties": {
-						"answer": {
-							"type": "string"
-						}
-					}
-				}
-				""";
-		JsonNode json = serializeChat(
-				base().responseFormat(OpenRouterResponseFormat.jsonSchema("weather", true, schema)).build());
-
-		assertThat(json.path("response_format").path("type").stringValue()).isEqualTo("json_schema");
-		assertThat(json.path("response_format").path("json_schema").path("name").stringValue()).isEqualTo("weather");
-		assertThat(json.path("response_format").path("json_schema").path("strict").asBoolean()).isTrue();
-		assertThat(json.path("response_format").path("json_schema").path("schema").path("type").stringValue())
-			.isEqualTo("object");
-	}
-
-	@Test
-	void serializesOutputSchemaAsJsonSchemaResponseFormat() {
-		String schema = """
-				{
-					"type": "object",
-					"properties": {
-						"answer": {
-							"type": "string"
-						}
-					}
-				}
-				""";
-		JsonNode json = serializeChat(base().outputSchema(schema).build());
-
-		assertThat(json.path("response_format").path("type").stringValue()).isEqualTo("json_schema");
-		assertThat(json.path("response_format").path("json_schema").path("name").stringValue()).isEqualTo("response");
-		assertThat(json.path("response_format").path("json_schema").path("schema").path("type").stringValue())
-			.isEqualTo("object");
-	}
-
-	@Test
-	void explicitResponseFormatTakesPrecedenceOverOutputSchema() {
-		JsonNode json = serializeChat(base().responseFormat(OpenRouterResponseFormat.jsonObject()).outputSchema("""
-				{
-				  "type": "object"
-				}
-				""").build());
-
-		// When both are present, the explicit responseFormat wins (no json_schema
-		// wrapper).
-		assertThat(json.path("response_format").path("type").stringValue()).isEqualTo("json_object");
-	}
-
-	@Test
-	void malformedOutputSchemaThrowsTypedExceptionWithUsefulMessage() {
-		assertThatThrownBy(() -> serializeChat(base().outputSchema("{not valid json").build()))
-			.isInstanceOf(IllegalArgumentException.class)
-			.hasMessageContaining("Invalid JSON schema");
-	}
-
-	@Test
-	void malformedToolSchemaThrowsTypedException() {
+	@ParameterizedTest
+	@MethodSource("wires")
+	void malformedToolSchemaThrowsTypedException(Wire wire) {
 		ToolDefinition badTool = ToolDefinition.builder()
 			.name("broken")
 			.description("broken schema")
 			.inputSchema("{not valid json")
 			.build();
 
-		assertThatThrownBy(() -> serializeChat(base().build(), List.of(new UserMessage("hi")), List.of(badTool)))
+		assertThatThrownBy(() -> serialize(wire, base().build(), List.of(badTool)))
 			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessageContaining("Invalid JSON schema");
 	}
@@ -234,48 +128,25 @@ class OpenRouterChatRequestSerializationTests {
 	// ---------------------------------------------------------------------
 
 	@Test
-	void serializesToolsToolChoiceAndParallelToolCalls() {
-		JsonNode json = serializeChat(base().toolChoice(Map.of("type", "auto")).parallelToolCalls(true).build(),
-				List.of(new UserMessage("hi")), List.of(weatherTool()));
+	void chatToolsUseTheNestedFunctionShape() {
+		JsonNode tool = serializeChat(base().build(), List.of(new UserMessage("hi")), List.of(weatherTool()))
+			.at("/tools/0");
 
-		assertThat(json.path("tools").get(0).path("type").stringValue()).isEqualTo("function");
-		assertThat(json.path("tools").get(0).path("function").path("name").stringValue()).isEqualTo("get_weather");
-		assertThat(json.path("tools").get(0).path("function").path("parameters").path("type").stringValue())
-			.isEqualTo("object");
-		assertThat(json.path("tool_choice").stringValue()).isEqualTo("auto");
-		assertThat(json.path(PARALLEL_TOOL_CALLS).asBoolean()).isTrue();
-	}
-
-	@Test
-	void serializesStringFormToolChoiceVerbatim() {
-		// tool_choice accepts a named function object or a bare string
-		// ("none"/"auto"/"required"); the string form must not be wrapped or quoted
-		// differently.
-		JsonNode json = serializeChat(base().toolChoice("none").build());
-
-		assertThat(json.path("tool_choice").isString()).isTrue();
-		assertThat(json.path("tool_choice").stringValue()).isEqualTo("none");
-	}
-
-	@Test
-	void parallelToolCallsFalseIsNotOmitted() {
-		// NON_EMPTY would drop an empty collection, but a Boolean.FALSE is meaningful and
-		// must survive serialization.
-		JsonNode json = serializeChat(base().parallelToolCalls(false).build());
-
-		assertThat(json.has(PARALLEL_TOOL_CALLS)).isTrue();
-		assertThat(json.path(PARALLEL_TOOL_CALLS).asBoolean()).isFalse();
+		assertThat(tool.path("type").stringValue()).isEqualTo("function");
+		assertThat(tool.path("function").path("name").stringValue()).isEqualTo("get_weather");
+		assertThat(tool.path("function").path("parameters").path("type").stringValue()).isEqualTo("object");
 	}
 
 	// ---------------------------------------------------------------------
 	// Provider routing, reasoning, service tier, metadata, route
 	// ---------------------------------------------------------------------
 
-	@Test
-	void serializesProviderRoutingPreferences() {
+	@ParameterizedTest
+	@MethodSource("wires")
+	void serializesProviderRoutingPreferences(Wire wire) {
 		OpenRouterProviderPreferences provider = new OpenRouterProviderPreferences(true, false, "deny",
 				List.of("openai", "anthropic"), List.of("azure"), List.of("fp16", "int8"), "throughput");
-		JsonNode json = serializeChat(base().provider(provider).build()).path("provider");
+		JsonNode json = serialize(wire, base().provider(provider).build()).path("provider");
 
 		assertThat(json.path("allow_fallbacks").asBoolean()).isTrue();
 		assertThat(json.path("require_parameters").asBoolean()).isFalse();
@@ -286,69 +157,164 @@ class OpenRouterChatRequestSerializationTests {
 		assertThat(json.path("sort").stringValue()).isEqualTo("throughput");
 	}
 
-	@Test
-	void serializesReasoningEffortFields() {
-		JsonNode json = serializeChat(
-				base().reasoning(new OpenRouterReasoningOptions("high", null, false, true)).build())
-			.path("reasoning");
+	private static final String OBJECT_SCHEMA = """
+			{"type":"object","properties":{"answer":{"type":"string"}}}
+			""";
 
-		assertThat(json.path("effort").stringValue()).isEqualTo("high");
-		assertThat(json.has("max_tokens")).isFalse();
-		assertThat(json.path("exclude").asBoolean()).isFalse();
-		assertThat(json.path("enabled").asBoolean()).isTrue();
+	private static String formatPath(Wire wire) {
+		return wire == Wire.CHAT ? "/response_format" : "/text/format";
+	}
+
+	static Stream<Arguments> wiresWithStreaming() {
+		return Stream.of(Arguments.of(Named.of("chat completions", Wire.CHAT), Named.of("blocking", false)),
+				Arguments.of(Named.of("chat completions", Wire.CHAT), Named.of("streaming", true)),
+				Arguments.of(Named.of("responses", Wire.RESPONSES), Named.of("blocking", false)),
+				Arguments.of(Named.of("responses", Wire.RESPONSES), Named.of("streaming", true)));
+	}
+
+	@ParameterizedTest(name = "{0}, {1}")
+	@MethodSource("wiresWithStreaming")
+	void serializesTheStreamFlagOnBothWires(Wire wire, boolean stream) {
+		var messages = List.<Message>of(new UserMessage("hi"));
+		var options = base().build();
+		Object request = wire == Wire.CHAT ? this.chatMapper.map(messages, options, stream, List.of())
+				: this.responsesMapper.map(messages, options, stream, List.of());
+		assertThat(this.objectMapper.valueToTree(request).path("stream").asBoolean()).isEqualTo(stream);
+	}
+
+	@ParameterizedTest(name = "includeUsage={0}")
+	@ValueSource(booleans = { false, true })
+	void chatRequestsCarryTheUsageIncludeFlag(boolean include) {
+		var request = this.chatMapper.map(List.of(new UserMessage("hi")), base().includeUsage(include).build(), true,
+				List.of());
+		assertThat(this.objectMapper.valueToTree(request).at("/usage/include"))
+			.isEqualTo(this.objectMapper.valueToTree(include));
+	}
+
+	@ParameterizedTest
+	@MethodSource("wires")
+	void outputSchemaBecomesAJsonSchemaFormatNamedResponse(Wire wire) {
+		JsonNode format = serialize(wire, base().outputSchema(OBJECT_SCHEMA).build()).at(formatPath(wire));
+		JsonNode schema = wire == Wire.CHAT ? format.path("json_schema") : format;
+		assertThat(format.path("type").stringValue()).isEqualTo("json_schema");
+		assertThat(schema.path("name").stringValue()).isEqualTo("response");
+		assertThat(schema.path("schema")).isEqualTo(this.objectMapper.readTree(OBJECT_SCHEMA));
+	}
+
+	@ParameterizedTest
+	@MethodSource("wires")
+	void explicitResponseFormatTakesPrecedenceOverOutputSchema(Wire wire) {
+		JsonNode json = serialize(wire,
+				base().responseFormat(OpenRouterResponseFormat.jsonObject()).outputSchema(OBJECT_SCHEMA).build());
+		assertThat(json.at(formatPath(wire))).isEqualTo(this.objectMapper.readTree("{\"type\":\"json_object\"}"));
+	}
+
+	@ParameterizedTest
+	@MethodSource("wires")
+	void malformedOutputSchemaThrowsTypedExceptionWithUsefulMessage(Wire wire) {
+		assertThatThrownBy(() -> serialize(wire, base().outputSchema("{not valid json").build()))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("Invalid JSON schema");
+	}
+
+	static Stream<Arguments> reasoningControls() {
+		return wires().map(wire -> (Named<?>) wire.get()[0])
+			.flatMap(wire -> Stream.of(
+					Arguments.of(wire, true, false, "{\"effort\":\"high\",\"exclude\":true,\"enabled\":false}"),
+					Arguments.of(wire, false, true, "{\"effort\":\"high\",\"exclude\":false,\"enabled\":true}"),
+					Arguments.of(wire, null, null, "{\"effort\":\"high\"}")));
+	}
+
+	@ParameterizedTest(name = "{0}: exclude={1}, enabled={2}")
+	@MethodSource("reasoningControls")
+	void effortAndTheExcludeAndEnabledSwitchesReachTheWire(Wire wire, Boolean exclude, Boolean enabled,
+			String expected) {
+		JsonNode json = serialize(wire,
+				base().reasoning(new OpenRouterReasoningOptions("high", null, exclude, enabled)).build());
+		assertThat(json.path("reasoning")).isEqualTo(this.objectMapper.readTree(expected));
+	}
+
+	static Stream<Arguments> serviceTiers() {
+		var tiers = Map.of(OpenRouterServiceTier.AUTO, "auto", OpenRouterServiceTier.DEFAULT, "default",
+				OpenRouterServiceTier.FLEX, "flex", OpenRouterServiceTier.PRIORITY, "priority");
+		return wires().map(wire -> (Named<?>) wire.get()[0])
+			.flatMap(wire -> tiers.entrySet().stream().map(tier -> Arguments.of(wire, tier.getKey(), tier.getValue())));
+	}
+
+	@ParameterizedTest(name = "{0}: {1} -> {2}")
+	@MethodSource("serviceTiers")
+	void serviceTierSerializesAsItsLowercaseWireValue(Wire wire, OpenRouterServiceTier tier, String expected) {
+		JsonNode json = serialize(wire, base().serviceTier(tier).build());
+		assertThat(json.path("service_tier").stringValue()).isEqualTo(expected);
+	}
+
+	@ParameterizedTest
+	@MethodSource("wires")
+	void unsetOptionsAreOmittedFromTheWire(Wire wire) {
+		JsonNode json = serialize(wire, base().build());
+		assertThat(json.propertyNames()).doesNotContain("temperature", "tools", "provider", "reasoning",
+				"response_format", "text", "metadata", "usage", "service_tier", "max_tokens", MAX_OUTPUT_TOKENS);
 	}
 
 	@Test
-	void serializesReasoningTokenBudgetWithoutEffort() {
-		JsonNode json = serializeChat(base().reasoning(new OpenRouterReasoningOptions(null, 1024, false, true)).build())
-			.path("reasoning");
-
-		assertThat(json.path("max_tokens").asInt()).isEqualTo(1024);
-		assertThat(json.has("effort")).isFalse();
+	void responsesToolsUseTheFlatFunctionShape() {
+		JsonNode tool = serializeResponses(base().build(), List.of(new UserMessage("hi")), List.of(weatherTool()))
+			.at("/tools/0");
+		assertThat(tool.path("type").stringValue()).isEqualTo("function");
+		assertThat(tool.path("name").stringValue()).isEqualTo("get_weather");
+		assertThat(tool.path("parameters").path("type").stringValue()).isEqualTo("object");
+		assertThat(tool.has("function")).isFalse();
 	}
 
-	@Test
-	void serializesServiceTierAsLowercaseWireValue() {
-		JsonNode json = serializeChat(base().serviceTier(OpenRouterServiceTier.FLEX).build());
-
-		assertThat(json.path("service_tier").stringValue()).isEqualTo("flex");
+	@ParameterizedTest
+	@MethodSource("wires")
+	void writesNonEnglishContentAsUtf8ThroughTheRealTransport(Wire wire) {
+		String text = "こんにちは世界 🌍 Köln";
+		RestClient.Builder builder = RestClient.builder();
+		MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+		AtomicReference<byte[]> sent = new AtomicReference<>();
+		String path = wire == Wire.CHAT ? "/chat/completions" : "/responses";
+		String reply = wire == Wire.CHAT
+				? "{\"choices\":[{\"index\":0,\"finish_reason\":\"stop\",\"message\":{\"role\":\"assistant\",\"content\":\"ok\"}}]}"
+				: "{\"id\":\"resp-1\",\"status\":\"completed\",\"output\":[]}";
+		server.expect(requestTo("https://openrouter.test" + path))
+			.andExpect(request -> sent.set(((MockClientHttpRequest) request).getBodyAsBytes()))
+			.andRespond(withSuccess(reply, MediaType.APPLICATION_JSON));
+		OpenRouterApi api = OpenRouterApi.builder()
+			.apiKey("test-key")
+			.baseUrl("https://openrouter.test")
+			.restClientBuilder(builder)
+			.build();
+		var messages = List.<Message>of(new UserMessage(text));
+		var options = base().build();
+		if (wire == Wire.CHAT) {
+			api.chatCompletion(this.chatMapper.map(messages, options, false, List.of()));
+		}
+		else {
+			api.responses(this.responsesMapper.map(messages, options, false, List.of()));
+		}
+		server.verify();
+		byte[] body = sent.get();
+		assertThat(body).containsSequence(text.getBytes(StandardCharsets.UTF_8));
+		assertThat(new String(body, StandardCharsets.UTF_8)).doesNotContain("\\u");
+		assertThat(this.objectMapper.readTree(body).toString()).contains(text);
 	}
 
-	@Test
-	void serializesMetadataAndRoute() {
-		JsonNode json = serializeChat(base().metadata(Map.of("trace", "abc")).route("fallback").build());
-
-		assertThat(json.path("metadata").path("trace").stringValue()).isEqualTo("abc");
-		assertThat(json.path("route").stringValue()).isEqualTo("fallback");
-	}
-
-	// ---------------------------------------------------------------------
-	// Null omission
-	// ---------------------------------------------------------------------
-
-	@Test
-	void omitsNullAndUnsetFields() {
-		JsonNode json = serializeChat(base().build());
-
-		assertThat(json.has("temperature")).isFalse();
-		assertThat(json.has("tools")).isFalse();
-		assertThat(json.has("provider")).isFalse();
-		assertThat(json.has("reasoning")).isFalse();
-		assertThat(json.has("response_format")).isFalse();
-		assertThat(json.has("metadata")).isFalse();
-		assertThat(json.has("usage")).isFalse();
-		assertThat(json.has("service_tier")).isFalse();
-	}
-
-	@Test
-	void omitsExplicitlyEmptyCollections() {
+	@ParameterizedTest
+	@MethodSource("wires")
+	void omitsExplicitlyEmptyCollections(Wire wire) {
 		// NON_EMPTY must drop empty lists/maps: OpenRouter rejects some empty arrays
-		// (e.g. models) and an empty stop array is noise.
-		JsonNode json = serializeChat(base().models(List.of()).stopSequences(List.of()).metadata(Map.of()).build());
+		// (e.g. models and tools) and an empty metadata object is noise.
+		JsonNode json = serialize(wire, base().models(List.of()).metadata(Map.of()).build(), List.of());
 
-		assertThat(json.has("models")).isFalse();
-		assertThat(json.has("stop")).isFalse();
-		assertThat(json.has("metadata")).isFalse();
+		assertThat(json.propertyNames()).doesNotContain("models", "metadata", "tools");
+	}
+
+	@Test
+	void omitsAnExplicitlyEmptyStopListFromTheChatWire() {
+		JsonNode json = serializeChat(base().stopSequences(List.of()).build());
+
+		assertThat(json.propertyNames()).doesNotContain("stop");
 	}
 
 	@Test
@@ -389,10 +355,31 @@ class OpenRouterChatRequestSerializationTests {
 		assertThat(json.get(0).path("role").stringValue()).isEqualTo("system");
 		assertThat(json.get(1).path("role").stringValue()).isEqualTo("user");
 		assertThat(json.get(2).path("role").stringValue()).isEqualTo("assistant");
+		assertThat(json.get(2).path("tool_calls")).hasSize(1);
 		assertThat(json.get(2).path("tool_calls").get(0).path("function").path("name").stringValue())
 			.isEqualTo("get_weather");
+		assertThat(json.get(2).path("tool_calls").get(0).path("function").path("arguments").stringValue())
+			.isEqualTo("{\"city\":\"X\"}");
 		assertThat(json.get(3).path("role").stringValue()).isEqualTo("tool");
 		assertThat(json.get(3).path("tool_call_id").stringValue()).isEqualTo("call-1");
+	}
+
+	@Test
+	void serializesResponsesInputForUserAssistantToolCallAndToolResponseMessages() {
+		AssistantMessage assistant = AssistantMessage.builder()
+			.content("calling tool")
+			.toolCalls(List.of(new AssistantMessage.ToolCall("call-1", "function", "get_weather", "{\"city\":\"X\"}")))
+			.build();
+		ToolResponseMessage toolResponse = ToolResponseMessage.builder()
+			.responses(List.of(new ToolResponseMessage.ToolResponse("call-1", "get_weather", "\"sunny\"")))
+			.build();
+		List<Message> messages = List.of(new SystemMessage("be terse"), new UserMessage("weather?"), assistant,
+				toolResponse);
+
+		JsonNode json = serializeResponses(base().build(), messages, List.of());
+
+		assertThat(json.path("instructions").stringValue()).isEqualTo("be terse");
+		assertThat(json.path("input")).isEqualTo(this.objectMapper.readTree(EXPECTED_RESPONSES_INPUT));
 	}
 
 	@Test
@@ -414,64 +401,6 @@ class OpenRouterChatRequestSerializationTests {
 	// ---------------------------------------------------------------------
 
 	@Test
-	void serializesResponsesOptionFieldsUnderSnakeCaseNames() {
-		JsonNode json = serializeResponses(base().models(List.of(FALLBACK_MODEL))
-			.temperature(0.7)
-			.topP(0.9)
-			.topK(40)
-			.frequencyPenalty(0.1)
-			.presencePenalty(0.2)
-			.maxCompletionTokens(512)
-			.metadata(Map.of("trace", "abc"))
-			.provider(new OpenRouterProviderPreferences(true, false, "deny", List.of("openai"), List.of("azure"),
-					List.of("fp16"), "throughput"))
-			.reasoning(new OpenRouterReasoningOptions("high", null, false, true))
-			.route("fallback")
-			.serviceTier(OpenRouterServiceTier.PRIORITY)
-			.user("user-7")
-			.parallelToolCalls(true)
-			.toolChoice("auto")
-			.build(), List.of(new UserMessage("hi")), List.of(weatherTool()));
-
-		assertThat(json.path("model").stringValue()).isEqualTo("openai/gpt-5.4-mini");
-		assertThat(json.path("models").get(0).stringValue()).isEqualTo(FALLBACK_MODEL);
-		assertThat(json.path("temperature").asDouble()).isEqualTo(0.7);
-		assertThat(json.path("top_p").asDouble()).isEqualTo(0.9);
-		assertThat(json.path("top_k").asInt()).isEqualTo(40);
-		assertThat(json.path("frequency_penalty").asDouble()).isEqualTo(0.1);
-		assertThat(json.path("presence_penalty").asDouble()).isEqualTo(0.2);
-		assertThat(json.path(MAX_OUTPUT_TOKENS).asInt()).isEqualTo(512);
-		assertThat(json.path("metadata").path("trace").stringValue()).isEqualTo("abc");
-		assertThat(json.path("provider").path("allow_fallbacks").asBoolean()).isTrue();
-		assertThat(json.path("provider").path("data_collection").stringValue()).isEqualTo("deny");
-		assertThat(json.path("reasoning").path("effort").stringValue()).isEqualTo("high");
-		assertThat(json.path("reasoning").has("max_tokens")).isFalse();
-		assertThat(json.path("route").stringValue()).isEqualTo("fallback");
-		assertThat(json.path("service_tier").stringValue()).isEqualTo("priority");
-		assertThat(json.path("user").stringValue()).isEqualTo("user-7");
-		assertThat(json.path(PARALLEL_TOOL_CALLS).asBoolean()).isTrue();
-		assertThat(json.path("tool_choice").stringValue()).isEqualTo("auto");
-		assertThat(json.path("tools").get(0).path("type").stringValue()).isEqualTo("function");
-		assertThat(json.path("tools").get(0).path("name").stringValue()).isEqualTo("get_weather");
-		// camelCase forms must never leak onto the responses wire either
-		assertThat(json.has("maxOutputTokens")).isFalse();
-		assertThat(json.has("topP")).isFalse();
-		assertThat(json.has("serviceTier")).isFalse();
-		assertThat(json.has("parallelToolCalls")).isFalse();
-		assertThat(json.has("toolChoice")).isFalse();
-	}
-
-	@Test
-	void serializesResponsesReasoningTokenBudgetWithoutEffort() {
-		JsonNode json = serializeResponses(
-				base().reasoning(new OpenRouterReasoningOptions(null, 1024, false, true)).build(),
-				List.of(new UserMessage("hi")), List.of());
-
-		assertThat(json.path("reasoning").path("max_tokens").asInt()).isEqualTo(1024);
-		assertThat(json.path("reasoning").has("effort")).isFalse();
-	}
-
-	@Test
 	void responsesMaxOutputTokensPrefersMaxCompletionTokensOverMaxTokens() {
 		JsonNode fallback = serializeResponses(base().maxTokens(256).build(), List.of(new UserMessage("hi")),
 				List.of());
@@ -482,119 +411,107 @@ class OpenRouterChatRequestSerializationTests {
 		assertThat(preferred.path(MAX_OUTPUT_TOKENS).asInt()).isEqualTo(512);
 	}
 
-	@Test
-	void omitsNullAndUnsetResponsesFields() {
-		JsonNode json = serializeResponses(base().build(), List.of(new UserMessage("hi")), List.of());
+	private static final String EXPECTED_RESPONSES_INPUT = "[{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"weather?\"}]},{\"type\":\"message\",\"status\":\"completed\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"calling tool\"}]},{\"type\":\"function_call\",\"call_id\":\"call-1\",\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"X\\\"}\"},{\"id\":\"fc_output_call-1\",\"type\":\"function_call_output\",\"call_id\":\"call-1\",\"output\":\"\\\"sunny\\\"\"}]";
 
-		assertThat(json.has("temperature")).isFalse();
-		assertThat(json.has("tools")).isFalse();
-		assertThat(json.has("provider")).isFalse();
-		assertThat(json.has("reasoning")).isFalse();
-		assertThat(json.has("metadata")).isFalse();
-		assertThat(json.has("service_tier")).isFalse();
-		assertThat(json.has(MAX_OUTPUT_TOKENS)).isFalse();
+	private static final String PORTABLE_SCHEMA = "{\"type\":\"object\"}";
+
+	static Stream<Arguments> strictnessWithStreaming() {
+		String schema = "\"name\":\"answer\",\"schema\":{\"type\":\"object\"}";
+		return Stream
+			.of(Arguments.of(Named.of("strict unset", (Boolean) null), "{" + schema + "}",
+					"{\"type\":\"json_schema\"," + schema + "}"),
+					Arguments.of(Named.of("strict false", false), "{" + schema + ",\"strict\":false}",
+							"{\"type\":\"json_schema\"," + schema + ",\"strict\":false}"),
+					Arguments.of(Named.of("strict true", true), "{" + schema + ",\"strict\":true}",
+							"{\"type\":\"json_schema\"," + schema + ",\"strict\":true}"))
+			.flatMap(row -> Stream.of(
+					Arguments.of(row.get()[0], row.get()[1], row.get()[2], Named.of("blocking", false)),
+					Arguments.of(row.get()[0], row.get()[1], row.get()[2], Named.of("streaming", true))));
 	}
 
-	@ParameterizedTest
-	@ValueSource(strings = { "stopSequences", "seed", "repetitionPenalty", "minP", "topA", "includeUsage" })
-	void rejectsUnsupportedResponsesOptions(String name) throws Exception {
-		Object value = switch (name) {
-			case "stopSequences" -> List.of();
-			case "seed" -> 0;
-			case "includeUsage" -> false;
-			default -> 0.0;
-		};
-		var builder = base();
-		var method = Arrays.stream(builder.getClass().getMethods())
-			.filter(candidate -> candidate.getName().equals(name))
-			.findFirst()
-			.orElseThrow();
-		method.invoke(builder, value);
-		for (boolean stream : List.of(false, true)) {
-			assertThatThrownBy(
-					() -> this.responsesMapper.map(List.of(new UserMessage("hi")), builder.build(), stream, List.of()))
-				.isInstanceOf(IllegalArgumentException.class)
-				.hasMessageContaining(name)
-				.hasMessageContaining("OPENAI_RESPONSES");
-		}
+	@ParameterizedTest(name = "{0}, {3}")
+	@MethodSource("strictnessWithStreaming")
+	void jsonSchemaFormatAndNamedToolAreEquivalentOnBothWires(Boolean strict, String chatFormat, String responsesFormat,
+			boolean stream) {
+		var options = base().outputSchema("invalid but overridden")
+			.responseFormat(OpenRouterResponseFormat.jsonSchema("answer", strict, PORTABLE_SCHEMA))
+			.toolChoice(Map.of("type", "function", "function", Map.of("name", "get_weather")))
+			.build();
+		var messages = List.<Message>of(new UserMessage("hi"));
+		JsonNode chat = this.objectMapper
+			.valueToTree(this.chatMapper.map(messages, options, stream, List.of(weatherTool())));
+		JsonNode responses = this.objectMapper
+			.valueToTree(this.responsesMapper.map(messages, options, stream, List.of(weatherTool())));
+
+		assertThat(chat.at("/response_format/json_schema")).isEqualTo(this.objectMapper.readTree(chatFormat));
+		assertThat(responses.at("/text/format")).isEqualTo(this.objectMapper.readTree(responsesFormat));
+		assertThat(responses.at("/tool_choice/name").stringValue()).isEqualTo("get_weather");
+		assertThat(chat.at("/tool_choice/function/name").stringValue()).isEqualTo("get_weather");
+		assertThat(responses.at("/tools/0").has("strict")).isFalse();
+		assertThat(chat.at("/tools/0/function").has("strict")).isFalse();
 	}
 
-	@ParameterizedTest
+	static Stream<Arguments> plainFormatsWithStreaming() {
+		return Stream
+			.of(Arguments.of(Named.of("text format", OpenRouterResponseFormat.text()), "{\"type\":\"text\"}"),
+					Arguments.of(Named.of("json_object format", OpenRouterResponseFormat.jsonObject()),
+							"{\"type\":\"json_object\"}"))
+			.flatMap(row -> Stream.of(Arguments.of(row.get()[0], row.get()[1], Named.of("blocking", false)),
+					Arguments.of(row.get()[0], row.get()[1], Named.of("streaming", true))));
+	}
+
+	@ParameterizedTest(name = "{0}, {2}")
+	@MethodSource("plainFormatsWithStreaming")
+	void textAndJsonObjectFormatsMatchOnBothWires(OpenRouterResponseFormat format, String expected, boolean stream) {
+		var options = base().responseFormat(format).build();
+		var messages = List.<Message>of(new UserMessage("hi"));
+		JsonNode chat = this.objectMapper.valueToTree(this.chatMapper.map(messages, options, stream, List.of()));
+		JsonNode responses = this.objectMapper
+			.valueToTree(this.responsesMapper.map(messages, options, stream, List.of()));
+		JsonNode expectedFormat = this.objectMapper.readTree(expected);
+		assertThat(chat.path("response_format")).isEqualTo(expectedFormat);
+		assertThat(responses.at("/text/format")).isEqualTo(expectedFormat);
+	}
+
+	@ParameterizedTest(name = "stream={0}")
 	@ValueSource(booleans = { false, true })
-	void structuredFormatsAndNamedToolsArePortable(boolean stream) {
-		String schema = "{\"type\":\"object\"}";
-		for (Boolean strict : Arrays.asList(null, false, true)) {
-			var options = base().outputSchema("invalid but overridden")
-				.responseFormat(OpenRouterResponseFormat.jsonSchema("answer", strict, schema))
-				.toolChoice(Map.of("type", "function", "function", Map.of("name", "get_weather")))
-				.build();
-			var messages = List.<Message>of(new UserMessage("hi"));
-			JsonNode chat = this.objectMapper
-				.valueToTree(this.chatMapper.map(messages, options, stream, List.of(weatherTool())));
-			JsonNode responses = this.objectMapper
-				.valueToTree(this.responsesMapper.map(messages, options, stream, List.of(weatherTool())));
-			JsonNode format = responses.at("/text/format");
-			assertThat(format.path("type").stringValue()).isEqualTo("json_schema");
-			assertThat(format.path("name").stringValue()).isEqualTo("answer");
-			assertThat(format.path("schema")).isEqualTo(this.objectMapper.readTree(schema));
-			assertThat(format.path("strict")).isEqualTo(chat.at("/response_format/json_schema/strict"));
-			assertThat(format.has("strict")).isEqualTo(strict != null);
-			if (strict != null) {
-				assertThat(format.path("strict").asBoolean()).isEqualTo(strict);
-			}
-			assertThat(responses.at("/tool_choice/name").stringValue()).isEqualTo("get_weather");
-			assertThat(chat.at("/tool_choice/function/name").stringValue()).isEqualTo("get_weather");
-			assertThat(responses.at("/tools/0").has("strict")).isFalse();
-			assertThat(chat.at("/tools/0/function").has("strict")).isFalse();
-		}
-		for (var format : List.of(OpenRouterResponseFormat.text(), OpenRouterResponseFormat.jsonObject())) {
-			var options = base().responseFormat(format).build();
-			assertThat(serializeResponses(options, List.of(new UserMessage("hi")), List.of()).at("/text/format"))
-				.isEqualTo(serializeChat(options).path("response_format"));
-		}
-		JsonNode portable = serializeResponses(base().outputSchema(schema).build(), List.of(new UserMessage("hi")),
-				List.of());
-		assertThat(portable.at("/text/format/schema")).isEqualTo(this.objectMapper.readTree(schema));
+	void outputSchemaIsPortableWithoutStrict(boolean stream) {
+		var options = base().outputSchema(PORTABLE_SCHEMA).build();
+		JsonNode portable = this.objectMapper
+			.valueToTree(this.responsesMapper.map(List.of(new UserMessage("hi")), options, stream, List.of()));
+		assertThat(portable.at("/text/format/schema")).isEqualTo(this.objectMapper.readTree(PORTABLE_SCHEMA));
 		assertThat(portable.at("/text/format").has("strict")).isFalse();
-		assertThatThrownBy(() -> serializeResponses(base().outputSchema("invalid").build(),
-				List.of(new UserMessage("hi")), List.of()))
-			.isInstanceOf(IllegalArgumentException.class)
-			.hasMessageContaining("Invalid JSON schema");
 	}
 
-	@ParameterizedTest
-	@ValueSource(strings = { "{\"type\":\"function\",\"name\":\"get_weather\"}",
-			"{\"type\":\"function\",\"function\":{\"name\":\"get_weather\"}}" })
-	void namedToolChoicesSerializeTypeFirst(String choice) {
+	static Stream<Arguments> namedToolChoices() {
+		return Stream
+			.of(Named.of("flat shape", "{\"type\":\"function\",\"name\":\"get_weather\"}"),
+					Named.of("nested shape", "{\"type\":\"function\",\"function\":{\"name\":\"get_weather\"}}"))
+			.flatMap(choice -> Stream.of(Arguments.of(choice, Named.of("blocking", false)),
+					Arguments.of(choice, Named.of("streaming", true))));
+	}
+
+	@ParameterizedTest(name = "{0}, {1}")
+	@MethodSource("namedToolChoices")
+	void namedToolChoicesSerializeTypeFirst(String choice, boolean stream) {
 		var options = base().toolChoice(this.objectMapper.readTree(choice)).build();
 		var messages = List.<Message>of(new UserMessage("hi"));
-		for (boolean stream : List.of(false, true)) {
-			assertThat(this.objectMapper.writeValueAsString(this.chatMapper.map(messages, options, stream, List.of())))
-				.contains("\"tool_choice\":{\"type\":\"function\",\"function\":{\"name\":\"get_weather\"}}");
-			assertThat(this.objectMapper
-				.writeValueAsString(this.responsesMapper.map(messages, options, stream, List.of())))
-				.contains("\"tool_choice\":{\"type\":\"function\",\"name\":\"get_weather\"}");
-		}
+		assertThat(this.objectMapper.writeValueAsString(this.chatMapper.map(messages, options, stream, List.of())))
+			.contains("\"tool_choice\":{\"type\":\"function\",\"function\":{\"name\":\"get_weather\"}}");
+		assertThat(this.objectMapper.writeValueAsString(this.responsesMapper.map(messages, options, stream, List.of())))
+			.contains("\"tool_choice\":{\"type\":\"function\",\"name\":\"get_weather\"}");
 	}
 
-	@ParameterizedTest
-	@ValueSource(strings = { "auto", "none", "required", "{\"type\":\"auto\"}", "{\"type\":\"none\"}",
-			"{\"type\":\"required\"}", "{\"type\":\"function\",\"name\":\"get_weather\"}",
-			"{\"type\":\"function\",\"function\":{\"name\":\"get_weather\"}}" })
-	void acceptsBothNamedToolShapesAndStringChoices(String choice) {
+	@ParameterizedTest(name = "{0} -> \"{1}\"")
+	@CsvSource(delimiter = '|', value = { "auto|auto", "none|none", "required|required", "{\"type\":\"auto\"}|auto",
+			"{\"type\":\"none\"}|none", "{\"type\":\"required\"}|required" })
+	void stringAndTypeOnlyToolChoicesSerializeAsTheSameStringOnBothWires(String choice, String expected) {
 		Object value = choice.startsWith("{") ? this.objectMapper.readTree(choice) : choice;
 		var options = base().toolChoice(value).build();
 		JsonNode chat = serializeChat(options).path("tool_choice");
 		JsonNode responses = serializeResponses(options, List.of(new UserMessage("hi")), List.of()).path("tool_choice");
-		if (choice.contains("function")) {
-			assertThat(chat.at("/function/name").stringValue()).isEqualTo("get_weather");
-			assertThat(responses.path("name").stringValue()).isEqualTo("get_weather");
-		}
-		else {
-			assertThat(chat.stringValue()).isEqualTo(
-					choice.startsWith("{") ? this.objectMapper.readTree(choice).path("type").stringValue() : choice);
-			assertThat(responses).isEqualTo(chat);
-		}
+		assertThat(chat.stringValue()).isEqualTo(expected);
+		assertThat(responses).isEqualTo(chat);
 	}
 
 	@ParameterizedTest
@@ -609,55 +526,120 @@ class OpenRouterChatRequestSerializationTests {
 			.hasMessageContaining("toolChoice");
 	}
 
-	@ParameterizedTest
-	@MethodSource("optionContracts")
-	void everyOptionIsMappedClientOnlyOrRejected(String name, Object value, String chatPath, String responsesPath)
-			throws Exception {
-		var builder = OpenRouterChatOptions.builder();
-		var method = Arrays.stream(builder.getClass().getMethods())
-			.filter(candidate -> candidate.getName().equals(name) && candidate.getParameterCount() == 1
-					&& candidate.getParameterTypes()[0].isInstance(value))
-			.findFirst()
-			.orElseThrow();
-		method.invoke(builder, value);
-		var options = builder.build();
-		var messages = List.<Message>of(new UserMessage("hi"));
-		var tools = "toolCallbacks".equals(name) || "toolStrict".equals(name) ? List.of(weatherTool())
-				: List.<ToolDefinition>of();
-		for (boolean stream : List.of(false, true)) {
-			if ("rejected".equals(chatPath)) {
-				assertThatThrownBy(() -> this.chatMapper.map(messages, options, stream, tools))
-					.isInstanceOf(IllegalArgumentException.class);
-				assertThatThrownBy(() -> this.responsesMapper.map(messages, options, stream, tools))
-					.isInstanceOf(IllegalArgumentException.class);
-				continue;
-			}
-			JsonNode chat = this.objectMapper.valueToTree(this.chatMapper.map(messages, options, stream, tools));
-			if (chatPath != null) {
-				assertThat(chat.at(chatPath).isMissingNode()).as(name).isFalse();
-			}
-			else {
-				assertThat(chat.has(name)).isFalse();
-			}
-			if ("rejected".equals(responsesPath)) {
-				assertThatThrownBy(() -> this.responsesMapper.map(messages, options, stream, tools))
-					.isInstanceOf(IllegalArgumentException.class)
-					.hasMessageContaining(name);
-			}
-			else {
-				JsonNode responses = this.objectMapper
-					.valueToTree(this.responsesMapper.map(messages, options, stream, tools));
-				if (responsesPath != null) {
-					assertThat(responses.at(responsesPath)).as(name).isEqualTo(chat.at(chatPath));
-				}
-				else {
-					assertThat(responses.has(name)).isFalse();
-				}
-			}
-		}
+	private static Stream<Arguments> withStreaming(Stream<OptionRow> rows) {
+		return rows.flatMap(row -> Stream.of(Arguments.of(Named.of(row.name(), row), Named.of("blocking", false)),
+				Arguments.of(Named.of(row.name(), row), Named.of("streaming", true))));
 	}
 
-	static Stream<Arguments> optionContracts() {
+	static Stream<Arguments> chatMappedOptions() {
+		return withStreaming(optionRows().stream().filter(row -> row.isMapped(row.chatPath())));
+	}
+
+	static Stream<Arguments> responsesMappedOptions() {
+		return withStreaming(optionRows().stream().filter(row -> row.isMapped(row.responsesPath())));
+	}
+
+	static Stream<Arguments> clientOnlyOptions() {
+		return withStreaming(
+				optionRows().stream().filter(row -> row.chatPath() == null && row.responsesPath() == null));
+	}
+
+	static Stream<Arguments> responsesRejectedOptions() {
+		// audio is rejected earlier with its own reason; see
+		// audioOptionAloneIsRejected...
+		return withStreaming(optionRows().stream()
+			.filter(row -> "rejected".equals(row.responsesPath()) && !"audio".equals(row.name())));
+	}
+
+	private static OptionRow row(String name) {
+		return optionRows().stream()
+			.filter(candidate -> candidate.name().equals(name))
+			.findFirst()
+			.orElseThrow(() -> new AssertionError("no option row named " + name));
+	}
+
+	private OpenRouterChatOptions optionsWith(OptionRow row) throws Exception {
+		var builder = OpenRouterChatOptions.builder();
+		var method = Arrays.stream(builder.getClass().getMethods())
+			.filter(candidate -> candidate.getName().equals(row.name()) && candidate.getParameterCount() == 1
+					&& candidate.getParameterTypes()[0].isInstance(row.value()))
+			.findFirst()
+			.orElseThrow(() -> new AssertionError("no builder method accepting the value of " + row.name()));
+		method.invoke(builder, row.value());
+		return builder.build();
+	}
+
+	private List<ToolDefinition> toolsFor(OptionRow row) {
+		return "toolCallbacks".equals(row.name()) || "toolStrict".equals(row.name()) ? List.of(weatherTool())
+				: List.of();
+	}
+
+	@ParameterizedTest(name = "{0}, {1}")
+	@MethodSource("chatMappedOptions")
+	void mappedOptionsReachTheChatWireUnderTheirWireName(OptionRow row, boolean stream) throws Exception {
+		JsonNode chat = this.objectMapper
+			.valueToTree(this.chatMapper.map(List.of(new UserMessage("hi")), optionsWith(row), stream, toolsFor(row)));
+
+		assertThat(chat.at(row.chatPath())).isEqualTo(this.objectMapper.valueToTree(row.expected()));
+		assertThat(
+				chat.propertyNames().stream().filter(row.camelCaseNamesAbsentFrom(row.chatPath())::contains).toList())
+			.as("camelCase names on the chat wire")
+			.isEmpty();
+	}
+
+	@ParameterizedTest(name = "{0}, {1}")
+	@MethodSource("responsesMappedOptions")
+	void mappedOptionsReachTheResponsesWireUnderTheirWireName(OptionRow row, boolean stream) throws Exception {
+		JsonNode responses = this.objectMapper.valueToTree(
+				this.responsesMapper.map(List.of(new UserMessage("hi")), optionsWith(row), stream, toolsFor(row)));
+
+		assertThat(responses.at(row.responsesPath())).isEqualTo(this.objectMapper.valueToTree(row.expected()));
+		assertThat(responses.propertyNames()
+			.stream()
+			.filter(row.camelCaseNamesAbsentFrom(row.responsesPath())::contains)
+			.toList()).as("camelCase names on the responses wire").isEmpty();
+	}
+
+	@ParameterizedTest(name = "{0}, {1}")
+	@MethodSource("clientOnlyOptions")
+	void clientOnlyOptionsReachNeitherWire(OptionRow row, boolean stream) throws Exception {
+		var options = optionsWith(row);
+		var messages = List.<Message>of(new UserMessage("hi"));
+
+		assertThat(this.objectMapper.valueToTree(this.chatMapper.map(messages, options, stream, List.of()))
+			.has(row.name())).isFalse();
+		assertThat(this.objectMapper.valueToTree(this.responsesMapper.map(messages, options, stream, List.of()))
+			.has(row.name())).isFalse();
+	}
+
+	@ParameterizedTest(name = "{0}, {1}")
+	@MethodSource("responsesRejectedOptions")
+	void responsesModeRejectsOptionsItCannotSend(OptionRow row, boolean stream) throws Exception {
+		var options = optionsWith(row);
+		var messages = List.<Message>of(new UserMessage("hi"));
+
+		assertThatThrownBy(() -> this.responsesMapper.map(messages, options, stream, List.of()))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("OPENAI_RESPONSES does not support %s; unset it or use OPENAI_CHAT_COMPLETIONS", row.name());
+	}
+
+	@ParameterizedTest(name = "stream={0}")
+	@ValueSource(booleans = { false, true })
+	void audioOptionAloneIsRejectedWithTheModeSpecificReason(boolean stream) throws Exception {
+		var options = optionsWith(row("audio"));
+		var messages = List.<Message>of(new UserMessage("hi"));
+		String chatReason = stream ? "Audio output requires both audio options and the audio modality"
+				: "Audio output requires streaming Chat Completions";
+
+		assertThatThrownBy(() -> this.chatMapper.map(messages, options, stream, List.of()))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessage(chatReason);
+		assertThatThrownBy(() -> this.responsesMapper.map(messages, options, stream, List.of()))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("Audio output requires streaming Chat Completions");
+	}
+
+	static List<OptionRow> optionRows() {
 		Object[][] rows = { { "model", "test/model", "/model", "/model" },
 				{ "models", List.of("test/fallback"), "/models", "/models" },
 				{ "requestMode", OpenRouterRequestMode.OPENAI_RESPONSES, null, null },
@@ -667,33 +649,44 @@ class OpenRouterChatRequestSerializationTests {
 				{ "presencePenalty", 0.0, "/presence_penalty", "/presence_penalty" },
 				{ "temperature", 0.0, "/temperature", "/temperature" }, { "topK", 10, "/top_k", "/top_k" },
 				{ "topP", 0.5, "/top_p", "/top_p" }, { "user", "synthetic-user", "/user", "/user" },
-				{ "responseFormat", OpenRouterResponseFormat.jsonObject(), "/response_format", "/text/format" },
-				{ "outputSchema", "{\"type\":\"object\"}", "/response_format/json_schema/schema",
-						"/text/format/schema" },
+				{ "responseFormat", OpenRouterResponseFormat.jsonObject(), "/response_format", "/text/format",
+						Map.of("type", "json_object") },
+				{ "outputSchema", "{\"type\":\"object\"}", "/response_format/json_schema/schema", "/text/format/schema",
+						Map.of("type", "object") },
 				{ "parallelToolCalls", false, "/parallel_tool_calls", "/parallel_tool_calls" },
 				{ "toolChoice", "required", "/tool_choice", "/tool_choice" },
 				{ "toolStrict", false, "/tools/0/function/strict", "/tools/0/strict" },
 				{ "provider", new OpenRouterProviderPreferences(true, null, null, null, null, null, null), "/provider",
-						"/provider" },
-				{ "reasoning", new OpenRouterReasoningOptions("high", null, null, null), "/reasoning", "/reasoning" },
-				{ "serviceTier", OpenRouterServiceTier.FLEX, "/service_tier", "/service_tier" },
+						"/provider", Map.of("allow_fallbacks", true) },
+				{ "reasoning", new OpenRouterReasoningOptions("high", null, null, null), "/reasoning", "/reasoning",
+						Map.of("effort", "high") },
+				{ "serviceTier", OpenRouterServiceTier.FLEX, "/service_tier", "/service_tier", "flex" },
 				{ "metadata", Map.of("test", "value"), "/metadata", "/metadata" },
 				{ "route", "fallback", "/route", "/route" },
 				{ "modalities", List.of("text"), "/modalities", "/modalities" },
 				{ "imageConfig", Map.of("aspect_ratio", "1:1"), "/image_config", "/image_config" },
 				{ "audio", new OpenRouterAudioOptions("alloy", "pcm16"), "rejected", "rejected" },
-				{ "extraBody", Map.of("prompt_cache_key", "synthetic"), "/prompt_cache_key", "/prompt_cache_key" },
-				{ "providerExtraBody", Map.of("zdr", false), "/provider/zdr", "/provider/zdr" },
-				{ "toolCallbacks", List.of(), "/tools/0/function/name", "/tools/0/name" },
+				{ "extraBody", Map.of("prompt_cache_key", "synthetic"), "/prompt_cache_key", "/prompt_cache_key",
+						"synthetic" },
+				{ "providerExtraBody", Map.of("zdr", false), "/provider/zdr", "/provider/zdr", false },
+				{ "toolCallbacks", List.of(), "/tools/0/function/name", "/tools/0/name", "get_weather" },
 				{ "toolContext", Map.of("test", "value"), null, null },
 				{ "stopSequences", List.of("STOP"), "/stop", "rejected" }, { "seed", 0, "/seed", "rejected" },
 				{ "repetitionPenalty", 1.0, "/repetition_penalty", "rejected" }, { "minP", 0.0, "/min_p", "rejected" },
 				{ "topA", 0.0, "/top_a", "rejected" }, { "includeUsage", false, "/usage/include", "rejected" } };
-		assertThat(Arrays.stream(OpenRouterChatOptions.class.getDeclaredFields())
-			.filter(field -> !Modifier.isStatic(field.getModifiers()))
-			.map(Field::getName))
-			.containsExactlyInAnyOrder(Arrays.stream(rows).map(row -> (String) row[0]).toArray(String[]::new));
-		return Arrays.stream(rows).map(Arguments::of);
+		return Arrays.stream(rows)
+			.map(row -> new OptionRow((String) row[0], row[1], (String) row[2], (String) row[3],
+					row.length > 4 ? row[4] : row[1]))
+			.toList();
+	}
+
+	@Test
+	void everyDeclaredOptionHasAContractRow() {
+		assertThat(optionRows()).extracting(OptionRow::name)
+			.containsExactlyInAnyOrderElementsOf(Arrays.stream(OpenRouterChatOptions.class.getDeclaredFields())
+				.filter(field -> !Modifier.isStatic(field.getModifiers()))
+				.map(Field::getName)
+				.toList());
 	}
 
 	// ---------------------------------------------------------------------
@@ -716,11 +709,29 @@ class OpenRouterChatRequestSerializationTests {
 		assertThat(json.path("instructions").stringValue()).isEqualTo("keep");
 	}
 
-	@Test
-	void serializesNonEnglishContent() {
-		JsonNode json = serializeChat(base().build(), List.of(new UserMessage("こんにちは世界 🌍 Köln")), List.of());
+	private record OptionRow(String name, Object value, String chatPath, String responsesPath, Object expected) {
 
-		assertThat(json.path("messages").get(0).path("content").stringValue()).isEqualTo("こんにちは世界 🌍 Köln");
+		@Override
+		public String toString() {
+			return this.name;
+		}
+
+		boolean isMapped(String path) {
+			return path != null && !"rejected".equals(path);
+		}
+
+		// The Java option name must not appear on the wire unless it is also the wire
+		// name.
+		List<String> camelCaseNamesAbsentFrom(String path) {
+			return path.equals("/" + this.name) ? List.of() : List.of(this.name);
+		}
+
+	}
+
+	enum Wire {
+
+		CHAT, RESPONSES
+
 	}
 
 }

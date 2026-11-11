@@ -75,41 +75,51 @@ class OpenRouterMultiProviderBackoffTests {
 			});
 	}
 
+	// OpenRouterModelSelectionTests proves which models each selection creates. These two
+	// tests keep what only the two-provider setup shows: no scope warning, and which tool
+	// failure processor serves the remaining chat model.
 	@Test
-	void selectingOpenRouterKeepsOnlyItsChatModel(CapturedOutput output) {
+	void selectingOpenRouterDoesNotWarnAboutAnotherProvider(CapturedOutput output) {
 		this.contextRunner.withPropertyValues(SpringAIModelProperties.CHAT_MODEL + "=openrouter").run(context -> {
 			assertThat(context).hasNotFailed();
-			assertThat(context).hasSingleBean(OpenRouterChatModel.class);
+			// The other provider is gone, so there is no other provider's tool call to
+			// serve.
 			assertThat(context).doesNotHaveBean(SimulatedChatModel.class);
 			assertThat(output).doesNotContain(SCOPE_WARNING);
 		});
 	}
 
 	@Test
-	void selectingTheOtherProviderLeavesOutOurChatModel(CapturedOutput output) {
+	void selectingTheOtherProviderKeepsTheDefaultToolFailureProcessorAndDoesNotWarn(CapturedOutput output) {
 		this.contextRunner.withPropertyValues(SpringAIModelProperties.CHAT_MODEL + "=simulated").run(context -> {
 			assertThat(context).hasNotFailed();
-			assertThat(context).hasSingleBean(SimulatedChatModel.class);
-			assertThat(context).doesNotHaveBean(OpenRouterChatModel.class);
 			assertThat(context.getBean(ToolExecutionExceptionProcessor.class))
 				.isInstanceOf(DefaultToolExecutionExceptionProcessor.class);
 			assertThat(output).doesNotContain(SCOPE_WARNING);
 		});
 	}
 
+	private ApplicationContextRunner allModelTypes() {
+		return this.contextRunner.withConfiguration(AutoConfigurations.of(OpenRouterEmbeddingAutoConfiguration.class,
+				OpenRouterImageAutoConfiguration.class, SimulatedProviderAutoConfigurations.Embedding.class,
+				SimulatedProviderAutoConfigurations.Image.class));
+	}
+
 	@Test
-	void embeddingAndImageModelsNeedTheirOwnSelection() {
-		ApplicationContextRunner allModelTypes = this.contextRunner.withConfiguration(AutoConfigurations.of(
-				OpenRouterEmbeddingAutoConfiguration.class, OpenRouterImageAutoConfiguration.class,
-				SimulatedProviderAutoConfigurations.Embedding.class, SimulatedProviderAutoConfigurations.Image.class));
-		// Selecting only the chat model leaves two embedding and two image models; a
-		// consumer that injects a single EmbeddingModel, such as a vector store, fails.
-		allModelTypes.withPropertyValues(SpringAIModelProperties.CHAT_MODEL + "=openrouter").run(context -> {
+	void selectingOnlyTheChatModelLeavesBothEmbeddingAndBothImageModels() {
+		// A consumer that injects a single EmbeddingModel, such as a vector store, then
+		// fails. This is the premise of the next test: without it, the simulated
+		// providers could be absent for an unrelated reason.
+		allModelTypes().withPropertyValues(SpringAIModelProperties.CHAT_MODEL + "=openrouter").run(context -> {
 			assertThat(context).hasNotFailed();
 			assertThat(context.getBeansOfType(EmbeddingModel.class)).hasSize(2);
 			assertThat(context.getBeansOfType(ImageModel.class)).hasSize(2);
 		});
-		allModelTypes.withPropertyValues(SpringAIModelProperties.CHAT_MODEL + "=openrouter",
+	}
+
+	@Test
+	void selectingEmbeddingAndImageProvidersLeavesOnlyOurEmbeddingModel() {
+		allModelTypes().withPropertyValues(SpringAIModelProperties.CHAT_MODEL + "=openrouter",
 				SpringAIModelProperties.EMBEDDING_MODEL + "=openrouter", SpringAIModelProperties.IMAGE_MODEL + "=none")
 			.run(context -> {
 				assertThat(context).hasNotFailed();
@@ -122,8 +132,8 @@ class OpenRouterMultiProviderBackoffTests {
 	@Test
 	void textEmbeddingProvidersNeedTheNarrowerSelector() {
 		// Google GenAI and Vertex AI text embeddings select on
-		// spring.ai.model.embedding.text,
-		// so spring.ai.model.embedding alone does not rule them out.
+		// spring.ai.model.embedding.text, so spring.ai.model.embedding alone does not
+		// rule them out.
 		ApplicationContextRunner withTextEmbeddings = this.contextRunner
 			.withConfiguration(AutoConfigurations.of(OpenRouterEmbeddingAutoConfiguration.class,
 					SimulatedProviderAutoConfigurations.TextEmbedding.class))

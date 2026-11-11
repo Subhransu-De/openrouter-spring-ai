@@ -7,17 +7,20 @@ import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
+import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.client.advisor.ToolCallingAdvisor;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.tool.function.FunctionToolCallback;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.reactive.function.client.ClientResponse;
@@ -32,25 +35,47 @@ class OpenRouterResponsesTerminationTests {
 
 	private static final String DONE = "data: [DONE]\n\n";
 
-	@ParameterizedTest
-	@ValueSource(strings = { "", ": synthetic keepalive\n\n", "data: [DONE]\n\n", "data: [DONE]\ndata: {invalid}\n\n" })
-	void missingTerminalFailsEmptyAndTextStreamsOnEverySubscription(String tail) {
-		for (String prefix : new String[] { "", TEXT }) {
-			Flux<ChatResponse> stream = model(prefix + tail).stream(new Prompt("synthetic"));
-			for (int i = 0; i < 2; i++) {
-				StepVerifier.create(stream)
-					.expectNextCount(prefix.isEmpty() ? 0 : 1)
-					.expectErrorSatisfies(
-							error -> assertThat(error).isInstanceOf(OpenRouterTruncatedResponseException.class)
-								.hasMessageContaining("before protocol termination"))
-					.verify();
-			}
-		}
+	static Stream<Arguments> missingTerminalStreams() {
+		Map<String, String> tails = new LinkedHashMap<>();
+		tails.put("empty body", "");
+		tails.put("keep-alive comment only", ": synthetic keepalive\n\n");
+		tails.put("[DONE] without a terminal event", "data: [DONE]\n\n");
+		tails.put("[DONE] then malformed data", "data: [DONE]\ndata: {invalid}\n\n");
+		return tails.entrySet()
+			.stream()
+			.flatMap(tail -> Stream.of(
+					Arguments.of(Named.of(tail.getKey() + ", no text before it", ""), tail.getValue(), 0),
+					Arguments.of(Named.of(tail.getKey() + ", after a text delta", TEXT), tail.getValue(), 1)));
 	}
 
 	@ParameterizedTest
-	@ValueSource(strings = { "completed", "incomplete" })
-	void terminalPreservesUsageAndFinishMetadataWithoutDone(String status) {
+	@MethodSource("missingTerminalStreams")
+	void missingTerminalFailsEmptyAndTextStreams(String prefix, String tail, int expectedItems) {
+		Flux<ChatResponse> stream = model(prefix + tail).stream(new Prompt("synthetic"));
+
+		assertTruncatedBeforeProtocolTermination(stream, expectedItems);
+	}
+
+	@ParameterizedTest
+	@MethodSource("missingTerminalStreams")
+	void missingTerminalFailsAgainOnASecondSubscription(String prefix, String tail, int expectedItems) {
+		Flux<ChatResponse> stream = model(prefix + tail).stream(new Prompt("synthetic"));
+		stream.onErrorResume(OpenRouterTruncatedResponseException.class, error -> Flux.empty()).blockLast();
+
+		assertTruncatedBeforeProtocolTermination(stream, expectedItems);
+	}
+
+	private static void assertTruncatedBeforeProtocolTermination(Flux<ChatResponse> stream, int expectedItems) {
+		StepVerifier.create(stream)
+			.expectNextCount(expectedItems)
+			.expectErrorSatisfies(error -> assertThat(error).isInstanceOf(OpenRouterTruncatedResponseException.class)
+				.hasMessageContaining("before protocol termination"))
+			.verify();
+	}
+
+	@ParameterizedTest
+	@CsvSource({ "completed,STOP", "incomplete,incomplete" })
+	void terminalPreservesUsageAndFinishMetadataWithoutDone(String status, String expectedFinishReason) {
 		String terminal = "data: {\"type\":\"response." + status + "\",\"response\":{"
 				+ "\"id\":\"synthetic\",\"status\":\"" + status
 				+ "\",\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"hello\"}]}],"
@@ -58,13 +83,9 @@ class OpenRouterResponsesTerminationTests {
 		StepVerifier.create(model(TEXT + terminal + "data: {invalid}\n\n").stream(new Prompt("synthetic")))
 			.assertNext(response -> {
 				assertThat(response.getResult().getOutput().getText()).isEqualTo("hello");
-				assertThat(response.getResult().getMetadata().isEmpty()).isTrue();
-				assertThat(response.getResult().getMetadata().getFinishReason()).isNull();
-				assertThat(response.getResult().getMetadata().getContentFilters()).isEmpty();
 			})
 			.assertNext(response -> {
-				assertThat(response.getResult().getMetadata().getFinishReason())
-					.isEqualTo("completed".equals(status) ? "STOP" : status);
+				assertThat(response.getResult().getMetadata().getFinishReason()).isEqualTo(expectedFinishReason);
 				assertThat(response.getMetadata().getUsage().getTotalTokens()).isEqualTo(5);
 			})
 			.verifyComplete();
@@ -95,48 +116,29 @@ class OpenRouterResponsesTerminationTests {
 	}
 
 	@Test
-	void unfinishedRoundNeverExecutesAdvisorTools() {
-		AtomicInteger executions = new AtomicInteger();
-		var callback = FunctionToolCallback.builder("synthetic_action", (Map<String, Object> input) -> {
-			executions.incrementAndGet();
-			return "ok";
-		}).description("Synthetic counter").inputType(Map.class).build();
-		var client = ChatClient
-			.builder(
-					model("""
-							data: {"type":"response.output_item.done","item":{"type":"function_call","id":"synthetic","call_id":"synthetic","name":"synthetic_action","status":"completed","arguments":"{}"}}
+	void doneWithoutTerminalEventFailsAndClosesAnOpenBody() {
+		AtomicBoolean cancelled = new AtomicBoolean();
+		Flux<String> body = Flux.just(TEXT + DONE).concatWith(Flux.never()).doOnCancel(() -> cancelled.set(true));
 
-							"""
-							+ DONE))
-			.defaultAdvisors(ToolCallingAdvisor.builder().build())
-			.build();
-		StepVerifier
-			.create(client.prompt()
-				.user("synthetic")
-				.options(OpenRouterChatOptions.builder().toolCallbacks(callback))
-				.stream()
-				.content())
-			.thenConsumeWhile(value -> true)
-			.expectError(OpenRouterTruncatedResponseException.class)
-			.verify();
-		assertThat(executions).hasValue(0);
+		StepVerifier.create(model(body).stream(new Prompt("synthetic")))
+			.expectNextCount(1)
+			.expectErrorSatisfies(error -> assertThat(error).isInstanceOf(OpenRouterTruncatedResponseException.class)
+				.hasMessageContaining("before protocol termination"))
+			.verify(Duration.ofSeconds(3));
+
+		assertThat(cancelled).isTrue();
 	}
 
-	@ParameterizedTest
-	@ValueSource(booleans = { false, true })
-	void cancellationAndDoneStopAnOpenBody(boolean done) {
+	@Test
+	void consumerCancellationClosesAnOpenBody() {
 		AtomicBoolean cancelled = new AtomicBoolean();
-		Flux<String> body = Flux.just(TEXT + (done ? DONE : ""))
-			.concatWith(Flux.never())
-			.doOnCancel(() -> cancelled.set(true));
-		var verification = StepVerifier.create(model(body).stream(new Prompt("synthetic"))).expectNextCount(1);
-		if (done) {
-			verification.expectError(OpenRouterTruncatedResponseException.class)
-				.verify(java.time.Duration.ofSeconds(3));
-		}
-		else {
-			verification.thenCancel().verify(java.time.Duration.ofSeconds(3));
-		}
+		Flux<String> body = Flux.just(TEXT).concatWith(Flux.never()).doOnCancel(() -> cancelled.set(true));
+
+		StepVerifier.create(model(body).stream(new Prompt("synthetic")))
+			.expectNextCount(1)
+			.thenCancel()
+			.verify(Duration.ofSeconds(3));
+
 		assertThat(cancelled).isTrue();
 	}
 

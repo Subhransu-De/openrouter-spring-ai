@@ -4,10 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
+import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.errors.OpenRouterHttpException;
 import de.subhransu.openrouter.springai.errors.OpenRouterHttpExceptionFactory;
+import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException;
+import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
 import de.subhransu.openrouter.springai.image.OpenRouterImageModel;
 import de.subhransu.openrouter.springai.image.OpenRouterImageOptions;
@@ -18,11 +21,17 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntFunction;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.image.ImagePrompt;
+import org.springframework.core.NestedExceptionUtils;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DefaultDataBufferFactory;
 import org.springframework.core.retry.RetryPolicy;
@@ -30,6 +39,7 @@ import org.springframework.core.retry.RetryTemplate;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.util.backoff.BackOff;
 import org.springframework.util.backoff.FixedBackOff;
 import org.springframework.web.reactive.function.client.ClientResponse;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -61,57 +71,60 @@ class StreamRetriesTests {
 	void exhaustionPreservesTypedErrorAndEachSubscriptionHasItsOwnAttempts(Mode mode) {
 		Fixture fixture = new Fixture(attempt -> Mono.just(rejection(429, "0")));
 		Flux<?> stream = fixture.stream(mode, policy(2, 0));
-		for (int subscription = 1; subscription <= 2; subscription++) {
-			StepVerifier.withVirtualTime(() -> stream).thenAwait(Duration.ofMillis(1)).expectErrorSatisfies(error -> {
-				assertThat(error).isInstanceOf(OpenRouterTransientApiException.class);
-				assertThat(((OpenRouterHttpException) error).getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
-				assertThat(((OpenRouterHttpException) error).getRetryAfter().value()).isEqualTo("0");
-			}).verify(Duration.ofSeconds(10));
-			assertThat(fixture.attempts).hasValue(subscription * 3);
-		}
+
+		verifyExhaustion(stream);
+		assertThat(fixture.attempts).hasValue(3);
+		verifyExhaustion(stream);
+		assertThat(fixture.attempts).hasValue(6);
+
 		assertThat(fixture.stops).hasValue(2);
 		assertThat(fixture.errors).hasValue(2);
 	}
 
-	@ParameterizedTest
-	@EnumSource(Mode.class)
-	void nonEligibleHttpStatusesNeverRetryEvenWithPermissivePolicy(Mode mode) {
-		for (int status : new int[] { 400, 401, 402, 403, 408, 500, 502, 503, 504 }) {
-			Fixture fixture = new Fixture(attempt -> Mono.just(rejection(status, "0")));
-			StepVerifier.create(fixture.stream(mode, policy(2, 0)))
-				.expectErrorSatisfies(error -> assertThat(((OpenRouterHttpException) error).getStatusCode().value())
-					.isEqualTo(status))
-				.verify(Duration.ofSeconds(10));
-			assertThat(fixture.attempts).hasValue(1);
-			fixture.assertObservation(1);
-		}
+	private static void verifyExhaustion(Flux<?> stream) {
+		StepVerifier.withVirtualTime(() -> stream).thenAwait(Duration.ofMillis(1)).expectErrorSatisfies(error -> {
+			assertThat(error).isInstanceOf(OpenRouterTransientApiException.class);
+			assertThat(((OpenRouterHttpException) error).getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+			assertThat(((OpenRouterHttpException) error).getRetryAfter().value()).isEqualTo("0");
+		}).verify(Duration.ofSeconds(10));
 	}
 
 	@ParameterizedTest
-	@EnumSource(Mode.class)
-	void connectionFailureAndFailureAfterHeadersNeverRetry(Mode mode) {
-		RuntimeException failure = new IllegalStateException("synthetic connection failure");
-		for (boolean headersReceived : new boolean[] { false, true }) {
-			Fixture fixture = new Fixture(
-					attempt -> headersReceived ? Mono.just(sse(Flux.error(failure))) : Mono.error(failure));
-			StepVerifier.create(fixture.stream(mode, policy(2, 0))).expectError().verify(Duration.ofSeconds(10));
-			assertThat(fixture.attempts).hasValue(1);
-			fixture.assertObservation(1);
-		}
-	}
-
-	@ParameterizedTest
-	@EnumSource(Mode.class)
-	void firstVisibleElementIsNeverReplayed(Mode mode) {
-		RuntimeException failure = new IllegalStateException("synthetic body failure");
-		Fixture fixture = new Fixture(
-				attempt -> Mono.just(sse(Flux.concat(Mono.just(buffer(mode.first)), Mono.error(failure)))));
+	@MethodSource("modesWithNonEligibleStatuses")
+	void nonEligibleHttpStatusesNeverRetryEvenWithPermissivePolicy(Mode mode, int status) {
+		Fixture fixture = new Fixture(attempt -> Mono.just(rejection(status, "0")));
 		StepVerifier.create(fixture.stream(mode, policy(2, 0)))
-			.expectNextCount(1)
-			.expectError()
+			.expectErrorSatisfies(
+					error -> assertThat(((OpenRouterHttpException) error).getStatusCode().value()).isEqualTo(status))
 			.verify(Duration.ofSeconds(10));
 		assertThat(fixture.attempts).hasValue(1);
 		fixture.assertObservation(1);
+	}
+
+	static Stream<Arguments> modesWithNonEligibleStatuses() {
+		return Stream.of(Mode.values())
+			.flatMap(mode -> IntStream.of(400, 401, 402, 403, 408, 500, 502, 503, 504)
+				.mapToObj(status -> Arguments.of(Named.of(mode.name(), mode), Named.of("HTTP " + status, status))));
+	}
+
+	@ParameterizedTest
+	@MethodSource("modesWithFailurePoints")
+	void failuresOutsideAMarkedRejectionNeverRetry(Mode mode, FailurePoint point) {
+		RuntimeException failure = new IllegalStateException("synthetic failure");
+		Fixture fixture = new Fixture(attempt -> point.response(mode, failure));
+		StepVerifier.create(fixture.stream(mode, policy(2, 0)))
+			.expectNextCount(point.expectedElements)
+			.expectErrorSatisfies(
+					error -> assertThat(NestedExceptionUtils.getMostSpecificCause(error)).isSameAs(failure))
+			.verify(Duration.ofSeconds(10));
+		assertThat(fixture.attempts).hasValue(1);
+		fixture.assertObservation(1);
+	}
+
+	static Stream<Arguments> modesWithFailurePoints() {
+		return Stream.of(Mode.values())
+			.flatMap(mode -> Stream.of(FailurePoint.values())
+				.map(point -> Arguments.of(Named.of(mode.name(), mode), Named.of(point.label, point))));
 	}
 
 	@ParameterizedTest
@@ -132,62 +145,121 @@ class StreamRetriesTests {
 	}
 
 	@ParameterizedTest
-	@EnumSource(Mode.class)
-	void policyCanDenyRetriesAndTimeoutCanDeclineProviderDelay(Mode mode) {
-		for (RetryPolicy policy : new RetryPolicy[] {
-				RetryPolicy.builder().predicate(error -> false).backOff(new FixedBackOff(0, 2)).build(),
-				RetryPolicy.builder().timeout(Duration.ofSeconds(2)).backOff(new FixedBackOff(0, 2)).build(),
-				policy(0, 0) }) {
-			Fixture fixture = new Fixture(attempt -> Mono.just(rejection(429, "3")));
-			StepVerifier.create(fixture.stream(mode, policy))
-				.expectError(OpenRouterTransientApiException.class)
-				.verify(Duration.ofSeconds(10));
-			assertThat(fixture.attempts).hasValue(1);
-			fixture.assertObservation(1);
-		}
-	}
-
-	@ParameterizedTest
-	@EnumSource(Mode.class)
-	void rejectedErrorBodyLimitsAndNonTransientCategoriesDoNotRetry(Mode mode) {
-		for (String body : new String[] { "x".repeat(OpenRouterApi.DEFAULT_MAX_ERROR_BODY_BYTES + 1),
-				"{\"error_type\":\"invalid_request_error\"}", "{\"error_type\":\"server_error\"}" }) {
-			Fixture fixture = new Fixture(
-					attempt -> Mono.just(ClientResponse.create(HttpStatus.TOO_MANY_REQUESTS).body(body).build()));
-			StepVerifier.create(fixture.stream(mode, policy(2, 0))).expectError().verify(Duration.ofSeconds(10));
-			assertThat(fixture.attempts).hasValue(1);
-		}
-	}
-
-	@Test
-	void inBandRateLimitInAcceptedResponsesStreamDoesNotRetry() {
-		Fixture fixture = new Fixture(attempt -> Mono.just(sse(Flux.just(buffer(
-				"data: {\"type\":\"response.failed\",\"response\":{\"status\":\"failed\",\"error\":{\"code\":\"rate_limit_exceeded\"}}}\n\n")))));
-		StepVerifier.create(fixture.stream(Mode.RESPONSES, policy(2, 0)))
+	@MethodSource("modesWithDecliningPolicies")
+	void policyCanDenyRetriesAndTimeoutCanDeclineProviderDelay(Mode mode, RetryPolicy policy) {
+		Fixture fixture = new Fixture(attempt -> Mono.just(rejection(429, "3")));
+		StepVerifier.create(fixture.stream(mode, policy))
 			.expectError(OpenRouterTransientApiException.class)
 			.verify(Duration.ofSeconds(10));
 		assertThat(fixture.attempts).hasValue(1);
 		fixture.assertObservation(1);
 	}
 
+	static Stream<Arguments> modesWithDecliningPolicies() {
+		return Stream.of(Mode.values())
+			.flatMap(mode -> Stream.of(
+					Arguments.of(Named.of(mode.name(), mode), Named.of("predicate rejects the failure",
+							RetryPolicy.builder().predicate(error -> false).backOff(new FixedBackOff(0, 2)).build())),
+					Arguments.of(Named.of(mode.name(), mode),
+							Named.of("Retry-After does not fit the timeout",
+									RetryPolicy.builder()
+										.timeout(Duration.ofSeconds(2))
+										.backOff(new FixedBackOff(0, 2))
+										.build())),
+					Arguments.of(Named.of(mode.name(), mode), Named.of("no retries configured", policy(0, 0)))));
+	}
+
 	@ParameterizedTest
-	@EnumSource(value = Mode.class, names = { "CHAT", "IMAGE" })
-	void inBandRateLimitInAcceptedStreamDoesNotRetry(Mode mode) {
-		Fixture fixture = new Fixture(attempt -> Mono
-			.just(sse(Flux.just(buffer("data: {\"error\":{\"code\":429,\"message\":\"synthetic rate limit\"}}\n\n")))));
-		StepVerifier.create(fixture.stream(mode, policy(2, 0))).expectError().verify(Duration.ofSeconds(10));
+	@MethodSource("modesWithRetryAfterValues")
+	void unusableOrOverlongRetryAfterFallsBackToTheConfiguredDelay(Mode mode, String retryAfter,
+			long expectedDelayMillis) {
+		Fixture fixture = new Fixture(attempt -> Mono.just(attempt == 1 ? rejection(429, retryAfter) : success(mode)));
+		StepVerifier.withVirtualTime(() -> fixture.stream(mode, policy(2, 1000)))
+			.expectSubscription()
+			.expectNoEvent(Duration.ofMillis(expectedDelayMillis - 1))
+			.then(() -> assertThat(fixture.attempts).hasValue(1))
+			.thenAwait(Duration.ofMillis(1))
+			.expectNextCount(1)
+			.expectComplete()
+			.verify(Duration.ofSeconds(10));
+		assertThat(fixture.attempts).hasValue(2);
+		fixture.assertObservation(0);
+	}
+
+	static Stream<Arguments> modesWithRetryAfterValues() {
+		return Stream.of(Mode.values())
+			.flatMap(mode -> Stream
+				.of(Arguments.of(Named.of("not a number", "soon"), 1000L),
+						Arguments.of(Named.of("negative", "-1"), 1000L),
+						Arguments.of(Named.of("just over five minutes", "301"), 1000L),
+						Arguments.of(Named.of("exactly five minutes", "300"), 300_000L))
+				.map(retryAfter -> Arguments.of(Named.of(mode.name(), mode), retryAfter.get()[0],
+						retryAfter.get()[1])));
+	}
+
+	@ParameterizedTest
+	@EnumSource(Mode.class)
+	void timeoutExpiringDuringTheDelayDeclinesTheRetry(Mode mode) {
+		AtomicInteger timeoutReads = new AtomicInteger();
+		RetryPolicy policy = new RetryPolicy() {
+			@Override
+			public boolean shouldRetry(Throwable throwable) {
+				return true;
+			}
+
+			@Override
+			public Duration getTimeout() {
+				// A long timeout when the delay is chosen, an expired one when it ends.
+				return timeoutReads.incrementAndGet() == 1 ? Duration.ofSeconds(30) : Duration.ofMillis(1);
+			}
+
+			@Override
+			public BackOff getBackOff() {
+				return new FixedBackOff(500, 2);
+			}
+		};
+		Fixture fixture = new Fixture(attempt -> Mono.just(rejection(429, "0")));
+		StepVerifier.withVirtualTime(() -> fixture.stream(mode, policy))
+			.expectSubscription()
+			.thenAwait(Duration.ofSeconds(1))
+			.expectErrorSatisfies(error -> {
+				assertThat(error).isInstanceOf(OpenRouterTransientApiException.class);
+				assertThat(((OpenRouterHttpException) error).getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+			})
+			.verify(Duration.ofSeconds(10));
 		assertThat(fixture.attempts).hasValue(1);
 		fixture.assertObservation(1);
 	}
 
-	@Test
-	void inBandRateLimitInImageJsonFallbackDoesNotRetry() {
-		Fixture fixture = new Fixture(attempt -> Mono.just(ClientResponse.create(HttpStatus.OK)
-			.header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-			.body("{\"error\":{\"code\":429,\"message\":\"synthetic rate limit\"}}")
-			.build()));
-		StepVerifier.create(fixture.stream(Mode.IMAGE, policy(2, 0)))
-			.expectError(OpenRouterTransientApiException.class)
+	@ParameterizedTest
+	@MethodSource("modesWithRejectedBodies")
+	void rejectedErrorBodyLimitsAndNonTransientCategoriesDoNotRetry(Mode mode, String body,
+			Class<? extends Throwable> errorType) {
+		Fixture fixture = new Fixture(
+				attempt -> Mono.just(ClientResponse.create(HttpStatus.TOO_MANY_REQUESTS).body(body).build()));
+		StepVerifier.create(fixture.stream(mode, policy(2, 0))).expectError(errorType).verify(Duration.ofSeconds(10));
+		assertThat(fixture.attempts).hasValue(1);
+		fixture.assertObservation(1);
+	}
+
+	static Stream<Arguments> modesWithRejectedBodies() {
+		return Stream.of(Mode.values())
+			.flatMap(mode -> Stream.of(
+					Arguments.of(Named.of("oversized body", "x".repeat(OpenRouterApi.DEFAULT_MAX_ERROR_BODY_BYTES + 1)),
+							OpenRouterLimitExceededException.class),
+					Arguments.of(Named.of("invalid_request_error type", "{\"error_type\":\"invalid_request_error\"}"),
+							OpenRouterNonTransientApiException.class),
+					Arguments.of(Named.of("server_error type", "{\"error_type\":\"server_error\"}"),
+							OpenRouterTransientApiException.class))
+				.map(rejected -> Arguments.of(Named.of(mode.name(), mode), rejected.get()[0], rejected.get()[1])));
+	}
+
+	@ParameterizedTest
+	@EnumSource(InBandRateLimit.class)
+	void inBandRateLimitInAnAcceptedResponseDoesNotRetry(InBandRateLimit scenario) {
+		Fixture fixture = new Fixture(attempt -> Mono.just(scenario.response()));
+		StepVerifier.create(fixture.stream(scenario.mode, policy(2, 0)))
+			.expectError(scenario.errorType)
 			.verify(Duration.ofSeconds(10));
 		assertThat(fixture.attempts).hasValue(1);
 		fixture.assertObservation(1);
@@ -233,6 +305,86 @@ class StreamRetriesTests {
 
 	private static DataBuffer buffer(String value) {
 		return DefaultDataBufferFactory.sharedInstance.wrap(value.getBytes(StandardCharsets.UTF_8));
+	}
+
+	private enum FailurePoint {
+
+		CONNECTION("before the response", 0) {
+			@Override
+			Mono<ClientResponse> response(Mode mode, RuntimeException failure) {
+				return Mono.error(failure);
+			}
+		},
+		AFTER_HEADERS("after the headers", 0) {
+			@Override
+			Mono<ClientResponse> response(Mode mode, RuntimeException failure) {
+				return Mono.just(sse(Flux.error(failure)));
+			}
+		},
+		AFTER_FIRST_ELEMENT("after the first element", 1) {
+			@Override
+			Mono<ClientResponse> response(Mode mode, RuntimeException failure) {
+				return Mono.just(sse(Flux.concat(Mono.just(buffer(mode.first)), Mono.error(failure))));
+			}
+		};
+
+		private final String label;
+
+		private final int expectedElements;
+
+		FailurePoint(String label, int expectedElements) {
+			this.label = label;
+			this.expectedElements = expectedElements;
+		}
+
+		abstract Mono<ClientResponse> response(Mode mode, RuntimeException failure);
+
+	}
+
+	private enum InBandRateLimit {
+
+		RESPONSES_STREAM_FAILED_EVENT(Mode.RESPONSES, OpenRouterTransientApiException.class) {
+			@Override
+			ClientResponse response() {
+				return sse(Flux.just(buffer(
+						"data: {\"type\":\"response.failed\",\"response\":{\"status\":\"failed\",\"error\":{\"code\":\"rate_limit_exceeded\"}}}\n\n")));
+			}
+		},
+		CHAT_STREAM_ERROR_FRAME(Mode.CHAT, OpenRouterApiException.class) {
+			@Override
+			ClientResponse response() {
+				return sse(Flux.just(buffer(IN_BAND_FRAME)));
+			}
+		},
+		IMAGE_STREAM_ERROR_FRAME(Mode.IMAGE, OpenRouterApiException.class) {
+			@Override
+			ClientResponse response() {
+				return sse(Flux.just(buffer(IN_BAND_FRAME)));
+			}
+		},
+		IMAGE_JSON_FALLBACK(Mode.IMAGE, OpenRouterTransientApiException.class) {
+			@Override
+			ClientResponse response() {
+				return ClientResponse.create(HttpStatus.OK)
+					.header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+					.body("{\"error\":{\"code\":429,\"message\":\"synthetic rate limit\"}}")
+					.build();
+			}
+		};
+
+		private static final String IN_BAND_FRAME = "data: {\"error\":{\"code\":429,\"message\":\"synthetic rate limit\"}}\n\n";
+
+		private final Mode mode;
+
+		private final Class<? extends Throwable> errorType;
+
+		InBandRateLimit(Mode mode, Class<? extends Throwable> errorType) {
+			this.mode = mode;
+			this.errorType = errorType;
+		}
+
+		abstract ClientResponse response();
+
 	}
 
 	private enum Mode {

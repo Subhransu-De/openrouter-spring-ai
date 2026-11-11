@@ -21,7 +21,7 @@ public record SceneResult(
     @Nullable String error,
     @Nullable SceneFailureReason reason) {
 
-  public static SceneResult passed(
+  static SceneResult passed(
       String sceneId,
       String operationId,
       OpenRouterRequestMode requestMode,
@@ -38,35 +38,6 @@ public record SceneResult(
         new LinkedHashMap<>(details),
         null,
         null);
-  }
-
-  public static SceneResult failed(
-      String sceneId,
-      String operationId,
-      OpenRouterRequestMode requestMode,
-      Duration duration,
-      Path outputDirectory,
-      Throwable failure) {
-    return failed(
-        sceneId,
-        operationId,
-        requestMode,
-        duration,
-        outputDirectory,
-        Map.of(),
-        failure);
-  }
-
-  public static SceneResult failed(
-      String sceneId,
-      String operationId,
-      OpenRouterRequestMode requestMode,
-      Duration duration,
-      Path outputDirectory,
-      Map<String, Object> details,
-      Throwable failure) {
-    return failed(
-        sceneId, operationId, requestMode, duration, outputDirectory, details, failure, List.of());
   }
 
   /**

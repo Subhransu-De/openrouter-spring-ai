@@ -18,16 +18,21 @@ import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
 import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
+import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.ThrowingSupplier;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.chat.model.MessageAggregator;
 import org.springframework.ai.tool.definition.ToolDefinition;
 import reactor.core.publisher.Flux;
 
@@ -114,27 +119,27 @@ class OpenRouterResponsesMapperTests {
 		assertThat(request.imageConfig()).containsEntry("aspect_ratio", "16:9");
 	}
 
-	@Test
-	void mapsImageGenerationCallOutputItemsToMedia() {
-		ResponsesResult result = new ResponsesResult("resp-1", "response", 123L, "google/gemini-2.5-flash-image",
-				"completed",
-				List.of(new ResponsesOutputItem("item-img", "image_generation_call", "completed", null, null, null,
-						null, null, "aW1hZ2Ux"),
-						new ResponsesOutputItem("item-1", "message", "completed", "assistant",
-								List.of(new ResponsesContent("output_text", "here you go")))),
-				null, null);
+	@ParameterizedTest
+	@MethodSource("imageGenerationCallMappings")
+	void imageGenerationCallItemsMapToDataUriMedia(ThrowingSupplier<ChatResponse> mapping, String expectedText)
+			throws Throwable {
+		ChatResponse mapped = mapping.get();
 
-		ChatResponse mapped = new OpenRouterResponsesResponseMapper().map(result);
-
-		assertThat(mapped.getResult().getOutput().getText()).isEqualTo("here you go");
+		assertThat(mapped.getResult().getOutput().getText()).isEqualTo(expectedText);
 		assertThat(mapped.getResult().getOutput().getMedia()).hasSize(1);
 		assertThat(mapped.getResult().getOutput().getMedia().get(0).getData())
 			.isEqualTo("data:image/png;base64,aW1hZ2Ux");
 	}
 
-	@Test
-	void mapsCompletedImageGenerationCallItemsFromResponsesStream() throws Exception {
-		ChatResponse mapped = new OpenRouterResponsesStreamingResponseMapper().map(streamEvent("""
+	static Stream<Arguments> imageGenerationCallMappings() {
+		ThrowingSupplier<ChatResponse> result = () -> ResponseMappers.responses()
+			.map(new ResponsesResult("resp-1", "response", 123L, "google/gemini-2.5-flash-image", "completed",
+					List.of(new ResponsesOutputItem("item-img", "image_generation_call", "completed", null, null, null,
+							null, null, "aW1hZ2Ux"),
+							new ResponsesOutputItem("item-1", "message", "completed", "assistant",
+									List.of(new ResponsesContent("output_text", "here you go")))),
+					null, null));
+		ThrowingSupplier<ChatResponse> event = () -> ResponseMappers.responsesEvent(streamEvent("""
 				{
 				  "type": "response.output_item.done",
 				  "item": {
@@ -145,11 +150,8 @@ class OpenRouterResponsesMapperTests {
 				  }
 				}
 				"""));
-
-		assertThat(mapped.getResult().getOutput().getText()).isEmpty();
-		assertThat(mapped.getResult().getOutput().getMedia()).hasSize(1);
-		assertThat(mapped.getResult().getOutput().getMedia().get(0).getData())
-			.isEqualTo("data:image/png;base64,aW1hZ2Ux");
+		return Stream.of(Arguments.of(Named.of("blocking result", result), "here you go"),
+				Arguments.of(Named.of("stream output_item.done event", event), ""));
 	}
 
 	@Test
@@ -159,7 +161,7 @@ class OpenRouterResponsesMapperTests {
 						"function_call", "completed", null, null, "call-1", "get_weather", WEATHER_ARGUMENTS, null)),
 				null, null);
 
-		ChatResponse mapped = new OpenRouterResponsesResponseMapper().map(result);
+		ChatResponse mapped = ResponseMappers.responses().map(result);
 
 		assertThat(mapped.hasToolCalls()).isTrue();
 		assertThat(mapped.getResult().getMetadata().getFinishReason()).isEqualTo("TOOL_CALLS");
@@ -177,7 +179,7 @@ class OpenRouterResponsesMapperTests {
 								new ResponsesContent("output_text", " world")))),
 				new Usage(4, 2, 6, null, null, null, null, null, null), null);
 
-		ChatResponse mapped = new OpenRouterResponsesResponseMapper().map(result);
+		ChatResponse mapped = ResponseMappers.responses().map(result);
 
 		assertThat(mapped.getResult().getOutput().getText()).isEqualTo("hello world");
 		assertThat(mapped.getResult().getMetadata().getFinishReason()).isEqualTo("STOP");
@@ -186,43 +188,19 @@ class OpenRouterResponsesMapperTests {
 	}
 
 	@Test
-	void mapsResponsesTextDeltaStreamEvent() throws Exception {
-		ChatResponse mapped = new OpenRouterResponsesStreamingResponseMapper().map(streamEvent("""
-				{
-				  "type": "response.output_text.delta",
-				  "delta": "hello"
-				}
-				"""));
-
-		assertThat(mapped.getResult().getOutput().getText()).isEqualTo("hello");
-		assertThat(mapped.getResult().getMetadata().isEmpty()).isTrue();
-		assertThat(mapped.getResult().getMetadata().getFinishReason()).isNull();
-		assertThat(mapped.getResult().getMetadata().getContentFilters()).isEmpty();
-	}
-
-	@Test
-	void aggregatedPerEventResultsKeepTheLastEventMetadata() throws Exception {
-		OpenRouterResponsesStreamingResponseMapper mapper = new OpenRouterResponsesStreamingResponseMapper();
-		ChatResponse reasoning = mapper.map(streamEvent("""
+	void reasoningDeltaCarriesReasoningMetadataWithoutText() throws Exception {
+		ChatResponse mapped = ResponseMappers.responsesEvent(streamEvent("""
 				{"type": "response.reasoning_text.delta", "delta": "thinking"}
 				"""));
-		ChatResponse text = mapper.map(streamEvent("""
-				{"type": "response.output_text.delta", "delta": "hello"}
-				"""));
-		List<ChatResponse> aggregated = new ArrayList<>();
 
-		new MessageAggregator().aggregate(Flux.just(reasoning, text), aggregated::add).blockLast();
-
-		assertThat(reasoning.getResult().getMetadata().containsKey("openrouter.reasoning")).isTrue();
-		assertThat(aggregated).singleElement()
-			.satisfies(response -> assertThat(response.getResult().getMetadata().isEmpty()).isTrue());
+		assertThat(mapped.getResult().getOutput().getText()).isEmpty();
+		assertThat(mapped.getResult().getMetadata().<Object>get("openrouter.reasoning")).isEqualTo("thinking");
 	}
 
 	@Test
-	void doesNotRepeatStreamedTextOnTerminalEvents() throws Exception {
+	void textDeltaEmitsTextWithoutMetadataAndTerminalEventsDoNotRepeatIt() throws Exception {
 		// output_text.done and output_item.done carry the full text already sent as
-		// deltas;
-		// re-emitting it would duplicate the streamed output.
+		// deltas; re-emitting it would duplicate the streamed output.
 		String outputTextDone = """
 				{
 				  "type": "response.output_text.done",
@@ -238,35 +216,24 @@ class OpenRouterResponsesMapperTests {
 				  }
 				}
 				""";
-		OpenRouterResponsesStreamingResponseMapper mapper = new OpenRouterResponsesStreamingResponseMapper();
+		OpenRouterResponsesStreamingResponseMapper mapper = ResponseMappers.responsesStreaming();
 
-		assertThat(mapper.map(streamEvent(outputTextDone)).getResult().getOutput().getText()).isEmpty();
-		assertThat(mapper.map(streamEvent(outputItemDone)).getResult().getOutput().getText()).isEmpty();
-		var responses = mapper.map(reactor.core.publisher.Flux.just(
-				new ResponsesStreamEvent("response.output_text.delta", "already streamed", null, null, null),
-				streamEvent(outputTextDone), streamEvent(outputItemDone)))
+		var responses = mapper
+			.map(Flux.just(new ResponsesStreamEvent("response.output_text.delta", "already streamed", null, null, null),
+					streamEvent(outputTextDone), streamEvent(outputItemDone)))
 			.collectList()
 			.block();
+
 		assertThat(responses).extracting(response -> response.getResult().getOutput().getText())
 			.containsExactly("already streamed", "", "");
-	}
-
-	@Test
-	void mapsResponsesCompletedEventToFinishReason() throws Exception {
-		ChatResponse mapped = new OpenRouterResponsesStreamingResponseMapper().map(streamEvent("""
-				{
-				  "type": "response.completed",
-				  "response": {"status": "completed", "output": []}
-				}
-				"""));
-
-		assertThat(mapped.getResult().getOutput().getText()).isEmpty();
-		assertThat(mapped.getResult().getMetadata().getFinishReason()).isEqualTo("STOP");
+		assertThat(responses.get(0).getResult().getMetadata().isEmpty()).isTrue();
+		assertThat(responses.get(0).getResult().getMetadata().getFinishReason()).isNull();
+		assertThat(responses.get(0).getResult().getMetadata().getContentFilters()).isEmpty();
 	}
 
 	@Test
 	void doesNotExposeFunctionCallBeforeTerminalResponse() throws Exception {
-		ChatResponse mapped = new OpenRouterResponsesStreamingResponseMapper().map(streamEvent("""
+		ChatResponse mapped = ResponseMappers.responsesEvent(streamEvent("""
 				{
 				  "type": "response.output_item.done",
 				  "item": {
@@ -285,7 +252,7 @@ class OpenRouterResponsesMapperTests {
 
 	@Test
 	void mapsUsageAndIdentityFromResponsesCompletedEvent() throws Exception {
-		ChatResponse mapped = new OpenRouterResponsesStreamingResponseMapper().map(streamEvent("""
+		ChatResponse mapped = ResponseMappers.responsesEvent(streamEvent("""
 				{
 				  "type": "response.completed",
 				  "response": {
@@ -302,6 +269,8 @@ class OpenRouterResponsesMapperTests {
 				}
 				"""));
 
+		assertThat(mapped.getResult().getOutput().getText()).isEmpty();
+		assertThat(mapped.getResult().getMetadata().getFinishReason()).isEqualTo("STOP");
 		assertThat(mapped.getMetadata().getId()).isEqualTo("resp-1");
 		assertThat(mapped.getMetadata().getModel()).isEqualTo("openai/gpt-5.4");
 		assertThat(mapped.getMetadata().getUsage().getTotalTokens()).isEqualTo(6);
@@ -309,7 +278,7 @@ class OpenRouterResponsesMapperTests {
 
 	@Test
 	void throwsOnResponsesFailedStreamEvent() throws Exception {
-		assertThatThrownBy(() -> new OpenRouterResponsesStreamingResponseMapper().map(streamEvent("""
+		assertThatThrownBy(() -> ResponseMappers.responsesEvent(streamEvent("""
 				{
 				  "type": "response.failed",
 				  "response": {
@@ -326,7 +295,7 @@ class OpenRouterResponsesMapperTests {
 
 	@Test
 	void failedResponsesStreamKeepsTaxonomyWithNonStringMessage() throws Exception {
-		assertThatThrownBy(() -> new OpenRouterResponsesStreamingResponseMapper().map(streamEvent("""
+		assertThatThrownBy(() -> ResponseMappers.responsesEvent(streamEvent("""
 				{
 				  "type": "response.failed",
 				  "response": {
@@ -341,9 +310,18 @@ class OpenRouterResponsesMapperTests {
 		});
 	}
 
-	@Test
-	void failedResponsesStreamPreservesNonStringRootErrorType() throws Exception {
-		assertThatThrownBy(() -> new OpenRouterResponsesStreamingResponseMapper().map(streamEvent("""
+	@ParameterizedTest
+	@MethodSource("failuresWithNonStringRootErrorType")
+	void failedResponsesPreserveNonStringRootErrorType(ThrowingCallable mapping) {
+		assertThatThrownBy(mapping).isInstanceOfSatisfying(OpenRouterNonTransientApiException.class, exception -> {
+			assertThat(exception.getCategory()).isEqualTo(OpenRouterErrorCategory.UNKNOWN);
+			assertThat(exception.getErrorDetails().code()).isEqualTo("invalid_api_key");
+			assertThat(exception.getErrorDetails().errorType()).isEqualTo("{\"kind\":\"authentication\"}");
+		});
+	}
+
+	static Stream<Arguments> failuresWithNonStringRootErrorType() {
+		ThrowingCallable stream = () -> ResponseMappers.responsesEvent(streamEvent("""
 				{
 				  "type": "response.failed",
 				  "response": {
@@ -352,26 +330,13 @@ class OpenRouterResponsesMapperTests {
 				    "error_type": {"kind": "authentication"}
 				  }
 				}
-				"""))).isInstanceOfSatisfying(OpenRouterNonTransientApiException.class, exception -> {
-			assertThat(exception.getCategory()).isEqualTo(OpenRouterErrorCategory.UNKNOWN);
-			assertThat(exception.getErrorDetails().code()).isEqualTo("invalid_api_key");
-			assertThat(exception.getErrorDetails().errorType()).isEqualTo("{\"kind\":\"authentication\"}");
-		});
-	}
-
-	@Test
-	void failedResponsesResultPreservesNonStringRootErrorType() throws Exception {
-		ResponsesResult result = new ObjectMapper().readValue("""
+				"""));
+		ThrowingCallable result = () -> ResponseMappers.responses().map(new ObjectMapper().readValue("""
 				{"status":"failed","error":{"code":"invalid_api_key","message":"invalid key"},
 				 "error_type":{"kind":"authentication"}}
-				""", ResponsesResult.class);
-
-		assertThatThrownBy(() -> new OpenRouterResponsesResponseMapper().map(result))
-			.isInstanceOfSatisfying(OpenRouterNonTransientApiException.class, exception -> {
-				assertThat(exception.getCategory()).isEqualTo(OpenRouterErrorCategory.UNKNOWN);
-				assertThat(exception.getErrorDetails().code()).isEqualTo("invalid_api_key");
-				assertThat(exception.getErrorDetails().errorType()).isEqualTo("{\"kind\":\"authentication\"}");
-			});
+				""", ResponsesResult.class));
+		return Stream.of(Arguments.of(Named.of("response.failed stream event", stream)),
+				Arguments.of(Named.of("blocking result", result)));
 	}
 
 	@Test
@@ -379,26 +344,29 @@ class OpenRouterResponsesMapperTests {
 		ResponsesResult result = new ResponsesResult("resp-1", "response", 123L, "openai/gpt-5.4", "failed", List.of(),
 				null, new StreamError("server_error", "add credits"), null, "payment_required");
 
-		assertThatThrownBy(() -> new OpenRouterResponsesResponseMapper().map(result))
+		assertThatThrownBy(() -> ResponseMappers.responses().map(result))
 			.isInstanceOfSatisfying(OpenRouterNonTransientApiException.class,
 					exception -> assertThat(exception.getCategory()).isEqualTo(OpenRouterErrorCategory.BILLING_CREDITS))
 			.hasMessage("OpenRouter responses request failed");
 	}
 
 	@Test
-	void throwsOnResponsesStreamErrorEvents() throws Exception {
-		assertThatThrownBy(() -> new OpenRouterResponsesStreamingResponseMapper().map(streamEvent("""
+	void streamErrorEventWithoutACodeIsNonTransientAndKeepsItsDiagnostic() throws Exception {
+		assertThatThrownBy(() -> ResponseMappers.responsesEvent(streamEvent("""
 				{
 				  "type": "response.failed.error",
 				  "error": {"message": "boom"}
 				}
-				"""))).isInstanceOf(OpenRouterNonTransientApiException.class)
-			.hasMessage("OpenRouter responses stream failed");
+				"""))).isInstanceOfSatisfying(OpenRouterNonTransientApiException.class, exception -> {
+			assertThat(exception.getCategory()).isEqualTo(OpenRouterErrorCategory.UNKNOWN);
+			assertThat(exception.getErrorDetails().code()).isNull();
+			assertThat(exception.getErrorDetails().message()).isEqualTo("boom");
+		}).hasMessage("OpenRouter responses stream failed");
 	}
 
 	@Test
 	void eventLevelResponsesStreamErrorPreservesTypedDetails() throws Exception {
-		assertThatThrownBy(() -> new OpenRouterResponsesStreamingResponseMapper().map(streamEvent("""
+		assertThatThrownBy(() -> ResponseMappers.responsesEvent(streamEvent("""
 				{"type":"error","error":{"code":"server_error","message":"invalid key",
 				 "metadata":{"provider_code":"nested_code","upstream_request_id":"req-1"}},
 				 "error_type":"authentication","metadata":{"provider_code":"bad_key","trace":"abc"}}

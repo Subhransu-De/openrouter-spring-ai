@@ -87,22 +87,6 @@ public final class OpenRouterExceptionMessage {
 	}
 
 	/**
-	 * Retained for source compatibility. Provider diagnostics are deliberately excluded
-	 * from {@link Throwable#getMessage()}.
-	 * @param message host-controlled exception message
-	 * @param responseBody provider-controlled response body that must not become the
-	 * exception message
-	 * @return the host-controlled message
-	 */
-	public static String build(String message, @Nullable String responseBody) {
-		if (responseBody == null) {
-			return message;
-		}
-		// A non-null provider response is deliberately excluded from the host message.
-		return message;
-	}
-
-	/**
 	 * Recursively sanitize provider metadata while preserving maps, lists, and scalar
 	 * value types.
 	 * @param metadata provider-controlled metadata

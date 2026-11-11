@@ -2,15 +2,21 @@ package de.subhransu.openrouter.springai.garage;
 
 import static de.subhransu.openrouter.springai.garage.GarageRunRequests.request;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
+import de.subhransu.openrouter.springai.api.dto.EmbeddingsResponse;
+import de.subhransu.openrouter.springai.api.dto.Usage;
+import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingModel;
+import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingOptions;
 import de.subhransu.openrouter.springai.garage.evidence.EvidenceLevel;
 import de.subhransu.openrouter.springai.garage.evidence.GarageEvidence;
 import de.subhransu.openrouter.springai.garage.evidence.GarageFeature;
@@ -22,7 +28,6 @@ import de.subhransu.openrouter.springai.garage.scenes.GarageScene;
 import de.subhransu.openrouter.springai.garage.scenes.SceneContext;
 import de.subhransu.openrouter.springai.garage.scenes.SceneResult;
 import io.micrometer.observation.ObservationRegistry;
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -30,36 +35,59 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.embedding.EmbeddingRequest;
 import org.springframework.ai.image.ImageModel;
 import org.springframework.ai.image.ImagePrompt;
+import org.springframework.core.retry.RetryPolicy;
+import org.springframework.core.retry.RetryTemplate;
 import org.springframework.mock.env.MockEnvironment;
 import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.ObjectWriter;
 
+/**
+ * Run lifecycle of {@link GarageRunService}: planning, exclusivity, failure handling and cleanup.
+ * The scenes and the report writer are test doubles here, so a test that verifies a call to the
+ * writer proves only that the service hands the finished run over; the report content is proved
+ * by {@code GarageReportWriterTests} and the full-run integration tests. The scene list test
+ * asserts the identity of its doubles because the service returns the registered beans.
+ */
 // Keep synthetic failure inputs explicit in each test.
 @SuppressWarnings("PMD.AvoidDuplicateLiterals")
 class GarageRunServiceTests {
 
   private static final String DYNO = "{\"scenes\":[\"dyno-tuning\"]}";
 
+  private static final String RECOVERY_RESPONSES = "{\"capabilities\":[\"text\"],"
+      + "\"scenes\":[\"recovery-road-test\"],\"requestModes\":[\"responses\"]}";
+
   @TempDir Path output;
 
   @Test
-  void scenesExposeEveryRegistryFeature() throws Exception {
-    GarageScene scene = scene();
-    when(scene.features()).thenReturn(List.of(GarageFeature.values()));
-    GarageRunService service = service(scene, new GarageEvidence(), writer());
+  void scenesAreListedByIdAndTheFirstOfADuplicateIdWins() throws Exception {
+    GarageScene second = namedScene("routing-lane");
+    GarageScene first = namedScene("attribution-check-in");
+    GarageScene duplicate = namedScene("routing-lane");
+    GarageRunService service = new GarageRunService(mock(ChatModel.class), mock(EmbeddingModel.class),
+        mock(ImageModel.class), new ObjectMapper(), environment(), List.of(second, first, duplicate),
+        new GarageEvidence(), mock(GarageTelemetry.class), mock(GarageTransportEvidence.class),
+        ObservationRegistry.create(), writer(), Runnable::run);
 
-    assertThat(service.scenes()).containsExactly(scene);
-    assertThat(service.scenes().get(0).features()).containsExactly(GarageFeature.values());
+    assertThat(service.scenes()).containsExactly(first, second);
   }
 
   @Test
@@ -92,20 +120,47 @@ class GarageRunServiceTests {
   }
 
   @Test
+  void aFailedSceneKeepsTheCostItsOperationRecorded() throws Exception {
+    GarageScene scene = scene();
+    GarageEvidence evidence = new GarageEvidence();
+    when(scene.execute(any())).thenAnswer(invocation -> {
+      String operation = ModeEvidence.record(evidence, GarageFeature.STANDARD_SAMPLING,
+          OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS, ModeEvidence.Outcome.INCOMPLETE);
+      recordCost(evidence, operation, 0.01);
+      throw new IllegalStateException("invalid image");
+    });
+    GarageReportWriter writer = writer();
+    GarageRunService service = service(scene, evidence, writer);
+
+    GarageRun run = finished(service, service.start(request(DYNO)));
+
+    assertThat(run.status()).isEqualTo(GarageRun.Status.FAILED);
+    assertThat(run.recordedCostUsd()).isCloseTo(0.01, within(1e-12));
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<List<SceneResult>> results = ArgumentCaptor.forClass(List.class);
+    verify(writer).write(any(), any(), results.capture(), any());
+    assertThat(results.getValue()).singleElement().satisfies(result -> {
+      assertThat(result.status()).isEqualTo(SceneResult.Status.FAILED);
+      assertThat(result.details()).containsEntry("costUsd", 0.01);
+    });
+  }
+
+  @Test
   void recordedCostAloneNeverFailsARun() throws Exception {
     GarageScene scene = scene();
     GarageEvidence evidence = new GarageEvidence();
     when(scene.execute(any())).thenAnswer(invocation -> {
-      evidence.recordCost("synthetic-operation", 0.01);
-      return SceneResult.passed("dyno-tuning", "synthetic-operation",
-          OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS, Duration.ZERO, this.output, Map.of());
+      String operation = evidence.newOperation("dyno-tuning", OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS.name());
+      recordCost(evidence, operation, 0.01);
+      return SceneResults.passed("dyno-tuning", operation, OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS,
+          Duration.ZERO, this.output, Map.of());
     });
     GarageRunService service = service(scene, evidence, writer());
 
     GarageRun run = finished(service, service.start(request(DYNO)));
 
     assertThat(run.status()).isEqualTo(GarageRun.Status.PASSED);
-    assertThat(run.recordedCostUsd()).isEqualTo(0.01);
+    assertThat(run.recordedCostUsd()).isCloseTo(0.01, within(1e-12));
     assertThat(run.message()).isNull();
   }
 
@@ -135,36 +190,41 @@ class GarageRunServiceTests {
     verify(writer).write(any(), any(), any(), eq(List.of("structured-output")));
   }
 
-  @ParameterizedTest
-  @ValueSource(strings = {"responses", "chat", "both"})
-  void recoveryEvidenceIsRequiredOnlyWhenItsModeRuns(String mode) throws Exception {
-    GarageScene scene = scene();
-    when(scene.id()).thenReturn("recovery-road-test");
-    when(scene.features()).thenReturn(GarageFeature.forScene("recovery-road-test"));
-    when(scene.execute(any())).thenReturn(SceneResult.passed("recovery-road-test",
-        "synthetic-operation", OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS, Duration.ZERO,
-        this.output, Map.of()));
-    GarageRunService service = service(scene, new GarageEvidence(), writer());
-    String selection = "{\"capabilities\":[\"text\"],"
-        + "\"scenes\":[\"recovery-road-test\"],\"requestModes\":[\"" + mode + "\"]}";
+  @Test
+  void aResponsesOnlySelectionOfTheChatOnlyRecoveryContractsStartsNoRun() throws Exception {
+    GarageRunService service = service(recoveryScene(), new GarageEvidence(), writer());
 
-    if ("responses".equals(mode)) {
-      // Nothing would run, so a PASSED run would certify work that never happened.
-      assertThatThrownBy(() -> service.start(request(selection)))
-          .isInstanceOf(IllegalArgumentException.class)
-          .hasMessageContaining("No selected scene runs in the selected request modes");
-    }
-    else {
-      GarageRun run = finished(service, service.start(request(selection)));
-      assertThat(run.status()).isEqualTo(GarageRun.Status.FAILED);
-      assertThat(run.incompleteFeatures()).contains("connection-timeout");
-    }
+    // Nothing would run, so a PASSED run would certify work that never happened.
+    assertThatThrownBy(() -> service.start(request(RECOVERY_RESPONSES)))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("No selected scene runs in the selected request modes");
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"embedding", "image"})
-  void sweepFileOmitsProviderErrorTextAndModelInput(String surface) throws Exception {
-    String secret = "SYNTHETIC_PRIVATE_SENTINEL";
+  @ValueSource(strings = {"chat", "both"})
+  void recoveryEvidenceIsRequiredWhenItsModeRuns(String mode) throws Exception {
+    GarageRunService service = service(recoveryScene(), new GarageEvidence(), writer());
+
+    GarageRun run = finished(service, service.start(request("{\"capabilities\":[\"text\"],"
+        + "\"scenes\":[\"recovery-road-test\"],\"requestModes\":[\"" + mode + "\"]}")));
+
+    assertThat(run.status()).isEqualTo(GarageRun.Status.FAILED);
+    assertThat(run.incompleteFeatures()).contains("connection-timeout");
+  }
+
+  private static final String SWEEP_SECRET = "SYNTHETIC_PRIVATE_SENTINEL";
+
+  static Stream<Arguments> sweepSurfaces() {
+    List<String> entries = List.of(SWEEP_SECRET);
+    return Stream.of(
+        Arguments.of(Named.of("embedding", new GarageSweepRequest(entries, null, null, null)), "embedding"),
+        Arguments.of(Named.of("image", new GarageSweepRequest(null, entries, null, null)), "image"));
+  }
+
+  @ParameterizedTest
+  @MethodSource("sweepSurfaces")
+  void sweepFileOmitsProviderErrorTextAndModelInput(GarageSweepRequest sweep, String surface) throws Exception {
+    String secret = SWEEP_SECRET;
     EmbeddingModel model = mock(EmbeddingModel.class);
     when(model.call(any(EmbeddingRequest.class)))
         .thenThrow(new IllegalStateException(secret, new IllegalArgumentException(secret)));
@@ -175,11 +235,8 @@ class GarageRunServiceTests {
         new ObjectMapper(), environment(), List.of(), new GarageEvidence(),
         mock(GarageTelemetry.class), mock(GarageTransportEvidence.class),
         ObservationRegistry.create(), writer(), Runnable::run);
-    List<String> entries = List.of(secret);
 
-    GarageRun run = finished(service, service.startSweep("embedding".equals(surface)
-        ? new GarageSweepRequest(entries, null, null, null)
-        : new GarageSweepRequest(null, entries, null, null)));
+    GarageRun run = finished(service, service.startSweep(sweep));
 
     assertThat(run.status()).isEqualTo(GarageRun.Status.FAILED);
     assertThat(run.message()).isEqualTo("1 sweep entries failed");
@@ -191,28 +248,32 @@ class GarageRunServiceTests {
     assertThat(json.get("failed").intValue()).isEqualTo(1);
   }
 
+  static Stream<Arguments> responsesEvidence() {
+    return Stream.of(
+        Arguments.of(Named.of("complete in both modes", ModeEvidence.Outcome.COVERED),
+            GarageRun.Status.PASSED, List.of()),
+        Arguments.of(Named.of("failed in Responses", ModeEvidence.Outcome.FAILED), GarageRun.Status.FAILED,
+            List.of("standard-sampling")),
+        Arguments.of(Named.of("incomplete in Responses", ModeEvidence.Outcome.INCOMPLETE),
+            GarageRun.Status.FAILED, List.of("standard-sampling")),
+        Arguments.of(Named.of("no evidence in Responses", ModeEvidence.Outcome.NOT_EXECUTED),
+            GarageRun.Status.FAILED, List.of("standard-sampling")));
+  }
+
   @ParameterizedTest
-  @ValueSource(strings = {"covered", "failed", "incomplete", "not-executed"})
-  void everySelectedModeNeedsCompleteEvidenceEvenWhenScenesReturnPassed(String responseStatus) throws Exception {
+  @MethodSource("responsesEvidence")
+  void everySelectedModeNeedsCompleteEvidenceEvenWhenScenesReturnPassed(ModeEvidence.Outcome responses,
+      GarageRun.Status expectedStatus, List<String> expectedMissing) throws Exception {
     GarageEvidence evidence = new GarageEvidence();
     GarageScene scene = scene();
     when(scene.features()).thenReturn(List.of(GarageFeature.STANDARD_SAMPLING));
     when(scene.execute(any())).thenAnswer(invocation -> {
       var context = invocation.getArgument(0, SceneContext.class);
-      String mode = context.requestMode().name();
-      String operation = evidence.newOperation(scene.id(), mode);
-      String status = context.requestMode() == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS ? "covered" : responseStatus;
-      if (!"not-executed".equals(status)) {
-        for (var level : EvidenceLevel.values()) {
-          if (!"incomplete".equals(status) || level != EvidenceLevel.ASSERTED) {
-            evidence.record(GarageFeature.STANDARD_SAMPLING, operation, mode, level, "status", "passed");
-          }
-        }
-        if ("failed".equals(status)) {
-          evidence.error(GarageFeature.STANDARD_SAMPLING, operation, mode, new IllegalStateException("synthetic"));
-        }
-      }
-      return SceneResult.passed(scene.id(), operation, context.requestMode(), Duration.ZERO, this.output, Map.of());
+      ModeEvidence.Outcome outcome = context.requestMode() == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS
+          ? ModeEvidence.Outcome.COVERED : responses;
+      String operation = ModeEvidence.record(evidence, GarageFeature.STANDARD_SAMPLING, context.requestMode(),
+          outcome);
+      return SceneResults.passed(scene.id(), operation, context.requestMode(), Duration.ZERO, this.output, Map.of());
     });
     GarageReportWriter writer = writer();
     GarageRunService service = service(scene, evidence, writer);
@@ -220,13 +281,9 @@ class GarageRunServiceTests {
     GarageRun run = finished(service, service.start(request(
         "{\"capabilities\":[\"text\"],\"scenes\":[\"dyno-tuning\"],\"requestModes\":[\"both\"]}")));
 
-    if ("covered".equals(responseStatus)) {
-      assertThat(run.status()).isEqualTo(GarageRun.Status.PASSED);
-    } else {
-      assertThat(run.status()).isEqualTo(GarageRun.Status.FAILED);
-      assertThat(run.message()).contains("0 scene runs failed and 1 features");
-    }
-    verify(writer).write(any(), any(), any(), eq("covered".equals(responseStatus) ? List.of() : List.of("standard-sampling")));
+    assertThat(run.status()).isEqualTo(expectedStatus);
+    assertThat(run.incompleteFeatures()).containsExactlyElementsOf(expectedMissing);
+    verify(writer).write(any(), any(), any(), eq(expectedMissing));
   }
 
   @Test
@@ -236,7 +293,7 @@ class GarageRunServiceTests {
     when(scene.execute(any())).thenAnswer(invocation -> {
       SceneContext context = invocation.getArgument(0, SceneContext.class);
       seen.add(context.properties());
-      return SceneResult.passed("dyno-tuning", "synthetic-operation",
+      return SceneResults.passed("dyno-tuning", "synthetic-operation",
           OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS, Duration.ZERO, this.output, Map.of());
     });
     GarageRunService service = service(scene, new GarageEvidence(), writer());
@@ -255,7 +312,7 @@ class GarageRunServiceTests {
   @Test
   void onlyOneRunIsActiveAtATime() throws Exception {
     GarageScene scene = scene();
-    when(scene.execute(any())).thenReturn(SceneResult.passed("dyno-tuning", "synthetic-operation",
+    when(scene.execute(any())).thenReturn(SceneResults.passed("dyno-tuning", "synthetic-operation",
         OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS, Duration.ZERO, this.output, Map.of()));
     List<Runnable> queued = new ArrayList<>();
     GarageRunService service = service(scene, new GarageEvidence(), writer(), environment(), queued::add);
@@ -275,7 +332,7 @@ class GarageRunServiceTests {
   @Test
   void liveScenesNeedAnApiKeyButOfflineContractsDoNot() throws Exception {
     GarageScene scene = scene();
-    when(scene.execute(any())).thenReturn(SceneResult.passed("dyno-tuning", "synthetic-operation",
+    when(scene.execute(any())).thenReturn(SceneResults.passed("dyno-tuning", "synthetic-operation",
         OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS, Duration.ZERO, this.output, Map.of()));
     MockEnvironment withoutKey = new MockEnvironment()
         .withProperty("spring.ai.openrouter.api-key", "garage-missing-api-key")
@@ -298,10 +355,15 @@ class GarageRunServiceTests {
 
   @Test
   void unknownScenesAreRejectedBeforeARunStarts() throws Exception {
-    GarageRunService service = service(scene(), new GarageEvidence(), writer());
+    GarageScene scene = scene();
+    when(scene.execute(any())).thenReturn(SceneResults.passed("dyno-tuning", "synthetic-operation",
+        OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS, Duration.ZERO, this.output, Map.of()));
+    GarageRunService service = service(scene, new GarageEvidence(), writer());
 
     assertThatThrownBy(() -> service.start(request("{\"scenes\":[\"paint-shop\"]}")))
         .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("paint-shop");
+    // The rejected selection left the service free: the next valid run is accepted, not a conflict.
+    assertThat(finished(service, service.start(request(DYNO))).status()).isEqualTo(GarageRun.Status.PASSED);
   }
 
   @Test
@@ -309,9 +371,10 @@ class GarageRunServiceTests {
     GarageScene scene = scene();
     GarageEvidence evidence = new GarageEvidence();
     when(scene.execute(any())).thenAnswer(invocation -> {
-      evidence.recordCost("synthetic-operation", 0.02);
-      return SceneResult.passed("dyno-tuning", "synthetic-operation",
-          OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS, Duration.ZERO, this.output, Map.of());
+      String operation = evidence.newOperation("dyno-tuning", OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS.name());
+      recordCost(evidence, operation, 0.02);
+      return SceneResults.passed("dyno-tuning", operation, OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS,
+          Duration.ZERO, this.output, Map.of());
     });
     GarageReportWriter writer = mock(GarageReportWriter.class);
     when(writer.write(any(), any(), any(), any())).thenThrow(new IOException("disk full"));
@@ -326,9 +389,30 @@ class GarageRunServiceTests {
       assertThat(outcome.sceneId()).isEqualTo("dyno-tuning");
       assertThat(outcome.status()).isEqualTo("PASSED");
     });
-    assertThat(run.recordedCostUsd()).isEqualTo(0.02);
+    assertThat(run.recordedCostUsd()).isCloseTo(0.02, within(1e-12));
     assertThat(run.files()).isEmpty();
     assertThat(service.start(request(DYNO)).status()).isEqualTo(GarageRun.Status.RUNNING);
+  }
+
+  @Test
+  void anOutputDirectoryThatCannotBeCreatedEndsTheRunAsAnErrorAndFreesTheService() throws Exception {
+    // A regular file where the run directory's parent belongs makes directory creation fail on every platform.
+    Path blocker = Files.writeString(this.output.resolve("not-a-directory"), "synthetic");
+    MockEnvironment blocked = new MockEnvironment()
+        .withProperty("spring.ai.openrouter.api-key", "synthetic-test-key")
+        .withProperty("garage.output-dir", blocker.toString());
+    GarageScene scene = scene();
+    GarageRunService service = service(scene, new GarageEvidence(), writer(), blocked, Runnable::run);
+
+    GarageRun started = service.start(request(DYNO));
+    GarageRun run = service.find(started.id()).orElseThrow();
+
+    assertThat(run.status()).isEqualTo(GarageRun.Status.ERROR);
+    assertThat(run.message()).isNotBlank();
+    assertThat(run.files()).isEmpty();
+    verify(scene, never()).execute(any());
+    // The failed run released the service, so the next request is accepted rather than a conflict.
+    assertThat(service.start(request(DYNO)).id()).isNotEqualTo(started.id());
   }
 
   @Test
@@ -337,21 +421,92 @@ class GarageRunServiceTests {
     when(embeddingModel.call(any(EmbeddingRequest.class))).thenThrow(new IllegalStateException("synthetic"));
     ImageModel imageModel = mock(ImageModel.class);
     when(imageModel.call(any(ImagePrompt.class))).thenThrow(new IllegalStateException("synthetic"));
-    ObjectMapper mapper = mock(ObjectMapper.class);
-    ObjectWriter sweepWriter = mock(ObjectWriter.class);
-    when(mapper.writerWithDefaultPrettyPrinter()).thenReturn(sweepWriter);
-    doNothing().doThrow(new IllegalStateException("disk full"))
-        .when(sweepWriter).writeValue(any(File.class), any());
+    List<Runnable> queued = new ArrayList<>();
     GarageRunService service = new GarageRunService(mock(ChatModel.class), embeddingModel, imageModel,
-        mapper, environment(), List.of(), new GarageEvidence(), mock(GarageTelemetry.class),
-        mock(GarageTransportEvidence.class), ObservationRegistry.create(), writer(), Runnable::run);
+        new ObjectMapper(), environment(), List.of(), new GarageEvidence(), mock(GarageTelemetry.class),
+        mock(GarageTransportEvidence.class), ObservationRegistry.create(), writer(), queued::add);
 
-    GarageRun run = finished(service, service.startSweep(new GarageSweepRequest(
-        List.of("synthetic/embedding"), List.of("synthetic/image"), null, null)));
+    GarageRun started = service.startSweep(new GarageSweepRequest(
+        List.of("synthetic/embedding"), List.of("synthetic/image"), null, null));
+    // A directory where the image document belongs makes only that write fail.
+    Files.createDirectories(started.directory().resolve("image-sweep.json"));
+    queued.remove(0).run();
+    GarageRun run = service.find(started.id()).orElseThrow();
 
     assertThat(run.status()).isEqualTo(GarageRun.Status.ERROR);
-    assertThat(run.message()).isEqualTo("IllegalStateException: disk full");
+    assertThat(run.message()).isNotBlank().doesNotContain("synthetic");
     assertThat(run.files()).containsOnlyKeys(GarageRun.EMBEDDING_SWEEP);
+    assertThat(run.files().get(GarageRun.EMBEDDING_SWEEP)).isRegularFile();
+  }
+
+  @Test
+  // The service under test owns the executor and shuts it down in destroy().
+  @SuppressWarnings("PMD.CloseResource")
+  void closingTheServiceWhileARunIsActiveInterruptsItAndEndsItAsAFailedRun() throws Exception {
+    CountDownLatch inScene = new CountDownLatch(1);
+    GarageScene scene = scene();
+    when(scene.execute(any())).thenAnswer(invocation -> {
+      inScene.countDown();
+      // Blocks until the service closes its executor; the interrupt is the only way out.
+      new CountDownLatch(1).await();
+      throw new IllegalStateException("not reached");
+    });
+    ExecutorService executor = Executors.newSingleThreadExecutor();
+    GarageRunService service = service(scene, new GarageEvidence(), writer(), environment(), executor);
+
+    GarageRun started = service.start(request(DYNO));
+    assertThat(inScene.await(30, TimeUnit.SECONDS)).as("scene started").isTrue();
+    assertThatThrownBy(() -> service.start(request(DYNO)))
+        .isInstanceOf(GarageRunService.RunActiveException.class);
+    service.destroy();
+
+    // The run finishes on the executor thread; termination signals that its outcome is published.
+    assertThat(executor.awaitTermination(30, TimeUnit.SECONDS)).as("executor terminated").isTrue();
+    GarageRun run = service.find(started.id()).orElseThrow();
+    assertThat(run.status()).isEqualTo(GarageRun.Status.FAILED);
+    assertThat(run.finished()).isTrue();
+    assertThat(run.scenes()).singleElement().satisfies(outcome -> {
+      assertThat(outcome.sceneId()).isEqualTo("dyno-tuning");
+      assertThat(outcome.status()).isEqualTo("FAILED");
+    });
+  }
+
+  @Test
+  // The service under test owns the executor and shuts it down in destroy().
+  @SuppressWarnings("PMD.CloseResource")
+  void closingTheServiceWithNoActiveRunLeavesItsFinishedRunsReadable() throws Exception {
+    GarageScene scene = scene();
+    when(scene.execute(any())).thenReturn(SceneResults.passed("dyno-tuning", "synthetic-operation",
+        OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS, Duration.ZERO, this.output, Map.of()));
+    ExecutorService executor = Executors.newSingleThreadExecutor();
+    GarageRunService service = service(scene, new GarageEvidence(), writer(), environment(), executor);
+    GarageRun started = service.start(request(DYNO));
+    executor.submit(() -> { }).get(30, TimeUnit.SECONDS);
+
+    service.destroy();
+
+    assertThat(executor.isShutdown()).isTrue();
+    assertThat(service.find(started.id())).get().extracting(GarageRun::status)
+        .isEqualTo(GarageRun.Status.PASSED);
+  }
+
+  /** Records a model call's cost through the real telemetry, the only way cost reaches the evidence. */
+  private static void recordCost(GarageEvidence evidence, String operation, double costUsd) {
+    GarageTelemetryFixture fixture = new GarageTelemetryFixture(evidence);
+    try {
+      OpenRouterApi api = mock(OpenRouterApi.class);
+      when(api.embeddings(any())).thenReturn(new EmbeddingsResponse("list",
+          List.of(new EmbeddingsResponse.EmbeddingData("embedding", 0, new float[] {1})), "synthetic/embedding",
+          new Usage(1, 0, 1, null, null, costUsd, null, null, Map.of())));
+      OpenRouterEmbeddingModel model = OpenRouterEmbeddingModel.builder().openRouterApi(api)
+          .observationRegistry(fixture.observations())
+          .retryTemplate(new RetryTemplate(RetryPolicy.builder().maxRetries(0).build())).build();
+      fixture.telemetry().observeOperation(operation, "dyno-tuning",
+          () -> model.call(new EmbeddingRequest(List.of("synthetic"), OpenRouterEmbeddingOptions.builder().model("synthetic/embedding").build())));
+      fixture.telemetry().awaitObservationsFor(operation, Duration.ofSeconds(5));
+    } finally {
+      fixture.close();
+    }
   }
 
   private GarageRun finished(GarageRunService service, GarageRun started) {
@@ -365,9 +520,24 @@ class GarageRunServiceTests {
     GarageScene scene = scene();
     when(scene.id()).thenReturn("digital-inspection");
     when(scene.features()).thenReturn(List.of(GarageFeature.STRUCTURED_OUTPUT));
-    when(scene.execute(any())).thenReturn(SceneResult.passed("digital-inspection",
+    when(scene.execute(any())).thenReturn(SceneResults.passed("digital-inspection",
         "synthetic-operation", OpenRouterRequestMode.OPENAI_RESPONSES, Duration.ZERO,
         this.output, Map.of("status", "unsupported-in-mode")));
+    return scene;
+  }
+
+  private GarageScene recoveryScene() throws Exception {
+    GarageScene scene = namedScene("recovery-road-test");
+    when(scene.features()).thenReturn(GarageFeature.forScene("recovery-road-test"));
+    when(scene.execute(any())).thenReturn(SceneResults.passed("recovery-road-test",
+        "synthetic-operation", OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS, Duration.ZERO,
+        this.output, Map.of()));
+    return scene;
+  }
+
+  private GarageScene namedScene(String id) {
+    GarageScene scene = scene();
+    when(scene.id()).thenReturn(id);
     return scene;
   }
 

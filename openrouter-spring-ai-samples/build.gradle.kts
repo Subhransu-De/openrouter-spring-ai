@@ -6,6 +6,7 @@ plugins {
 val lombokVersion: String by rootProject.extra
 val twelveMonkeysVersion: String by rootProject.extra
 val wiremockVersion: String by rootProject.extra
+val archunitVersion: String by rootProject.extra
 
 description = "Repository-local sample applications for the OpenRouter starter. Not published."
 
@@ -23,6 +24,7 @@ dependencies {
 
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
 	testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
+	testImplementation("com.tngtech.archunit:archunit-junit5:$archunitVersion")
 	testImplementation("org.wiremock:wiremock-standalone:$wiremockVersion")
 }
 
@@ -36,4 +38,10 @@ springBoot {
 
 tasks.withType<JavaCompile>().configureEach {
 	options.compilerArgs.add("-parameters")
+}
+
+// See openrouter-spring-ai-autoconfigure: an incremental compile drops the Javadoc
+// descriptions from the generated configuration metadata.
+tasks.named<JavaCompile>("compileJava") {
+	options.isIncremental = false
 }

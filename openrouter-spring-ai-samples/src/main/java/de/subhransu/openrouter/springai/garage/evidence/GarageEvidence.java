@@ -154,16 +154,7 @@ public final class GarageEvidence {
         ? "covered" : "incomplete";
   }
 
-  public boolean operationPassed(String operationId) {
-    List<FeatureEvidence> matching =
-        this.featureEvidence.entrySet().stream()
-            .filter(entry -> entry.getKey().startsWith(operationId + "|"))
-            .map(Map.Entry::getValue)
-            .toList();
-    return !matching.isEmpty() && matching.stream().allMatch(FeatureEvidence::complete);
-  }
-
-  public void recordCost(@Nullable String operationId, double costUsd) {
+  void recordCost(@Nullable String operationId, double costUsd) {
     if (operationId != null && Double.isFinite(costUsd) && costUsd > 0.0) {
       this.operationCosts.merge(operationId, costUsd, Double::sum);
     }

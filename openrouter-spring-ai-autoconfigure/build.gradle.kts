@@ -27,3 +27,11 @@ dependencies {
 	testImplementation("org.springframework.security:spring-security-oauth2-client")
 	testImplementation("com.tngtech.archunit:archunit-junit5:$archunitVersion")
 }
+
+// The configuration processor reads property descriptions from Javadoc, which only source
+// files carry. An incremental compile hands it the unchanged properties classes as class
+// files, so the generated metadata loses those descriptions and the build cache keeps the
+// broken result. Maven always compiles the whole module.
+tasks.named<JavaCompile>("compileJava") {
+	options.isIncremental = false
+}

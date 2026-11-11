@@ -1,7 +1,6 @@
 package de.subhransu.openrouter.springai.garage;
 
 import de.subhransu.openrouter.springai.chat.OpenRouterUsage;
-import de.subhransu.openrouter.springai.garage.scenes.SceneResult;
 import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
@@ -48,15 +47,5 @@ public final class GarageCosts {
         .mapToDouble(GarageCosts::usage)
         .max()
         .orElse(0.0);
-  }
-
-  public static double scenes(List<SceneResult> results) {
-    return results.stream()
-        .map(SceneResult::details)
-        .map(details -> details.get("costUsd"))
-        .filter(Number.class::isInstance)
-        .map(Number.class::cast)
-        .mapToDouble(Number::doubleValue)
-        .sum();
   }
 }

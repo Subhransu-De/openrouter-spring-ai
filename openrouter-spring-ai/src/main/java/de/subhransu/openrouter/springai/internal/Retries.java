@@ -28,7 +28,7 @@ public final class Retries {
 	 * fall back to the application's configured Spring Retry backoff so an untrusted
 	 * response cannot park the worker indefinitely.
 	 */
-	static final Duration MAX_PROVIDER_BACKOFF = Duration.ofMinutes(5);
+	private static final Duration MAX_PROVIDER_BACKOFF = Duration.ofMinutes(5);
 
 	private Retries() {
 	}

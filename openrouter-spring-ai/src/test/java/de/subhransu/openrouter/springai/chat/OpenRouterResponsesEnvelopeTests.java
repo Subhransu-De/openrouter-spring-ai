@@ -9,6 +9,7 @@ import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
 import de.subhransu.openrouter.springai.errors.OpenRouterExceptionMessage;
+import de.subhransu.openrouter.springai.errors.OpenRouterHttpException;
 import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
@@ -19,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -47,40 +49,66 @@ class OpenRouterResponsesEnvelopeTests {
 	private final TestObservationRegistry observations = TestObservationRegistry.create();
 
 	static Stream<Arguments> invalidResponses() {
-		return Stream.of(Arguments.of("{}", OpenRouterProtocolException.class),
-				Arguments.of("{\"output\":[]}", OpenRouterProtocolException.class),
-				Arguments.of("{\"status\":\"completed\"}", OpenRouterProtocolException.class),
-				Arguments.of("{\"status\":\"completed\",\"output\":null}", OpenRouterProtocolException.class),
-				Arguments.of("{\"status\":\"in_progress\",\"output\":[]}", OpenRouterTruncatedResponseException.class),
-				Arguments.of("{\"status\":\"queued\",\"output\":[]}", OpenRouterTruncatedResponseException.class),
-				Arguments.of("{\"status\":\"cancelled\",\"output\":[]}", OpenRouterTruncatedResponseException.class),
-				Arguments.of("{\"status\":\"future_status\",\"output\":[]}",
-						OpenRouterTruncatedResponseException.class),
-				Arguments.of("{\"status\":\"failed\"}", OpenRouterNonTransientApiException.class),
-				Arguments.of("{\"error\":{}}", OpenRouterNonTransientApiException.class),
+		return Stream.of(
+				Arguments.of("{}", OpenRouterProtocolException.class, "OpenRouter response requires Responses status"),
+				Arguments.of("{\"output\":[]}", OpenRouterProtocolException.class,
+						"OpenRouter response requires Responses status"),
+				Arguments.of("{\"status\":\"completed\"}", OpenRouterProtocolException.class,
+						"OpenRouter response requires Responses output"),
+				Arguments.of("{\"status\":\"completed\",\"output\":null}", OpenRouterProtocolException.class,
+						"OpenRouter response requires Responses output"),
+				Arguments.of("{\"status\":\"in_progress\",\"output\":[]}", OpenRouterTruncatedResponseException.class,
+						"Responses result is not final: status=in_progress"),
+				Arguments.of("{\"status\":\"queued\",\"output\":[]}", OpenRouterTruncatedResponseException.class,
+						"Responses result is not final: status=queued"),
+				Arguments.of("{\"status\":\"cancelled\",\"output\":[]}", OpenRouterTruncatedResponseException.class,
+						"Responses result is not final: status=cancelled"),
+				Arguments.of("{\"status\":\"future_status\",\"output\":[]}", OpenRouterTruncatedResponseException.class,
+						"Responses result is not final: status=future_status"),
+				Arguments.of("{\"status\":\"failed\"}", OpenRouterNonTransientApiException.class,
+						"OpenRouter responses request failed"),
+				Arguments.of("{\"error\":{}}", OpenRouterNonTransientApiException.class,
+						"OpenRouter responses request failed"),
 				Arguments.of("{\"error\":{\"code\":503,\"message\":\"synthetic failure\"}}",
-						OpenRouterTransientApiException.class));
+						OpenRouterTransientApiException.class, "OpenRouter responses request failed"));
 	}
 
 	@ParameterizedTest
-	@MethodSource("invalidResponses")
-	void invalidBodiesRecordFailuresInBothModes(String json, Class<? extends Throwable> error) {
-		for (String mode : List.of("call", "completed", "incomplete")) {
-			OpenRouterChatModel model = model(!"call".equals(mode), wire(mode, json));
-			assertThatThrownBy(() -> invoke(model, !"call".equals(mode))).isInstanceOf(error);
-			assertFailure(error);
-			this.observations.clear();
-		}
+	@MethodSource("modesWithInvalidResponses")
+	void invalidBodiesRecordFailuresInBothModes(String mode, String json, Class<? extends Throwable> error,
+			String message) {
+		boolean streaming = !"call".equals(mode);
+		OpenRouterChatModel model = model(streaming, wire(mode, json));
+
+		assertThatThrownBy(() -> invoke(model, streaming)).isInstanceOf(error).hasMessageContaining(message);
+		assertFailure(error);
+	}
+
+	static Stream<Arguments> modesWithInvalidResponses() {
+		return Stream.of("call", "completed", "incomplete")
+			.flatMap(mode -> invalidResponses().map(arguments -> Arguments.of(Named.of(mode, mode), arguments.get()[0],
+					arguments.get()[1], messageFor(mode, (String) arguments.get()[2]))));
+	}
+
+	// A completed snapshot inside an "incomplete" terminal event is rejected before its
+	// missing output is read.
+	private static String messageFor(String mode, String message) {
+		return "incomplete".equals(mode) && message.endsWith("Responses output")
+				? "Responses terminal event disagrees with response status" : message;
 	}
 
 	static Stream<Arguments> nonObjectOutputItems() {
-		return Stream.of("call", "completed", "item")
-			.flatMap(mode -> Stream.of("123", "[]", "\"synthetic\"", "true").map(item -> Arguments.of(mode, item)));
+		return Stream
+			.of(Arguments.of("call", "Failed to decode OpenRouter /responses response"),
+					Arguments.of("completed", "Failed to decode OpenRouter stream chunk"),
+					Arguments.of("item", "Failed to decode OpenRouter stream chunk"))
+			.flatMap(row -> Stream.of("123", "[]", "\"synthetic\"", "true")
+				.map(item -> Arguments.of(row.get()[0], row.get()[1], item)));
 	}
 
 	@ParameterizedTest
 	@MethodSource("nonObjectOutputItems")
-	void nonObjectOutputItemsFailAsMalformed(String mode, String item) {
+	void nonObjectOutputItemsFailAsMalformed(String mode, String message, String item) {
 		String output = "{\"status\":\"completed\",\"output\":[" + item + "]}";
 		String body = switch (mode) {
 			case "call" -> output;
@@ -90,50 +118,66 @@ class OpenRouterResponsesEnvelopeTests {
 		};
 		boolean streaming = !"call".equals(mode);
 		assertThatThrownBy(() -> invoke(model(streaming, body), streaming))
-			.isInstanceOf(OpenRouterProtocolException.class);
+			.isInstanceOf(OpenRouterProtocolException.class)
+			.hasMessageContaining(message);
 		assertFailure(OpenRouterProtocolException.class);
 	}
 
 	@ParameterizedTest
-	@ValueSource(strings = { "call", "completed", "incomplete" })
-	void errorEnvelopeOverridesStatusAndPreservesBoundedTypedDiagnostics(String mode) {
-		String json = "{\"status\":\"completed\",\"output\":[],\"error_type\":\"provider_unavailable\","
-				+ "\"error\":{\"code\":503,\"message\":\"synthetic\\nfailure " + "x".repeat(1500)
-				+ "\",\"metadata\":{\"provider_code\":\"synthetic_code\"}}}";
+	@MethodSource("modesWithErrorEnvelopes")
+	void errorEnvelopeKeepsItsClassificationAndBoundedTypedDiagnostics(String mode, String json,
+			Class<? extends Throwable> type, int status, OpenRouterErrorCategory category, String code,
+			String providerCode) {
 		boolean streaming = !"call".equals(mode);
-		assertThatThrownBy(() -> invoke(model(streaming, wire(mode, json)), streaming))
-			.isInstanceOfSatisfying(OpenRouterTransientApiException.class, error -> {
-				assertThat(error.getStatusCode().value()).isEqualTo(503);
-				assertThat(error.getCategory()).isEqualTo(OpenRouterErrorCategory.PROVIDER_UNAVAILABLE);
-				assertThat(error.getErrorDetails().code()).isEqualTo("503");
-				assertThat(error.getErrorDetails().providerCode()).isEqualTo("synthetic_code");
+		assertThatThrownBy(() -> invoke(model(streaming, wire(mode, json)), streaming)).isInstanceOf(type)
+			.satisfies(thrown -> {
+				OpenRouterHttpException error = (OpenRouterHttpException) thrown;
+				assertThat(error.getStatusCode().value()).isEqualTo(status);
+				assertThat(error.getCategory()).isEqualTo(category);
+				assertThat(error.getErrorDetails().code()).isEqualTo(code);
+				assertThat(error.getErrorDetails().providerCode()).isEqualTo(providerCode);
 				assertThat(error.getErrorDetails().message()).doesNotContain("\n")
 					.hasSizeLessThanOrEqualTo(OpenRouterExceptionMessage.MAX_DIAGNOSTIC_LENGTH + 3);
 				assertThat(error.getMessage()).doesNotContain("synthetic");
 			});
-		assertFailure(OpenRouterTransientApiException.class);
+		assertFailure(type);
+	}
+
+	static Stream<Arguments> modesWithErrorEnvelopes() {
+		String overridesStatus = "{\"status\":\"completed\",\"output\":[],\"error_type\":\"provider_unavailable\","
+				+ "\"error\":{\"code\":503,\"message\":\"synthetic\\nfailure " + "x".repeat(1500)
+				+ "\",\"metadata\":{\"provider_code\":\"synthetic_code\"}}}";
+		String errorOnly = "{\"error\":{\"code\":401,\"message\":\"synthetic failure\"}}";
+		return Stream.of("call", "completed", "incomplete")
+			.flatMap(mode -> Stream
+				.of(Arguments.of(Named.of("an error envelope overrides a completed status", overridesStatus),
+						OpenRouterTransientApiException.class, 503, OpenRouterErrorCategory.PROVIDER_UNAVAILABLE, "503",
+						"synthetic_code"),
+						Arguments.of(Named.of("an error-only body stays non-transient", errorOnly),
+								OpenRouterNonTransientApiException.class, 401, OpenRouterErrorCategory.AUTHENTICATION,
+								"401", null))
+				.map(arguments -> Arguments.of(Named.of(mode, mode), arguments.get()[0], arguments.get()[1],
+						arguments.get()[2], arguments.get()[3], arguments.get()[4], arguments.get()[5])));
 	}
 
 	@ParameterizedTest
-	@ValueSource(strings = { "call", "completed", "incomplete" })
-	void errorOnlyBodiesRetainNonTransientClassification(String mode) {
-		String json = "{\"error\":{\"code\":401,\"message\":\"synthetic failure\"}}";
-		boolean streaming = !"call".equals(mode);
-		assertThatThrownBy(() -> invoke(model(streaming, wire(mode, json)), streaming)).isInstanceOfSatisfying(
-				OpenRouterNonTransientApiException.class,
-				error -> assertThat(error.getCategory()).isEqualTo(OpenRouterErrorCategory.AUTHENTICATION));
-	}
-
-	@ParameterizedTest
-	@ValueSource(
-			strings = { "{\"type\":\"response.completed\"}", "{\"type\":\"response.incomplete\",\"response\":null}",
-					"{\"type\":\"response.completed\",\"response\":{\"status\":\"incomplete\",\"output\":[]}}",
-					"{\"type\":\"response.incomplete\",\"response\":{\"status\":\"completed\",\"output\":[]}}",
-					"{\"type\":\"response.completed\",\"error\":{\"code\":503}}" })
-	void malformedTerminalNeverReleasesBufferedTools(String terminal) {
+	@MethodSource("malformedTerminals")
+	void malformedTerminalNeverReleasesBufferedTools(String terminal, Class<? extends Throwable> error) {
 		String body = "data: {\"type\":\"response.output_item.done\",\"item\":" + TOOL + "}\n\n" + "data: " + terminal
 				+ "\n\n";
-		assertNoToolExecution(true, body);
+		assertNoToolExecution(true, body, error);
+	}
+
+	static Stream<Arguments> malformedTerminals() {
+		return Stream.of(Arguments.of("{\"type\":\"response.completed\"}", OpenRouterTruncatedResponseException.class),
+				Arguments.of("{\"type\":\"response.incomplete\",\"response\":null}",
+						OpenRouterTruncatedResponseException.class),
+				Arguments.of("{\"type\":\"response.completed\",\"response\":{\"status\":\"incomplete\",\"output\":[]}}",
+						OpenRouterProtocolException.class),
+				Arguments.of("{\"type\":\"response.incomplete\",\"response\":{\"status\":\"completed\",\"output\":[]}}",
+						OpenRouterProtocolException.class),
+				Arguments.of("{\"type\":\"response.completed\",\"error\":{\"code\":503}}",
+						OpenRouterTransientApiException.class));
 	}
 
 	@ParameterizedTest
@@ -148,7 +192,13 @@ class OpenRouterResponsesEnvelopeTests {
 	@Test
 	void typelessErrorEnvelopeKeepsProviderFailure() {
 		String body = "data: {\"error\":{\"code\":503,\"message\":\"synthetic failure\"}}\n\n";
-		assertThatThrownBy(() -> invoke(model(true, body), true)).isInstanceOf(OpenRouterTransientApiException.class);
+		assertThatThrownBy(() -> invoke(model(true, body), true))
+			.isInstanceOfSatisfying(OpenRouterTransientApiException.class, error -> {
+				assertThat(error.getStatusCode().value()).isEqualTo(503);
+				assertThat(error.getCategory()).isEqualTo(OpenRouterErrorCategory.PROVIDER_UNAVAILABLE);
+				assertThat(error.getErrorDetails().code()).isEqualTo("503");
+				assertThat(error.getErrorDetails().message()).isEqualTo("synthetic failure");
+			});
 		assertFailure(OpenRouterTransientApiException.class);
 	}
 
@@ -167,10 +217,11 @@ class OpenRouterResponsesEnvelopeTests {
 	@ValueSource(booleans = { false, true })
 	void providerErrorNeverExecutesAdvertisedTools(boolean streaming) {
 		String json = "{\"status\":\"completed\",\"output\":[" + TOOL + "],\"error\":{\"code\":503}}";
-		assertNoToolExecution(streaming, streaming ? wire("completed", json) : json);
+		assertNoToolExecution(streaming, streaming ? wire("completed", json) : json,
+				OpenRouterTransientApiException.class);
 	}
 
-	private void assertNoToolExecution(boolean streaming, String body) {
+	private void assertNoToolExecution(boolean streaming, String body, Class<? extends Throwable> error) {
 		AtomicInteger executions = new AtomicInteger();
 		var callback = FunctionToolCallback.builder("synthetic_action", (Map<String, Object> input) -> {
 			executions.incrementAndGet();
@@ -192,59 +243,81 @@ class OpenRouterResponsesEnvelopeTests {
 			else {
 				request.call().content();
 			}
-		}).isInstanceOfAny(OpenRouterProtocolException.class, OpenRouterTruncatedResponseException.class,
-				OpenRouterTransientApiException.class);
+		}).isInstanceOf(error);
 		assertThat(executions).hasValue(0);
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "completed", "incomplete" })
-	void missingSnapshotsFailWithoutTools(String status) {
+	void terminalEventWithoutASnapshotFailsAsTruncatedAndRecordsTheFailure(String status) {
 		assertThatThrownBy(() -> invoke(model(true, "data: {\"type\":\"response." + status + "\"}\n\n"), true))
 			.isInstanceOf(OpenRouterTruncatedResponseException.class);
 		assertFailure(OpenRouterTruncatedResponseException.class);
 	}
 
-	static Stream<Arguments> validResponses() {
-		return Stream.of(Arguments.of("[]", "STOP"),
-				Arguments.of("[{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"\"}]}]", "STOP"),
-				Arguments.of(
-						"[{\"type\":\"message\",\"content\":[{\"type\":\"refusal\",\"refusal\":\"synthetic refusal\"}]}]",
-						"STOP"),
-				Arguments.of("[" + TOOL + "]", "TOOL_CALLS"),
-				Arguments.of("[{\"type\":\"image_generation_call\",\"status\":\"completed\",\"result\":\"aW1hZ2U=\"}]",
-						"STOP"));
+	private static final String EMPTY_TEXT_MESSAGE = "[{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"\"}]}]";
+
+	private static final String IMAGE_ITEM = "{\"type\":\"image_generation_call\",\"status\":\"completed\",\"result\":\"aW1hZ2U=\"}";
+
+	static Stream<Arguments> emptyOutputs() {
+		return Stream.of(Arguments.of(Named.of("no output items", "[]"), false),
+				Arguments.of(Named.of("no output items", "[]"), true),
+				Arguments.of(Named.of("an empty text message", EMPTY_TEXT_MESSAGE), false),
+				Arguments.of(Named.of("an empty text message", EMPTY_TEXT_MESSAGE), true));
+	}
+
+	@ParameterizedTest(name = "[{index}] {0}, streaming={1}")
+	@MethodSource("emptyOutputs")
+	void emptyTextDoesNotInvalidateCompletedOutput(String output, boolean streaming) {
+		ChatResponse response = lastOf(completedResponses(output, streaming, false));
+		assertThat(response.getResult().getOutput().getText()).isEmpty();
+		assertThat(response.getResult().getMetadata().getFinishReason()).isEqualTo("STOP");
 	}
 
 	@ParameterizedTest
-	@MethodSource("validResponses")
-	void emptyTextDoesNotInvalidateCompletedOutput(String output, String finishReason) {
+	@ValueSource(booleans = { false, true })
+	void completedRefusalKeepsItsTextAsMetadata(boolean streaming) {
+		String output = "[{\"type\":\"message\",\"content\":[{\"type\":\"refusal\",\"refusal\":\"synthetic refusal\"}]}]";
+		ChatResponse response = lastOf(completedResponses(output, streaming, false));
+		assertThat(response.getResult().getOutput().getText()).isEmpty();
+		assertThat(response.getResult().getMetadata().getFinishReason()).isEqualTo("STOP");
+		assertThat(response.getResult().getOutput().getMetadata()).containsEntry("openrouter.refusal",
+				"synthetic refusal");
+	}
+
+	@ParameterizedTest
+	@ValueSource(booleans = { false, true })
+	void completedToolCallFinishesWithToolCalls(boolean streaming) {
+		ChatResponse response = lastOf(completedResponses("[" + TOOL + "]", streaming, false));
+		assertThat(response.getResult().getOutput().getText()).isEmpty();
+		assertThat(response.getResult().getMetadata().getFinishReason()).isEqualTo("TOOL_CALLS");
+		assertThat(response.getResult().getOutput().getToolCalls()).hasSize(1);
+	}
+
+	@ParameterizedTest
+	@ValueSource(booleans = { false, true })
+	void completedImageGenerationYieldsOneMediaItem(boolean streaming) {
+		List<ChatResponse> responses = completedResponses("[" + IMAGE_ITEM + "]", streaming, true);
+		ChatResponse response = lastOf(responses);
+		assertThat(response.getResult().getOutput().getText()).isEmpty();
+		assertThat(response.getResult().getMetadata().getFinishReason()).isEqualTo("STOP");
+		assertThat(responses).anySatisfy(part -> assertThat(part.getResult().getOutput().getMedia()).hasSize(1));
+	}
+
+	private List<ChatResponse> completedResponses(String output, boolean streaming, boolean imageItemEvent) {
 		String json = "{\"status\":\"completed\",\"output\":" + output + ",\"future_field\":true}";
-		for (boolean streaming : new boolean[] { false, true }) {
-			String body = streaming ? wire("completed", json) : json;
-			if (streaming && output.contains("image_generation_call")) {
-				body = "data: {\"type\":\"response.output_item.done\",\"output_index\":0,\"item\":"
-						+ output.substring(1, output.length() - 1) + "}\n\n" + body;
-			}
-			var model = model(streaming, body);
-			List<ChatResponse> responses = streaming
-					? model.stream(new Prompt("synthetic")).collectList().block(Duration.ofSeconds(5))
-					: List.of(model.call(new Prompt("synthetic")));
-			ChatResponse response = responses.get(responses.size() - 1);
-			assertThat(response.getResult().getOutput().getText()).isEmpty();
-			assertThat(response.getResult().getMetadata().getFinishReason()).isEqualTo(finishReason);
-			if (output.contains("refusal")) {
-				assertThat(response.getResult().getOutput().getMetadata()).containsEntry("openrouter.refusal",
-						"synthetic refusal");
-			}
-			if (output.contains("function_call")) {
-				assertThat(response.getResult().getOutput().getToolCalls()).hasSize(1);
-			}
-			if (output.contains("image_generation_call")) {
-				assertThat(responses)
-					.anySatisfy(part -> assertThat(part.getResult().getOutput().getMedia()).hasSize(1));
-			}
+		String body = streaming ? wire("completed", json) : json;
+		if (streaming && imageItemEvent) {
+			body = "data: {\"type\":\"response.output_item.done\",\"output_index\":0,\"item\":"
+					+ output.substring(1, output.length() - 1) + "}\n\n" + body;
 		}
+		var model = model(streaming, body);
+		return streaming ? model.stream(new Prompt("synthetic")).collectList().block(Duration.ofSeconds(5))
+				: List.of(model.call(new Prompt("synthetic")));
+	}
+
+	private static ChatResponse lastOf(List<ChatResponse> responses) {
+		return responses.get(responses.size() - 1);
 	}
 
 	@ParameterizedTest

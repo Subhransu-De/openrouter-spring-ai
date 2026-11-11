@@ -1,5 +1,7 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
+import static de.subhransu.openrouter.springai.chat.mapper.StreamingMapperSupport.chatMapper;
+import static de.subhransu.openrouter.springai.chat.mapper.StreamingMapperSupport.map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -8,15 +10,21 @@ import de.subhransu.openrouter.springai.chat.errors.OpenRouterNonTransientChoice
 import de.subhransu.openrouter.springai.chat.errors.OpenRouterTransientChoiceException;
 import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException;
 import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException.Limit;
-import java.util.Map;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.ai.chat.model.ChatResponse;
 import reactor.core.publisher.Flux;
+import reactor.core.scheduler.Schedulers;
 import reactor.test.StepVerifier;
 import tools.jackson.databind.ObjectMapper;
 
@@ -26,54 +34,43 @@ class ChatStreamBudgetTests {
 
 	private static final long DIAGNOSTIC = 4L * OpenRouterChoiceErrorExceptionFactory.MAX_DIAGNOSTIC_LENGTH;
 
-	@ParameterizedTest
-	@ValueSource(strings = { "{\"text\":\"é😀\\n\\t\\\"\",\"null\":null}",
-			"{\"nested\":[{},[],null,false,1,1.25,{\"unknown\":\"value\"}]}",
-			"{\"openrouter.reasoning_details\":[{\"type\":\"reasoning.encrypted\",\"data\":\"opaque\"}]}" })
-	void concurrentBudgetsChargeTheSameBytesAsFreshMappers(String value) {
-		Map<String, Object> metadata = JSON.readValue(value, new tools.jackson.core.type.TypeReference<>() {
-		});
-		long charge = new ObjectMapper().writeValueAsBytes(metadata).length;
-		List<CompletableFuture<Void>> checks = java.util.stream.IntStream.range(0, 32)
-			.mapToObj(index -> CompletableFuture.runAsync(() -> {
-				ChatStreamBudget budget = new ChatStreamBudget(charge * 2, 1);
-				budget.appendResponse(metadata);
-				budget.appendResponse(metadata);
-				assertThatThrownBy(() -> budget.appendResponse(metadata))
-					.isInstanceOfSatisfying(OpenRouterLimitExceededException.class, error -> {
-						assertThat(error.getLimit()).isEqualTo(Limit.CHAT_STATE_BYTES);
-						assertThat(error.getConfiguredLimit()).isEqualTo(charge * 2);
-						assertThat(error.getObservedValue()).isEqualTo(charge * 3);
-					});
-			}))
-			.toList();
-		checks.forEach(CompletableFuture::join);
+	private static final String UNICODE = "é😀";
+
+	@Test
+	void concurrentSubscriptionsToOneStreamEachGetTheirOwnBudgetAndReasoningState() {
+		// The budget admits exactly three reasoning deltas. One shared budget (or one
+		// shared reasoning accumulator) would be exhausted by the first few of 16
+		// subscriptions that run in parallel on the same mapped stream.
+		var chunk = chunk("{\"index\":0,\"delta\":{\"reasoning\":\"x\"}}");
+		long charge = JSON.writeValueAsBytes(Map.of(ReasoningMetadata.REASONING, "x")).length;
+		var stream = map(chatMapper(DIAGNOSTIC + charge * 3, 1), Flux.just(chunk, chunk, chunk));
+
+		List<List<Object>> perSubscription = Flux.range(0, 16)
+			.flatMap(index -> stream.subscribeOn(Schedulers.parallel())
+				.map(response -> response.getResult().getOutput().getMetadata().get(ReasoningMetadata.REASONING))
+				.collectList(), 16)
+			.collectList()
+			.block(Duration.ofSeconds(30));
+
+		assertThat(perSubscription).hasSize(16)
+			.allSatisfy(reasoning -> assertThat(reasoning).containsExactly("x", "xx", "xxx"));
 	}
 
 	@Test
 	void acceptsExactUtf8BoundaryAndCancelsBeforeNextSnapshot() {
-		ChatCompletionChunk chunk = chunk("{\"index\":0,\"delta\":{\"reasoning\":\"é😀\"}}");
-		long charge = JSON.writeValueAsBytes(Map.of(ReasoningMetadata.REASONING, "é😀")).length;
-		AtomicBoolean cancelled = new AtomicBoolean();
-		var stream = new OpenRouterStreamingResponseMapper(DIAGNOSTIC + charge * 2, 1)
-			.map(Flux.just(chunk, chunk, chunk).doOnCancel(() -> cancelled.set(true)));
-		for (int subscription = 0; subscription < 2; subscription++) {
-			cancelled.set(false);
-			StepVerifier.create(stream)
-				.assertNext(response -> assertThat(response.getResult().getOutput().getMetadata())
-					.containsEntry(ReasoningMetadata.REASONING, "é😀"))
-				.assertNext(response -> assertThat(response.getResult().getOutput().getMetadata())
-					.containsEntry(ReasoningMetadata.REASONING, "é😀é😀"))
-				.expectErrorSatisfies(error -> {
-					assertThat(error).isInstanceOf(OpenRouterLimitExceededException.class);
-					var limit = (OpenRouterLimitExceededException) error;
-					assertThat(limit.getLimit()).isEqualTo(Limit.CHAT_STATE_BYTES);
-					assertThat(limit.getConfiguredLimit()).isEqualTo(DIAGNOSTIC + charge * 2);
-					assertThat(limit.getObservedValue()).isEqualTo(DIAGNOSTIC + charge * 3);
-				})
-				.verify();
-			assertThat(cancelled).isTrue();
-		}
+		Utf8Budget budget = new Utf8Budget();
+
+		budget.assertExactBoundaryThenLimit();
+	}
+
+	@Test
+	void aSubscriptionAfterAnExhaustedOneStartsWithAFreshBudget() {
+		Utf8Budget budget = new Utf8Budget();
+		budget.stream.onErrorResume(OpenRouterLimitExceededException.class, error -> Flux.empty())
+			.collectList()
+			.block(Duration.ofSeconds(5));
+
+		budget.assertExactBoundaryThenLimit();
 	}
 
 	@ParameterizedTest
@@ -84,8 +81,8 @@ class ChatStreamBudgetTests {
 	void smallMetadataDeltasCannotBypassBudget(String choice) {
 		AtomicBoolean cancelled = new AtomicBoolean();
 		StepVerifier
-			.create(new OpenRouterStreamingResponseMapper(DIAGNOSTIC + 256, 1)
-				.map(Flux.range(0, 1200).map(index -> chunk(choice)).doOnCancel(() -> cancelled.set(true))))
+			.create(map(chatMapper(DIAGNOSTIC + 256, 1),
+					Flux.range(0, 1200).map(index -> chunk(choice)).doOnCancel(() -> cancelled.set(true))))
 			.thenConsumeWhile(response -> true)
 			.expectError(OpenRouterLimitExceededException.class)
 			.verify();
@@ -96,12 +93,16 @@ class ChatStreamBudgetTests {
 	void rootExtensionsAreChargedWithoutChoices() {
 		var chunk = JSON.readValue("{\"choices\":[],\"opaque\":\"é\"}", ChatCompletionChunk.class);
 		long charge = JSON.writeValueAsBytes(chunk.extensions()).length;
-		StepVerifier.create(new OpenRouterStreamingResponseMapper(charge, 1).map(Flux.just(chunk, chunk)))
+		StepVerifier.create(map(chatMapper(charge, 1), Flux.just(chunk, chunk)))
 			.expectNextCount(1)
 			.expectError(OpenRouterLimitExceededException.class)
 			.verify();
+	}
+
+	@Test
+	void manySmallRootExtensionsCannotBypassTheBudget() {
 		StepVerifier
-			.create(new OpenRouterStreamingResponseMapper(100, 1).map(Flux.range(0, 100)
+			.create(map(chatMapper(100, 1), Flux.range(0, 100)
 				.map(index -> JSON.readValue("{\"choices\":[],\"key" + index + "\":true}", ChatCompletionChunk.class))))
 			.thenConsumeWhile(response -> true)
 			.expectError(OpenRouterLimitExceededException.class)
@@ -109,18 +110,31 @@ class ChatStreamBudgetTests {
 	}
 
 	@Test
-	void boundsActiveChoicesAndReleasesFinishedChoices() {
+	void boundsActiveChoices() {
 		var first = chunk("{\"index\":0,\"delta\":{\"content\":\"a\"}}");
 		var second = chunk("{\"index\":1,\"delta\":{\"content\":\"b\"}}");
-		var finish = chunk("{\"index\":0,\"finish_reason\":\"stop\"}");
-		var mapper = new OpenRouterStreamingResponseMapper(DIAGNOSTIC, 1);
-		StepVerifier.create(mapper.map(Flux.just(first, second)))
+		StepVerifier.create(map(chatMapper(DIAGNOSTIC, 1), Flux.just(first, second)))
 			.expectNextCount(1)
 			.expectErrorSatisfies(error -> assertThat(((OpenRouterLimitExceededException) error).getLimit())
 				.isEqualTo(Limit.CHAT_STATE_CHOICES))
 			.verify();
-		StepVerifier.create(mapper.map(Flux.just(first, finish, second))).expectNextCount(3).verifyComplete();
-		StepVerifier.create(new OpenRouterStreamingResponseMapper(DIAGNOSTIC, 2).map(Flux.just(first, second)))
+	}
+
+	@Test
+	void releasesFinishedChoicesSoALaterChoiceFits() {
+		var first = chunk("{\"index\":0,\"delta\":{\"content\":\"a\"}}");
+		var second = chunk("{\"index\":1,\"delta\":{\"content\":\"b\"}}");
+		var finish = chunk("{\"index\":0,\"finish_reason\":\"stop\"}");
+		StepVerifier.create(map(chatMapper(DIAGNOSTIC, 1), Flux.just(first, finish, second)))
+			.expectNextCount(3)
+			.verifyComplete();
+	}
+
+	@Test
+	void twoActiveChoicesStillRespectTheByteBudget() {
+		var first = chunk("{\"index\":0,\"delta\":{\"content\":\"a\"}}");
+		var second = chunk("{\"index\":1,\"delta\":{\"content\":\"b\"}}");
+		StepVerifier.create(map(chatMapper(DIAGNOSTIC, 2), Flux.just(first, second)))
 			.expectNextCount(1)
 			.expectErrorSatisfies(error -> assertThat(((OpenRouterLimitExceededException) error).getLimit())
 				.isEqualTo(Limit.CHAT_STATE_BYTES))
@@ -133,13 +147,14 @@ class ChatStreamBudgetTests {
 		var second = chunk("{\"index\":1,\"delta\":{\"reasoning\":\"b\"}}");
 		var finish = chunk("{\"index\":0,\"finish_reason\":\"stop\"}");
 		long charge = JSON.writeValueAsBytes(Map.of(ReasoningMetadata.REASONING, "a")).length;
-		var mapper = new OpenRouterStreamingResponseMapper(2 * (DIAGNOSTIC + charge), 2);
-		StepVerifier.create(mapper.map(Flux.just(first, second, first)))
+		var mapper = chatMapper(2 * (DIAGNOSTIC + charge), 2);
+		StepVerifier.create(map(mapper, Flux.just(first, second, first)))
 			.expectNextCount(2)
 			.expectError(OpenRouterLimitExceededException.class)
 			.verify();
 		var secondFinished = chunk("{\"index\":1,\"delta\":{\"reasoning\":\"b\"},\"finish_reason\":\"stop\"}");
-		var responses = mapper.map(Flux.just(first, second, finish, secondFinished, first)).collectList().block();
+		var responses = map(mapper, Flux.just(first, second, finish, secondFinished, first)).collectList()
+			.block(Duration.ofSeconds(5));
 		assertThat(responses).hasSize(5);
 		assertThat(responses.get(0).getResult().getOutput().getMetadata()).containsEntry(ReasoningMetadata.REASONING,
 				"a");
@@ -158,14 +173,14 @@ class ChatStreamBudgetTests {
 		AtomicBoolean cancelled = new AtomicBoolean();
 		var chunk = chunk("{\"index\":0,\"delta\":{\"content\":\"hello\"}}");
 		StepVerifier
-			.create(new OpenRouterStreamingResponseMapper(DIAGNOSTIC, 1)
-				.map(Flux.range(0, 10000).map(index -> chunk).doOnCancel(() -> cancelled.set(true))), 0)
+			.create(map(chatMapper(DIAGNOSTIC, 1),
+					Flux.range(0, 10000).map(index -> chunk).doOnCancel(() -> cancelled.set(true))), 0)
 			.thenRequest(2000)
 			.expectNextCount(2000)
 			.thenCancel()
 			.verify();
 		assertThat(cancelled).isTrue();
-		StepVerifier.create(new OpenRouterStreamingResponseMapper(DIAGNOSTIC, 1).map(Flux.just(chunk, chunk)))
+		StepVerifier.create(map(chatMapper(DIAGNOSTIC, 1), Flux.just(chunk, chunk)))
 			.assertNext(response -> assertThat(response.getResult().getOutput().getText()).isEqualTo("hello"))
 			.assertNext(response -> assertThat(response.getResult().getOutput().getText()).isEqualTo("hello"))
 			.verifyComplete();
@@ -179,7 +194,7 @@ class ChatStreamBudgetTests {
 				 "choices":[{"index":0,"delta":{"content":"failure"},
 				 "error":{"code":"502","message":"synthetic"}}]}
 				""", ChatCompletionChunk.class);
-		StepVerifier.create(new OpenRouterStreamingResponseMapper(DIAGNOSTIC, 1).map(Flux.just(first, failed)))
+		StepVerifier.create(map(chatMapper(DIAGNOSTIC, 1), Flux.just(first, failed)))
 			.expectNextCount(1)
 			.expectErrorSatisfies(error -> assertThat(error).isInstanceOfSatisfying(
 					OpenRouterTransientChoiceException.class,
@@ -187,33 +202,84 @@ class ChatStreamBudgetTests {
 			.verify();
 	}
 
+	static Stream<Arguments> providerFailuresUnderTightLimits() {
+		return Stream.of(
+				Arguments.of(Named.of("502 with 1 byte and 2 choices", 502), 1L, 2,
+						OpenRouterTransientChoiceException.class),
+				Arguments.of(Named.of("502 with 4096 bytes and 1 choice", 502), 4096L, 1,
+						OpenRouterTransientChoiceException.class),
+				Arguments.of(Named.of("400 with 1 byte and 2 choices", 400), 1L, 2,
+						OpenRouterNonTransientChoiceException.class),
+				Arguments.of(Named.of("400 with 4096 bytes and 1 choice", 400), 4096L, 1,
+						OpenRouterNonTransientChoiceException.class));
+	}
+
 	@ParameterizedTest
-	@CsvSource({ "1,2,502", "4096,1,502", "1,2,400", "4096,1,400" })
-	void providerFailureTakesPrecedenceOverByteAndChoiceLimits(long maxBytes, int maxChoices, int status) {
+	@MethodSource("providerFailuresUnderTightLimits")
+	void providerFailureTakesPrecedenceOverByteAndChoiceLimits(int status, long maxBytes, int maxChoices,
+			Class<? extends Throwable> expected) {
 		var failed = JSON.readValue("""
 				{"choices":[{"index":0,"delta":{"content":"sibling"}},
 				 {"index":1,"delta":{"content":"partial"},"error":{"code":"%s","message":"synthetic"}}]}
 				""".formatted(status), ChatCompletionChunk.class);
 		AtomicBoolean cancelled = new AtomicBoolean();
 		StepVerifier
-			.create(new OpenRouterStreamingResponseMapper(maxBytes, maxChoices)
-				.map(Flux.just(failed).doOnCancel(() -> cancelled.set(true))))
-			.expectError(status == 502 ? OpenRouterTransientChoiceException.class
-					: OpenRouterNonTransientChoiceException.class)
+			.create(map(chatMapper(maxBytes, maxChoices), Flux.just(failed).doOnCancel(() -> cancelled.set(true))))
+			.expectError(expected)
 			.verify();
 		assertThat(cancelled).isTrue();
 	}
 
 	@Test
 	void rejectsNonPositiveLimits() {
-		assertThatThrownBy(() -> new OpenRouterStreamingResponseMapper(0, 1))
-			.isInstanceOf(IllegalArgumentException.class);
-		assertThatThrownBy(() -> new OpenRouterStreamingResponseMapper(1, 0))
-			.isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> chatMapper(0, 1)).isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("Maximum Chat Completions state size must be greater than zero");
+		assertThatThrownBy(() -> chatMapper(1, 0)).isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("Maximum Chat Completions active choices must be greater than zero");
 	}
 
 	private static ChatCompletionChunk chunk(String choice) {
 		return JSON.readValue("{\"choices\":[" + choice + "]}", ChatCompletionChunk.class);
+	}
+
+	/** A reasoning stream whose third snapshot is the first one over the budget. */
+	private static final class Utf8Budget {
+
+		private final long charge = JSON.writeValueAsBytes(Map.of(ReasoningMetadata.REASONING, UNICODE)).length;
+
+		private final AtomicBoolean cancelled = new AtomicBoolean();
+
+		private final Flux<ChatResponse> stream;
+
+		Utf8Budget() {
+			ChatCompletionChunk chunk = chunk("{\"index\":0,\"delta\":{\"reasoning\":\"" + UNICODE + "\"}}");
+			this.stream = map(chatMapper(DIAGNOSTIC + this.charge * 2, 1),
+					Flux.just(chunk, chunk, chunk).doOnCancel(() -> this.cancelled.set(true)));
+		}
+
+		void assertExactBoundaryThenLimit() {
+			// Anchor the measured charge to a literal document: two-byte and four-byte
+			// characters count as bytes, not as characters.
+			String literal = "{\"" + ReasoningMetadata.REASONING + "\":\"" + UNICODE + "\"}";
+			assertThat(this.charge).isEqualTo(literal.getBytes(StandardCharsets.UTF_8).length)
+				.isGreaterThan(literal.length());
+			this.cancelled.set(false);
+			StepVerifier.create(this.stream)
+				.assertNext(response -> assertThat(response.getResult().getOutput().getMetadata())
+					.containsEntry(ReasoningMetadata.REASONING, UNICODE))
+				.assertNext(response -> assertThat(response.getResult().getOutput().getMetadata())
+					.containsEntry(ReasoningMetadata.REASONING, UNICODE + UNICODE))
+				.expectErrorSatisfies(error -> {
+					assertThat(error).isInstanceOf(OpenRouterLimitExceededException.class);
+					var limit = (OpenRouterLimitExceededException) error;
+					assertThat(limit.getLimit()).isEqualTo(Limit.CHAT_STATE_BYTES);
+					assertThat(limit.getConfiguredLimit()).isEqualTo(DIAGNOSTIC + this.charge * 2);
+					assertThat(limit.getObservedValue()).isEqualTo(DIAGNOSTIC + this.charge * 3);
+				})
+				.verify();
+			assertThat(this.cancelled).isTrue();
+		}
+
 	}
 
 }

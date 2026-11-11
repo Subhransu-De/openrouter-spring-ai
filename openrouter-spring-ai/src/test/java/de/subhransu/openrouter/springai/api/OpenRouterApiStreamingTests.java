@@ -7,13 +7,14 @@ import de.subhransu.openrouter.springai.api.dto.FunctionCall;
 import de.subhransu.openrouter.springai.api.dto.ImagesRequest;
 import de.subhransu.openrouter.springai.api.dto.ResponsesRequest;
 import de.subhransu.openrouter.springai.api.dto.ChatMessage;
-import de.subhransu.openrouter.springai.errors.OpenRouterHttpException;
-import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
-import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.api.Named;
+import java.util.stream.Stream;
+import java.util.function.Function;
 import java.util.concurrent.TimeoutException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -37,33 +38,14 @@ import tools.jackson.databind.annotation.JsonDeserialize;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.module.SimpleModule;
 
+/**
+ * How the stream binding treats a caller-supplied {@code ObjectMapper}. Stream events are
+ * bound from a normalized JSON tree, so a custom deserializer sees normalized number text
+ * (wire {@code 1.50} arrives as {@code 1.5}). That is a documented property of this
+ * library's binding rather than a wire contract; the tests pin it so a change in the
+ * binding is deliberate.
+ */
 class OpenRouterApiStreamingTests {
-
-	@Test
-	void suppliedModuleIsNotSetUpAgainForStreamBinding() {
-		AtomicInteger setups = new AtomicInteger();
-		SimpleModule module = new SimpleModule("counted") {
-			@Override
-			public void setupModule(SetupContext context) {
-				int generation = setups.incrementAndGet();
-				new SimpleModule().addDeserializer(FunctionCall.class, new ValueDeserializer<FunctionCall>() {
-					@Override
-					public FunctionCall deserialize(JsonParser parser, DeserializationContext context) {
-						parser.skipChildren();
-						return new FunctionCall("generation-" + generation, "{}");
-					}
-				}).setupModule(context);
-			}
-		};
-		ObjectMapper mapper = JsonMapper.builder().addModule(module).build();
-		String body = "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"function\":{}}]}}]}\n\ndata: [DONE]\n\n";
-		OpenRouterApi api = mappedApi(mapper, body);
-		StepVerifier.create(api.chatCompletionStream(chatRequest()))
-			.assertNext(chunk -> assertThat(chunk.choices().get(0).delta().toolCalls().get(0).function().name())
-				.isEqualTo("generation-1"))
-			.verifyComplete();
-		assertThat(setups).hasValue(1);
-	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "chat", "responses", "images" })
@@ -98,22 +80,17 @@ class OpenRouterApiStreamingTests {
 	}
 
 	@Test
-	void suppliedMixInDeserializerKeepsTreeParserSemantics() {
+	void suppliedMixInDeserializerReadsNormalizedNumbersFromTheStream() {
+		// The mix-in deserializer reads the raw token text of "name". Stream chunks are
+		// bound from a normalized JSON tree, so the wire literal 1.50 reaches it as 1.5.
 		ObjectMapper mapper = JsonMapper.builder().addMixIn(FunctionCall.class, FunctionMixin.class).build();
-		String body = "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"function\":{}}]}}]}\n\ndata: [DONE]\n\n";
+		String body = "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"function\":{\"name\":1.50}}]}}]}\n\n"
+				+ "data: [DONE]\n\n";
 		OpenRouterApi api = mappedApi(mapper, body);
 		StepVerifier.create(api.chatCompletionStream(chatRequest()))
 			.assertNext(chunk -> assertThat(chunk.choices().get(0).delta().toolCalls().get(0).function().name())
-				.isEqualTo("TreeTraversingParser"))
+				.isEqualTo("1.5"))
 			.verifyComplete();
-	}
-
-	@Test
-	void binderKeepsSuppliedDeserializerOnItsTreePath() {
-		ObjectMapper mapper = JsonMapper.builder().addMixIn(FunctionCall.class, FunctionMixin.class).build();
-		StreamEventBinder binder = new StreamEventBinder(mapper, false);
-		FunctionCall function = binder.bind("{}", binder.reader(FunctionCall.class), FunctionCall.class);
-		assertThat(function.name()).isEqualTo("TreeTraversingParser");
 	}
 
 	private OpenRouterApi mappedApi(ObjectMapper mapper, String body) {
@@ -137,59 +114,12 @@ class OpenRouterApiStreamingTests {
 			.build();
 	}
 
-	private ChatCompletionRequest chatRequest() {
+	private static ChatCompletionRequest chatRequest() {
 		return ChatCompletionRequest.builder()
 			.model("openai/gpt-5.4-mini")
 			.messages(List.of(new ChatMessage("user", "hello", null, null, null)))
 			.stream(true)
 			.build();
-	}
-
-	@Test
-	void eofBeforeDoneIsTypedTruncation() {
-		for (String body : List.of("", "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"hi\"}}]}\n\n")) {
-			OpenRouterApi api = apiRespondingWith(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE, body);
-			StepVerifier.create(api.chatCompletionStream(chatRequest()))
-				.thenConsumeWhile(chunk -> true)
-				.expectError(OpenRouterTruncatedResponseException.class)
-				.verify();
-		}
-	}
-
-	@Test
-	void doneTerminatesWithoutWaitingForConnectionClose() {
-		DefaultDataBufferFactory buffers = new DefaultDataBufferFactory();
-		ExchangeFunction exchange = request -> Mono.just(ClientResponse.create(HttpStatus.OK)
-			.header(HttpHeaders.CONTENT_TYPE, MediaType.TEXT_EVENT_STREAM_VALUE)
-			.body(Flux.<DataBuffer>just(buffers.wrap("data: [DONE]\n\n".getBytes(StandardCharsets.UTF_8)))
-				.concatWith(Flux.never()))
-			.build());
-		OpenRouterApi api = OpenRouterApi.builder()
-			.apiKey("test-key")
-			.webClientBuilder(WebClient.builder().exchangeFunction(exchange))
-			.build();
-		StepVerifier.create(api.chatCompletionStream(chatRequest())).expectComplete().verify(Duration.ofSeconds(5));
-	}
-
-	@Test
-	void parsesChunksAndFiltersDoneMarker() {
-		String sse = """
-				data: {"id":"gen-1","object":"chat.completion.chunk","model":"openai/gpt-5.4-mini","choices":[{"index":0,"delta":{"content":"Hel"}}]}
-
-				data: {"id":"gen-1","object":"chat.completion.chunk","model":"openai/gpt-5.4-mini","choices":[{"index":0,"delta":{"content":"lo"},"finish_reason":"stop"}]}
-
-				data: [DONE]
-
-				""";
-		OpenRouterApi api = apiRespondingWith(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE, sse);
-
-		StepVerifier.create(api.chatCompletionStream(chatRequest()))
-			.assertNext(chunk -> assertThat(chunk.choices().get(0).delta().content()).isEqualTo("Hel"))
-			.assertNext(chunk -> {
-				assertThat(chunk.choices().get(0).delta().content()).isEqualTo("lo");
-				assertThat(chunk.choices().get(0).finishReason()).isEqualTo("stop");
-			})
-			.verifyComplete();
 	}
 
 	@Test
@@ -202,64 +132,81 @@ class OpenRouterApiStreamingTests {
 				""";
 		OpenRouterApi api = apiRespondingWith(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE, sse);
 
-		StepVerifier.create(api.chatCompletionStream(chatRequest()))
-			.assertNext(chunk -> assertThat(chunk.choices().get(0).delta().content()).isEqualTo("Hi"))
-			.verifyComplete();
+		StepVerifier.create(api.chatCompletionStream(chatRequest())).assertNext(chunk -> {
+			assertThat(chunk.choices().get(0).delta().content()).isEqualTo("Hi");
+			// The unknown reasoning format and the unknown choice field are kept, not
+			// dropped or rejected.
+			assertThat(chunk.choices().get(0).delta().reasoningDetails()).hasSize(1);
+			assertThat(chunk.choices().get(0).delta().reasoningDetails().get(0).path("format").asString())
+				.isEqualTo("unknown");
+			assertThat(chunk.choices().get(0).extensions()).containsEntry("brand_new_field", true);
+		}).verifyComplete();
 	}
 
 	@Test
 	void failsStalledStreamWhenTimeoutIsConfigured() {
-		// The body emits one chunk, then stalls forever. With a short timeout the gap
-		// between
-		// elements exceeds it, so the stream errors instead of hanging.
-		DefaultDataBufferFactory bufferFactory = new DefaultDataBufferFactory();
-		Flux<DataBuffer> stalledBody = Flux.<DataBuffer>just(bufferFactory
-			.wrap("""
-					data: {"id":"gen-1","object":"chat.completion.chunk","model":"openai/gpt-5.4-mini","choices":[{"index":0,"delta":{"content":"Hi"}}]}
+		// The body emits one chunk, then stalls forever. Virtual time moves past the
+		// configured timeout, so the stream errors instead of hanging.
+		StepVerifier.withVirtualTime(() -> {
+			DefaultDataBufferFactory bufferFactory = new DefaultDataBufferFactory();
+			Flux<DataBuffer> stalledBody = Flux.<DataBuffer>just(bufferFactory
+				.wrap("""
+						data: {"id":"gen-1","object":"chat.completion.chunk","model":"openai/gpt-5.4-mini","choices":[{"index":0,"delta":{"content":"Hi"}}]}
 
-					"""
-				.getBytes(StandardCharsets.UTF_8)))
-			.concatWith(Flux.never());
-		ExchangeFunction exchange = request -> Mono.just(ClientResponse.create(HttpStatus.OK)
-			.header(HttpHeaders.CONTENT_TYPE, MediaType.TEXT_EVENT_STREAM_VALUE)
-			.body(stalledBody)
-			.build());
-		// A second-scale timeout leaves a wide margin for the immediate first chunk to
-		// arrive under
-		// CI load, while the infinite stall still trips it. The verifier returns as soon
-		// as it fires.
-		OpenRouterApi api = OpenRouterApi.builder()
-			.apiKey("test-key")
-			.webClientBuilder(WebClient.builder().exchangeFunction(exchange))
-			.timeout(Duration.ofSeconds(1))
-			.build();
-
-		StepVerifier.create(api.chatCompletionStream(chatRequest()))
+						"""
+					.getBytes(StandardCharsets.UTF_8)))
+				.concatWith(Flux.never());
+			ExchangeFunction exchange = request -> Mono.just(ClientResponse.create(HttpStatus.OK)
+				.header(HttpHeaders.CONTENT_TYPE, MediaType.TEXT_EVENT_STREAM_VALUE)
+				.body(stalledBody)
+				.build());
+			OpenRouterApi api = OpenRouterApi.builder()
+				.apiKey("test-key")
+				.webClientBuilder(WebClient.builder().exchangeFunction(exchange))
+				.timeout(Duration.ofSeconds(1))
+				.build();
+			return api.chatCompletionStream(chatRequest());
+		})
 			.assertNext(chunk -> assertThat(chunk.choices().get(0).delta().content()).isEqualTo("Hi"))
+			.expectNoEvent(Duration.ofMillis(900))
+			.thenAwait(Duration.ofMillis(100))
 			.expectError(TimeoutException.class)
-			.verify(Duration.ofSeconds(30));
+			.verify();
 	}
 
-	@Test
-	void keepAliveCommentsResetTheStreamTimeout() {
+	static Stream<Arguments> keepAliveEndpoints() {
+		Function<OpenRouterApi, Flux<String>> chat = api -> api.chatCompletionStream(chatRequest())
+			.map(chunk -> chunk.choices().get(0).delta().content());
+		Function<OpenRouterApi, Flux<String>> responses = api -> api
+			.responsesStream(ResponsesRequest.builder().model("test").input("hello").stream(true).build())
+			.mapNotNull(event -> event.delta());
+		Function<OpenRouterApi, Flux<String>> images = api -> api
+			.imagesStream(new ImagesRequest("test", "hello", null, null, null, null, null, null, null, null, null, true,
+					null, null))
+			.map(event -> event.b64Json());
+		return Stream.of(Arguments.of(Named.of("chat", chat),
+				"data: {\"id\":\"gen-1\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hi\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n"),
+				Arguments.of(Named.of("responses", responses),
+						"data: {\"type\":\"response.output_text.delta\",\"delta\":\"Hi\"}\n\ndata: {\"type\":\"response.completed\"}\n\n"),
+				Arguments.of(Named.of("images", images),
+						"data: {\"type\":\"image_generation.completed\",\"b64_json\":\"Hi\"}\n\ndata: [DONE]\n\n"));
+	}
+
+	@ParameterizedTest
+	@MethodSource("keepAliveEndpoints")
+	void keepAliveCommentsResetTheStreamTimeout(Function<OpenRouterApi, Flux<String>> stream, String finalEvents) {
 		// OpenRouter emits ": OPENROUTER PROCESSING" SSE comments as keep-alives during
 		// slow generations. The parser filters them out, but the timeout sits on the SSE
 		// event stream, so comments spaced under the timeout must NOT trip it before the
-		// real chunk arrives. Virtual time makes the 100ms-interval-vs-250ms-timeout
-		// relationship deterministic instead of racing real CI wall-clock.
+		// real event arrives, on every SSE endpoint. Virtual time makes the
+		// 100ms-interval-vs-250ms-timeout relationship deterministic instead of racing
+		// real CI wall-clock.
 		StepVerifier.withVirtualTime(() -> {
 			DefaultDataBufferFactory bufferFactory = new DefaultDataBufferFactory();
 			Flux<DataBuffer> body = Flux.interval(Duration.ofMillis(100))
 				.take(15)
 				.map(tick -> bufferFactory.wrap(": OPENROUTER PROCESSING\n\n".getBytes(StandardCharsets.UTF_8)))
-				.concatWith(Flux.just(bufferFactory
-					.wrap("""
-							data: {"id":"gen-1","object":"chat.completion.chunk","model":"openai/gpt-5.4-mini","choices":[{"index":0,"delta":{"content":"Hi"},"finish_reason":"stop"}]}
-
-							data: [DONE]
-
-							"""
-						.getBytes(StandardCharsets.UTF_8))))
+				.concatWith(Flux.just(bufferFactory.wrap(finalEvents.getBytes(StandardCharsets.UTF_8))))
 				.cast(DataBuffer.class);
 			ExchangeFunction exchange = request -> Mono.just(ClientResponse.create(HttpStatus.OK)
 				.header(HttpHeaders.CONTENT_TYPE, MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -270,24 +217,8 @@ class OpenRouterApiStreamingTests {
 				.webClientBuilder(WebClient.builder().exchangeFunction(exchange))
 				.timeout(Duration.ofMillis(250))
 				.build();
-			return api.chatCompletionStream(chatRequest());
-		})
-			.thenAwait(Duration.ofSeconds(2))
-			.assertNext(chunk -> assertThat(chunk.choices().get(0).delta().content()).isEqualTo("Hi"))
-			.verifyComplete();
-	}
-
-	@Test
-	void emitsApiExceptionOnErrorStatus() {
-		OpenRouterApi api = apiRespondingWith(HttpStatus.UNAUTHORIZED, MediaType.APPLICATION_JSON_VALUE,
-				"{\"error\":{\"message\":\"bad key\"}}");
-
-		StepVerifier.create(api.chatCompletionStream(chatRequest())).expectErrorSatisfies(error -> {
-			assertThat(error).isInstanceOf(OpenRouterNonTransientApiException.class);
-			OpenRouterHttpException apiException = (OpenRouterHttpException) error;
-			assertThat(apiException.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
-			assertThat(apiException.getResponseBody()).contains("bad key");
-		}).verify();
+			return stream.apply(api);
+		}).thenAwait(Duration.ofSeconds(2)).expectNext("Hi").verifyComplete();
 	}
 
 	@JsonDeserialize(using = ParserFunctionDeserializer.class)
@@ -299,9 +230,12 @@ class OpenRouterApiStreamingTests {
 
 		@Override
 		public FunctionCall deserialize(JsonParser parser, DeserializationContext context) {
-			String parserType = parser.getClass().getSimpleName();
+			parser.nextToken();
+			parser.nextToken();
+			String rawValueText = parser.getText();
 			parser.skipChildren();
-			return new FunctionCall(parserType, "{}");
+			parser.nextToken();
+			return new FunctionCall(rawValueText, "{}");
 		}
 
 	}

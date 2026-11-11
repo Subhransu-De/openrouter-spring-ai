@@ -8,16 +8,23 @@ import de.subhransu.openrouter.springai.api.dto.ResponsesOutputItem;
 import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
 import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.content.Media;
 import org.springframework.util.MimeTypeUtils;
+import reactor.core.publisher.Flux;
 import tools.jackson.databind.ObjectMapper;
 
 class GeneratedImageReuseTests {
@@ -38,21 +45,17 @@ class GeneratedImageReuseTests {
 			.containsExactly(MimeTypeUtils.IMAGE_JPEG, MimeTypeUtils.IMAGE_PNG);
 	}
 
-	@ParameterizedTest
+	@ParameterizedTest(name = "{0}")
 	@ValueSource(strings = { "png", "jpeg", "webp" })
 	void typedImageItemsRetainTheirOutputFormat(String format) {
 		ResponsesOutputItem item = new ResponsesOutputItem("image-1", "image_generation_call", "completed", null, null,
 				null, null, null, "AQID", format, null);
-		assertThat(GeneratedImageMapper.responsesMedia(List.of(item)).get(0).getData())
-			.isEqualTo("data:image/" + format + ";base64,AQID");
+		Media media = GeneratedImageMapper.responsesMedia(List.of(item)).get(0);
+		assertThat(media.getData()).isEqualTo("data:image/" + format + ";base64,AQID");
+		assertThat(media.getMimeType()).isEqualTo(MimeTypeUtils.parseMimeType("image/" + format));
 		ResponsesOutputItem decoded = this.json.readValue(this.json.writeValueAsString(item),
 				ResponsesOutputItem.class);
 		assertThat(decoded.outputFormat()).isEqualTo(format);
-		ResponsesOutputItem rebuilt = new ResponsesOutputItem(decoded.id(), decoded.type(), decoded.status(),
-				decoded.role(), decoded.content(), decoded.callId(), decoded.name(), decoded.arguments(),
-				decoded.result(), decoded.outputFormat(), null);
-		assertThat(GeneratedImageMapper.responsesMedia(List.of(rebuilt)).get(0).getMimeType())
-			.isEqualTo(MimeTypeUtils.parseMimeType("image/" + format));
 	}
 
 	@Test
@@ -68,7 +71,7 @@ class GeneratedImageReuseTests {
 			.isEqualTo("data:image/png;base64,AQID");
 	}
 
-	@ParameterizedTest
+	@ParameterizedTest(name = "stream = {0}")
 	@ValueSource(booleans = { false, true })
 	void rejectsUnsupportedAssistantMediaEvenWithReasoningReplayMetadata(boolean stream) {
 		AssistantMessage assistant = AssistantMessage.builder()
@@ -88,41 +91,129 @@ class GeneratedImageReuseTests {
 			.withMessageContaining("audio replay is unsupported");
 	}
 
-	@ParameterizedTest
-	@ValueSource(strings = { "png", "jpeg", "webp" })
-	void responsesImagesCanBeReusedAsUserInput(String format) {
-		for (String result : List.of("aW1hZ2U=", "data:image/" + format + ";base64,aW1hZ2U=",
-				"https://example.com/image." + format)) {
-			ResponsesOutputItem item = this.json.readValue("""
-					{"type":"image_generation_call","result":"%s","output_format":"%s"}
-					""".formatted(result, format), ResponsesOutputItem.class);
-			var sync = new OpenRouterResponsesResponseMapper().map(new ResponsesResult("response-1", "response", 0L,
-					"synthetic/model", "completed", List.of(item), null, null));
-			var streamed = new OpenRouterResponsesStreamingResponseMapper().map(this.json.readValue(
-					"{\"type\":\"response.output_item.done\",\"item\":" + this.json.writeValueAsString(item) + "}",
-					ResponsesStreamEvent.class));
-			Media media = sync.getResult().getOutput().getMedia().get(0);
-			assertThat(streamed.getResult().getOutput().getMedia().get(0).getData()).isEqualTo(media.getData());
-			assertThat(streamed.getResult().getOutput().getMedia().get(0).getMimeType()).isEqualTo(media.getMimeType());
-			assertThat(media.getMimeType()).isEqualTo(MimeTypeUtils.parseMimeType("image/" + format));
-			String expected = result.equals("aW1hZ2U=") ? "data:image/" + format + ";base64," + result : result;
-			UserMessage user = UserMessage.builder().text("Edit this image").media(media).build();
-			for (boolean stream : List.of(false, true)) {
-				assertThat(this.json
-					.valueToTree(new OpenRouterChatRequestMapper(this.json).map(List.of(user), this.options, stream,
-							List.of()))
-					.at("/messages/0/content/1/image_url/url")
-					.asString()).isEqualTo(expected);
-				assertThat(this.json
-					.valueToTree(new OpenRouterResponsesRequestMapper(this.json).map(List.of(user), this.options,
-							stream, List.of()))
-					.at("/input/0/content/1/image_url")
-					.asString()).isEqualTo(expected);
-			}
-		}
+	static Stream<Arguments> nonImageAssistantMedia() {
+		return Stream.of("application/pdf", "video/mp4")
+			.flatMap(mime -> Stream.of(false, true).map(stream -> Arguments.of(mime, stream)));
+	}
+
+	@ParameterizedTest(name = "{0}, stream = {1}")
+	@MethodSource("nonImageAssistantMedia")
+	void rejectsPdfAndVideoAssistantHistoryInBothRequestModes(String mime, boolean stream) {
+		AssistantMessage assistant = AssistantMessage.builder()
+			.content("")
+			.media(List.of(Media.builder().mimeType(MimeTypeUtils.parseMimeType(mime)).data(new byte[] { 1 }).build()))
+			.build();
+
+		assertThatIllegalArgumentException()
+			.isThrownBy(() -> new OpenRouterChatRequestMapper(this.json).map(List.of(assistant), this.options, stream,
+					List.of()))
+			.withMessageContaining("accepts only image media")
+			.withMessageContaining(mime);
+		assertThatIllegalArgumentException()
+			.isThrownBy(() -> new OpenRouterResponsesRequestMapper(this.json).map(List.of(assistant), this.options,
+					stream, List.of()))
+			.withMessageContaining("does not support assistant media history");
+	}
+
+	static Stream<Arguments> generatedImageResults() {
+		return Stream.of("png", "jpeg", "webp")
+			.flatMap(format -> Stream.of(
+					Arguments.of(Named.of("bare base64 " + format, format), "aW1hZ2U=",
+							"data:image/" + format + ";base64,aW1hZ2U="),
+					Arguments.of(Named.of("data URL " + format, format), "data:image/" + format + ";base64,aW1hZ2U=",
+							"data:image/" + format + ";base64,aW1hZ2U="),
+					Arguments.of(Named.of("remote URL " + format, format), "https://example.com/image." + format,
+							"https://example.com/image." + format)));
 	}
 
 	@ParameterizedTest
+	@MethodSource("generatedImageResults")
+	void syncAndStreamedResponsesImagesAgreeAndKeepTheirMimeType(String format, String result, String expected) {
+		ResponsesOutputItem item = outputItem(result, format);
+		Media media = syncMedia(item);
+		Media streamed = streamedMedia(item);
+		assertThat(streamed.getData()).isEqualTo(media.getData()).isEqualTo(expected);
+		assertThat(streamed.getMimeType()).isEqualTo(media.getMimeType())
+			.isEqualTo(MimeTypeUtils.parseMimeType("image/" + format));
+	}
+
+	static Stream<Arguments> reuseCases() {
+		return generatedImageResults().flatMap(args -> Stream.of(false, true)
+			.map(stream -> Arguments.of(args.get()[0], args.get()[1], args.get()[2], stream)));
+	}
+
+	@ParameterizedTest(name = "{0} as user input, stream = {3}")
+	@MethodSource("reuseCases")
+	void responsesImagesCanBeReusedAsUserInputInBothRequestModes(String format, String result, String expected,
+			boolean stream) {
+		Media media = syncMedia(outputItem(result, format));
+		UserMessage user = UserMessage.builder().text("Edit this image").media(media).build();
+		var chat = this.json.valueToTree(
+				new OpenRouterChatRequestMapper(this.json).map(List.of(user), this.options, stream, List.of()));
+		assertThat(chat.at("/messages/0/content/0/type").asString()).isEqualTo("text");
+		assertThat(chat.at("/messages/0/content/0/text").asString()).isEqualTo("Edit this image");
+		assertThat(chat.at("/messages/0/content/1/type").asString()).isEqualTo("image_url");
+		assertThat(chat.at("/messages/0/content/1/image_url/url").asString()).isEqualTo(expected);
+		var responses = this.json.valueToTree(
+				new OpenRouterResponsesRequestMapper(this.json).map(List.of(user), this.options, stream, List.of()));
+		assertThat(responses.at("/input/0/content/0/type").asString()).isEqualTo("input_text");
+		assertThat(responses.at("/input/0/content/0/text").asString()).isEqualTo("Edit this image");
+		assertThat(responses.at("/input/0/content/1/type").asString()).isEqualTo("input_image");
+		assertThat(responses.at("/input/0/content/1/image_url").asString()).isEqualTo(expected);
+	}
+
+	private ResponsesOutputItem outputItem(String result, String format) {
+		return this.json.readValue("""
+				{"type":"image_generation_call","result":"%s","output_format":"%s"}
+				""".formatted(result, format), ResponsesOutputItem.class);
+	}
+
+	private Media syncMedia(ResponsesOutputItem item) {
+		return ResponseMappers.responses()
+			.map(new ResponsesResult("response-1", "response", 0L, "synthetic/model", "completed", List.of(item), null,
+					null))
+			.getResult()
+			.getOutput()
+			.getMedia()
+			.get(0);
+	}
+
+	private Media streamedMedia(ResponsesOutputItem item) {
+		return ResponseMappers
+			.responsesEvent(this.json.readValue("{\"type\":\"response.output_item.done\",\"output_index\":0,\"item\":"
+					+ this.json.writeValueAsString(item) + "}", ResponsesStreamEvent.class))
+			.getResult()
+			.getOutput()
+			.getMedia()
+			.get(0);
+	}
+
+	@Test
+	void partialImageEventsProduceNoMediaAndOnlyTheDoneItemDoes() {
+		var partial = this.json.readValue("""
+				{"type":"response.image_generation_call.partial_image","output_index":0,"item_id":"image-1",
+				 "partial_image_index":0,"partial_image_b64":"cGFydGlhbA=="}
+				""", ResponsesStreamEvent.class);
+		var done = this.json.readValue("""
+				{"type":"response.output_item.done","output_index":0,"item":
+				 {"type":"image_generation_call","id":"image-1","result":"AQID","output_format":"png"}}
+				""", ResponsesStreamEvent.class);
+
+		List<ChatResponse> responses = ResponseMappers.responsesStreaming()
+			.map(Flux.just(partial, partial, done))
+			.collectList()
+			.block(Duration.ofSeconds(10));
+
+		assertThat(responses).hasSize(3);
+		assertThat(responses.subList(0, 2))
+			.allSatisfy(response -> assertThat(response.getResult().getOutput().getMedia())
+				.as("partial previews are not final images")
+				.isEmpty());
+		assertThat(responses.get(2).getResult().getOutput().getMedia()).extracting(Media::getData)
+			.containsExactly("data:image/png;base64,AQID");
+	}
+
+	@ParameterizedTest(name = "stream = {0}")
 	@ValueSource(booleans = { false, true })
 	void assistantImagesArePreservedOrExplicitlyRejected(boolean stream) {
 		Media media = Media.builder().mimeType(MimeTypeUtils.IMAGE_PNG).data(new byte[] { 1, 2, 3 }).build();

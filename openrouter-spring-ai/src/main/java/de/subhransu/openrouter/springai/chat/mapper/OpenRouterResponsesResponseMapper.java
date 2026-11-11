@@ -25,10 +25,6 @@ public final class OpenRouterResponsesResponseMapper {
 
 	private final OpenRouterDiagnosticSanitizer sanitizer;
 
-	public OpenRouterResponsesResponseMapper() {
-		this(OpenRouterDiagnosticSanitizer.keyless());
-	}
-
 	public OpenRouterResponsesResponseMapper(OpenRouterDiagnosticSanitizer sanitizer) {
 		this.sanitizer = sanitizer;
 	}

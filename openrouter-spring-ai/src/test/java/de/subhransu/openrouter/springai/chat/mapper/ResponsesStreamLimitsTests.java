@@ -14,8 +14,14 @@ import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
 import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException;
 import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException.Limit;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.api.Named;
+import java.util.stream.Stream;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -46,6 +52,27 @@ class ResponsesStreamLimitsTests {
 		StepVerifier.create(mapper(bytes, 11).map(events)).expectNextCount(11).verifyComplete();
 		StepVerifier.create(mapper(bytes - 1, 11).map(events))
 			.expectNextCount(10)
+			.expectErrorSatisfies(error -> assertLimit(error, Limit.RESPONSES_STATE_BYTES, bytes - 1))
+			.verify();
+	}
+
+	// The other boundary tests measure the charge with the same ObjectMapper the mapper
+	// uses; this one fixes it to literal byte counts of ASCII JSON, so a change in what
+	// is charged cannot pass by changing the serializer with it.
+	@Test
+	void chargeEqualsTheLiteralUtf8LengthOfEachSerializedEvent() {
+		String fragmentJson = "{\"type\":\"response.reasoning_text.delta\",\"delta\":\"a\"}";
+		String doneJson = "{\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"output\":[]}}";
+		assertThat(fragmentJson.getBytes(StandardCharsets.UTF_8)).hasSize(52);
+		assertThat(this.json.writeValueAsString(new ResponsesStreamEvent(REASONING_DELTA, "a", null, null, null)))
+			.isEqualTo(fragmentJson);
+		assertThat(this.json.writeValueAsString(this.done)).isEqualTo(doneJson);
+		long bytes = 52 + doneJson.getBytes(StandardCharsets.UTF_8).length;
+		Flux<ResponsesStreamEvent> events = Flux.just(event(fragmentJson), this.done);
+
+		StepVerifier.create(mapper(bytes, 2).map(events)).expectNextCount(2).verifyComplete();
+		StepVerifier.create(mapper(bytes - 1, 2).map(events))
+			.expectNextCount(1)
 			.expectErrorSatisfies(error -> assertLimit(error, Limit.RESPONSES_STATE_BYTES, bytes - 1))
 			.verify();
 	}
@@ -97,18 +124,23 @@ class ResponsesStreamLimitsTests {
 			.verify();
 	}
 
+	static Stream<Arguments> upstreamsAfterTheFirstEvent() {
+		Supplier<Flux<ResponsesStreamEvent>> silent = () -> Flux.never();
+		Supplier<Flux<ResponsesStreamEvent>> keepalives = () -> Flux.interval(Duration.ofSeconds(1))
+			.map(i -> new ResponsesStreamEvent("ping", null, null, null, null));
+		return Stream.of(Arguments.of(Named.of("silent upstream", silent)),
+				Arguments.of(Named.of("upstream sending keep-alives", keepalives)));
+	}
+
 	@ParameterizedTest
-	@ValueSource(booleans = { false, true })
-	void absoluteDeadlineCancelsSilentOrActiveUpstream(boolean keepalives) {
+	@MethodSource("upstreamsAfterTheFirstEvent")
+	void absoluteDeadlineCancelsSilentOrActiveUpstream(Supplier<Flux<ResponsesStreamEvent>> tail) {
 		AtomicBoolean cancelled = new AtomicBoolean();
-		StepVerifier.withVirtualTime(() -> {
-			Flux<ResponsesStreamEvent> tail = keepalives ? Flux.interval(Duration.ofSeconds(1))
-				.map(i -> new ResponsesStreamEvent("ping", null, null, null, null)) : Flux.never();
-			return mapper(10000, 100).map(
+		StepVerifier
+			.withVirtualTime(() -> mapper(10000, 100).map(
 					Flux.just(new ResponsesStreamEvent("response.function_call_arguments.delta", "{", null, null, null))
-						.concatWith(tail)
-						.doOnCancel(() -> cancelled.set(true)));
-		})
+						.concatWith(tail.get())
+						.doOnCancel(() -> cancelled.set(true))))
 			.expectNextCount(1)
 			.thenAwait(Duration.ofSeconds(5))
 			.thenConsumeWhile(response -> true)
@@ -118,16 +150,26 @@ class ResponsesStreamLimitsTests {
 	}
 
 	@Test
-	void cancellationFailureAndCompletionDoNotContaminateOtherSubscriptions() {
+	void cancelledSubscriptionDoesNotContaminateOtherSubscriptions() {
 		var mapper = mapper(10000, 2);
 		var fragment = new ResponsesStreamEvent(REASONING_DELTA, "synthetic", null, null, null);
 		var stream = mapper.map(Flux.just(fragment, this.done));
 		StepVerifier.create(stream).expectNextCount(1).thenCancel().verify();
+
+		StepVerifier.create(Flux.merge(stream, stream)).expectNextCount(4).verifyComplete();
+	}
+
+	@Test
+	void failedSubscriptionDoesNotContaminateOtherSubscriptions() {
+		var mapper = mapper(10000, 2);
+		var fragment = new ResponsesStreamEvent(REASONING_DELTA, "synthetic", null, null, null);
 		StepVerifier
 			.create(mapper.map(Flux.just(fragment).concatWith(Mono.error(new IllegalStateException("synthetic")))))
 			.expectNextCount(1)
 			.expectError(IllegalStateException.class)
 			.verify();
+
+		var stream = mapper.map(Flux.just(fragment, this.done));
 		StepVerifier.create(Flux.merge(stream, stream)).expectNextCount(4).verifyComplete();
 	}
 
@@ -164,28 +206,82 @@ class ResponsesStreamLimitsTests {
 	}
 
 	@Test
-	void modelBuilderAppliesLimitsToResponses() {
-		OpenRouterApi api = mock(OpenRouterApi.class);
-		when(api.responsesStream(any()))
-			.thenReturn(Flux.just(new ResponsesStreamEvent(REASONING_DELTA, "synthetic", null, null, null), this.done));
-		var model = OpenRouterChatModel.builder().openRouterApi(api).toolCallAggregationMaxChunks(1).build();
-		var options = OpenRouterChatOptions.builder()
-			.model("synthetic")
-			.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
+	void modelBuilderAppliesChunkLimitToResponses() {
+		var model = OpenRouterChatModel.builder()
+			.openRouterApi(responsesApi(Flux.just(reasoningFragment(), this.done)))
+			.toolCallAggregationMaxChunks(1)
 			.build();
-		StepVerifier.create(model.stream(new Prompt("synthetic", options)))
+		StepVerifier.create(model.stream(responsesPrompt()))
 			.expectNextCount(1)
 			.expectErrorSatisfies(error -> assertLimit(error, Limit.RESPONSES_STATE_CHUNKS, 1))
 			.verify();
 	}
 
 	@Test
+	void modelBuilderAppliesSizeLimitToResponses() {
+		long fragmentBytes = this.json.writeValueAsBytes(reasoningFragment()).length;
+		var atLimit = OpenRouterChatModel.builder()
+			.openRouterApi(responsesApi(Flux.just(reasoningFragment(), this.done)))
+			.toolCallAggregationMaxBytes(fragmentBytes + this.json.writeValueAsBytes(this.done).length)
+			.build();
+		StepVerifier.create(atLimit.stream(responsesPrompt())).expectNextCount(2).verifyComplete();
+
+		var overLimit = OpenRouterChatModel.builder()
+			.openRouterApi(responsesApi(Flux.just(reasoningFragment(), this.done)))
+			.toolCallAggregationMaxBytes(fragmentBytes)
+			.build();
+		StepVerifier.create(overLimit.stream(responsesPrompt()))
+			.expectNextCount(1)
+			.expectErrorSatisfies(error -> assertLimit(error, Limit.RESPONSES_STATE_BYTES, fragmentBytes))
+			.verify();
+	}
+
+	@Test
+	void modelBuilderAppliesDurationLimitToResponses() {
+		AtomicBoolean cancelled = new AtomicBoolean();
+		StepVerifier
+			.withVirtualTime(() -> OpenRouterChatModel.builder()
+				.openRouterApi(responsesApi(
+						Flux.just(reasoningFragment()).concatWith(Flux.never()).doOnCancel(() -> cancelled.set(true))))
+				.toolCallAggregationMaxDuration(Duration.ofSeconds(7))
+				.build()
+				.stream(responsesPrompt()))
+			.expectNextCount(1)
+			.expectNoEvent(Duration.ofSeconds(6))
+			.thenAwait(Duration.ofSeconds(1))
+			.expectErrorSatisfies(error -> assertLimit(error, Limit.RESPONSES_STATE_DURATION, 7000))
+			.verify();
+		assertThat(cancelled).isTrue();
+	}
+
+	@Test
 	void rejectsInvalidLimits() {
-		assertThatThrownBy(() -> mapper(0, 1)).isInstanceOf(IllegalArgumentException.class);
-		assertThatThrownBy(() -> mapper(1, 0)).isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> mapper(0, 1)).isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("Maximum Responses state size must be greater than zero");
+		assertThatThrownBy(() -> mapper(1, 0)).isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("Maximum Responses state chunk count must be greater than zero");
 		assertThatThrownBy(() -> new OpenRouterResponsesStreamingResponseMapper(this.json, 1, 1, Duration.ZERO,
 				OpenRouterDiagnosticSanitizer.keyless()))
-			.isInstanceOf(IllegalArgumentException.class);
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("Maximum Responses state duration must be greater than zero");
+	}
+
+	private ResponsesStreamEvent reasoningFragment() {
+		return new ResponsesStreamEvent(REASONING_DELTA, "synthetic", null, null, null);
+	}
+
+	private static OpenRouterApi responsesApi(Flux<ResponsesStreamEvent> events) {
+		OpenRouterApi api = mock(OpenRouterApi.class);
+		when(api.responsesStream(any())).thenReturn(events);
+		return api;
+	}
+
+	private static Prompt responsesPrompt() {
+		return new Prompt("synthetic",
+				OpenRouterChatOptions.builder()
+					.model("synthetic")
+					.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
+					.build());
 	}
 
 	private OpenRouterResponsesStreamingResponseMapper mapper(long bytes, int chunks) {

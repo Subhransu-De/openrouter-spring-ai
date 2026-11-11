@@ -9,25 +9,36 @@ import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
 import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.api.Named;
+import java.util.stream.Stream;
+import java.util.function.BiConsumer;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.model.ChatResponse;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
+import reactor.test.StepVerifierOptions;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 class OpenRouterExtensionTests {
 
 	private static final String CACHE_KEY = "prompt_cache_key";
 
+	private static final Duration TIMEOUT = Duration.ofSeconds(5);
+
 	private final ObjectMapper json = new ObjectMapper();
 
-	@Test
-	@SuppressWarnings("unchecked")
-	void responseExtensionsRemainDetachedImmutableCumulativeSnapshots() {
+	private Flux<ChatResponse> cumulativeExtensionStream() {
 		Map<String, Object> nested = new LinkedHashMap<>();
 		nested.put("flag", false);
 		nested.put("zero", 0);
@@ -42,92 +53,119 @@ class OpenRouterExtensionTests {
 		nested.clear();
 		items.clear();
 		extensions.clear();
-		List<String> emitted = new ArrayList<>();
-		var stream = new OpenRouterStreamingResponseMapper().map(Flux.just(empty, first, empty, replacement, empty));
-		for (int subscription = 0; subscription < 2; subscription++) {
-			emitted.clear();
-			var responses = stream
-				.doOnNext(response -> emitted
-					.add(this.json.writeValueAsString(response.getMetadata().get(ExtensionMetadata.RESPONSE))))
-				.collectList()
-				.block();
-			assertThat(responses).hasSize(5);
-			for (int index = 0; index < responses.size(); index++) {
-				Map<String, Object> snapshot = responses.get(index).getMetadata().get(ExtensionMetadata.RESPONSE);
-				assertThat(this.json.writeValueAsString(snapshot)).isEqualTo(emitted.get(index));
-				assertThatThrownBy(() -> snapshot.put("changed", true))
-					.isInstanceOf(UnsupportedOperationException.class);
-			}
-			Map<String, Object> initial = responses.get(0).getMetadata().get(ExtensionMetadata.RESPONSE);
-			assertThat(initial).isEmpty();
-			assertThat(initial.containsKey(null)).isFalse();
-			assertThat(initial.get(null)).isNull();
-			Map<String, Object> snapshot = responses.get(1).getMetadata().get(ExtensionMetadata.RESPONSE);
-			List<Object> savedItems = (List<Object>) snapshot.get("opaque");
-			Map<String, Object> savedNested = (Map<String, Object>) savedItems.get(0);
-			assertThat(savedNested).containsEntry("flag", false).containsEntry("zero", 0).containsEntry("absent", null);
-			assertThatThrownBy(() -> savedItems.add(true)).isInstanceOf(UnsupportedOperationException.class);
-			assertThatThrownBy(() -> savedNested.put("changed", true))
-				.isInstanceOf(UnsupportedOperationException.class);
-			Map<String, Object> last = responses.get(4).getMetadata().get(ExtensionMetadata.RESPONSE);
-			assertThat(last).containsEntry("opaque", null).containsEntry("later", true);
-		}
+		return ResponseMappers.chatStream(Flux.just(empty, first, empty, replacement, empty));
+	}
+
+	private Map<String, Object> responseExtensions(ChatResponse response) {
+		return response.getMetadata().get(ExtensionMetadata.RESPONSE);
+	}
+
+	private List<String> responseExtensionsAsJson(List<ChatResponse> responses) {
+		return responses.stream().map(response -> this.json.writeValueAsString(responseExtensions(response))).toList();
 	}
 
 	@Test
-	void numericExtensionMapsRejectNonNumericLeavesAndNonFiniteValues() {
-		for (String key : List.of("logit_bias", "max_price", "preferred_min_throughput", "preferred_max_latency")) {
-			for (Object invalid : List.of(true, List.of(1), Map.of("nested", 1), Double.NaN, Double.POSITIVE_INFINITY,
-					"not-a-number")) {
-				Map<String, Object> values = new LinkedHashMap<>();
-				values.put("42", invalid);
-				assertThatThrownBy(() -> {
-					if ("logit_bias".equals(key)) {
-						OpenRouterChatOptions.builder().extraBody(Map.of(key, values));
-					}
-					else {
-						OpenRouterChatOptions.builder().providerExtraBody(Map.of(key, values));
-					}
-				}).isInstanceOf(IllegalArgumentException.class);
-			}
-		}
+	void responseExtensionsAreDetachedFromTheChunkTheyWereReadFrom() {
+		List<ChatResponse> responses = cumulativeExtensionStream().collectList().block(TIMEOUT);
+
+		assertThat(responses).hasSize(5);
+		JsonNode snapshot = this.json.valueToTree(responseExtensions(responses.get(1)));
+		assertThat(snapshot)
+			.isEqualTo(this.json.readTree("{\"opaque\":[{\"flag\":false,\"zero\":0,\"absent\":null}]}"));
+	}
+
+	@Test
+	void responseExtensionSnapshotsAreImmutableAtEveryNestingLevel() {
+		List<ChatResponse> responses = cumulativeExtensionStream().collectList().block(TIMEOUT);
+
+		assertThat(responses).hasSize(5)
+			.allSatisfy(response -> assertThatThrownBy(() -> responseExtensions(response).put("changed", true))
+				.as("top-level snapshot")
+				.isInstanceOf(UnsupportedOperationException.class));
+		assertThat(responseExtensions(responses.get(1)).get("opaque")).isInstanceOfSatisfying(List.class, list -> {
+			assertThatThrownBy(list::clear).as("nested list").isInstanceOf(UnsupportedOperationException.class);
+			assertThat(list.get(0)).isInstanceOfSatisfying(Map.class,
+					map -> assertThatThrownBy(map::clear).as("nested map")
+						.isInstanceOf(UnsupportedOperationException.class));
+		});
+	}
+
+	@Test
+	void responseExtensionSnapshotsAreCumulativeAndNullReplacementsSurvive() {
+		List<String> emittedWhenReceived = new ArrayList<>();
+
+		List<ChatResponse> responses = cumulativeExtensionStream()
+			.doOnNext(response -> emittedWhenReceived.add(this.json.writeValueAsString(responseExtensions(response))))
+			.collectList()
+			.block(TIMEOUT);
+
+		assertThat(responses).hasSize(5);
+		assertThat(responseExtensionsAsJson(responses)).as("later chunks never rewrite an emitted snapshot")
+			.containsExactlyElementsOf(emittedWhenReceived);
+		assertThat(responseExtensions(responses.get(4))).containsEntry("opaque", null).containsEntry("later", true);
+	}
+
+	@Test
+	void repeatSubscriptionsEmitTheSameCumulativeSnapshots() {
+		var stream = cumulativeExtensionStream();
+
+		List<String> first = responseExtensionsAsJson(stream.collectList().block(TIMEOUT));
+		List<String> second = responseExtensionsAsJson(stream.collectList().block(TIMEOUT));
+
+		assertThat(first).hasSize(5);
+		assertThat(second).containsExactlyElementsOf(first);
+	}
+
+	private ChatCompletionChunk logprobChunk(String delta, String logprobs, String finishReason) {
+		return this.json.readValue("{\"choices\":[{\"index\":0,\"delta\":" + delta + ",\"logprobs\":" + logprobs
+				+ ",\"finish_reason\":" + finishReason + "}]}", ChatCompletionChunk.class);
+	}
+
+	private static String tokenLogprobs(int index) {
+		return "{\"content\":[{\"token\":\"t" + index + "\",\"logprob\":-1}],\"refusal\":[{\"token\":\"r" + index
+				+ "\",\"logprob\":-2}]}";
+	}
+
+	private void assertLogprobsAccumulated(Flux<ChatResponse> stream, int expectedResponses) {
+		List<ChatResponse> responses = stream.collectList().block(TIMEOUT);
+
+		assertThat(responses).hasSize(expectedResponses);
+		var output = responses.get(responses.size() - 1).getResult().getOutput();
+		var logprobs = this.json.valueToTree(output.getMetadata().get(ExtensionMetadata.CHOICE)).get("logprobs");
+		assertThat(logprobs.get("content").size()).isEqualTo(2);
+		assertThat(logprobs.get("content").get(0).get("token").asString()).isEqualTo("t0");
+		assertThat(logprobs.get("content").get(1).get("token").asString()).isEqualTo("t1");
+		assertThat(logprobs.get("refusal").size()).isEqualTo(2);
+	}
+
+	@Test
+	void streamedLogprobsAccumulateAcrossContentChunksAndResubscription() {
+		var chunks = List.of(logprobChunk("{\"content\":\"synthetic\"}", tokenLogprobs(0), "null"),
+				logprobChunk("{\"content\":\"synthetic\"}", tokenLogprobs(1), "null"),
+				logprobChunk("{\"content\":\"synthetic\"}", "null", "\"stop\""));
+		var stream = ResponseMappers.chatStream(ResponseMappers.aggregator().aggregate(Flux.fromIterable(chunks)));
+
+		assertLogprobsAccumulated(stream, 3);
+		assertLogprobsAccumulated(stream, 3);
 	}
 
 	@Test
 	void streamedLogprobsAccumulateThroughToolBufferingAndResubscription() {
-		for (boolean tools : List.of(false, true)) {
-			List<ChatCompletionChunk> chunks = new ArrayList<>();
-			for (int index = 0; index < 3; index++) {
-				String delta = tools ? (index == 0
-						? "{\"tool_calls\":[{\"index\":0,\"id\":\"call-1\",\"type\":\"function\",\"function\":{\"name\":\"lookup\",\"arguments\":\"{\"}}]}"
-						: index == 1 ? "{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"}\"}}]}" : "{}")
-						: "{\"content\":\"synthetic\"}";
-				String probabilities = index == 2 ? "null" : "{\"content\":[{\"token\":\"t" + index
-						+ "\",\"logprob\":-1}],\"refusal\":[{\"token\":\"r" + index + "\",\"logprob\":-2}]}";
-				chunks.add(this.json.readValue("{\"choices\":[{\"index\":0,\"delta\":" + delta + ",\"logprobs\":"
-						+ probabilities + ",\"finish_reason\":"
-						+ (index == 2 ? this.json.writeValueAsString(tools ? "tool_calls" : "stop") : "null") + "}]}",
-						ChatCompletionChunk.class));
-			}
-			var stream = new OpenRouterStreamingResponseMapper()
-				.map(new OpenRouterStreamingToolCallAggregator().aggregate(Flux.fromIterable(chunks)));
-			for (int attempt = 0; attempt < 2; attempt++) {
-				StepVerifier.create(stream.collectList()).assertNext(responses -> {
-					assertThat(responses).hasSize(tools ? 1 : 3);
-					var output = responses.get(responses.size() - 1).getResult().getOutput();
-					var logprobs = this.json.valueToTree(output.getMetadata().get(ExtensionMetadata.CHOICE))
-						.get("logprobs");
-					assertThat(logprobs.get("content").size()).isEqualTo(2);
-					assertThat(logprobs.get("content").get(0).get("token").asString()).isEqualTo("t0");
-					assertThat(logprobs.get("content").get(1).get("token").asString()).isEqualTo("t1");
-					assertThat(logprobs.get("refusal").size()).isEqualTo(2);
-				}).verifyComplete();
-			}
-		}
+		var chunks = List.of(logprobChunk(
+				"{\"tool_calls\":[{\"index\":0,\"id\":\"call-1\",\"type\":\"function\",\"function\":{\"name\":\"lookup\",\"arguments\":\"{\"}}]}",
+				tokenLogprobs(0), "null"),
+				logprobChunk("{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"}\"}}]}", tokenLogprobs(1),
+						"null"),
+				logprobChunk("{}", "null", "\"tool_calls\""));
+		var stream = ResponseMappers.chatStream(ResponseMappers.aggregator().aggregate(Flux.fromIterable(chunks)));
+
+		assertLogprobsAccumulated(stream, 1);
+		assertLogprobsAccumulated(stream, 1);
 	}
 
-	@Test
-	void requestExtensionsAreFlattenedWithFalseZeroAndNullPreserved() {
+	@ParameterizedTest(name = "stream={0}")
+	@ValueSource(booleans = { false, true })
+	void requestExtensionsAreFlattenedWithFalseZeroAndNullPreserved(boolean stream) {
 		Map<String, Object> fields = new LinkedHashMap<>();
 		fields.put("logprobs", true);
 		fields.put("top_logprobs", 0);
@@ -136,22 +174,125 @@ class OpenRouterExtensionTests {
 		fields.put("logit_bias", Map.of("42", 0));
 		fields.put("transforms", List.of());
 		var options = OpenRouterChatOptions.builder().model("synthetic/model").extraBody(fields).build();
-		for (boolean stream : List.of(false, true)) {
-			var request = new OpenRouterChatRequestMapper(this.json).map(List.of(new UserMessage("synthetic")), options,
-					stream, List.of());
-			var wire = this.json.readTree(this.json.writeValueAsString(request));
-			assertThat(wire.get("logprobs").asBoolean()).isTrue();
-			assertThat(wire.get("top_logprobs").asInt()).isZero();
-			assertThat(wire.has(CACHE_KEY)).isTrue();
-			assertThat(wire.get(CACHE_KEY).isNull()).isTrue();
-			assertThat(wire.has("extraBody")).isFalse();
-			assertThat(wire.get("logit_bias").get("42").asInt()).isZero();
-			assertThat(wire.get("transforms").isArray()).isTrue();
-			assertThat(wire.get("transforms")).isEmpty();
-		}
+		var request = new OpenRouterChatRequestMapper(this.json).map(List.of(new UserMessage("synthetic")), options,
+				stream, List.of());
+		var wire = this.json.readTree(this.json.writeValueAsString(request));
+		assertThat(wire.get("logprobs").asBoolean()).isTrue();
+		assertThat(wire.get("top_logprobs").asInt()).isZero();
+		assertThat(wire.has(CACHE_KEY)).isTrue();
+		assertThat(wire.get(CACHE_KEY).isNull()).isTrue();
+		assertThat(wire.has("extraBody")).isFalse();
+		assertThat(wire.get("logit_bias").get("42").asInt()).isZero();
+		assertThat(wire.get("transforms").isArray()).isTrue();
+		assertThat(wire.get("transforms")).isEmpty();
+	}
+
+	@Test
+	void transformsRejectNonStringEntries() {
 		assertThatThrownBy(() -> OpenRouterChatOptions.builder().extraBody(Map.of("transforms", List.of(1))))
 			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessageContaining("transforms");
+	}
+
+	@ParameterizedTest(name = "reserved key {0}")
+	@ValueSource(
+			strings = { "model", "messages", "input", "provider", "stream", "tools", "n", "store", "unknown", "text" })
+	void reservedKeysCannotBeSuppliedAsExtraBody(String key) {
+		assertThatThrownBy(() -> OpenRouterChatOptions.builder().extraBody(Map.of(key, false)))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining(key);
+	}
+
+	static Stream<Arguments> chatOnlyExtensions() {
+		return Stream.of(Arguments.of("logprobs", false), Arguments.of("logit_bias", Map.of("42", 0)),
+				Arguments.of("verbosity", "low"), Arguments.of("transforms", List.of()));
+	}
+
+	@ParameterizedTest(name = "{0} is chat-only")
+	@MethodSource("chatOnlyExtensions")
+	void chatOnlyExtensionsAreRejectedOnTheResponsesEndpoint(String key, Object value) {
+		var options = OpenRouterChatOptions.builder().extraBody(Map.of(key, value)).build();
+		assertThatThrownBy(
+				() -> new OpenRouterResponsesRequestMapper(this.json).map(List.of(), options, false, List.of()))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining(key);
+	}
+
+	@ParameterizedTest(name = "stream={0}")
+	@ValueSource(booleans = { false, true })
+	void sharedExtensionsReachTheResponsesWire(boolean stream) {
+		var options = OpenRouterChatOptions.builder().extraBody(Map.of("top_logprobs", 0, CACHE_KEY, "test")).build();
+		var wire = this.json
+			.valueToTree(new OpenRouterResponsesRequestMapper(this.json).map(List.of(), options, stream, List.of()));
+		assertThat(wire.get("top_logprobs").asInt()).isZero();
+		assertThat(wire.get(CACHE_KEY).asString()).isEqualTo("test");
+	}
+
+	static Stream<Arguments> routingEndpoints() {
+		return Stream.of(false, true)
+			.flatMap(stream -> Stream.of(Arguments.of(Named.of("chat completions, stream=" + stream, "chat"), stream),
+					Arguments.of(Named.of("responses, stream=" + stream, "responses"), stream)));
+	}
+
+	@ParameterizedTest
+	@MethodSource("routingEndpoints")
+	void routingExtensionsReachBothEndpoints(String endpoint, boolean stream) {
+		List<String> only = new ArrayList<>(List.of("synthetic-provider"));
+		var fields = Map.<String, Object>of("only", only, "zdr", false, "max_price", Map.of("prompt", 0), "sort",
+				Map.of("by", "latency", "partition", "none"), "preferred_min_throughput", Map.of("p50", 10),
+				"preferred_max_latency", 2);
+		var options = OpenRouterChatOptions.builder().providerExtraBody(fields).build();
+		only.clear();
+
+		Object request = "chat".equals(endpoint)
+				? new OpenRouterChatRequestMapper(this.json).map(List.of(), options, stream, List.of())
+				: new OpenRouterResponsesRequestMapper(this.json).map(List.of(), options, stream, List.of());
+		var wire = this.json.valueToTree(request).get("provider");
+		assertThat(wire.get("only").get(0).asString()).isEqualTo("synthetic-provider");
+		assertThat(wire.get("sort").get("by").asString()).isEqualTo("latency");
+		assertThat(wire.get("zdr").asBoolean()).isFalse();
+	}
+
+	@Test
+	void routingSortCollisionIsRejected() {
+		var options = OpenRouterChatOptions.builder()
+			.providerExtraBody(Map.of("sort", Map.of("by", "latency")))
+			.provider(new OpenRouterProviderPreferences(null, null, null, null, null, null, "price"))
+			.build();
+		assertThatThrownBy(() -> new OpenRouterChatRequestMapper(this.json).map(List.of(), options, false, List.of()))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("conflicts");
+	}
+
+	static Stream<Arguments> invalidNumericLeaves() {
+		Map<String, Object> invalid = new LinkedHashMap<>();
+		invalid.put("boolean", true);
+		invalid.put("list", List.of(1));
+		invalid.put("object", Map.of("nested", 1));
+		invalid.put("NaN", Double.NaN);
+		invalid.put("infinity", Double.POSITIVE_INFINITY);
+		invalid.put("text", "not-a-number");
+		Map<String, BiConsumer<OpenRouterChatOptions.Builder, Map<String, Object>>> setters = new LinkedHashMap<>();
+		setters.put("logit_bias", (builder, values) -> builder.extraBody(Map.of("logit_bias", values)));
+		for (String key : List.of("max_price", "preferred_min_throughput", "preferred_max_latency")) {
+			setters.put(key, (builder, values) -> builder.providerExtraBody(Map.of(key, values)));
+		}
+		return setters.entrySet()
+			.stream()
+			.flatMap(setter -> invalid.entrySet()
+				.stream()
+				.map(leaf -> Arguments.of(Named.of(setter.getKey() + " with " + leaf.getKey(), setter.getValue()),
+						leaf.getValue())));
+	}
+
+	@ParameterizedTest
+	@MethodSource("invalidNumericLeaves")
+	void numericExtensionMapsRejectNonNumericLeavesAndNonFiniteValues(
+			BiConsumer<OpenRouterChatOptions.Builder, Map<String, Object>> setter, Object invalid) {
+		Map<String, Object> values = new LinkedHashMap<>();
+		values.put("42", invalid);
+		assertThatThrownBy(() -> setter.accept(OpenRouterChatOptions.builder(), values))
+			.isInstanceOf(IllegalArgumentException.class);
 	}
 
 	@Test
@@ -174,63 +315,6 @@ class OpenRouterExtensionTests {
 	}
 
 	@Test
-	void reservedAndUnsupportedKeysCannotBypassEitherEndpoint() {
-		for (String key : List.of("model", "messages", "input", "provider", "stream", "tools", "n", "store", "unknown",
-				"text")) {
-			assertThatThrownBy(() -> OpenRouterChatOptions.builder().extraBody(Map.of(key, false)))
-				.isInstanceOf(IllegalArgumentException.class)
-				.hasMessageContaining(key);
-		}
-		for (String key : List.of("logprobs", "logit_bias", "verbosity", "transforms")) {
-			Object value = switch (key) {
-				case "logprobs" -> false;
-				case "verbosity" -> "low";
-				case "transforms" -> List.of();
-				default -> Map.of("42", 0);
-			};
-			var options = OpenRouterChatOptions.builder().extraBody(Map.of(key, value)).build();
-			assertThatThrownBy(
-					() -> new OpenRouterResponsesRequestMapper(this.json).map(List.of(), options, false, List.of()))
-				.isInstanceOf(IllegalArgumentException.class)
-				.hasMessageContaining(key);
-		}
-		var options = OpenRouterChatOptions.builder().extraBody(Map.of("top_logprobs", 0, CACHE_KEY, "test")).build();
-		for (boolean stream : List.of(false, true)) {
-			var request = new OpenRouterResponsesRequestMapper(this.json).map(List.of(), options, stream, List.of());
-			assertThat(this.json.valueToTree(request).get("top_logprobs").asInt()).isZero();
-		}
-	}
-
-	@Test
-	void routingExtensionsReachBothEndpointsAndRejectSortCollisions() {
-		List<String> only = new ArrayList<>(List.of("synthetic-provider"));
-		var fields = Map.<String, Object>of("only", only, "zdr", false, "max_price", Map.of("prompt", 0), "sort",
-				Map.of("by", "latency", "partition", "none"), "preferred_min_throughput", Map.of("p50", 10),
-				"preferred_max_latency", 2);
-		var options = OpenRouterChatOptions.builder().providerExtraBody(fields).build();
-		only.clear();
-
-		for (boolean stream : List.of(false, true)) {
-			Object chat = new OpenRouterChatRequestMapper(this.json).map(List.of(), options, stream, List.of());
-			Object responses = new OpenRouterResponsesRequestMapper(this.json).map(List.of(), options, stream,
-					List.of());
-			for (Object request : List.of(chat, responses)) {
-				var wire = this.json.valueToTree(request).get("provider");
-				assertThat(wire.get("only").get(0).asString()).isEqualTo("synthetic-provider");
-				assertThat(wire.get("sort").get("by").asString()).isEqualTo("latency");
-				assertThat(wire.get("zdr").asBoolean()).isFalse();
-			}
-		}
-		assertThatThrownBy(() -> new OpenRouterChatRequestMapper(this.json).map(List.of(),
-				options.mutate()
-					.provider(new OpenRouterProviderPreferences(null, null, null, null, null, null, "price"))
-					.build(),
-				false, List.of()))
-			.isInstanceOf(IllegalArgumentException.class)
-			.hasMessageContaining("conflicts");
-	}
-
-	@Test
 	void unknownResponseFieldsRoundtripAndRemainInspectableWithoutReplay() {
 		String fixture = """
 				{"model":"synthetic/model","opaque_root":{"enabled":false},"choices":[{"index":0,
@@ -243,7 +327,7 @@ class OpenRouterExtensionTests {
 		var wire = this.json.valueToTree(response);
 		assertThat(wire.get("choices").get(0).get("message").get("future").isNull()).isTrue();
 		assertThat(wire.get("opaque_root").get("enabled").asBoolean()).isFalse();
-		var assistant = new OpenRouterChatResponseMapper().map(response).getResult().getOutput();
+		var assistant = ResponseMappers.chat().map(response).getResult().getOutput();
 		assertThat(assistant.getMetadata()).containsKeys(ExtensionMetadata.MESSAGE, ExtensionMetadata.CHOICE,
 				ExtensionMetadata.TOOLS);
 		var replay = new OpenRouterChatRequestMapper(this.json).map(List.of(assistant),
@@ -252,31 +336,30 @@ class OpenRouterExtensionTests {
 		assertThat(replay.messages().get(0).toolCalls().get(0).extensions()).isEmpty();
 	}
 
-	@Test
-	void responsesAnnotationsAndOpaqueToolFieldsRemainInOutputSnapshots() {
+	@ParameterizedTest
+	@ValueSource(strings = { "sync", "streaming" })
+	void responsesAnnotationsAndOpaqueToolFieldsRemainInOutputSnapshots(String path) {
 		String fixture = """
 				{"status":"completed","output":[{"type":"message","role":"assistant",
 				"content":[{"type":"output_text","text":"synthetic","annotations":[{"future":false}]}]},
 				{"type":"function_call","call_id":"call-1","name":"lookup","arguments":"{}","future":0}]}
 				""";
 		var response = this.json.readValue(fixture, ResponsesResult.class);
-		var sync = new OpenRouterResponsesResponseMapper().map(response);
 		var event = this.json.readValue("{\"type\":\"response.completed\",\"response\":" + fixture + "}",
 				ResponsesStreamEvent.class);
-		var streaming = new OpenRouterResponsesStreamingResponseMapper().map(event);
-		for (var mapped : List.of(sync, streaming)) {
-			var snapshot = this.json.valueToTree(
-					mapped.getResult().getOutput().getMetadata().get(ReasoningMetadata.RESPONSES_OUTPUT_ITEMS));
-			assertThat(snapshot.get(0).get("content").get(0).get("annotations").get(0).get("future").asBoolean())
-				.isFalse();
-			assertThat(snapshot.get(1).get("future").asInt()).isZero();
-		}
+		var mapped = path.equals("sync") ? ResponseMappers.responses().map(response)
+				: ResponseMappers.responsesEvent(event);
+
+		var snapshot = this.json
+			.valueToTree(mapped.getResult().getOutput().getMetadata().get(ReasoningMetadata.RESPONSES_OUTPUT_ITEMS));
+		assertThat(snapshot.get(0).get("content").get(0).get("annotations").get(0).get("future").asBoolean()).isFalse();
+		assertThat(snapshot.get(1).get("future").asInt()).isZero();
 	}
 
 	@Test
 	void plainTextStreamsRetainEarlierAnnotationsAtCompletion() {
-		var stream = new OpenRouterStreamingResponseMapper()
-			.map(Flux.just(chunk("{\"content\":\"a\",\"annotations\":[{\"id\":1}]}", null),
+		var stream = ResponseMappers
+			.chatStream(Flux.just(chunk("{\"content\":\"a\",\"annotations\":[{\"id\":1}]}", null),
 					chunk("{\"content\":\"b\",\"annotations\":[{\"id\":2}]}", null), chunk("{}", "stop")));
 		StepVerifier.create(stream).expectNextCount(2).assertNext(response -> {
 			var metadata = this.json.valueToTree(response.getResult().getOutput().getMetadata());
@@ -295,20 +378,24 @@ class OpenRouterExtensionTests {
 				{"choices":[{"index":0,"delta":{},"finish_reason":"stop"},
 				{"index":1,"delta":{},"finish_reason":"stop"}]}
 				""", ChatCompletionChunk.class);
-		var stream = new OpenRouterStreamingResponseMapper()
-			.map(new OpenRouterStreamingToolCallAggregator().aggregate(Flux.just(first, last)));
-		StepVerifier.create(stream).thenConsumeWhile(response -> {
+		var stream = ResponseMappers.chatStream(ResponseMappers.aggregator().aggregate(Flux.just(first, last)));
+		List<ChatResponse> responses = stream.collectList().block(TIMEOUT);
+
+		assertThat(responses).as("aggregated responses").isNotEmpty();
+		assertThat(responses).allSatisfy(response -> {
 			var root = this.json.valueToTree(response.getMetadata().get(ExtensionMetadata.RESPONSE));
 			assertThat(root.get("annotations").size()).isEqualTo(1);
 			assertThat(response.getResults()).hasSize(2);
-			for (int index = 0; index < 2; index++) {
-				var metadata = this.json.valueToTree(response.getResults().get(index).getOutput().getMetadata());
-				var annotations = metadata.get(ExtensionMetadata.MESSAGE).get("annotations");
-				assertThat(annotations.size()).isEqualTo(1);
-				assertThat(annotations.get(0).get("id").asInt()).isEqualTo(index + 1);
-			}
-			return true;
-		}).verifyComplete();
+			var choiceAnnotations = response.getResults()
+				.stream()
+				.map(result -> this.json.valueToTree(result.getOutput().getMetadata())
+					.get(ExtensionMetadata.MESSAGE)
+					.get("annotations"))
+				.toList();
+			assertThat(choiceAnnotations).hasSize(2).allSatisfy(annotations -> assertThat(annotations.size()).isOne());
+			assertThat(choiceAnnotations.get(0).get(0).get("id").asInt()).isEqualTo(1);
+			assertThat(choiceAnnotations.get(1).get(0).get("id").asInt()).isEqualTo(2);
+		});
 	}
 
 	@Test
@@ -320,19 +407,21 @@ class OpenRouterExtensionTests {
 		var last = chunk("""
 				{"annotations":[{"id":2}],"tool_calls":[{"index":0,"function":{"arguments":"}"},"future":0}]}
 				""", "tool_calls");
-		var stream = new OpenRouterStreamingResponseMapper()
-			.map(new OpenRouterStreamingToolCallAggregator().aggregate(Flux.just(first, last)));
-		for (int attempt = 0; attempt < 2; attempt++) {
-			StepVerifier.create(stream).assertNext(response -> {
-				var output = response.getResult().getOutput();
-				assertThat(output.getToolCalls().get(0).arguments()).isEqualTo("{}");
-				var metadata = this.json.valueToTree(output.getMetadata());
-				assertThat(metadata.get(ExtensionMetadata.MESSAGE).get("annotations").size()).isEqualTo(2);
-				assertThat(metadata.get(ExtensionMetadata.TOOLS).get("call-1").get("signature").asString())
-					.isEqualTo("synthetic");
-				assertThat(metadata.get(ExtensionMetadata.TOOLS).get("call-1").get("future").asInt()).isZero();
-			}).verifyComplete();
-		}
+		var stream = ResponseMappers.chatStream(ResponseMappers.aggregator().aggregate(Flux.just(first, last)));
+		verifyAggregatedToolStream(stream, "first subscription");
+		verifyAggregatedToolStream(stream, "second subscription");
+	}
+
+	private void verifyAggregatedToolStream(Flux<ChatResponse> stream, String subscription) {
+		StepVerifier.create(stream, StepVerifierOptions.create().scenarioName(subscription)).assertNext(response -> {
+			var output = response.getResult().getOutput();
+			assertThat(output.getToolCalls().get(0).arguments()).isEqualTo("{}");
+			var metadata = this.json.valueToTree(output.getMetadata());
+			assertThat(metadata.get(ExtensionMetadata.MESSAGE).get("annotations").size()).isEqualTo(2);
+			assertThat(metadata.get(ExtensionMetadata.TOOLS).get("call-1").get("signature").asString())
+				.isEqualTo("synthetic");
+			assertThat(metadata.get(ExtensionMetadata.TOOLS).get("call-1").get("future").asInt()).isZero();
+		}).verifyComplete();
 	}
 
 	private ChatCompletionChunk chunk(String delta, String finishReason) {

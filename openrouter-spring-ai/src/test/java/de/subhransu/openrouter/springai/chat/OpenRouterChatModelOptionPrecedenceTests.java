@@ -17,16 +17,19 @@ import de.subhransu.openrouter.springai.api.dto.ResponsesContent;
 import de.subhransu.openrouter.springai.api.dto.ResponsesOutputItem;
 import de.subhransu.openrouter.springai.api.dto.ResponsesRequest;
 import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
+import reactor.core.publisher.Flux;
 
 class OpenRouterChatModelOptionPrecedenceTests {
 
@@ -34,10 +37,13 @@ class OpenRouterChatModelOptionPrecedenceTests {
 
 	private static final String OPENAI_MODEL = "openai/gpt-5.4";
 
-	@Test
-	void nullRuntimeOptionsUseDetachedStartupDefaults() {
+	private static final Duration WAIT = Duration.ofSeconds(5);
+
+	@ParameterizedTest
+	@EnumSource(Delivery.class)
+	void nullRuntimeOptionsUseDetachedStartupDefaults(Delivery delivery) {
 		OpenRouterApi api = mock(OpenRouterApi.class);
-		when(api.responses(any())).thenReturn(responsesResult("startup response"));
+		delivery.stubResponses(api, "startup response");
 		List<String> startupModels = new ArrayList<>(List.of(OPENAI_MODEL));
 		Map<String, Object> startupMetadata = new LinkedHashMap<>(Map.of("source", "startup"));
 		OpenRouterChatModel model = OpenRouterChatModel.builder()
@@ -52,37 +58,36 @@ class OpenRouterChatModelOptionPrecedenceTests {
 		startupModels.add(CLAUDE_MODEL);
 		startupMetadata.put("mutated", true);
 
-		model.call(new Prompt(List.of(new UserMessage("hello"))));
+		delivery.send(model, new Prompt(List.of(new UserMessage("hello"))));
 
-		ArgumentCaptor<ResponsesRequest> captor = ArgumentCaptor.forClass(ResponsesRequest.class);
-		verify(api).responses(captor.capture());
-		assertThat(captor.getValue().model()).isEqualTo(OPENAI_MODEL);
-		assertThat(captor.getValue().models()).containsExactly(OPENAI_MODEL);
-		assertThat(captor.getValue().metadata()).containsExactlyEntriesOf(Map.of("source", "startup"));
+		ResponsesRequest request = delivery.sentResponses(api);
+		assertThat(request.model()).isEqualTo(OPENAI_MODEL);
+		assertThat(request.models()).containsExactly(OPENAI_MODEL);
+		assertThat(request.metadata()).containsExactlyEntriesOf(Map.of("source", "startup"));
 	}
 
-	@Test
-	void suppliedOpenRouterOptionsReplaceStartupProviderModelAndMode() {
+	@ParameterizedTest
+	@EnumSource(Delivery.class)
+	void suppliedOpenRouterOptionsReplaceStartupProviderModelAndMode(Delivery delivery) {
 		OpenRouterApi api = mock(OpenRouterApi.class);
-		when(api.chatCompletion(any())).thenReturn(chatCompletionResponse());
+		delivery.stubChat(api);
 		OpenRouterChatModel model = modelWithConflictingStartupDefaults(api);
 
-		model.call(new Prompt(List.of(new UserMessage("hello")),
+		delivery.send(model, new Prompt(List.of(new UserMessage("hello")),
 				OpenRouterChatOptions.builder().model(CLAUDE_MODEL).temperature(0.3).build()));
 
-		ArgumentCaptor<ChatCompletionRequest> captor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
-		verify(api).chatCompletion(captor.capture());
-		ChatCompletionRequest request = captor.getValue();
+		ChatCompletionRequest request = delivery.sentChat(api);
 		assertThat(request.model()).isEqualTo(CLAUDE_MODEL);
 		assertThat(request.temperature()).isEqualTo(0.3);
 		assertThat(request.provider()).isNull();
 		assertThat(request.metadata()).isNull();
 	}
 
-	@Test
-	void genericRuntimeOptionsReplaceStartupDefaultsAndPreservePortableFields() {
+	@ParameterizedTest
+	@EnumSource(Delivery.class)
+	void genericRuntimeOptionsReplaceStartupDefaultsAndPreservePortableFields(Delivery delivery) {
 		OpenRouterApi api = mock(OpenRouterApi.class);
-		when(api.chatCompletion(any())).thenReturn(chatCompletionResponse());
+		delivery.stubChat(api);
 		OpenRouterChatModel model = modelWithConflictingStartupDefaults(api);
 		List<String> stopSequences = new ArrayList<>(List.of("DONE"));
 		ChatOptions runtime = ChatOptions.builder()
@@ -97,11 +102,9 @@ class OpenRouterChatModelOptionPrecedenceTests {
 			.build();
 		stopSequences.add("MUTATED");
 
-		model.call(new Prompt(List.of(new UserMessage("hello")), runtime));
+		delivery.send(model, new Prompt(List.of(new UserMessage("hello")), runtime));
 
-		ArgumentCaptor<ChatCompletionRequest> captor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
-		verify(api).chatCompletion(captor.capture());
-		ChatCompletionRequest request = captor.getValue();
+		ChatCompletionRequest request = delivery.sentChat(api);
 		assertThat(request.model()).isEqualTo(CLAUDE_MODEL);
 		assertThat(request.temperature()).isEqualTo(0.4);
 		assertThat(request.topP()).isEqualTo(0.8);
@@ -114,44 +117,43 @@ class OpenRouterChatModelOptionPrecedenceTests {
 		assertThat(request.metadata()).isNull();
 	}
 
-	@Test
-	void runtimeCollectionsRemainReadOnlyAfterMapping() {
+	@ParameterizedTest
+	@EnumSource(Delivery.class)
+	void mappedRequestIsDetachedFromTheCallersCollections(Delivery delivery) {
 		OpenRouterApi api = mock(OpenRouterApi.class);
-		when(api.chatCompletion(any())).thenReturn(chatCompletionResponse());
+		delivery.stubChat(api);
 		OpenRouterChatModel model = OpenRouterChatModel.builder().openRouterApi(api).build();
-		OpenRouterChatOptions runtime = OpenRouterChatOptions.builder()
-			.model(CLAUDE_MODEL)
-			.models(List.of("anthropic/claude-3.7-sonnet"))
-			.metadata(Map.of("request", "caller"))
-			.build();
+		List<String> fallbacks = new ArrayList<>(List.of("anthropic/claude-3.7-sonnet"));
+		Map<String, Object> metadata = new LinkedHashMap<>(Map.of("request", "caller"));
+		Prompt prompt = new Prompt(List.of(new UserMessage("hello")),
+				OpenRouterChatOptions.builder().model(CLAUDE_MODEL).models(fallbacks).metadata(metadata).build());
 
-		model.call(new Prompt(List.of(new UserMessage("hello")), runtime));
+		delivery.send(model, prompt);
+		fallbacks.add(OPENAI_MODEL);
+		metadata.put("later", true);
 
-		ArgumentCaptor<ChatCompletionRequest> captor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
-		verify(api).chatCompletion(captor.capture());
-		assertThatThrownBy(() -> captor.getValue().models().add(OPENAI_MODEL))
+		ChatCompletionRequest request = delivery.sentChat(api);
+		assertThat(request.models()).containsExactly("anthropic/claude-3.7-sonnet");
+		assertThat(request.metadata()).containsExactlyEntriesOf(Map.of("request", "caller"));
+		assertThatThrownBy(() -> request.models().add(OPENAI_MODEL)).isInstanceOf(UnsupportedOperationException.class);
+		assertThatThrownBy(() -> request.metadata().put("mapped", true))
 			.isInstanceOf(UnsupportedOperationException.class);
-		assertThatThrownBy(() -> captor.getValue().metadata().put("mapped", true))
-			.isInstanceOf(UnsupportedOperationException.class);
-		assertThat(runtime.getModels()).containsExactly("anthropic/claude-3.7-sonnet");
-		assertThat(runtime.getMetadata()).containsExactlyEntriesOf(Map.of("request", "caller"));
 	}
 
-	@Test
-	void chatClientComposesItsDeltaIntoACompleteRuntimeOptionSet() {
+	@ParameterizedTest
+	@EnumSource(Delivery.class)
+	void chatClientComposesItsDeltaIntoACompleteRuntimeOptionSet(Delivery delivery) {
 		OpenRouterApi api = mock(OpenRouterApi.class);
-		when(api.responses(any())).thenReturn(responsesResult("client response"));
+		delivery.stubResponses(api, "client response");
 		OpenRouterChatModel model = modelWithConflictingStartupDefaults(api);
 		ChatClient client = ChatClient.builder(model)
 			.defaultOptions(OpenRouterChatOptions.builder().temperature(0.5))
 			.build();
 		Prompt prompt = new Prompt(List.of(new UserMessage("hello")), ChatOptions.builder().topP(0.7).build());
 
-		client.prompt(prompt).call().chatResponse();
+		delivery.send(client, prompt);
 
-		ArgumentCaptor<ResponsesRequest> captor = ArgumentCaptor.forClass(ResponsesRequest.class);
-		verify(api).responses(captor.capture());
-		ResponsesRequest request = captor.getValue();
+		ResponsesRequest request = delivery.sentResponses(api);
 		assertThat(request.model()).isEqualTo(OPENAI_MODEL);
 		assertThat(request.temperature()).isEqualTo(0.5);
 		assertThat(request.topP()).isEqualTo(0.7);
@@ -171,17 +173,85 @@ class OpenRouterChatModelOptionPrecedenceTests {
 			.build();
 	}
 
-	private ChatCompletionResponse chatCompletionResponse() {
+	private static ChatCompletionResponse chatCompletionResponse() {
 		return new ChatCompletionResponse("gen-1", "chat.completion", 123L, CLAUDE_MODEL, "anthropic",
 				List.of(new Choice(0, new ChatMessage("assistant", "ok", null, null, null), null, "stop", "stop")),
 				null);
 	}
 
-	private ResponsesResult responsesResult(String content) {
+	private static ResponsesResult responsesResult(String content) {
 		return new ResponsesResult(
 				"resp-1", "response", 123L, OPENAI_MODEL, "completed", List.of(new ResponsesOutputItem("item-1",
 						"message", "completed", "assistant", List.of(new ResponsesContent("output_text", content)))),
 				null, null);
+	}
+
+	/**
+	 * How a prompt reaches the model. Both deliveries must resolve options the same way,
+	 * so every precedence test runs once per delivery.
+	 */
+	enum Delivery {
+
+		BLOCKING, STREAMING;
+
+		void stubChat(OpenRouterApi api) {
+			if (this == BLOCKING) {
+				when(api.chatCompletion(any())).thenReturn(chatCompletionResponse());
+			}
+			else {
+				when(api.chatCompletionStream(any())).thenReturn(Flux.empty());
+			}
+		}
+
+		void stubResponses(OpenRouterApi api, String content) {
+			if (this == BLOCKING) {
+				when(api.responses(any())).thenReturn(responsesResult(content));
+			}
+			else {
+				when(api.responsesStream(any())).thenReturn(Flux.empty());
+			}
+		}
+
+		ChatCompletionRequest sentChat(OpenRouterApi api) {
+			ArgumentCaptor<ChatCompletionRequest> captor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
+			if (this == BLOCKING) {
+				verify(api).chatCompletion(captor.capture());
+			}
+			else {
+				verify(api).chatCompletionStream(captor.capture());
+			}
+			return captor.getValue();
+		}
+
+		ResponsesRequest sentResponses(OpenRouterApi api) {
+			ArgumentCaptor<ResponsesRequest> captor = ArgumentCaptor.forClass(ResponsesRequest.class);
+			if (this == BLOCKING) {
+				verify(api).responses(captor.capture());
+			}
+			else {
+				verify(api).responsesStream(captor.capture());
+			}
+			return captor.getValue();
+		}
+
+		void send(OpenRouterChatModel model, Prompt prompt) {
+			if (this == BLOCKING) {
+				model.call(prompt);
+			}
+			else {
+				model.stream(prompt).collectList().block(WAIT);
+			}
+		}
+
+		void send(ChatClient client, Prompt prompt) {
+			if (this == BLOCKING) {
+				client.prompt(prompt).call().chatResponse();
+			}
+			else {
+				client.prompt(prompt).stream().chatResponse().collectList().block(WAIT);
+			}
+		}
+
 	}
 
 }

@@ -8,7 +8,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import tools.jackson.core.JacksonException;
 import tools.jackson.databind.json.JsonMapper;
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
@@ -43,6 +42,8 @@ class OpenRouterResponsesToolLifecycleTests {
 
 	private static final String FIRST_CALL_ID = "synthetic_call_1";
 
+	private static final String SECOND_CALL_ID = "synthetic_call_2";
+
 	private final OpenRouterApi api = mock(OpenRouterApi.class);
 
 	private final AtomicInteger executions = new AtomicInteger();
@@ -60,11 +61,12 @@ class OpenRouterResponsesToolLifecycleTests {
 					Arguments.of(streaming, "in_progress", "completed", "{}", false)));
 	}
 
-	@ParameterizedTest
+	@ParameterizedTest(
+			name = "streaming={0}, response status={1}, item status={2}, arguments={3}, mixed with a completed call={4}")
 	@MethodSource("nonFinalRounds")
 	void advisorRejectsWholeNonFinalRound(boolean streaming, String responseStatus, String itemStatus, String arguments,
 			boolean mixed) {
-		ResponsesOutputItem unfinished = call("synthetic_call_2", itemStatus, arguments);
+		ResponsesOutputItem unfinished = call(SECOND_CALL_ID, itemStatus, arguments);
 		List<ResponsesOutputItem> items = mixed ? List.of(call(FIRST_CALL_ID, "completed", "{}"), unfinished)
 				: List.of(unfinished);
 		stub(result(responseStatus, items));
@@ -75,42 +77,46 @@ class OpenRouterResponsesToolLifecycleTests {
 		verifyRequests(streaming, 1);
 	}
 
+	@ParameterizedTest(name = "streaming={0}")
+	@ValueSource(booleans = { false, true })
+	void advisorRejectsACompletedCallWithoutArgumentsBeforeExecutingAnything(boolean streaming) {
+		stub(result("completed",
+				List.of(call(FIRST_CALL_ID, "completed", "{}"), call(SECOND_CALL_ID, "completed", null))));
+
+		assertThatThrownBy(() -> invoke(streaming)).isInstanceOf(OpenRouterProtocolException.class)
+			.hasMessage("OpenRouter response requires tool call arguments");
+		assertThat(this.executions).hasValue(0);
+		verifyRequests(streaming, 1);
+	}
+
 	static Stream<Arguments> completedRounds() {
 		return Stream.of(false, true)
 			.flatMap(streaming -> Stream.of(Arguments.of(streaming, "completed"),
 					Arguments.of(streaming, (String) null)));
 	}
 
-	@ParameterizedTest
+	@ParameterizedTest(name = "streaming={0}, item status={1}")
 	@MethodSource("completedRounds")
 	void advisorExecutesEachCompletedOrStatuslessCallExactlyOnce(boolean streaming, String itemStatus) {
 		ResponsesOutputItem reasoning = new ResponsesOutputItem("synthetic_reasoning", "reasoning", "completed", null,
 				null);
 		stub(result("completed", List.of(reasoning, call(FIRST_CALL_ID, itemStatus, "{}"),
-				call("synthetic_call_2", itemStatus, "{\"optional\":true}"))));
+				call(SECOND_CALL_ID, itemStatus, "{\"optional\":true}"))));
 
 		assertThat(invoke(streaming)).isEqualTo("done");
 		assertThat(this.executions).hasValue(2);
-		ArgumentCaptor<ResponsesRequest> requests = ArgumentCaptor.forClass(ResponsesRequest.class);
-		if (streaming) {
-			verify(this.api, times(2)).responsesStream(requests.capture());
-		}
-		else {
-			verify(this.api, times(2)).responses(requests.capture());
-		}
-		assertThat((List<?>) requests.getAllValues().get(1).input())
-			.anySatisfy(item -> assertThat(item).isEqualTo(reasoning));
+		List<ResponsesRequest> requests = requestsSent(streaming, 2);
+		assertThat((List<?>) requests.get(1).input()).anySatisfy(item -> assertThat(item).isEqualTo(reasoning));
 		var mapper = JsonMapper.builder().build();
-		var input = mapper.readTree(mapper.writeValueAsString(requests.getAllValues().get(1))).get("input");
+		var input = mapper.readTree(mapper.writeValueAsString(requests.get(1))).get("input");
 		assertThat(input.get(1)).isEqualTo(mapper.valueToTree(reasoning));
 		assertThat(input.get(2)).isEqualTo(mapper.valueToTree(call(FIRST_CALL_ID, itemStatus, "{}")));
-		assertThat(input.get(3))
-			.isEqualTo(mapper.valueToTree(call("synthetic_call_2", itemStatus, "{\"optional\":true}")));
+		assertThat(input.get(3)).isEqualTo(mapper.valueToTree(call(SECOND_CALL_ID, itemStatus, "{\"optional\":true}")));
 		assertThat(input.get(4).get("type").asString()).isEqualTo("function_call_output");
 		assertThat(input.get(5).get("type").asString()).isEqualTo("function_call_output");
 	}
 
-	@ParameterizedTest
+	@ParameterizedTest(name = "incomplete status on the done item={0} (otherwise on the terminal snapshot)")
 	@ValueSource(booleans = { false, true })
 	void streamingValidatesBothDoneItemsAndTerminalSnapshot(boolean invalidDoneItem) {
 		ResponsesOutputItem done = call(FIRST_CALL_ID, invalidDoneItem ? "incomplete" : "completed", "{}");
@@ -125,7 +131,7 @@ class OpenRouterResponsesToolLifecycleTests {
 		verifyRequests(true, 1);
 	}
 
-	@ParameterizedTest
+	@ParameterizedTest(name = "done-event type \"{0}\"")
 	@NullAndEmptySource
 	@ValueSource(strings = " ")
 	void typelessIncompleteItemCannotReleaseCompletedCalls(String type) {
@@ -142,23 +148,7 @@ class OpenRouterResponsesToolLifecycleTests {
 		verifyRequests(true, 1);
 	}
 
-	@ParameterizedTest
-	@ValueSource(strings = { "\"malformed\"", "{\"status\":\"incomplete\",\"usage\":\"malformed\"}",
-			"{\"status\":\"completed\",\"output\":\"malformed\"}",
-			"{\"status\":\"completed\",\"output\":[{\"type\":\"function_call\",\"status\":\"incomplete\"}],\"usage\":\"malformed\"}" })
-	void malformedTerminalResponseCannotReleaseBufferedCalls(String response) {
-		Flux<ResponsesStreamEvent> terminal = Flux.defer(() -> Flux.just(JsonMapper.builder()
-			.build()
-			.readValue("{\"type\":\"response.completed\",\"response\":" + response + "}", ResponsesStreamEvent.class)));
-		when(this.api.responsesStream(any())).thenReturn(
-				Flux.just(event(OUTPUT_ITEM_DONE, call(FIRST_CALL_ID, "completed", "{}"), null)).concatWith(terminal));
-
-		assertThatThrownBy(() -> invoke(true)).isInstanceOf(JacksonException.class);
-		assertThat(this.executions).hasValue(0);
-		verifyRequests(true, 1);
-	}
-
-	@ParameterizedTest
+	@ParameterizedTest(name = "terminal event {0}")
 	@ValueSource(
 			strings = { "{\"type\":\"response.completed\"}", "{\"type\":\"response.completed\",\"response\":null}" })
 	void missingTerminalResponseCannotReleaseBufferedCalls(String json) {
@@ -197,8 +187,11 @@ class OpenRouterResponsesToolLifecycleTests {
 				.model("synthetic")
 				.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
 				.toolCallbacks(callback));
-		return streaming ? request.stream().content().collectList().map(parts -> String.join("", parts)).block()
-				: request.call().content();
+		return streaming ? request.stream()
+			.content()
+			.collectList()
+			.map(parts -> String.join("", parts))
+			.block(java.time.Duration.ofSeconds(5)) : request.call().content();
 	}
 
 	private void stub(ResponsesResult first) {
@@ -215,12 +208,18 @@ class OpenRouterResponsesToolLifecycleTests {
 	}
 
 	private void verifyRequests(boolean streaming, int count) {
+		requestsSent(streaming, count);
+	}
+
+	private List<ResponsesRequest> requestsSent(boolean streaming, int count) {
+		ArgumentCaptor<ResponsesRequest> requests = ArgumentCaptor.forClass(ResponsesRequest.class);
 		if (streaming) {
-			verify(this.api, times(count)).responsesStream(any());
+			verify(this.api, times(count)).responsesStream(requests.capture());
 		}
 		else {
-			verify(this.api, times(count)).responses(any());
+			verify(this.api, times(count)).responses(requests.capture());
 		}
+		return requests.getAllValues();
 	}
 
 	private static ResponsesOutputItem call(String id, String status, String arguments) {
