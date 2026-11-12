@@ -145,6 +145,19 @@ When the gate fails:
 
 The configuration excludes no mutations. PIT 1.30.2 and later filter `null` return mutations from methods that JSpecify `@NullMarked` declares non-null; such a mutation breaks the declared contract instead of testing behavior, so it no longer counts toward the score. Not every survivor is equivalent, so inspect its observable effect before you add tests or propose a narrow exclusion. PIT counts a mutation timeout as a detection, so when you compare runs, compare which mutations timed out, not only the score.
 
+## Test areas and the test report comments
+
+Every test carries an area tag and a leaf tag on its class or method, such as `@Tag("http")` and `@Tag("http.errors")`. The areas are `api`, `http`, `configuration`, `samples`, `tools`, `streaming`, `multimodal`, `observability`, `embeddings` and `build-release`. JUnit's Open Test Reporting XML records the tags, in `target/junit-reports` (Maven) and `build/junit-reports` (Gradle).
+
+Each Maven verify job in CI turns its test results into a small report with `.github/scripts/TestReport.java` and uploads it as `test-report-java17`, `-java21` or `-java25`, on pull requests and on `main`. On a pull request, the `Test report comments` job compares the reports with `main` and posts two comments:
+
+- **Tests by area**: tests and runs per area against the `main` commit the pull request was tested against. ❌ marks an area that lost 10% or more of its tests, and untagged tests. ⚠️ marks an area that lost tests.
+- **Test time changes**: a chart of the summed test time on Java 25, 21 and 17 for `main` and the pull request, then areas and single tests on Java 25 against the last five `main` runs. A test is listed when it changed by 3 s and 2× or more against each of those runs, in the same direction. A slower test gets ❌ when its class also got slower by at least half as much, and ⚠️ when the class barely moved, because then start-up work moved into it. An area gets ⚠️ at 5 s and ❌ at 10 s and 35% above its slowest `main` run. New tests that take 1 s or more are listed under ⚠️.
+
+The bot posts when a pull request opens and again for every new commit, and collapses the older reports. Comments do not trigger it. A re-run for the same commit edits that commit's comments. Pull requests from forks and from Dependabot get a read-only token in CI, so `test-report.yml` posts their comments from `main` after CI completes; it reads the uploaded reports as data and runs no pull request code. Until `main` has a report, each Maven verify job on a pull request also tests the base commit, which adds a few minutes.
+
+The thresholds come from 84 Maven verify jobs in 28 `main` runs, in which nine commits ran two to eight times each. For one commit, the summed test time of the Java 17 job ranged from 87 s to 133 s over eight runs. A test class changed by up to 7.4 s between runs of the same commit; the classes that jump are usually fast and sometimes take about 2 s more, which looks like start-up work landing in a different first class. Replayed on those runs, the test rule flags 0.2–0.4% of class checks, and the area rule never gives ❌. Pass `--min-ms`, `--min-factor`, `--area-warn-ms`, `--area-fail-ms` or `--area-fail-share` to `TestReport.java diff` to change them, and run `java .github/scripts/TestReport.java selftest` after editing the script.
+
 ## Releases
 
 The Maven Central Release workflow takes a release version and a commit on `main`. With `upload=false`, it builds unsigned artifacts in a fresh Maven repository, then assembles a Central bundle and checks its contents. This rehearses packaging without uploading. With `upload=true`, Central validates the signed bundle, and you publish it manually in Central Portal.

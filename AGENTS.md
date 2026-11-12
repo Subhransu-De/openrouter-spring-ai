@@ -72,6 +72,7 @@ If a mode does not support an option, preserve or add explicit validation rather
 - Run the Garage live harness only when live API use is authorized. Confirm its output location and keep generated reports and service records outside the repository.
 - Never print an API key or place it in a command argument, documentation, or a commit. Use the existing environment-based configuration.
 - Use synthetic regression cases to reproduce a protocol defect; preserve no private live payload in the repository.
+- Give every test an area tag and a leaf tag on its class or method, such as `@Tag("http")` with `@Tag("http.errors")`. The areas are the `area:*` issue labels plus `http`; reuse an existing leaf from a nearby test. CI's test report comment marks untagged tests with ❌.
 
 ## Code style
 

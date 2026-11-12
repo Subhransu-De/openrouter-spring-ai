@@ -355,6 +355,9 @@ jobs:
     name: Verify with Maven · Java ${{ matrix.java-version }}
     runs-on: ubuntu-latest
     needs: maven-build
+    permissions:
+      actions: read # find earlier test reports on main
+      contents: read
 
     strategy:
       fail-fast: false
@@ -382,6 +385,43 @@ jobs:
       - name: Maven test
         run: mvn -B ${{ matrix.java-version == '25' && '-Pmodernizer-java25' || '' }} verify
 
+      - name: Collect the test report
+        if: ${{ !cancelled() }}
+        env:
+          JAVA_VERSION: ${{ matrix.java-version }}
+          COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          java .github/scripts/TestReport.java collect --java "$JAVA_VERSION" --commit "$COMMIT" \
+            --out test-report/head.tsv openrouter-spring-ai*/target
+
+      # Pull requests compare with the reports of main runs. Until main has one, also test the base commit here.
+      - name: Test the base commit while main has no test report
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JAVA_VERSION: ${{ matrix.java-version }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          found=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=test-report-java$JAVA_VERSION&per_page=100" \
+            --jq '[.artifacts[] | select(.expired | not) | select(.workflow_run.head_branch == "main")] | length')
+          if [ "$found" -gt 0 ]; then
+            echo "main already has a test report for Java $JAVA_VERSION."
+            exit 0
+          fi
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          git worktree add --detach "$RUNNER_TEMP/base" "$BASE_SHA"
+          (cd "$RUNNER_TEMP/base" && mvn -B -ntp -Dmaven.test.failure.ignore=true -Djacoco.skip=true test) || true
+          java .github/scripts/TestReport.java collect --java "$JAVA_VERSION" --commit "$BASE_SHA" \
+            --out test-report/base.tsv "$RUNNER_TEMP"/base/openrouter-spring-ai*/target
+
+      - name: Upload the test report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-report-java${{ matrix.java-version }}
+          path: test-report/
+          retention-days: 90
+
       - name: Prove each quality gate can fail
         if: matrix.java-version == '25'
         run: mvn -B -N -Pgate-its verify
@@ -396,6 +436,69 @@ jobs:
             **/target/site/jacoco/
             **/target/surefire-reports/
             target/it/*/build.log
+
+  test-report:
+    name: Test report comments
+    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+    needs: maven-test
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read # download the test reports of main runs
+      contents: read
+      pull-requests: write # post the two comments
+    steps:
+      - name: Check out the report scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - name: Set up Java
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Download this pull request's test reports
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: test-report-java*
+          path: head
+
+      - name: Download the test reports of the last five main runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n=0
+          for id in $(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=main&status=success&per_page=30" \
+            --jq '.workflow_runs[] | select(.event == "push" or .event == "schedule")
+                  | select(.head_repository.full_name == env.GITHUB_REPOSITORY) | .id'); do
+            if gh run download "$id" --repo "$GITHUB_REPOSITORY" --pattern 'test-report-java*' --dir "base/$((n + 1))"; then
+              n=$((n + 1))
+            fi
+            if [ "$n" -ge 5 ]; then break; fi
+          done
+          echo "Found test reports in $n main runs."
+
+      - name: Build the comments
+        env:
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          java .github/scripts/TestReport.java selftest
+          java .github/scripts/TestReport.java diff --head head --base base --pr "$PR" \
+            --head-commit "$HEAD_SHA" --base-commit "$BASE_SHA" --java 25,21,17 --tables-from 25 --out comments
+          cat comments/counts.md comments/timing.md >> "$GITHUB_STEP_SUMMARY"
+
+      # Pull requests from forks and from Dependabot get a read-only token here; test-report.yml comments on those.
+      - name: Post the comments
+        if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bash .github/scripts/post-test-report.sh "$PR" "$HEAD_SHA" comments
 
   gradle-test:
     name: Verify with Gradle · Java ${{ matrix.java-version }}
