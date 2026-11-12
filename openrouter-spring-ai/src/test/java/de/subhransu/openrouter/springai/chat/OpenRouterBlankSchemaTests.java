@@ -8,11 +8,14 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import java.util.List;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.ai.chat.prompt.Prompt;
 import reactor.test.StepVerifier;
 
+@Tag("api")
+@Tag("api.request")
 class OpenRouterBlankSchemaTests {
 
 	@ParameterizedTest

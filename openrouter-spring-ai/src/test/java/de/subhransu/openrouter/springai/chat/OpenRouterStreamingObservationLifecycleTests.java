@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -35,6 +36,8 @@ import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 import reactor.util.context.Context;
 
+@Tag("observability")
+@Tag("observability.observations")
 class OpenRouterStreamingObservationLifecycleTests {
 
 	private final OpenRouterApi api = mock(OpenRouterApi.class);

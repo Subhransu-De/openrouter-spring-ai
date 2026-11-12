@@ -17,6 +17,7 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
+import org.junit.jupiter.api.Tag;
 
 import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.ai.chat.client.ChatClient;
@@ -27,6 +28,8 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.ObjectMapper;
 
+@Tag("api")
+@Tag("api.request")
 class OpenRouterNativeStructuredOutputTests {
 
 	@ParameterizedTest

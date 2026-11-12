@@ -9,6 +9,7 @@ import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.garage.evidence.GarageToolLoop;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.ai.chat.client.advisor.api.CallAdvisorChain;
@@ -25,6 +26,8 @@ import org.springframework.ai.tool.function.FunctionToolCallback;
 import org.springframework.ai.tool.metadata.ToolMetadata;
 import reactor.core.publisher.Flux;
 
+@Tag("samples")
+@Tag("samples.scenes")
 class GarageToolLoopTests {
 
   @ParameterizedTest

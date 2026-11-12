@@ -13,6 +13,7 @@ import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
 import io.micrometer.observation.tck.TestObservationRegistry;
 import java.time.Duration;
 import java.util.List;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.image.ImagePrompt;
 import org.springframework.http.HttpStatus;
@@ -25,6 +26,8 @@ import reactor.core.publisher.Flux;
  * OpenRouter provider tag, and stream errors are recorded on the observation instead of
  * being dropped.
  */
+@Tag("observability")
+@Tag("observability.observations")
 class OpenRouterImageModelObservationTests {
 
 	private static final String MODEL = "bytedance-seed/seedream-4.5";

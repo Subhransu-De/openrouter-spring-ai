@@ -11,6 +11,7 @@ import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.ai.chat.model.ChatModel;
@@ -19,6 +20,8 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.definition.ToolDefinition;
 
+@Tag("samples")
+@Tag("samples.run-plan")
 class GarageOptionsFactoryTests {
 
   private final GarageOptionsFactory factory =

@@ -10,6 +10,7 @@ import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -32,6 +33,8 @@ class OpenRouterResponsesTerminationTests {
 
 	private static final String DONE = "data: [DONE]\n\n";
 
+	@Tag("streaming")
+	@Tag("streaming.lifecycle")
 	@ParameterizedTest
 	@ValueSource(strings = { "", ": synthetic keepalive\n\n", "data: [DONE]\n\n", "data: [DONE]\ndata: {invalid}\n\n" })
 	void missingTerminalFailsEmptyAndTextStreamsOnEverySubscription(String tail) {
@@ -48,6 +51,8 @@ class OpenRouterResponsesTerminationTests {
 		}
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.lifecycle")
 	@ParameterizedTest
 	@ValueSource(strings = { "completed", "incomplete" })
 	void terminalPreservesUsageAndFinishMetadataWithoutDone(String status) {
@@ -70,6 +75,8 @@ class OpenRouterResponsesTerminationTests {
 			.verifyComplete();
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@ParameterizedTest
 	@ValueSource(strings = { "response.failed", "error", "response.output_text.error" })
 	void terminalErrorsRetainProviderCategory(String type) {
@@ -83,6 +90,8 @@ class OpenRouterResponsesTerminationTests {
 			.verify();
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.lifecycle")
 	@Test
 	void legacyDoneIsExplicitlyRejected() {
 		StepVerifier.create(model("""
@@ -94,6 +103,8 @@ class OpenRouterResponsesTerminationTests {
 			.verify();
 	}
 
+	@Tag("tools")
+	@Tag("tools.execution")
 	@Test
 	void unfinishedRoundNeverExecutesAdvisorTools() {
 		AtomicInteger executions = new AtomicInteger();
@@ -122,6 +133,8 @@ class OpenRouterResponsesTerminationTests {
 		assertThat(executions).hasValue(0);
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.lifecycle")
 	@ParameterizedTest
 	@ValueSource(booleans = { false, true })
 	void cancellationAndDoneStopAnOpenBody(boolean done) {

@@ -15,6 +15,7 @@ import de.subhransu.openrouter.springai.chat.mapper.OpenRouterChatResponseMapper
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterStreamingResponseMapper;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -32,6 +33,8 @@ class ChatResponseContractTests {
 
 	private final ChatCompletionRequest request = new ObjectMapper().readValue("{}", ChatCompletionRequest.class);
 
+	@Tag("api")
+	@Tag("api.response")
 	@ParameterizedTest
 	@ValueSource(strings = { "", ",\"message\":null" })
 	void completedChoicesRequireMessageObjects(String message) {
@@ -53,6 +56,8 @@ class ChatResponseContractTests {
 			.isInstanceOf(OpenRouterProtocolException.class);
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@ParameterizedTest
 	@ValueSource(strings = { "\"content\":\"\"", "\"refusal\":\"synthetic refusal\"",
 			"\"tool_calls\":[{\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"test\",\"arguments\":\"{}\"}}]",
@@ -65,6 +70,8 @@ class ChatResponseContractTests {
 			.getResults()).hasSize(1);
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@ParameterizedTest
 	@ValueSource(strings = { "503", "\"503\"", "\"provider_unavailable\"", "null", "\"rate_limit_exceeded\"" })
 	void topLevelErrorsTakePrecedenceOverChoices(String code) {
@@ -90,6 +97,8 @@ class ChatResponseContractTests {
 			.verify();
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@Test
 	void errorEnvelopeWithoutChoicesFails() {
 		String body = "{\"error\":{\"code\":503,\"message\":\"synthetic failure\"}}";
@@ -102,6 +111,8 @@ class ChatResponseContractTests {
 			.verify();
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@ParameterizedTest
 	@ValueSource(strings = { "{}", "{\"choices\":null}", "{\"choices\":[]}", "{\"choices\":[null]}" })
 	void rejectsMissingOrInvalidChoices(String body) {
@@ -114,6 +125,8 @@ class ChatResponseContractTests {
 			.verify();
 	}
 
+	@Tag("api")
+	@Tag("api.wire")
 	@ParameterizedTest
 	@ValueSource(strings = { "", "null" })
 	void rejectsEmptyAndNullBlockingBodies(String body) {
@@ -123,6 +136,8 @@ class ChatResponseContractTests {
 			.isInstanceOf(OpenRouterProtocolException.class);
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@ParameterizedTest
 	@ValueSource(strings = { "", "\"choices\":[],", "\"choices\":null," })
 	void usageOnlyIsValidOnlyInStreams(String choices) {

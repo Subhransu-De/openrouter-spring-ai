@@ -29,6 +29,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
@@ -53,6 +54,8 @@ class OpenRouterStreamingToolCallAggregatorTests {
 
 	private final OpenRouterStreamingToolCallAggregator aggregator = new OpenRouterStreamingToolCallAggregator();
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@Test
 	void terminalTextPreservesNullEmptyAndUnicodeFieldsIndependently() {
 		for (String first : java.util.Arrays.asList(null, "", "first-😀")) {
@@ -92,6 +95,8 @@ class OpenRouterStreamingToolCallAggregatorTests {
 					.collect(java.util.stream.Collectors.joining());
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@Test
 	void terminalLogprobsMatchIncrementalMergingAcrossOpaqueAndNullValues() {
 		List<Map<String, Object>> extensions = List.of(Map.of(), nullValue("logprobs"), Map.of("logprobs", "opaque"),
@@ -119,6 +124,8 @@ class OpenRouterStreamingToolCallAggregatorTests {
 		}
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.lifecycle")
 	@Test
 	void boundedDemandAfterSubscriptionStillCollectsEveryToolFragment() {
 		Flux<ChatCompletionChunk> source = Flux.just(chunk(textChoice(0, "Checking")),
@@ -133,6 +140,8 @@ class OpenRouterStreamingToolCallAggregatorTests {
 			.verify(Duration.ofSeconds(2));
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.lifecycle")
 	@Test
 	void cancellationBeforeDemandCancelsTheSource() {
 		TestPublisher<ChatCompletionChunk> source = TestPublisher.create();
@@ -140,6 +149,8 @@ class OpenRouterStreamingToolCallAggregatorTests {
 		source.assertCancelled();
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.lifecycle")
 	@Test
 	void demandSaturatesWhileWaitingForTheUpstreamSubscription() {
 		AtomicReference<Subscriber<? super ChatCompletionChunk>> upstream = new AtomicReference<>();
@@ -155,6 +166,8 @@ class OpenRouterStreamingToolCallAggregatorTests {
 		verify(subscription).request(Long.MAX_VALUE);
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@Test
 	void missingFunctionsAndMixedIndexesPreserveSeparateCalls() {
 		ObjectMapper mapper = new ObjectMapper();
@@ -181,6 +194,8 @@ class OpenRouterStreamingToolCallAggregatorTests {
 		}).verifyComplete();
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@ParameterizedTest
 	@ValueSource(strings = { "{\"choices\":[null]}",
 			"{\"choices\":[{\"delta\":{\"tool_calls\":[null]},\"finish_reason\":\"tool_calls\"}]}",
@@ -196,6 +211,8 @@ class OpenRouterStreamingToolCallAggregatorTests {
 		assertThat(cancelled).isTrue();
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@ParameterizedTest
 	@NullAndEmptySource
 	@ValueSource(strings = { " ", "synthetic_lookup" })
@@ -211,6 +228,8 @@ class OpenRouterStreamingToolCallAggregatorTests {
 			.verifyComplete();
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@ParameterizedTest
 	@ValueSource(strings = { "lookup", "synthetic_lookup", "different_name" })
 	void differingNonblankNamesFailWithoutEmittingPartialCalls(String laterName) {
@@ -222,6 +241,8 @@ class OpenRouterStreamingToolCallAggregatorTests {
 			.verify();
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@ParameterizedTest
 	@NullAndEmptySource
 	@ValueSource(strings = " ")
@@ -238,6 +259,8 @@ class OpenRouterStreamingToolCallAggregatorTests {
 		}
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@Test
 	void missingToolCallIdUsesEmptySpringAiId() {
 		ChatCompletionChunk response = new ObjectMapper().readValue(
@@ -251,6 +274,8 @@ class OpenRouterStreamingToolCallAggregatorTests {
 			.verifyComplete();
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@Test
 	void supportedToolCallTerminatorsProduceExecutableCalls() {
 		for (String reason : List.of("tool_calls", "function_call")) {
@@ -265,6 +290,8 @@ class OpenRouterStreamingToolCallAggregatorTests {
 		}
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@ParameterizedTest
 	@ValueSource(booleans = { false, true })
 	void imageBearingToolFragmentsRetainMediaAndMatchSynchronousResponse(boolean imagesOnContinuation) {
@@ -319,6 +346,8 @@ class OpenRouterStreamingToolCallAggregatorTests {
 			.verifyComplete();
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@Test
 	void usageWhileBufferedIsRetainedAfterToolCallTerminator() {
 		var usage = new Usage(10, 5, 15, null, null, null, null, null, null);
@@ -333,6 +362,8 @@ class OpenRouterStreamingToolCallAggregatorTests {
 			.verifyComplete();
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@Test
 	void olderSharedUsageIsNotEmittedAfterANewerToolChoiceFinish() {
 		List<ChatCompletionChunk> aggregated = this.aggregator.aggregate(Flux.just(
@@ -349,6 +380,8 @@ class OpenRouterStreamingToolCallAggregatorTests {
 		assertThat(revisions(aggregated)).containsExactly("new");
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@Test
 	void newerSharedUsageStillReachesALaterToolChoiceFinish() {
 		List<ChatCompletionChunk> aggregated = this.aggregator.aggregate(Flux.just(
@@ -365,6 +398,8 @@ class OpenRouterStreamingToolCallAggregatorTests {
 		assertThat(revisions(aggregated)).containsExactly("old", "new");
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@Test
 	void threeInterleavedToolChoicesEmitUsageAndExtensionsInArrivalOrder() {
 		List<ChatCompletionChunk> aggregated = this.aggregator
@@ -386,6 +421,8 @@ class OpenRouterStreamingToolCallAggregatorTests {
 		assertThat(aggregated.get(2).extensions()).containsEntry("route", "b");
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@Test
 	void olderToolChoiceUsageIsNotEmittedAfterANewerTextChoice() {
 		List<ChatCompletionChunk> aggregated = this.aggregator.aggregate(Flux.just(
@@ -404,6 +441,8 @@ class OpenRouterStreamingToolCallAggregatorTests {
 		assertThat(revisions(aggregated)).containsExactly("old", "new");
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@Test
 	void passedThroughExtensionsRetainOnlyKeysThatCanSupersedeBufferedValues() throws Exception {
 		var bounded = new OpenRouterStreamingToolCallAggregator(new ObjectMapper(), 1024, 2, Duration.ofHours(1));
@@ -441,6 +480,8 @@ class OpenRouterStreamingToolCallAggregatorTests {
 		});
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@Test
 	void extensionTrackingFollowsSharedAndNewlyBufferedChunksAndPrunesFinishedChoices() throws Exception {
 		Object state = aggregationState(this.aggregator);
@@ -499,6 +540,8 @@ class OpenRouterStreamingToolCallAggregatorTests {
 		return chunks.stream().map(chunk -> chunk.extensions().get("revision")).filter(Objects::nonNull).toList();
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@Test
 	void interleavedChoicesCompleteIndependentlyAndKeepIndexedOrdering() {
 		List<ChatCompletionChunk> aggregated = this.aggregator
@@ -537,6 +580,8 @@ class OpenRouterStreamingToolCallAggregatorTests {
 			.containsExactly(List.of(0, 1), List.of(0), List.of(1));
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@Test
 	void inStreamErrorClearsEveryBufferedChoice() {
 		ChatCompletionChunk error = new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, MODEL, "openai", List.of(),
@@ -555,6 +600,8 @@ class OpenRouterStreamingToolCallAggregatorTests {
 			.isEqualTo("fresh");
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.lifecycle")
 	@Test
 	void reactiveErrorDiscardsIncompleteChoiceBuffers() {
 		RuntimeException failure = new RuntimeException("stream failed");
@@ -566,6 +613,8 @@ class OpenRouterStreamingToolCallAggregatorTests {
 			.verify(Duration.ofSeconds(5));
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@Test
 	void unexpectedCompletionNeverFlushesToolArguments() {
 		for (String arguments : List.of("", "{", "{}")) {
@@ -576,6 +625,8 @@ class OpenRouterStreamingToolCallAggregatorTests {
 		}
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@Test
 	void completedChoiceDoesNotAuthorizeAnotherChoice() {
 		StepVerifier
@@ -586,6 +637,8 @@ class OpenRouterStreamingToolCallAggregatorTests {
 			.verify();
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@Test
 	void otherFinishReasonsDoNotAuthorizeToolCalls() {
 		for (String reason : List.of("stop", "length", "content_filter")) {
@@ -597,6 +650,8 @@ class OpenRouterStreamingToolCallAggregatorTests {
 		}
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.lifecycle")
 	@Test
 	void cancellationReleasesStateBeforeAnotherSubscription() {
 		AtomicInteger subscriptions = new AtomicInteger();
@@ -639,6 +694,8 @@ class OpenRouterStreamingToolCallAggregatorTests {
 		return new Choice(choiceIndex, null, new Delta(null, null, null, null), "tool_calls", "tool_calls");
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@Test
 	void preservesChoiceErrorAndPartialOutputWhileToolCallChunksAreBuffered() {
 		Choice toolCall = new Choice(0, null, new Delta("assistant", "partial ", null,

@@ -15,6 +15,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -32,6 +33,7 @@ import reactor.core.publisher.Mono;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+@Tag("configuration")
 class OpenRouterStructuredOutputPropertiesTests {
 
 	private static final String PREFIX = "spring.ai.openrouter.chat.";
@@ -48,6 +50,7 @@ class OpenRouterStructuredOutputPropertiesTests {
 				AutoConfigurations.of(OpenRouterApiAutoConfiguration.class, OpenRouterChatAutoConfiguration.class))
 		.withPropertyValues("spring.ai.openrouter.api-key=test-key", PREFIX + "model=test/model");
 
+	@Tag("configuration.properties")
 	@Test
 	void toolStrictPropertyRetainsOmittedFalseAndTrue() {
 		for (Boolean strict : new Boolean[] { null, false, true }) {
@@ -62,6 +65,7 @@ class OpenRouterStructuredOutputPropertiesTests {
 		}
 	}
 
+	@Tag("configuration.properties")
 	@ParameterizedTest
 	@EnumSource(OpenRouterRequestMode.class)
 	void propertiesMatchJavaOptionsOnBothTransports(OpenRouterRequestMode mode) {
@@ -175,6 +179,7 @@ class OpenRouterStructuredOutputPropertiesTests {
 		return mode == OpenRouterRequestMode.OPENAI_RESPONSES ? "/text/format" : "/response_format";
 	}
 
+	@Tag("configuration.properties")
 	@ParameterizedTest
 	@ValueSource(strings = { "response-format.type=json-schema", "response-format.schema={}",
 			"response-format.type=unsupported" })
@@ -182,6 +187,7 @@ class OpenRouterStructuredOutputPropertiesTests {
 		runner.withPropertyValues(PREFIX + property).run(context -> assertThat(context).hasFailed());
 	}
 
+	@Tag("configuration.properties")
 	@ParameterizedTest
 	@EnumSource(OpenRouterRequestMode.class)
 	void malformedJsonFailsBeforeSendingRequests(OpenRouterRequestMode mode) {
@@ -208,6 +214,7 @@ class OpenRouterStructuredOutputPropertiesTests {
 		}
 	}
 
+	@Tag("configuration.metadata")
 	@Test
 	void publishesNestedConfigurationMetadata() throws Exception {
 		try (var input = getClass().getClassLoader()

@@ -25,6 +25,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -53,6 +54,8 @@ import tools.jackson.databind.ObjectMapper;
  */
 // Keep media names and wire field names explicit in each case.
 @SuppressWarnings("PMD.AvoidDuplicateLiterals")
+@Tag("samples")
+@Tag("samples.integration")
 class OpenRouterModalityIntegrationTests {
 
   private static final ObjectMapper JSON = new ObjectMapper();

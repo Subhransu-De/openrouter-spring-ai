@@ -8,6 +8,7 @@ import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
 import de.subhransu.openrouter.springai.chat.OpenRouterToolExecutionExceptionProcessor;
 import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingModel;
 import de.subhransu.openrouter.springai.image.OpenRouterImageModel;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -25,6 +26,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 
+@Tag("configuration")
+@Tag("configuration.model-selection")
 class OpenRouterModelSelectionTests {
 
 	private static final String API_KEY = "spring.ai.openrouter.api-key=test-key";

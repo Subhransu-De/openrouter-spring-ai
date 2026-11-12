@@ -20,6 +20,7 @@ import de.subhransu.openrouter.springai.api.dto.ToolCall;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.ai.chat.client.ChatClient;
@@ -33,6 +34,8 @@ import org.springframework.ai.tool.execution.ToolExecutionExceptionProcessor;
 import org.springframework.ai.tool.function.FunctionToolCallback;
 import reactor.core.publisher.Flux;
 
+@Tag("tools")
+@Tag("tools.execution")
 class OpenRouterToolCallingManagersTests {
 
 	private static final String MODEL = "openai/gpt-5.4-mini";

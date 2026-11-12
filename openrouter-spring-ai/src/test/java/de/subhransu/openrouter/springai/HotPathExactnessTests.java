@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.metadata.ChatGenerationMetadata;
@@ -63,6 +64,8 @@ class HotPathExactnessTests {
 
 	private static final Duration WAIT = Duration.ofSeconds(5);
 
+	@Tag("streaming")
+	@Tag("streaming.limits")
 	@Test
 	void statefulExtensionSerializerStartsFreshForEachSubscription() {
 		var chunk = new ChatCompletionChunk(null, null, null, null, null, List.of(), null, null,
@@ -73,6 +76,8 @@ class HotPathExactnessTests {
 		assertThat(stream.collectList().block(WAIT)).hasSize(1);
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@Test
 	void toolChunkBudgetMeasuresEachChunkWithAFreshGenerator() {
 		List<Integer> rootEntries = new ArrayList<>();
@@ -100,6 +105,8 @@ class HotPathExactnessTests {
 		assertThat(rootEntries).containsExactly(0, 0);
 	}
 
+	@Tag("http")
+	@Tag("http.limits")
 	@Test
 	void suppliedMapperDecodesBlockingBodiesFromBytes() {
 		SimpleModule module = new SimpleModule();
@@ -119,6 +126,8 @@ class HotPathExactnessTests {
 		assertThat(response.id()).isEqualTo("bytes");
 	}
 
+	@Tag("http")
+	@Tag("http.limits")
 	@Test
 	void suppliedMapperIsNotInvokedForAnOversizedBlockingBody() {
 		AtomicInteger calls = new AtomicInteger();
@@ -139,6 +148,8 @@ class HotPathExactnessTests {
 		assertThat(calls).hasValue(0);
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.sse")
 	@Test
 	void suppliedMapperProbesTheFirstLineOfAMultilineEvent() {
 		AtomicInteger calls = new AtomicInteger();
@@ -163,6 +174,8 @@ class HotPathExactnessTests {
 			.satisfies(chunk -> assertThat(chunk.choices().get(0).delta().content()).isEqualTo("hello-2"));
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.aggregation")
 	@Test
 	void responsesTextDeltaReplacesEarlierGenerationMetadataWhenAggregated() {
 		var event = new ObjectMapper().readValue("{\"type\":\"response.output_text.delta\",\"delta\":\"hello\"}",
@@ -179,6 +192,8 @@ class HotPathExactnessTests {
 		assertThat(aggregate.get().getResult().getMetadata().entrySet()).isEmpty();
 	}
 
+	@Tag("observability")
+	@Tag("observability.observations")
 	@Test
 	void rejectedStreamObservationStillReceivesTheResponse() {
 		ObservationRegistry registry = ObservationRegistry.create();

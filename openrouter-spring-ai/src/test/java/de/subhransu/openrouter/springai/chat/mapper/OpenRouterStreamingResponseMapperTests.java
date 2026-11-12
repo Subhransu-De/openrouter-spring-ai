@@ -20,6 +20,7 @@ import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.model.ChatResponse;
 import reactor.core.publisher.Flux;
@@ -31,6 +32,8 @@ class OpenRouterStreamingResponseMapperTests {
 
 	private static final String MODEL = "openai/gpt-5.4-mini";
 
+	@Tag("streaming")
+	@Tag("streaming.aggregation")
 	@Test
 	void validatesEveryChoiceBeforeOpeningTheBudget() {
 		ChatCompletionChunk chunk = new ObjectMapper().readValue("""
@@ -41,6 +44,8 @@ class OpenRouterStreamingResponseMapperTests {
 			.hasMessage("OpenRouter response requires choice");
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.lifecycle")
 	@Test
 	void choiceFailureTakesPrecedenceOverANullSibling() {
 		ChatCompletionChunk chunk = new ObjectMapper().readValue("""
@@ -51,6 +56,8 @@ class OpenRouterStreamingResponseMapperTests {
 				error -> assertThat(error.getErrorDetails().choiceIndex()).isEqualTo(1));
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.aggregation")
 	@Test
 	void mapsContentDeltaChunk() {
 		ChatCompletionChunk chunk = new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, MODEL, "openai",
@@ -62,6 +69,8 @@ class OpenRouterStreamingResponseMapperTests {
 		assertThat(mapped.getMetadata().getId()).isEqualTo("gen-1");
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.aggregation")
 	@Test
 	void preservesWireChoiceIndexInGenerationMetadata() {
 		ChatCompletionChunk chunk = new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, MODEL, "openai",
@@ -72,6 +81,8 @@ class OpenRouterStreamingResponseMapperTests {
 		assertThat(mapped.getResult().getMetadata().<Integer>get("openrouter.choice_index")).isEqualTo(7);
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@Test
 	void mapsDeltaToolCallsToAssistantToolCalls() {
 		// Streaming providers deliver tool calls on the Delta, not on a Message; this
@@ -93,6 +104,8 @@ class OpenRouterStreamingResponseMapperTests {
 		assertThat(mapped.getResult().getMetadata().getFinishReason()).isEqualTo("TOOL_CALLS");
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@Test
 	void throwsOnMidStreamErrorChunk() {
 		ChatCompletionChunk chunk = new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, MODEL, "openai",
@@ -115,6 +128,8 @@ class OpenRouterStreamingResponseMapperTests {
 			});
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@Test
 	void usesFallbackMessageWhenStreamErrorMessageIsNull() {
 		ChatCompletionChunk chunk = new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, MODEL, "openai", null, null,
@@ -125,6 +140,8 @@ class OpenRouterStreamingResponseMapperTests {
 			.hasMessage("OpenRouter chat completion stream failed");
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@Test
 	void parsesNonStringStreamErrorMessageWithoutLosingTaxonomy() throws Exception {
 		ChatCompletionChunk chunk = new ObjectMapper().readValue("""
@@ -139,6 +156,8 @@ class OpenRouterStreamingResponseMapperTests {
 			});
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@Test
 	void parsesNonStringStreamErrorTypeWithoutDroppingTheEvent() throws Exception {
 		ChatCompletionChunk chunk = new ObjectMapper().readValue("""
@@ -154,6 +173,8 @@ class OpenRouterStreamingResponseMapperTests {
 			});
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@Test
 	void throwsTypedTransientExceptionForChoiceError() {
 		ChoiceError error = new ChoiceError("502", "Provider disconnected",
@@ -170,6 +191,8 @@ class OpenRouterStreamingResponseMapperTests {
 			});
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@Test
 	void includesEarlierStreamedTextInChoiceErrorDiagnostics() {
 		ChatCompletionChunk partial = new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, MODEL, "openai",
@@ -190,6 +213,8 @@ class OpenRouterStreamingResponseMapperTests {
 			.verify();
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@Test
 	void boundsAccumulatedStreamedTextInChoiceErrorDiagnostics() {
 		String partialOutput = "x".repeat(600);
@@ -212,6 +237,8 @@ class OpenRouterStreamingResponseMapperTests {
 			.verify();
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@Test
 	void truncationPreservesWhitespaceAndSplitBoundaryDiagnostics() {
 		for (int size : List.of(0, 498, 499, 500, 501, 600, 4096)) {
@@ -239,6 +266,8 @@ class OpenRouterStreamingResponseMapperTests {
 		}
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@Test
 	void streamPartialOutputMatchesBlockingCutsAfterRedaction() {
 		// A nine-character key grows by one into "[REDACTED]".
@@ -269,6 +298,8 @@ class OpenRouterStreamingResponseMapperTests {
 		}
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@Test
 	void failedChoiceFailsMixedChunkBeforeSuccessfulSiblingIsMapped() {
 		Choice successful = new Choice(0, null, new Delta("assistant", "complete answer", null, null), "stop", "stop");
@@ -283,6 +314,8 @@ class OpenRouterStreamingResponseMapperTests {
 				exception -> assertThat(exception.getErrorDetails().choiceIndex()).isEqualTo(1));
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.aggregation")
 	@Test
 	void nullDeltaProducesEmptyText() {
 		ChatCompletionChunk chunk = new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, MODEL, "openai",
@@ -293,6 +326,8 @@ class OpenRouterStreamingResponseMapperTests {
 		assertThat(mapped.getResult().getOutput().getText()).isEmpty();
 	}
 
+	@Tag("api")
+	@Tag("api.reasoning")
 	@Test
 	void surfacesReasoningDeltaUnderReasoningMetadataKey() {
 		ChatCompletionChunk chunk = new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, "openai/gpt-oss-120b",
@@ -304,6 +339,8 @@ class OpenRouterStreamingResponseMapperTests {
 		assertThat(mapped.getResult().getMetadata().<String>get("openrouter.reasoning")).isEqualTo("thinking aloud");
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.aggregation")
 	@Test
 	void terminalChunkWithoutTextDeltaDoesNotRepeatPriorText() {
 		// A finish_reason-only terminal chunk carries an empty delta; mapping it must not
@@ -317,6 +354,8 @@ class OpenRouterStreamingResponseMapperTests {
 		assertThat(mapped.getResult().getMetadata().getFinishReason()).isEqualTo("STOP");
 	}
 
+	@Tag("observability")
+	@Tag("observability.usage")
 	@Test
 	void mapsFinalUsageChunkWithEmptyChoices() {
 		ChatCompletionChunk usageChunk = new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, MODEL, "openai",

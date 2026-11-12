@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.ai.chat.client.ChatClient;
@@ -21,6 +22,8 @@ import org.springframework.ai.chat.prompt.Prompt;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+@Tag("api")
+@Tag("api.options")
 class ChatClientOptionCompositionTests {
 
 	private final List<String> paths = new CopyOnWriteArrayList<>();

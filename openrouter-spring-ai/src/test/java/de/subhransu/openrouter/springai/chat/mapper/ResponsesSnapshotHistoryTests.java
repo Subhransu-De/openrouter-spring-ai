@@ -17,6 +17,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -29,6 +30,8 @@ class ResponsesSnapshotHistoryTests {
 
 	private final ObjectMapper mapper = new ObjectMapper();
 
+	@Tag("api")
+	@Tag("api.reasoning")
 	@ParameterizedTest
 	@ValueSource(booleans = { false, true })
 	void rejectsEditedHistoryBeforeDispatchAndPreservesUnchangedWireOrder(boolean streamed) {
@@ -116,6 +119,8 @@ class ResponsesSnapshotHistoryTests {
 		verifyNoInteractions(api);
 	}
 
+	@Tag("multimodal")
+	@Tag("multimodal.input")
 	@ParameterizedTest
 	@ValueSource(booleans = { false, true })
 	void rejectsRemovedGeneratedMediaInSnapshotsBeforeDispatch(boolean streamed) {
@@ -146,6 +151,8 @@ class ResponsesSnapshotHistoryTests {
 		verifyNoInteractions(api);
 	}
 
+	@Tag("api")
+	@Tag("api.reasoning")
 	@ParameterizedTest
 	@ValueSource(strings = { "123", "[]", "\"synthetic\"" })
 	void rejectsNonObjectSnapshotItemsBeforeDispatch(String item) {

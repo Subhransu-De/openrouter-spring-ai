@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.restclient.RestClientCustomizer;
@@ -35,6 +36,7 @@ import org.springframework.web.reactive.function.client.WebClient;
  * codecs, and OpenRouter's final client configuration all participate in real blocking
  * and streaming exchanges.
  */
+@Tag("configuration")
 class OpenRouterHttpClientStarterTests {
 
 	private static final String API_KEY_PROPERTY = "spring.ai.openrouter.api-key=test-key";
@@ -51,6 +53,7 @@ class OpenRouterHttpClientStarterTests {
 		.withUserConfiguration(TestApplication.class)
 		.withPropertyValues(API_KEY_PROPERTY);
 
+	@Tag("configuration.http")
 	@Test
 	void minimalStarterContextProvidesBootManagedPrototypeBuilders() {
 		this.contextRunner.run(context -> {
@@ -64,6 +67,7 @@ class OpenRouterHttpClientStarterTests {
 		});
 	}
 
+	@Tag("configuration.http")
 	@Test
 	void ordinaryBootBuilderCustomizationsReachBlockingAndStreamingTransports() throws IOException {
 		try (RecordingServer server = new RecordingServer()) {
@@ -94,6 +98,7 @@ class OpenRouterHttpClientStarterTests {
 		}
 	}
 
+	@Tag("configuration.http")
 	@Test
 	void explicitlySuppliedBuildersReplaceBootManagedBuildersAndReachBothTransports() throws IOException {
 		try (RecordingServer server = new RecordingServer()) {
@@ -123,6 +128,7 @@ class OpenRouterHttpClientStarterTests {
 		}
 	}
 
+	@Tag("configuration.beans")
 	@Test
 	void userSuppliedOpenRouterApiBacksOffAutoConfiguration() {
 		OpenRouterApi userApi = mock(OpenRouterApi.class);

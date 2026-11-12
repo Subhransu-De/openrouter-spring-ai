@@ -22,6 +22,7 @@ import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
 import java.util.List;
 import java.util.Map;
 import de.subhransu.openrouter.springai.api.dto.ContentPart;
+import org.junit.jupiter.api.Tag;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 import org.junit.jupiter.api.Test;
@@ -30,8 +31,10 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
 
+@Tag("api")
 class OpenRouterChatModelRequestModeTests {
 
+	@Tag("api.extensions")
 	@Test
 	void cacheBreakpointsReachCallsAndStreamsAndFailBeforeResponsesDispatch() {
 		OpenRouterApi api = mock(OpenRouterApi.class);
@@ -68,6 +71,7 @@ class OpenRouterChatModelRequestModeTests {
 		verifyNoInteractions(responsesApi);
 	}
 
+	@Tag("api.request")
 	@Test
 	void callDispatchesToChatCompletionsByDefault() {
 		OpenRouterApi api = mock(OpenRouterApi.class);
@@ -90,6 +94,7 @@ class OpenRouterChatModelRequestModeTests {
 		verify(api, never()).responses(any());
 	}
 
+	@Tag("api.request")
 	@Test
 	void callDispatchesToOpenAiResponsesMode() {
 		OpenRouterApi api = mock(OpenRouterApi.class);
@@ -116,6 +121,7 @@ class OpenRouterChatModelRequestModeTests {
 		verify(api, never()).chatCompletion(any());
 	}
 
+	@Tag("api.options")
 	@Test
 	void runtimeOptionsWithoutModeReplaceConfiguredDefaultMode() {
 		OpenRouterApi api = mock(OpenRouterApi.class);

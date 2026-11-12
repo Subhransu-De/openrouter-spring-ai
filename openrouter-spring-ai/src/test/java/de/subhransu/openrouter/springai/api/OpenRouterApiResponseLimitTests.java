@@ -37,6 +37,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 import org.junit.jupiter.api.Named;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -73,6 +74,8 @@ class OpenRouterApiResponseLimitTests {
 		return Stream.of(Arguments.of(Named.of("just below", LIMIT - 1)), Arguments.of(Named.of("exact", LIMIT)));
 	}
 
+	@Tag("http")
+	@Tag("http.limits")
 	@ParameterizedTest(name = "{0} success body is accepted")
 	@MethodSource("acceptedSuccessBoundaries")
 	void acceptsSuccessBodiesThroughTheExactLimit(int size) {
@@ -86,6 +89,8 @@ class OpenRouterApiResponseLimitTests {
 		fixture.server().verify();
 	}
 
+	@Tag("http")
+	@Tag("http.limits")
 	@ParameterizedTest
 	@EnumSource(Endpoint.class)
 	void rejectsOversizedSuccessBodiesAcrossEveryBlockingEndpoint(Endpoint endpoint) {
@@ -111,6 +116,8 @@ class OpenRouterApiResponseLimitTests {
 		return Stream.of(Arguments.of(Named.of("just below", LIMIT - 1)), Arguments.of(Named.of("exact", LIMIT)));
 	}
 
+	@Tag("http")
+	@Tag("http.limits")
 	@ParameterizedTest
 	@ValueSource(ints = { 8191, 8192, 8193, 16384 })
 	void blockingBodiesRetainLimitAndDecodeSemanticsAcrossReadChunks(int size) {
@@ -128,6 +135,8 @@ class OpenRouterApiResponseLimitTests {
 		fixture.server().verify();
 	}
 
+	@Tag("http")
+	@Tag("http.limits")
 	@ParameterizedTest
 	@ValueSource(booleans = { false, true })
 	void limitAndTransportFailuresOutrankAnEarlierCompleteValue(boolean transportFailure) throws IOException {
@@ -171,6 +180,8 @@ class OpenRouterApiResponseLimitTests {
 		}
 	}
 
+	@Tag("http")
+	@Tag("http.limits")
 	@ParameterizedTest
 	@ValueSource(booleans = { false, true })
 	void configuredJacksonDiagnosticsMatchByteArrayDecoding(boolean includeSource) {
@@ -203,6 +214,8 @@ class OpenRouterApiResponseLimitTests {
 		server.verify();
 	}
 
+	@Tag("http")
+	@Tag("http.limits")
 	@ParameterizedTest(name = "{0} error body remains a normal HTTP failure")
 	@MethodSource("acceptedErrorBoundaries")
 	void acceptsErrorBodiesThroughTheExactLimit(int size) {
@@ -217,6 +230,8 @@ class OpenRouterApiResponseLimitTests {
 		fixture.server().verify();
 	}
 
+	@Tag("http")
+	@Tag("http.limits")
 	@ParameterizedTest
 	@EnumSource(Endpoint.class)
 	void oversizedErrorsKeepOnlyABoundedExcerptAndStructuredDetails(Endpoint endpoint) {
@@ -240,6 +255,8 @@ class OpenRouterApiResponseLimitTests {
 		fixture.server().verify();
 	}
 
+	@Tag("http")
+	@Tag("http.limits")
 	@ParameterizedTest
 	@ValueSource(ints = { 0, 63, 64, 65, 4096 })
 	void streamingErrorsRespectBoundariesAcrossEndpoints(int size) {
@@ -295,6 +312,8 @@ class OpenRouterApiResponseLimitTests {
 		return (suppliedMapper ? builder.objectMapper(new ObjectMapper()) : builder).build();
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.limits")
 	@Test
 	void successLimitAppliesPerEventRatherThanToTheWholeStream() {
 		String event = "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"hello\"}}]}\n\n";
@@ -309,6 +328,8 @@ class OpenRouterApiResponseLimitTests {
 			.verify();
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.limits")
 	@ParameterizedTest
 	@ValueSource(booleans = { false, true })
 	void imageDecodingHonorsConfiguredLimitForSseAndJson(boolean sse) {

@@ -6,12 +6,15 @@ import tools.jackson.databind.ObjectMapper;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionRequest;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import java.util.List;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 
+@Tag("api")
+@Tag("api.request")
 class OpenRouterChatRequestMapperTests {
 
 	private final OpenRouterChatRequestMapper mapper = new OpenRouterChatRequestMapper(new ObjectMapper());

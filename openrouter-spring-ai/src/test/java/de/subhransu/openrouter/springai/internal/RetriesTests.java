@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.lang.reflect.UndeclaredThrowableException;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.retry.TransientAiException;
 import org.springframework.core.retry.RetryPolicy;
@@ -20,6 +21,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.util.backoff.BackOffExecution;
 import org.springframework.util.backoff.FixedBackOff;
 
+@Tag("http")
+@Tag("http.retry")
 class RetriesTests {
 
 	@Test

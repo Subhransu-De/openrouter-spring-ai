@@ -25,12 +25,15 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.ai.embedding.EmbeddingModel;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
 
+@Tag("samples")
+@Tag("samples.scenes")
 class GarageModalitySceneTelemetryTests {
 
   @TempDir Path output;

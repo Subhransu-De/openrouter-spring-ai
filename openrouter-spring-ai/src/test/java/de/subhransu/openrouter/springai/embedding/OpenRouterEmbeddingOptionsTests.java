@@ -4,9 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
 import java.util.List;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.embedding.EmbeddingOptions;
 
+@Tag("embeddings")
+@Tag("embeddings.options")
 class OpenRouterEmbeddingOptionsTests {
 
 	private static final String MODEL = "openai/text-embedding-3-small";

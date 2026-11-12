@@ -13,12 +13,15 @@ import de.subhransu.openrouter.springai.api.dto.Usage;
 import de.subhransu.openrouter.springai.chat.OpenRouterUsage;
 import de.subhransu.openrouter.springai.embedding.mapper.OpenRouterEmbeddingResponseMapper;
 import de.subhransu.openrouter.springai.image.mapper.OpenRouterImageResponseMapper;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 import tools.jackson.databind.ObjectMapper;
 
+@Tag("observability")
+@Tag("observability.usage")
 class UsageWireMappingTests {
 
 	private final ObjectMapper mapper = new ObjectMapper();

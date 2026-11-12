@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -62,6 +63,8 @@ class OpenRouterResponsesEnvelopeTests {
 						OpenRouterTransientApiException.class));
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@ParameterizedTest
 	@MethodSource("invalidResponses")
 	void invalidBodiesRecordFailuresInBothModes(String json, Class<? extends Throwable> error) {
@@ -78,6 +81,8 @@ class OpenRouterResponsesEnvelopeTests {
 			.flatMap(mode -> Stream.of("123", "[]", "\"synthetic\"", "true").map(item -> Arguments.of(mode, item)));
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@ParameterizedTest
 	@MethodSource("nonObjectOutputItems")
 	void nonObjectOutputItemsFailAsMalformed(String mode, String item) {
@@ -94,6 +99,8 @@ class OpenRouterResponsesEnvelopeTests {
 		assertFailure(OpenRouterProtocolException.class);
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@ParameterizedTest
 	@ValueSource(strings = { "call", "completed", "incomplete" })
 	void errorEnvelopeOverridesStatusAndPreservesBoundedTypedDiagnostics(String mode) {
@@ -114,6 +121,8 @@ class OpenRouterResponsesEnvelopeTests {
 		assertFailure(OpenRouterTransientApiException.class);
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@ParameterizedTest
 	@ValueSource(strings = { "call", "completed", "incomplete" })
 	void errorOnlyBodiesRetainNonTransientClassification(String mode) {
@@ -124,6 +133,8 @@ class OpenRouterResponsesEnvelopeTests {
 				error -> assertThat(error.getCategory()).isEqualTo(OpenRouterErrorCategory.AUTHENTICATION));
 	}
 
+	@Tag("tools")
+	@Tag("tools.execution")
 	@ParameterizedTest
 	@ValueSource(
 			strings = { "{\"type\":\"response.completed\"}", "{\"type\":\"response.incomplete\",\"response\":null}",
@@ -136,6 +147,8 @@ class OpenRouterResponsesEnvelopeTests {
 		assertNoToolExecution(true, body);
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.lifecycle")
 	@ParameterizedTest
 	@ValueSource(strings = { "{\"delta\":\"synthetic\"}", "{\"type\":null,\"delta\":\"synthetic\"}",
 			"{\"type\":\"\",\"delta\":\"synthetic\"}", "{\"type\":\" \",\"delta\":\"synthetic\"}" })
@@ -145,6 +158,8 @@ class OpenRouterResponsesEnvelopeTests {
 		assertFailure(OpenRouterProtocolException.class);
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@Test
 	void typelessErrorEnvelopeKeepsProviderFailure() {
 		String body = "data: {\"error\":{\"code\":503,\"message\":\"synthetic failure\"}}\n\n";
@@ -152,6 +167,8 @@ class OpenRouterResponsesEnvelopeTests {
 		assertFailure(OpenRouterTransientApiException.class);
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.aggregation")
 	@Test
 	void unknownNamedEventRemainsANoOp() {
 		String body = "data: {\"type\":\"response.synthetic_future\",\"delta\":\"synthetic\"}\n\n"
@@ -163,6 +180,8 @@ class OpenRouterResponsesEnvelopeTests {
 		assertThat(responses.get(responses.size() - 1).getResult().getMetadata().getFinishReason()).isEqualTo("STOP");
 	}
 
+	@Tag("tools")
+	@Tag("tools.execution")
 	@ParameterizedTest
 	@ValueSource(booleans = { false, true })
 	void providerErrorNeverExecutesAdvertisedTools(boolean streaming) {
@@ -197,6 +216,8 @@ class OpenRouterResponsesEnvelopeTests {
 		assertThat(executions).hasValue(0);
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.lifecycle")
 	@ParameterizedTest
 	@ValueSource(strings = { "completed", "incomplete" })
 	void missingSnapshotsFailWithoutTools(String status) {
@@ -216,6 +237,8 @@ class OpenRouterResponsesEnvelopeTests {
 						"STOP"));
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@ParameterizedTest
 	@MethodSource("validResponses")
 	void emptyTextDoesNotInvalidateCompletedOutput(String output, String finishReason) {
@@ -247,6 +270,8 @@ class OpenRouterResponsesEnvelopeTests {
 		}
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@ParameterizedTest
 	@ValueSource(booleans = { false, true })
 	void validIncompleteTextPreservesItsReason(boolean streaming) {

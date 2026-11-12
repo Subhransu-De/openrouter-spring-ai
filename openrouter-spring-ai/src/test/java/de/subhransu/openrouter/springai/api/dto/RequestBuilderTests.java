@@ -5,8 +5,11 @@ import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
+@Tag("api")
+@Tag("api.wire")
 class RequestBuilderTests {
 
 	private static final List<ChatMessage> MESSAGES = List.of(new ChatMessage("user", "hi", null, null, null));

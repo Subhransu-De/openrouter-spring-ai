@@ -16,6 +16,7 @@ import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterStreamingToolCallAggregator;
 import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException;
 import java.time.Duration;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -29,6 +30,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
+@Tag("configuration")
 class OpenRouterAutoConfigurationTests {
 
 	private static final String API_KEY_PROPERTY = "spring.ai.openrouter.api-key=test-key";
@@ -36,6 +38,7 @@ class OpenRouterAutoConfigurationTests {
 	private final ApplicationContextRunner contextRunner = new ApplicationContextRunner().withConfiguration(
 			AutoConfigurations.of(OpenRouterApiAutoConfiguration.class, OpenRouterChatAutoConfiguration.class));
 
+	@Tag("configuration.properties")
 	@ParameterizedTest
 	@ValueSource(strings = { "0B", "-1B", "2147483647B", "2147483648B", "3GB" })
 	void rejectsUnsupportedBodySizesDuringBinding(String value) {
@@ -51,6 +54,7 @@ class OpenRouterAutoConfigurationTests {
 		}
 	}
 
+	@Tag("configuration.beans")
 	@Test
 	void createsApiAndChatModelWhenApiKeyIsConfigured() {
 		contextRunner.withPropertyValues(API_KEY_PROPERTY).run(context -> {
@@ -59,6 +63,7 @@ class OpenRouterAutoConfigurationTests {
 		});
 	}
 
+	@Tag("configuration.http")
 	@Test
 	void bindsConnectionTimeoutProperty() {
 		contextRunner.withPropertyValues(API_KEY_PROPERTY, "spring.ai.openrouter.connection.timeout=45s")
@@ -70,6 +75,7 @@ class OpenRouterAutoConfigurationTests {
 			});
 	}
 
+	@Tag("configuration.properties")
 	@Test
 	void bindsAndWiresResponseAndToolCallLimits() {
 		contextRunner
@@ -99,6 +105,7 @@ class OpenRouterAutoConfigurationTests {
 			});
 	}
 
+	@Tag("configuration.properties")
 	@ParameterizedTest
 	@ValueSource(strings = { "max-size=1B", "max-chunks=1", "max-duration=1s" })
 	void appliesBoundLimitsToResponsesStreams(String setting) {
@@ -128,6 +135,7 @@ class OpenRouterAutoConfigurationTests {
 			});
 	}
 
+	@Tag("configuration.properties")
 	@ParameterizedTest
 	@ValueSource(strings = { "max-size=1B", "max-choices=1" })
 	void appliesBoundChatStateLimitsWithoutTools(String setting) {
@@ -153,6 +161,7 @@ class OpenRouterAutoConfigurationTests {
 				.verify());
 	}
 
+	@Tag("configuration.properties")
 	@ParameterizedTest
 	@ValueSource(strings = { "max-size=0B", "max-size=-1B", "max-choices=0", "max-choices=-1" })
 	void rejectsInvalidChatStateLimits(String setting) {
@@ -160,6 +169,7 @@ class OpenRouterAutoConfigurationTests {
 			.run(context -> assertThat(context).hasFailed());
 	}
 
+	@Tag("configuration.properties")
 	@Test
 	void chatStateDefaultsMatchMapperDefaults() {
 		var defaults = new OpenRouterChatProperties().getStreamingState();
@@ -168,6 +178,7 @@ class OpenRouterAutoConfigurationTests {
 		assertThat(defaults.getMaxChoices()).isEqualTo(OpenRouterStreamingResponseMapper.DEFAULT_MAX_STATE_CHOICES);
 	}
 
+	@Tag("configuration.properties")
 	@Test
 	void toolCallAggregationDefaultsMatchAggregatorDefaults() {
 		var defaults = new OpenRouterChatProperties().getToolCallAggregation();
@@ -176,6 +187,7 @@ class OpenRouterAutoConfigurationTests {
 		assertThat(defaults.getMaxDuration()).isEqualTo(OpenRouterStreamingToolCallAggregator.DEFAULT_MAX_DURATION);
 	}
 
+	@Tag("configuration.tools")
 	@Test
 	void injectsUserDefinedToolCallingManagerIntoChatModel() {
 		contextRunner.withUserConfiguration(ToolCallingManagerConfiguration.class)
@@ -187,6 +199,7 @@ class OpenRouterAutoConfigurationTests {
 			});
 	}
 
+	@Tag("configuration.observability")
 	@Test
 	void injectsUserDefinedObservationRegistryIntoChatModel() {
 		contextRunner.withUserConfiguration(ObservationRegistryConfiguration.class)
@@ -198,6 +211,7 @@ class OpenRouterAutoConfigurationTests {
 			});
 	}
 
+	@Tag("configuration.beans")
 	@Test
 	void backsOffWhenUserDefinesOwnChatModel() {
 		contextRunner.withUserConfiguration(CustomChatModelConfiguration.class)

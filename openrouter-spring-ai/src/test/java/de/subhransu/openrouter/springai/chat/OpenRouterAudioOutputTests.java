@@ -23,6 +23,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -41,6 +42,8 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.test.StepVerifier;
 import tools.jackson.databind.ObjectMapper;
 
+@Tag("multimodal")
+@Tag("multimodal.audio-output")
 class OpenRouterAudioOutputTests {
 
 	private static final String TRANSPORT_FAILURE = "synthetic transport failure";

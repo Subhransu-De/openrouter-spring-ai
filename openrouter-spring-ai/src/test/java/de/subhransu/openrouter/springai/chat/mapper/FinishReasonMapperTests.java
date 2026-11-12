@@ -2,6 +2,7 @@ package de.subhransu.openrouter.springai.chat.mapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -11,6 +12,8 @@ import org.junit.jupiter.params.provider.CsvSource;
  * portable values. Chat-completions and responses-mode finish reasons both flow through
  * {@link FinishReasonMapper}, so a regression in either contract fails here.
  */
+@Tag("api")
+@Tag("api.response")
 class FinishReasonMapperTests {
 
 	@ParameterizedTest(name = "[{index}] \"{0}\" -> \"{1}\"")

@@ -3,10 +3,13 @@ package de.subhransu.openrouter.springai.garage.integration;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 
 /** Model compatibility sweeps started over HTTP against the OpenRouter mock. */
+@Tag("samples")
+@Tag("samples.integration")
 class GarageSweepIntegrationTests extends MockedGarageIntegrationTest {
 
   @Test

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
 import de.subhransu.openrouter.springai.chat.OpenRouterToolExecutionExceptionProcessor;
 import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingModel;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.ai.chat.model.ChatModel;
@@ -37,6 +38,8 @@ import org.springframework.boot.test.system.OutputCaptureExtension;
  * tool failures.
  */
 @ExtendWith(OutputCaptureExtension.class)
+@Tag("configuration")
+@Tag("configuration.model-selection")
 class OpenRouterMultiProviderBackoffTests {
 
 	private static final String SCOPE_WARNING = "also handles the tool calls of another provider's chat model";

@@ -11,12 +11,15 @@ import java.io.InputStream;
 import java.net.URL;
 import java.util.Enumeration;
 import java.util.Properties;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 /**
  * Boot reads {@code META-INF/spring-autoconfigure-metadata.properties} to discard
  * auto-configurations whose class conditions fail before it loads them.
  */
+@Tag("configuration")
+@Tag("configuration.metadata")
 class OpenRouterAutoConfigurationMetadataTests {
 
 	private static final String ON_CLASS = "ConditionalOnClass";

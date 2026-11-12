@@ -11,6 +11,7 @@ import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -20,12 +21,14 @@ import org.springframework.ai.content.Media;
 import org.springframework.util.MimeTypeUtils;
 import tools.jackson.databind.ObjectMapper;
 
+@Tag("multimodal")
 class GeneratedImageReuseTests {
 
 	private final ObjectMapper json = new ObjectMapper();
 
 	private final OpenRouterChatOptions options = OpenRouterChatOptions.builder().model("synthetic/model").build();
 
+	@Tag("multimodal.image-output")
 	@Test
 	void chatImagesSkipMissingPartsAndUrlsWhilePreservingOrder() {
 		var images = Arrays.asList(null, ContentPart.text("synthetic text"),
@@ -38,6 +41,7 @@ class GeneratedImageReuseTests {
 			.containsExactly(MimeTypeUtils.IMAGE_JPEG, MimeTypeUtils.IMAGE_PNG);
 	}
 
+	@Tag("multimodal.image-output")
 	@ParameterizedTest
 	@ValueSource(strings = { "png", "jpeg", "webp" })
 	void typedImageItemsRetainTheirOutputFormat(String format) {
@@ -55,6 +59,7 @@ class GeneratedImageReuseTests {
 			.isEqualTo(MimeTypeUtils.parseMimeType("image/" + format));
 	}
 
+	@Tag("multimodal.image-output")
 	@Test
 	void dataUrlFormatTakesPrecedenceAndMissingFormatDefaultsToPng() {
 		ResponsesOutputItem item = this.json.readValue("""
@@ -68,6 +73,7 @@ class GeneratedImageReuseTests {
 			.isEqualTo("data:image/png;base64,AQID");
 	}
 
+	@Tag("multimodal.input")
 	@ParameterizedTest
 	@ValueSource(booleans = { false, true })
 	void rejectsUnsupportedAssistantMediaEvenWithReasoningReplayMetadata(boolean stream) {
@@ -88,6 +94,7 @@ class GeneratedImageReuseTests {
 			.withMessageContaining("audio replay is unsupported");
 	}
 
+	@Tag("multimodal.image-output")
 	@ParameterizedTest
 	@ValueSource(strings = { "png", "jpeg", "webp" })
 	void responsesImagesCanBeReusedAsUserInput(String format) {
@@ -122,6 +129,7 @@ class GeneratedImageReuseTests {
 		}
 	}
 
+	@Tag("multimodal.input")
 	@ParameterizedTest
 	@ValueSource(booleans = { false, true })
 	void assistantImagesArePreservedOrExplicitlyRejected(boolean stream) {

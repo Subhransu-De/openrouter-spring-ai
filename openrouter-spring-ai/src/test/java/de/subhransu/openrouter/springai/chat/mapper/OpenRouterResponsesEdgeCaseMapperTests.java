@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
+import org.junit.jupiter.api.Tag;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -60,6 +61,8 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 	// Sync result edge cases
 	// ---------------------------------------------------------------------
 
+	@Tag("api")
+	@Tag("api.response")
 	@ParameterizedTest
 	@ValueSource(strings = { "[null]", "[{\"type\":\"message\",\"content\":[null]}]",
 			"[{\"type\":\"function_call\",\"name\":\"lookup\",\"arguments\":\"{}\"}]",
@@ -76,6 +79,8 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 			.verify();
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@Test
 	void concatenatesTextAcrossMultipleMessageOutputItems() {
 		ChatResponse mapped = this.responseMapper
@@ -84,6 +89,8 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 		assertThat(mapped.getResult().getOutput().getText()).isEqualTo("Hello world");
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@Test
 	void ignoresReasoningOutputItemsWhenBuildingText() {
 		ResponsesOutputItem reasoning = new ResponsesOutputItem("item-r", "reasoning", "completed", "assistant",
@@ -95,6 +102,8 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 		assertThat(mapped.getResult().getOutput().getText()).isEqualTo("final");
 	}
 
+	@Tag("tools")
+	@Tag("tools.calls")
 	@Test
 	void mapsFunctionCallOutputItemsToToolCalls() {
 		ResponsesOutputItem functionCall = new ResponsesOutputItem("item-fc", "function_call", "completed", null, null,
@@ -106,6 +115,8 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 		assertThat(mapped.getResult().getOutput().getToolCalls().get(0).id()).isEqualTo("call-1");
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@Test
 	void failedStatusRaisesApiExceptionWithStructuredError() {
 		assertThatThrownBy(() -> this.responseMapper.map(result("failed", List.of(), null,
@@ -122,6 +133,8 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 			});
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@Test
 	void streamErrorEventUsesTheSameDiagnosticPolicy() throws Exception {
 		ResponsesStreamEvent event = streamEvent("""
@@ -137,6 +150,8 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 			});
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@Test
 	void incompleteStatusMapsToIncompleteFinishReason() {
 		ChatResponse mapped = this.responseMapper.map(result("incomplete", List.of(message("partial")), null, null));
@@ -146,6 +161,8 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 		assertThat(mapped.getResult().getOutput().getText()).isEqualTo("partial");
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@Test
 	void unknownOutputItemTypeContributesNoText() {
 		ResponsesOutputItem unknown = new ResponsesOutputItem("item-x", "web_search_call", "completed", null,
@@ -156,6 +173,8 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 		assertThat(mapped.getResult().getOutput().getText()).isEqualTo("kept");
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@Test
 	void outputItemWithMissingOptionalFieldsDoesNotFail() {
 		ResponsesOutputItem sparse = new ResponsesOutputItem(null, "message", null, null, null);
@@ -164,12 +183,16 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 		assertThat(mapped.getResult().getOutput().getText()).isEmpty();
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@Test
 	void nullOutputArrayFailsValidation() {
 		assertThatThrownBy(() -> this.responseMapper.map(result("completed", null, null, null)))
 			.isInstanceOf(OpenRouterProtocolException.class);
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@Test
 	void emptyOutputArrayMapsToEmptyText() {
 		ChatResponse mapped = this.responseMapper.map(result("completed", List.of(), null, null));
@@ -181,6 +204,8 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 	// Stream event variants
 	// ---------------------------------------------------------------------
 
+	@Tag("api")
+	@Tag("api.reasoning")
 	@Test
 	void mapsReasoningTextDeltaUnderReasoningMetadata() throws Exception {
 		ChatResponse mapped = this.streamingMapper.map(streamEvent("""
@@ -191,6 +216,8 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 		assertThat(mapped.getResult().getMetadata().<String>get("openrouter.reasoning")).isEqualTo("thinking");
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.lifecycle")
 	@Test
 	void mapsIncompleteStreamEventToReasonFromDetails() throws Exception {
 		ChatResponse mapped = this.streamingMapper.map(streamEvent(
@@ -205,6 +232,8 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 		assertThat(mapped.getResult().getMetadata().getFinishReason()).isEqualTo("LENGTH");
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.aggregation")
 	@Test
 	void unknownStreamEventTypeIsANoOp() throws Exception {
 		ChatResponse mapped = this.streamingMapper.map(streamEvent("""
@@ -216,6 +245,8 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 		assertThat(mapped.hasToolCalls()).isFalse();
 	}
 
+	@Tag("observability")
+	@Tag("observability.usage")
 	@Test
 	void completedEventExtractsUsageAndIdentity() throws Exception {
 		ChatResponse mapped = this.streamingMapper.map(streamEvent("""
@@ -239,6 +270,8 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 	// Request mapper message handling
 	// ---------------------------------------------------------------------
 
+	@Tag("api")
+	@Tag("api.request")
 	@Test
 	void allSystemPromptProducesInstructionsAndEmptyInput() {
 		ResponsesRequest request = this.requestMapper.map(List.of(new SystemMessage("only system")), options(), false,
@@ -248,6 +281,8 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 		assertThat((List<?>) request.input()).isEmpty();
 	}
 
+	@Tag("tools")
+	@Tag("tools.calls")
 	@Test
 	void assistantMessageWithToolCallsOnlyMapsToFunctionCallItem() {
 		AssistantMessage toolOnly = AssistantMessage.builder()
@@ -263,6 +298,8 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 		assertThat(input.get(1)).isInstanceOf(de.subhransu.openrouter.springai.api.dto.ResponsesFunctionCall.class);
 	}
 
+	@Tag("api")
+	@Tag("api.request")
 	@Test
 	void assistantMessageWithNeitherTextNorToolsContributesNothing() {
 		AssistantMessage empty = AssistantMessage.builder().content("").build();

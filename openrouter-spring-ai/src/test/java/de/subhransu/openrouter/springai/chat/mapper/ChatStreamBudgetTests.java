@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -20,6 +21,8 @@ import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 import tools.jackson.databind.ObjectMapper;
 
+@Tag("streaming")
+@Tag("streaming.limits")
 class ChatStreamBudgetTests {
 
 	private static final ObjectMapper JSON = new ObjectMapper();

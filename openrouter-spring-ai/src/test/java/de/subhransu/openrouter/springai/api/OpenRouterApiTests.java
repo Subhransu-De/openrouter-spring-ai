@@ -7,11 +7,14 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 
 import de.subhransu.openrouter.springai.api.dto.ResponsesRequest;
 import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
+@Tag("http")
+@Tag("http.client")
 class OpenRouterApiTests {
 
 	@Test

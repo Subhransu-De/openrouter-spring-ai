@@ -15,6 +15,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.TimeoutException;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -39,6 +40,8 @@ import tools.jackson.databind.module.SimpleModule;
 
 class OpenRouterApiStreamingTests {
 
+	@Tag("streaming")
+	@Tag("streaming.sse")
 	@Test
 	void suppliedModuleIsNotSetUpAgainForStreamBinding() {
 		AtomicInteger setups = new AtomicInteger();
@@ -65,6 +68,8 @@ class OpenRouterApiStreamingTests {
 		assertThat(setups).hasValue(1);
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.sse")
 	@ParameterizedTest
 	@ValueSource(strings = { "chat", "responses", "images" })
 	void suppliedStringDeserializerReadsNormalizedTreeTokens(String endpoint) {
@@ -97,6 +102,8 @@ class OpenRouterApiStreamingTests {
 		StepVerifier.create(values.take(1)).expectNext("1.5").verifyComplete();
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.sse")
 	@Test
 	void suppliedMixInDeserializerKeepsTreeParserSemantics() {
 		ObjectMapper mapper = JsonMapper.builder().addMixIn(FunctionCall.class, FunctionMixin.class).build();
@@ -108,6 +115,8 @@ class OpenRouterApiStreamingTests {
 			.verifyComplete();
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.sse")
 	@Test
 	void binderKeepsSuppliedDeserializerOnItsTreePath() {
 		ObjectMapper mapper = JsonMapper.builder().addMixIn(FunctionCall.class, FunctionMixin.class).build();
@@ -145,6 +154,8 @@ class OpenRouterApiStreamingTests {
 			.build();
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.lifecycle")
 	@Test
 	void eofBeforeDoneIsTypedTruncation() {
 		for (String body : List.of("", "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"hi\"}}]}\n\n")) {
@@ -156,6 +167,8 @@ class OpenRouterApiStreamingTests {
 		}
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.lifecycle")
 	@Test
 	void doneTerminatesWithoutWaitingForConnectionClose() {
 		DefaultDataBufferFactory buffers = new DefaultDataBufferFactory();
@@ -171,6 +184,8 @@ class OpenRouterApiStreamingTests {
 		StepVerifier.create(api.chatCompletionStream(chatRequest())).expectComplete().verify(Duration.ofSeconds(5));
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.sse")
 	@Test
 	void parsesChunksAndFiltersDoneMarker() {
 		String sse = """
@@ -192,6 +207,8 @@ class OpenRouterApiStreamingTests {
 			.verifyComplete();
 	}
 
+	@Tag("api")
+	@Tag("api.wire")
 	@Test
 	void toleratesUnknownFieldsInStreamChunks() {
 		String sse = """
@@ -207,6 +224,8 @@ class OpenRouterApiStreamingTests {
 			.verifyComplete();
 	}
 
+	@Tag("http")
+	@Tag("http.client")
 	@Test
 	void failsStalledStreamWhenTimeoutIsConfigured() {
 		// The body emits one chunk, then stalls forever. With a short timeout the gap
@@ -240,6 +259,8 @@ class OpenRouterApiStreamingTests {
 			.verify(Duration.ofSeconds(30));
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.sse")
 	@Test
 	void keepAliveCommentsResetTheStreamTimeout() {
 		// OpenRouter emits ": OPENROUTER PROCESSING" SSE comments as keep-alives during
@@ -277,6 +298,8 @@ class OpenRouterApiStreamingTests {
 			.verifyComplete();
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@Test
 	void emitsApiExceptionOnErrorStatus() {
 		OpenRouterApi api = apiRespondingWith(HttpStatus.UNAUTHORIZED, MediaType.APPLICATION_JSON_VALUE,

@@ -22,6 +22,7 @@ import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -53,6 +54,8 @@ class OpenRouterChatModelStreamingTests {
 		return new ResponsesStreamEvent("response.output_text.delta", text, null, null, null);
 	}
 
+	@Tag("api")
+	@Tag("api.request")
 	@Test
 	void defaultModeStreamsViaChatCompletionsAndSetsStreamTrue() {
 		OpenRouterApi api = mock(OpenRouterApi.class);
@@ -74,6 +77,8 @@ class OpenRouterChatModelStreamingTests {
 		verify(api, never()).responsesStream(any());
 	}
 
+	@Tag("api")
+	@Tag("api.request")
 	@Test
 	void responsesModeStreamsViaResponsesStreamAndSetsStreamTrue() {
 		OpenRouterApi api = mock(OpenRouterApi.class);
@@ -97,6 +102,8 @@ class OpenRouterChatModelStreamingTests {
 		verify(api, never()).chatCompletionStream(any());
 	}
 
+	@Tag("api")
+	@Tag("api.options")
 	@Test
 	void runtimeOptionsWithoutModeReplaceConfiguredResponsesDefaultMode() {
 		OpenRouterApi api = mock(OpenRouterApi.class);
@@ -120,6 +127,8 @@ class OpenRouterChatModelStreamingTests {
 		verify(api, never()).responsesStream(any());
 	}
 
+	@Tag("api")
+	@Tag("api.options")
 	@Test
 	void runtimeModeOverridesConfiguredDefaultMode() {
 		OpenRouterApi api = mock(OpenRouterApi.class);
@@ -141,6 +150,8 @@ class OpenRouterChatModelStreamingTests {
 		verify(api, never()).responsesStream(any());
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.lifecycle")
 	@Test
 	void chatCompletionsStreamPropagatesApiErrorsToTheCaller() {
 		OpenRouterApiException failure = new OpenRouterApiException("stream failed", HttpStatus.BAD_GATEWAY, "{}");
@@ -155,6 +166,8 @@ class OpenRouterChatModelStreamingTests {
 			.verify(Duration.ofSeconds(5));
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.lifecycle")
 	@Test
 	void responsesStreamPropagatesApiErrorsToTheCaller() {
 		OpenRouterApiException failure = new OpenRouterApiException("stream failed", HttpStatus.SERVICE_UNAVAILABLE,
@@ -173,6 +186,8 @@ class OpenRouterChatModelStreamingTests {
 			.verify(Duration.ofSeconds(5));
 	}
 
+	@Tag("http")
+	@Tag("http.retry")
 	@ParameterizedTest
 	@ValueSource(booleans = { false, true })
 	void transientResponsesFailureDoesNotResubscribe(boolean partialOutput) {
@@ -200,6 +215,8 @@ class OpenRouterChatModelStreamingTests {
 		verify(api, never()).responses(any());
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.lifecycle")
 	@Test
 	void streamCompletesEmptyWhenProviderEmitsNoChunks() {
 		OpenRouterApi api = mock(OpenRouterApi.class);

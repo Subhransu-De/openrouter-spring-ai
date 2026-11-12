@@ -6,12 +6,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterChatRequestMapper;
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterResponsesRequestMapper;
 import java.util.List;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
 import tools.jackson.databind.ObjectMapper;
 
+@Tag("configuration")
+@Tag("configuration.properties")
 class OpenRouterExtensionPropertiesTests {
 
 	private final ApplicationContextRunner runner = new ApplicationContextRunner().withUserConfiguration(Config.class);

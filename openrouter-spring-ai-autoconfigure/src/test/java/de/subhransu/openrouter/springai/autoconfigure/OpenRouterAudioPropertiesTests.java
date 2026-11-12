@@ -5,10 +5,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import de.subhransu.openrouter.springai.chat.OpenRouterAudioOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
+@Tag("configuration")
+@Tag("configuration.properties")
 class OpenRouterAudioPropertiesTests {
 
 	private final ApplicationContextRunner runner = new ApplicationContextRunner()

@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -49,6 +50,7 @@ import tools.jackson.databind.ObjectMapper;
  * the caller as tool-call metadata on the emitted {@link ChatResponse} and never invokes
  * the tool callback. The behavior is identical in chat-completions and responses mode.
  */
+@Tag("tools")
 class OpenRouterChatModelStreamingToolCallTests {
 
 	private static final String CHUNK_OBJECT = "chat.completion.chunk";
@@ -62,6 +64,7 @@ class OpenRouterChatModelStreamingToolCallTests {
 		return "sunny";
 	}).description("Look up the weather").inputType(Map.class).build();
 
+	@Tag("tools.stream-assembly")
 	@ParameterizedTest
 	@ValueSource(ints = { 1, 4 })
 	void finelyFragmentedParallelCallsRetainArgumentsAndBufferedUsage(int toolCount) {
@@ -129,6 +132,7 @@ class OpenRouterChatModelStreamingToolCallTests {
 		}
 	}
 
+	@Tag("tools.stream-assembly")
 	@Test
 	void advisorNeverExecutesUnterminatedToolCallsOrReplaysTheStream() {
 		for (String arguments : List.of("", "{", "{}")) {
@@ -152,6 +156,7 @@ class OpenRouterChatModelStreamingToolCallTests {
 		}
 	}
 
+	@Tag("tools.execution")
 	@Test
 	void chatCompletionsStreamingSurfacesToolCallWithoutExecutingIt() {
 		OpenRouterApi api = mock(OpenRouterApi.class);
@@ -184,6 +189,7 @@ class OpenRouterChatModelStreamingToolCallTests {
 		assertThat(this.toolInvoked).isFalse();
 	}
 
+	@Tag("tools.execution")
 	@Test
 	void responsesStreamingSurfacesToolCallWithoutExecutingIt() {
 		OpenRouterApi api = mock(OpenRouterApi.class);

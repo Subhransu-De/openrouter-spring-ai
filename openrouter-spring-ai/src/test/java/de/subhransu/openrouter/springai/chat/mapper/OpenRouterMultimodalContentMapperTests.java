@@ -11,6 +11,7 @@ import de.subhransu.openrouter.springai.api.dto.ResponsesRequest;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import java.net.URI;
 import java.util.List;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
@@ -22,6 +23,8 @@ import org.springframework.util.MimeTypeUtils;
  * chat-completions multimodal parts array and the responses-mode {@code input_image}
  * content items.
  */
+@Tag("multimodal")
+@Tag("multimodal.input")
 class OpenRouterMultimodalContentMapperTests {
 
 	private static final String QUESTION = "What is in this image?";

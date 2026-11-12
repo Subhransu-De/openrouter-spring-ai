@@ -17,6 +17,7 @@ import de.subhransu.openrouter.springai.errors.OpenRouterHttpException;
 import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -29,6 +30,8 @@ import org.springframework.web.client.RestClient;
  * Wire-contract tests for {@code POST /images}: endpoint path, method, headers and the
  * snake_case field names of OpenRouter's unified Image API are pinned here.
  */
+@Tag("multimodal")
+@Tag("multimodal.image-model")
 class OpenRouterApiImagesContractTests {
 
 	private static final String BASE_URL = "https://openrouter.test/api/v1";

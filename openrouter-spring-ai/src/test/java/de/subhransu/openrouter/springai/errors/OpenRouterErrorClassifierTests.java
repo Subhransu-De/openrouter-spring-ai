@@ -3,9 +3,12 @@ package de.subhransu.openrouter.springai.errors;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.jspecify.annotations.Nullable;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
+@Tag("http")
+@Tag("http.errors")
 class OpenRouterErrorClassifierTests {
 
 	@ParameterizedTest(name = "[{index}] status {0}, type [{1}], code {2} -> {3}")

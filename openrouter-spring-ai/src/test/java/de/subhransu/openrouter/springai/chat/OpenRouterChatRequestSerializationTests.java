@@ -20,6 +20,7 @@ import de.subhransu.openrouter.springai.chat.mapper.OpenRouterChatRequestMapper;
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterResponsesRequestMapper;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
@@ -87,6 +88,8 @@ class OpenRouterChatRequestSerializationTests {
 	// Core sampling and identity options
 	// ---------------------------------------------------------------------
 
+	@Tag("api")
+	@Tag("api.request")
 	@Test
 	void serializesModelAndModelsFallbackList() {
 		JsonNode json = serializeChat(base().models(List.of(FALLBACK_MODEL, "openai/gpt-5.4")).build());
@@ -97,6 +100,8 @@ class OpenRouterChatRequestSerializationTests {
 		assertThat(json.path("models").get(1).stringValue()).isEqualTo("openai/gpt-5.4");
 	}
 
+	@Tag("api")
+	@Tag("api.request")
 	@Test
 	void serializesSamplingScalarsUnderSnakeCaseNames() {
 		JsonNode json = serializeChat(base().temperature(0.7)
@@ -133,6 +138,8 @@ class OpenRouterChatRequestSerializationTests {
 		assertThat(json.has("frequencyPenalty")).isFalse();
 	}
 
+	@Tag("api")
+	@Tag("api.request")
 	@Test
 	void serializesStreamFlagAndUsageInclude() {
 		ChatCompletionRequest streamed = this.chatMapper.map(List.of(new UserMessage("hi")),
@@ -147,6 +154,8 @@ class OpenRouterChatRequestSerializationTests {
 	// Response format / structured output
 	// ---------------------------------------------------------------------
 
+	@Tag("api")
+	@Tag("api.request")
 	@Test
 	void serializesExplicitResponseFormat() {
 		JsonNode json = serializeChat(base().responseFormat(OpenRouterResponseFormat.jsonObject()).build());
@@ -154,6 +163,8 @@ class OpenRouterChatRequestSerializationTests {
 		assertThat(json.path("response_format").path("type").stringValue()).isEqualTo("json_object");
 	}
 
+	@Tag("api")
+	@Tag("api.request")
 	@Test
 	void serializesTypedJsonSchemaResponseFormatWithNameAndStrict() {
 		String schema = """
@@ -176,6 +187,8 @@ class OpenRouterChatRequestSerializationTests {
 			.isEqualTo("object");
 	}
 
+	@Tag("api")
+	@Tag("api.request")
 	@Test
 	void serializesOutputSchemaAsJsonSchemaResponseFormat() {
 		String schema = """
@@ -196,6 +209,8 @@ class OpenRouterChatRequestSerializationTests {
 			.isEqualTo("object");
 	}
 
+	@Tag("api")
+	@Tag("api.request")
 	@Test
 	void explicitResponseFormatTakesPrecedenceOverOutputSchema() {
 		JsonNode json = serializeChat(base().responseFormat(OpenRouterResponseFormat.jsonObject()).outputSchema("""
@@ -209,6 +224,8 @@ class OpenRouterChatRequestSerializationTests {
 		assertThat(json.path("response_format").path("type").stringValue()).isEqualTo("json_object");
 	}
 
+	@Tag("api")
+	@Tag("api.request")
 	@Test
 	void malformedOutputSchemaThrowsTypedExceptionWithUsefulMessage() {
 		assertThatThrownBy(() -> serializeChat(base().outputSchema("{not valid json").build()))
@@ -216,6 +233,8 @@ class OpenRouterChatRequestSerializationTests {
 			.hasMessageContaining("Invalid JSON schema");
 	}
 
+	@Tag("tools")
+	@Tag("tools.definition")
 	@Test
 	void malformedToolSchemaThrowsTypedException() {
 		ToolDefinition badTool = ToolDefinition.builder()
@@ -233,6 +252,8 @@ class OpenRouterChatRequestSerializationTests {
 	// Tools
 	// ---------------------------------------------------------------------
 
+	@Tag("tools")
+	@Tag("tools.definition")
 	@Test
 	void serializesToolsToolChoiceAndParallelToolCalls() {
 		JsonNode json = serializeChat(base().toolChoice(Map.of("type", "auto")).parallelToolCalls(true).build(),
@@ -246,6 +267,8 @@ class OpenRouterChatRequestSerializationTests {
 		assertThat(json.path(PARALLEL_TOOL_CALLS).asBoolean()).isTrue();
 	}
 
+	@Tag("tools")
+	@Tag("tools.definition")
 	@Test
 	void serializesStringFormToolChoiceVerbatim() {
 		// tool_choice accepts a named function object or a bare string
@@ -257,6 +280,8 @@ class OpenRouterChatRequestSerializationTests {
 		assertThat(json.path("tool_choice").stringValue()).isEqualTo("none");
 	}
 
+	@Tag("api")
+	@Tag("api.request")
 	@Test
 	void parallelToolCallsFalseIsNotOmitted() {
 		// NON_EMPTY would drop an empty collection, but a Boolean.FALSE is meaningful and
@@ -271,6 +296,8 @@ class OpenRouterChatRequestSerializationTests {
 	// Provider routing, reasoning, service tier, metadata, route
 	// ---------------------------------------------------------------------
 
+	@Tag("api")
+	@Tag("api.request")
 	@Test
 	void serializesProviderRoutingPreferences() {
 		OpenRouterProviderPreferences provider = new OpenRouterProviderPreferences(true, false, "deny",
@@ -286,6 +313,8 @@ class OpenRouterChatRequestSerializationTests {
 		assertThat(json.path("sort").stringValue()).isEqualTo("throughput");
 	}
 
+	@Tag("api")
+	@Tag("api.reasoning")
 	@Test
 	void serializesReasoningEffortFields() {
 		JsonNode json = serializeChat(
@@ -298,6 +327,8 @@ class OpenRouterChatRequestSerializationTests {
 		assertThat(json.path("enabled").asBoolean()).isTrue();
 	}
 
+	@Tag("api")
+	@Tag("api.reasoning")
 	@Test
 	void serializesReasoningTokenBudgetWithoutEffort() {
 		JsonNode json = serializeChat(base().reasoning(new OpenRouterReasoningOptions(null, 1024, false, true)).build())
@@ -307,6 +338,8 @@ class OpenRouterChatRequestSerializationTests {
 		assertThat(json.has("effort")).isFalse();
 	}
 
+	@Tag("api")
+	@Tag("api.request")
 	@Test
 	void serializesServiceTierAsLowercaseWireValue() {
 		JsonNode json = serializeChat(base().serviceTier(OpenRouterServiceTier.FLEX).build());
@@ -314,6 +347,8 @@ class OpenRouterChatRequestSerializationTests {
 		assertThat(json.path("service_tier").stringValue()).isEqualTo("flex");
 	}
 
+	@Tag("api")
+	@Tag("api.request")
 	@Test
 	void serializesMetadataAndRoute() {
 		JsonNode json = serializeChat(base().metadata(Map.of("trace", "abc")).route("fallback").build());
@@ -326,6 +361,8 @@ class OpenRouterChatRequestSerializationTests {
 	// Null omission
 	// ---------------------------------------------------------------------
 
+	@Tag("api")
+	@Tag("api.request")
 	@Test
 	void omitsNullAndUnsetFields() {
 		JsonNode json = serializeChat(base().build());
@@ -340,6 +377,8 @@ class OpenRouterChatRequestSerializationTests {
 		assertThat(json.has("service_tier")).isFalse();
 	}
 
+	@Tag("api")
+	@Tag("api.request")
 	@Test
 	void omitsExplicitlyEmptyCollections() {
 		// NON_EMPTY must drop empty lists/maps: OpenRouter rejects some empty arrays
@@ -351,6 +390,8 @@ class OpenRouterChatRequestSerializationTests {
 		assertThat(json.has("metadata")).isFalse();
 	}
 
+	@Tag("api")
+	@Tag("api.request")
 	@Test
 	void omitsNullProviderPreferenceFields() {
 		// ProviderPreferences serializes NON_NULL: a preferences object with only one
@@ -372,6 +413,8 @@ class OpenRouterChatRequestSerializationTests {
 	// Message shapes (chat-completions)
 	// ---------------------------------------------------------------------
 
+	@Tag("api")
+	@Tag("api.request")
 	@Test
 	void serializesUserSystemAssistantAndToolMessages() {
 		AssistantMessage assistant = AssistantMessage.builder()
@@ -395,6 +438,8 @@ class OpenRouterChatRequestSerializationTests {
 		assertThat(json.get(3).path("tool_call_id").stringValue()).isEqualTo("call-1");
 	}
 
+	@Tag("tools")
+	@Tag("tools.calls")
 	@Test
 	void serializesToolResponseMessageWithMultipleResponses() {
 		ToolResponseMessage multi = ToolResponseMessage.builder()
@@ -413,6 +458,8 @@ class OpenRouterChatRequestSerializationTests {
 	// Responses-mode option fields (wire names + camelCase guards)
 	// ---------------------------------------------------------------------
 
+	@Tag("api")
+	@Tag("api.request")
 	@Test
 	void serializesResponsesOptionFieldsUnderSnakeCaseNames() {
 		JsonNode json = serializeResponses(base().models(List.of(FALLBACK_MODEL))
@@ -461,6 +508,8 @@ class OpenRouterChatRequestSerializationTests {
 		assertThat(json.has("toolChoice")).isFalse();
 	}
 
+	@Tag("api")
+	@Tag("api.reasoning")
 	@Test
 	void serializesResponsesReasoningTokenBudgetWithoutEffort() {
 		JsonNode json = serializeResponses(
@@ -471,6 +520,8 @@ class OpenRouterChatRequestSerializationTests {
 		assertThat(json.path("reasoning").has("effort")).isFalse();
 	}
 
+	@Tag("api")
+	@Tag("api.request")
 	@Test
 	void responsesMaxOutputTokensPrefersMaxCompletionTokensOverMaxTokens() {
 		JsonNode fallback = serializeResponses(base().maxTokens(256).build(), List.of(new UserMessage("hi")),
@@ -482,6 +533,8 @@ class OpenRouterChatRequestSerializationTests {
 		assertThat(preferred.path(MAX_OUTPUT_TOKENS).asInt()).isEqualTo(512);
 	}
 
+	@Tag("api")
+	@Tag("api.request")
 	@Test
 	void omitsNullAndUnsetResponsesFields() {
 		JsonNode json = serializeResponses(base().build(), List.of(new UserMessage("hi")), List.of());
@@ -495,6 +548,8 @@ class OpenRouterChatRequestSerializationTests {
 		assertThat(json.has(MAX_OUTPUT_TOKENS)).isFalse();
 	}
 
+	@Tag("api")
+	@Tag("api.request")
 	@ParameterizedTest
 	@ValueSource(strings = { "stopSequences", "seed", "repetitionPenalty", "minP", "topA", "includeUsage" })
 	void rejectsUnsupportedResponsesOptions(String name) throws Exception {
@@ -519,6 +574,8 @@ class OpenRouterChatRequestSerializationTests {
 		}
 	}
 
+	@Tag("api")
+	@Tag("api.request")
 	@ParameterizedTest
 	@ValueSource(booleans = { false, true })
 	void structuredFormatsAndNamedToolsArePortable(boolean stream) {
@@ -562,6 +619,8 @@ class OpenRouterChatRequestSerializationTests {
 			.hasMessageContaining("Invalid JSON schema");
 	}
 
+	@Tag("tools")
+	@Tag("tools.definition")
 	@ParameterizedTest
 	@ValueSource(strings = { "{\"type\":\"function\",\"name\":\"get_weather\"}",
 			"{\"type\":\"function\",\"function\":{\"name\":\"get_weather\"}}" })
@@ -577,6 +636,8 @@ class OpenRouterChatRequestSerializationTests {
 		}
 	}
 
+	@Tag("tools")
+	@Tag("tools.definition")
 	@ParameterizedTest
 	@ValueSource(strings = { "auto", "none", "required", "{\"type\":\"auto\"}", "{\"type\":\"none\"}",
 			"{\"type\":\"required\"}", "{\"type\":\"function\",\"name\":\"get_weather\"}",
@@ -597,6 +658,8 @@ class OpenRouterChatRequestSerializationTests {
 		}
 	}
 
+	@Tag("tools")
+	@Tag("tools.definition")
 	@ParameterizedTest
 	@ValueSource(strings = { "\"unknown\"", "{}", "{\"type\":\"unknown\"}", "{\"type\":\"function\",\"name\":\" \"}",
 			"{\"type\":\"function\",\"name\":1}", "{\"type\":\"function\",\"function\":{}}" })
@@ -609,6 +672,8 @@ class OpenRouterChatRequestSerializationTests {
 			.hasMessageContaining("toolChoice");
 	}
 
+	@Tag("api")
+	@Tag("api.request")
 	@ParameterizedTest
 	@MethodSource("optionContracts")
 	void everyOptionIsMappedClientOnlyOrRejected(String name, Object value, String chatPath, String responsesPath)
@@ -700,6 +765,8 @@ class OpenRouterChatRequestSerializationTests {
 	// Responses-mode system message handling
 	// ---------------------------------------------------------------------
 
+	@Tag("api")
+	@Tag("api.request")
 	@Test
 	void joinsMultipleSystemMessagesIntoResponsesInstructions() {
 		JsonNode json = serializeResponses(base().build(),
@@ -708,6 +775,8 @@ class OpenRouterChatRequestSerializationTests {
 		assertThat(json.path("instructions").stringValue()).isEqualTo("first\nsecond");
 	}
 
+	@Tag("api")
+	@Tag("api.request")
 	@Test
 	void filtersBlankSystemMessagesFromResponsesInstructions() {
 		JsonNode json = serializeResponses(base().build(),
@@ -716,6 +785,8 @@ class OpenRouterChatRequestSerializationTests {
 		assertThat(json.path("instructions").stringValue()).isEqualTo("keep");
 	}
 
+	@Tag("api")
+	@Tag("api.request")
 	@Test
 	void serializesNonEnglishContent() {
 		JsonNode json = serializeChat(base().build(), List.of(new UserMessage("こんにちは世界 🌍 Köln")), List.of());

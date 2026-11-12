@@ -8,12 +8,15 @@ import static com.tngtech.archunit.library.GeneralCodingRules.ASSERTIONS_SHOULD_
 import com.tngtech.archunit.core.domain.JavaModifier;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
+import com.tngtech.archunit.junit.ArchTag;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 
 @AnalyzeClasses(packages = "de.subhransu.openrouter.springai.autoconfigure",
 		importOptions = ImportOption.DoNotIncludeTests.class)
+@ArchTag("build-release")
+@ArchTag("build-release.architecture")
 class AutoconfigureArchitectureTests {
 
 	private AutoconfigureArchitectureTests() {

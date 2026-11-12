@@ -5,11 +5,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import de.subhransu.openrouter.springai.autoconfigure.OpenRouterChatProperties;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import java.util.Map;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
 
+@Tag("samples")
+@Tag("samples.run-plan")
 class GarageCoverageProfileTests {
 
   @Test

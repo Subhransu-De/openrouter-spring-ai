@@ -35,7 +35,10 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 import java.nio.charset.StandardCharsets;
+import org.junit.jupiter.api.Tag;
 
+@Tag("multimodal")
+@Tag("multimodal.image-model")
 class ImageResponseContractTests {
 
 	private static final ImagePrompt PROMPT = new ImagePrompt("synthetic image");

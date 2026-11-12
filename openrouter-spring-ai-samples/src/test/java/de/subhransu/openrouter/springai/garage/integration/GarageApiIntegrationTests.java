@@ -3,12 +3,15 @@ package de.subhransu.openrouter.springai.garage.integration;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import tools.jackson.databind.JsonNode;
 
 /** Run scheduling and per-run settings, observed at the OpenRouter wire. */
+@Tag("samples")
+@Tag("samples.integration")
 class GarageApiIntegrationTests extends MockedGarageIntegrationTest {
 
   private static final String ROUTING =

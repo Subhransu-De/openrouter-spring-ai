@@ -4,12 +4,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import de.subhransu.openrouter.springai.api.dto.Usage;
 import de.subhransu.openrouter.springai.chat.OpenRouterUsage;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 /**
  * Pins usage mapping: flat versus nested cached/reasoning token sources, their
  * precedence, null handling, cost, and the null-usage case.
  */
+@Tag("observability")
+@Tag("observability.usage")
 class UsageMapperTests {
 
 	@Test

@@ -23,6 +23,7 @@ import de.subhransu.openrouter.springai.api.dto.ToolCall;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -42,6 +43,7 @@ import org.springframework.ai.tool.function.FunctionToolCallback;
  * {@code ChatClient}. Failure modes and multi-round flow live in
  * {@code OpenRouterChatModelToolCallingFailureTests}.
  */
+@Tag("tools")
 class OpenRouterChatModelToolCallingTests {
 
 	private static final String BERLIN_ARGS = "{\"city\":\"Berlin\"}";
@@ -69,6 +71,7 @@ class OpenRouterChatModelToolCallingTests {
 		return ChatClient.builder(model).defaultAdvisors(ToolCallingAdvisor.builder().build()).build();
 	}
 
+	@Tag("tools.execution")
 	@Test
 	void clientCombinesDefaultAndRequestToolsAndExecutesDefaultTool() {
 		ToolCallback requestTool = FunctionToolCallback.builder("get_time", (Map<String, Object> input) -> "12:00")
@@ -102,6 +105,7 @@ class OpenRouterChatModelToolCallingTests {
 		});
 	}
 
+	@Tag("tools.calls")
 	@ParameterizedTest
 	@ValueSource(booleans = { false, true })
 	void advisorExecutesToolsAndSendsResultsBackInChatCompletionsMode(boolean strict) {
@@ -140,6 +144,7 @@ class OpenRouterChatModelToolCallingTests {
 		});
 	}
 
+	@Tag("tools.calls")
 	@ParameterizedTest
 	@ValueSource(booleans = { false, true })
 	void advisorExecutesToolsAndSendsResultsBackInResponsesMode(boolean strict) {
@@ -181,6 +186,7 @@ class OpenRouterChatModelToolCallingTests {
 		});
 	}
 
+	@Tag("tools.execution")
 	@Test
 	void modelSurfacesToolCallsWithoutExecutingThem() {
 		// Spring AI 2.0 contract: the raw ChatModel never runs the tool loop. A
@@ -202,6 +208,7 @@ class OpenRouterChatModelToolCallingTests {
 		verify(api, times(1)).chatCompletion(any());
 	}
 
+	@Tag("tools.definition")
 	@Test
 	void toolsConfiguredAsModelDefaultsAreAdvertisedOnTheWire() {
 		OpenRouterApi api = mock(OpenRouterApi.class);
@@ -221,6 +228,7 @@ class OpenRouterChatModelToolCallingTests {
 		assertThat(captor.getValue().tools().get(0).function().name()).isEqualTo("get_weather");
 	}
 
+	@Tag("tools.definition")
 	@Test
 	void runtimeToolCallbacksReplaceModelDefaultsOnTheWire() {
 		// Framework merge semantics: runtime tool callbacks replace the defaults

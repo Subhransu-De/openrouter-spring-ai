@@ -3,8 +3,11 @@ package de.subhransu.openrouter.springai.chat;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
+@Tag("api")
+@Tag("api.reasoning")
 class OpenRouterReasoningOptionsTests {
 
 	@Test

@@ -32,6 +32,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Named;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -47,6 +48,8 @@ class OpenRouterStreamingToolCallLimitTests {
 
 	private static final Duration TEST_DURATION = Duration.ofSeconds(30);
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@ParameterizedTest
 	@ValueSource(ints = { 0, -1 })
 	void rejectsNonPositiveLimits(int limit) {
@@ -55,6 +58,8 @@ class OpenRouterStreamingToolCallLimitTests {
 		assertThatIllegalArgumentException().isThrownBy(() -> aggregator(1, 1, Duration.ofMillis(limit)));
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@Test
 	void requiresMapperAndDurationAtConstruction() {
 		assertThatIllegalArgumentException()
@@ -62,6 +67,8 @@ class OpenRouterStreamingToolCallLimitTests {
 		assertThatIllegalArgumentException().isThrownBy(() -> aggregator(1, 1, null));
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@Test
 	void completedCallsReleaseTheirByteAndChunkBudgets() {
 		ChatCompletionChunk first = toolChunk("{}");
@@ -73,6 +80,8 @@ class OpenRouterStreamingToolCallLimitTests {
 			.verifyComplete();
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@Test
 	void choiceLessChunksAreReleasedAndEmittedOnlyOnceBetweenCalls() {
 		ChatCompletionChunk first = toolChunk("{}");
@@ -89,6 +98,8 @@ class OpenRouterStreamingToolCallLimitTests {
 			.verifyComplete();
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@Test
 	void choiceLessChunksCountAgainstTheSharedBudget() {
 		ChatCompletionChunk concurrent = chunk(List.of(toolChoice(0, "first", "{"), toolChoice(1, "second", "{")));
@@ -101,6 +112,8 @@ class OpenRouterStreamingToolCallLimitTests {
 			.verify();
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.lifecycle")
 	@ParameterizedTest
 	@ValueSource(strings = { "complete", "cancel", "error", "limit", "truncated" })
 	void terminationDisposesPendingAssemblyTimers(String termination) {
@@ -143,6 +156,8 @@ class OpenRouterStreamingToolCallLimitTests {
 		return Stream.of(Arguments.of(Named.of("just below", bytes + 1)), Arguments.of(Named.of("exact", bytes)));
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@ParameterizedTest(name = "assembled bytes are {0} the limit")
 	@MethodSource("acceptedByteBoundaries")
 	void acceptsToolCallBytesThroughTheExactLimit(long maxBytes) {
@@ -154,6 +169,8 @@ class OpenRouterStreamingToolCallLimitTests {
 			.verifyComplete();
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@ParameterizedTest(name = "{0} mapper")
 	@MethodSource("byteCountingMappers")
 	void byteBudgetChargesTheSerializedSizeOfEveryChunk(ObjectMapper mapper) {
@@ -204,6 +221,8 @@ class OpenRouterStreamingToolCallLimitTests {
 						JsonMapper.builder(JsonFactory.builder().outputDecorator(closingMarker).build()).build())));
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@ParameterizedTest(name = "assembled chunk count is {0} the limit")
 	@MethodSource("acceptedChunkBoundaries")
 	void acceptsToolCallChunksThroughTheExactLimit(int maxChunks) {
@@ -218,6 +237,8 @@ class OpenRouterStreamingToolCallLimitTests {
 		return Stream.of(Arguments.of(Named.of("just below", 2)), Arguments.of(Named.of("exact", 1)));
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@ParameterizedTest(name = "over-limit {0} assembly cancels its source")
 	@MethodSource("overLimitAggregators")
 	void overLimitAssemblyFailsWithTypedExceptionAndCancelsSource(OpenRouterStreamingToolCallAggregator aggregator,
@@ -244,6 +265,8 @@ class OpenRouterStreamingToolCallLimitTests {
 						OpenRouterLimitExceededException.Limit.STREAMING_TOOL_CALL_CHUNKS));
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@ParameterizedTest
 	@MethodSource("durationLimits")
 	void durationLimitFailsWithTypedExceptionAndCancelsSource(Duration duration) {
@@ -264,6 +287,8 @@ class OpenRouterStreamingToolCallLimitTests {
 		assertThat(cancelled).isTrue();
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@Test
 	void aggregateLimitAppliesAcrossConcurrentChoices() {
 		AtomicBoolean cancelled = new AtomicBoolean();
@@ -280,6 +305,8 @@ class OpenRouterStreamingToolCallLimitTests {
 		assertThat(cancelled).isTrue();
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@Test
 	void aggregateByteLimitAppliesAcrossConcurrentChoices() {
 		AtomicBoolean cancelled = new AtomicBoolean();

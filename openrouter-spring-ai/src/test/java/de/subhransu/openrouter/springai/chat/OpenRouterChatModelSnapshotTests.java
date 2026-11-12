@@ -17,6 +17,7 @@ import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -25,6 +26,8 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.test.StepVerifier;
 
+@Tag("api")
+@Tag("api.options")
 class OpenRouterChatModelSnapshotTests {
 
 	@ParameterizedTest

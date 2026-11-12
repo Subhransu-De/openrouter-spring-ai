@@ -15,17 +15,20 @@ import java.nio.file.Path;
 import java.util.List;
 import org.jetbrains.kotlin.cli.common.ExitCode;
 import org.jetbrains.kotlin.cli.jvm.K2JVMCompiler;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import tools.jackson.databind.ObjectMapper;
 
+@Tag("api")
 class PublicApiNullabilityTests {
 
 	@TempDir
 	Path directory;
 
+	@Tag("api.contract")
 	@Test
 	void kotlinConsumerCanUseNullableOptionsResponsesAndCustomPolicy() throws IOException {
 		compile("""
@@ -63,6 +66,7 @@ class PublicApiNullabilityTests {
 				""", ExitCode.OK);
 	}
 
+	@Tag("api.contract")
 	@ParameterizedTest
 	@ValueSource(strings = { "fun invalid(o: OpenRouterChatOptions): String = o.model",
 			"fun invalid(r: ChatCompletionResponse): Usage = r.usage()",
@@ -79,6 +83,7 @@ class PublicApiNullabilityTests {
 				""" + source, ExitCode.COMPILATION_ERROR);
 	}
 
+	@Tag("api.options")
 	@Test
 	void nullRuntimeOptionInheritsEvenWhenSwitchingRequestMode() {
 		var defaults = OpenRouterChatOptions.builder().seed(7).build();

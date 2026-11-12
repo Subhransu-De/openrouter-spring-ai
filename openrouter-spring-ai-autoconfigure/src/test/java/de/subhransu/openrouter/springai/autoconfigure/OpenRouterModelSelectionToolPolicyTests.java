@@ -22,6 +22,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.ai.chat.client.ChatClient;
@@ -46,6 +47,8 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 
+@Tag("configuration")
+@Tag("configuration.tools")
 class OpenRouterModelSelectionToolPolicyTests {
 
 	@ParameterizedTest

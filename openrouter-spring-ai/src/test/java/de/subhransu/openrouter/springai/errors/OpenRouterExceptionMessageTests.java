@@ -9,12 +9,15 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import tools.jackson.databind.ObjectMapper;
 
+@Tag("http")
+@Tag("http.errors")
 class OpenRouterExceptionMessageTests {
 
 	private static final String SYNTHETIC_KEY = "synthetic-Key+/=_9";

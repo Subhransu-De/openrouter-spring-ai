@@ -11,6 +11,7 @@ import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -28,6 +29,8 @@ class OpenRouterResponsePreservationTests {
 
 	private final ObjectMapper json = new ObjectMapper();
 
+	@Tag("api")
+	@Tag("api.response")
 	@ParameterizedTest
 	@CsvSource({ "completed,,STOP", "incomplete,max_output_tokens,LENGTH", "incomplete,content_filter,CONTENT_FILTER",
 			"incomplete,future_reason,future_reason", "incomplete,,incomplete" })
@@ -48,6 +51,8 @@ class OpenRouterResponsePreservationTests {
 		}
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@Test
 	void preservesWhitespaceAndNullTextAcrossPartsAndMessagesWithoutRepeatingTerminalText() {
 		ResponsesResult result = this.json.readValue("""
@@ -75,6 +80,8 @@ class OpenRouterResponsePreservationTests {
 			.verifyComplete();
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@ParameterizedTest
 	@ValueSource(strings = { "stop", "content_filter" })
 	void chatRefusalRemainsSeparateFromContentAndPreservesActualFinishReason(String finish) {
@@ -89,6 +96,8 @@ class OpenRouterResponsePreservationTests {
 			.isEqualTo("stop".equals(finish) ? "STOP" : "CONTENT_FILTER");
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.aggregation")
 	@Test
 	void chatRefusalDeltasAccumulatePerChoiceAndSubscription() {
 		Flux<ChatCompletionChunk> chunks = Flux.just("""
@@ -109,6 +118,8 @@ class OpenRouterResponsePreservationTests {
 		}
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.aggregation")
 	@ParameterizedTest
 	@ValueSource(booleans = { true, false })
 	void responsesRefusalsSurviveDeltasDoneAndTerminalSnapshots(boolean deltas) {
@@ -142,6 +153,8 @@ class OpenRouterResponsePreservationTests {
 		}
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.aggregation")
 	@Test
 	void toolCallBufferingRetainsRefusalFragments() {
 		Flux<ChatCompletionChunk> chunks = Flux.just("""
@@ -160,6 +173,8 @@ class OpenRouterResponsePreservationTests {
 			.verifyComplete();
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.aggregation")
 	@Test
 	void indexedRefusalDoneEventsReplaceOnlyTheirOwnPart() {
 		Flux<ResponsesStreamEvent> events = Flux.just("""
@@ -184,6 +199,8 @@ class OpenRouterResponsePreservationTests {
 			.verifyComplete();
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@Test
 	void ordinaryEmptyResponsesHaveNoRefusalMetadata() {
 		ChatResponse response = new OpenRouterResponsesResponseMapper()

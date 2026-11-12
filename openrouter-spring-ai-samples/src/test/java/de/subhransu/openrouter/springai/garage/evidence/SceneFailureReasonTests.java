@@ -4,8 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import java.util.List;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
+@Tag("samples")
+@Tag("samples.evidence")
 class SceneFailureReasonTests {
 
   private static final IllegalStateException CHECK = new IllegalStateException("synthetic check failed");

@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -24,6 +25,8 @@ import reactor.test.StepVerifier;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+@Tag("multimodal")
+@Tag("multimodal.input")
 class MultimodalHttpContractTests {
 
 	@ParameterizedTest

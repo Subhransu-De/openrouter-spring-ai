@@ -2,10 +2,13 @@ package de.subhransu.openrouter.springai.chat.errors;
 
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
 import java.util.Map;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@Tag("api")
+@Tag("api.response")
 class OpenRouterChoiceErrorDetailsTests {
 
 	@Test
