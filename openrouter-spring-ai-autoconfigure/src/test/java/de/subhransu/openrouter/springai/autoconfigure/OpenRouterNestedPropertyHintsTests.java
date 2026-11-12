@@ -11,6 +11,7 @@ import java.lang.reflect.RecordComponent;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -34,6 +35,8 @@ class OpenRouterNestedPropertyHintsTests {
 				Arguments.of(OpenRouterEmbeddingProperties.class, OpenRouterProviderPreferences.class));
 	}
 
+	@Tag("build-release")
+	@Tag("build-release.native")
 	@ParameterizedTest
 	@MethodSource("nestedRecords")
 	void registersConstructorBindingHintsForNestedRecords(Class<?> properties, Class<?> nested) throws Exception {
@@ -44,6 +47,8 @@ class OpenRouterNestedPropertyHintsTests {
 			.accepts(hints);
 	}
 
+	@Tag("configuration")
+	@Tag("configuration.metadata")
 	@Test
 	void publishesNestedRoutingAndReasoningMetadata() throws Exception {
 		try (var input = getClass().getClassLoader()

@@ -28,6 +28,7 @@ import java.util.Map;
 import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Named;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -49,6 +50,8 @@ import tools.jackson.databind.ObjectMapper;
  * Errors carried inside a successful response or stream redact the configured API key and
  * its encoded forms, as HTTP errors do.
  */
+@Tag("http")
+@Tag("http.errors")
 class InBandErrorRedactionTests {
 
 	// Without an sk- prefix, only the configured-key redaction can catch this key.

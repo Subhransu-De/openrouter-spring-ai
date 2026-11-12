@@ -9,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
@@ -22,6 +23,8 @@ import org.springframework.ai.tool.function.FunctionToolCallback;
  * conversion from a generic {@link ChatOptions}. The baseline precedence and tool-field
  * tests stay in {@code OpenRouterChatOptionsTests}; this class owns the subtle branches.
  */
+@Tag("api")
+@Tag("api.options")
 class OpenRouterChatOptionsRobustnessTests {
 
 	private static final String MODEL = "openai/gpt-5.4-mini";

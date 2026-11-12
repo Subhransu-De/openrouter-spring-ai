@@ -7,9 +7,12 @@ import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import java.time.Duration;
+import org.junit.jupiter.api.Tag;
 import org.springframework.util.unit.DataSize;
 import org.springframework.beans.BeanUtils;
 
+@Tag("configuration")
+@Tag("configuration.metadata")
 class OpenRouterPropertyNullabilityTests {
 
 	@Test

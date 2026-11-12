@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -53,6 +54,8 @@ import tools.jackson.databind.ObjectMapper;
  * tag, and stream errors are recorded on the observation instead of being dropped. This
  * is what makes ChatClient metrics and tracing work for this provider.
  */
+@Tag("observability")
+@Tag("observability.observations")
 class OpenRouterChatModelObservationTests {
 
 	private static final String MODEL = "openai/gpt-5.4-mini";

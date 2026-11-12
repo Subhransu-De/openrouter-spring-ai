@@ -16,6 +16,7 @@ import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -36,6 +37,8 @@ class ResponsesOutputReconciliationTests {
 
 	private final OpenRouterResponsesStreamingResponseMapper mapper = new OpenRouterResponsesStreamingResponseMapper();
 
+	@Tag("streaming")
+	@Tag("streaming.aggregation")
 	@Test
 	void terminalSnapshotReconcilesTextReasoningRefusalAndPendingToolsTogether() {
 		var call = event("""
@@ -77,6 +80,8 @@ class ResponsesOutputReconciliationTests {
 		}
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.aggregation")
 	@ParameterizedTest
 	@ValueSource(strings = { "completed", "incomplete" })
 	void recoversSuffixesAndTerminalPartsInOutputOrder(String status) {
@@ -99,6 +104,8 @@ class ResponsesOutputReconciliationTests {
 					new OpenRouterResponsesResponseMapper().map(terminal.response()).getResult().getOutput().getText());
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.aggregation")
 	@Test
 	void doneSnapshotsEmitOnlyMissingSuffixAndPreserveWhitespace() {
 		var done = event("""
@@ -115,6 +122,8 @@ class ResponsesOutputReconciliationTests {
 		assertThat(aggregate(Flux.just(terminal)).getText()).isEqualTo("hi \n");
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.aggregation")
 	@ParameterizedTest
 	@ValueSource(strings = { "response.output_text.done", "response.completed", "response.output_item.done" })
 	void rejectsContradictorySnapshotsWithoutLeakingText(String type) {
@@ -138,6 +147,8 @@ class ResponsesOutputReconciliationTests {
 			.verify();
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.aggregation")
 	@Test
 	void itemSnapshotsReleaseBufferedLaterMessagesAndRejectLateRewrites() {
 		var first = event("""
@@ -162,6 +173,8 @@ class ResponsesOutputReconciliationTests {
 			.verify();
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.aggregation")
 	@ParameterizedTest
 	@ValueSource(strings = { "", "{\"type\":\"message\",\"content\":[]}" })
 	void rejectsSnapshotsThatRemoveReceivedText(String output) {
@@ -171,6 +184,8 @@ class ResponsesOutputReconciliationTests {
 			.verify();
 	}
 
+	@Tag("api")
+	@Tag("api.reasoning")
 	@Test
 	void unchangedAggregatedReasoningHistoryReplaysButUserEditsFail() {
 		var terminal = terminal("completed", """
@@ -198,6 +213,8 @@ class ResponsesOutputReconciliationTests {
 			.hasMessageContaining("stale assistant output snapshot");
 	}
 
+	@Tag("multimodal")
+	@Tag("multimodal.image-output")
 	@ParameterizedTest
 	@ValueSource(strings = { "png", "webp", "jpeg" })
 	void repeatedAndTerminalOnlyImagesMatchSynchronousMedia(String format) {
@@ -234,6 +251,8 @@ class ResponsesOutputReconciliationTests {
 			.block(), model.call(prompt).getResult().getOutput().getMedia());
 	}
 
+	@Tag("multimodal")
+	@Tag("multimodal.image-output")
 	@Test
 	void singleEventMappingPreservesStatelessImageDelivery() {
 		var terminal = terminal("completed", """
@@ -245,6 +264,8 @@ class ResponsesOutputReconciliationTests {
 		assertThat(media(Flux.just(terminal))).hasSize(1);
 	}
 
+	@Tag("multimodal")
+	@Tag("multimodal.image-output")
 	@Test
 	void imageIdentityUsesIdsOrIndexesAndNeverCollapsesDistinctEqualBytes() {
 		var terminal = terminal("completed", """
@@ -269,6 +290,8 @@ class ResponsesOutputReconciliationTests {
 			.verify();
 	}
 
+	@Tag("multimodal")
+	@Tag("multimodal.image-output")
 	@ParameterizedTest
 	@ValueSource(strings = { "\"result\":\"BAUG\"", "\"result\":\"AQID\",\"output_format\":\"webp\"" })
 	void rejectsConflictingImageSnapshots(String fields) {
@@ -285,6 +308,8 @@ class ResponsesOutputReconciliationTests {
 			.verify();
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.lifecycle")
 	@Test
 	void cancellationAndOverlappingSubscriptionsKeepIndependentState() {
 		var terminal = terminal("completed", """

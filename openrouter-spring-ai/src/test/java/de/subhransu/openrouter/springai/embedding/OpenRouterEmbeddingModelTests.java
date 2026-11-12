@@ -23,6 +23,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -81,6 +82,8 @@ class OpenRouterEmbeddingModelTests {
 		return new Fixture(model, server);
 	}
 
+	@Tag("embeddings")
+	@Tag("embeddings.model")
 	@Test
 	void mapsEmbeddingsResponseIntoSpringAiTypes() {
 		Fixture fixture = fixture(OpenRouterEmbeddingOptions.builder().model(MODEL).build());
@@ -103,6 +106,8 @@ class OpenRouterEmbeddingModelTests {
 		fixture.server().verify();
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@ParameterizedTest
 	@CsvSource({ "401,false", "401,true", "429,false", "429,true", "503,false", "503,true" })
 	void inBandErrorsPreserveDiagnosticsAndTakePrecedenceOverData(int code, boolean withData) {
@@ -139,6 +144,8 @@ class OpenRouterEmbeddingModelTests {
 		server.verify();
 	}
 
+	@Tag("http")
+	@Tag("http.retry")
 	@Test
 	void permanentInBandErrorIsNotRetried() {
 		Fixture fixture = fixture(OpenRouterEmbeddingOptions.builder().model(MODEL).build());
@@ -151,6 +158,8 @@ class OpenRouterEmbeddingModelTests {
 		fixture.server().verify();
 	}
 
+	@Tag("embeddings")
+	@Tag("embeddings.model")
 	@Test
 	void runtimeOptionsOverrideDefaults() {
 		Fixture fixture = fixture(OpenRouterEmbeddingOptions.builder().model(MODEL).dimensions(2).build());
@@ -167,6 +176,8 @@ class OpenRouterEmbeddingModelTests {
 		fixture.server().verify();
 	}
 
+	@Tag("embeddings")
+	@Tag("embeddings.model")
 	@Test
 	void embedsSingleTextAndDocumentThroughConvenienceMethods() {
 		Fixture fixture = fixture(OpenRouterEmbeddingOptions.builder().model(MODEL).build());
@@ -180,6 +191,8 @@ class OpenRouterEmbeddingModelTests {
 		fixture.server().verify();
 	}
 
+	@Tag("embeddings")
+	@Tag("embeddings.model")
 	@Test
 	void rejectsAMissingModelBeforeCallingTheApi() {
 		Fixture fixture = fixture(OpenRouterEmbeddingOptions.builder().build());
@@ -192,6 +205,8 @@ class OpenRouterEmbeddingModelTests {
 		fixture.server().verify();
 	}
 
+	@Tag("embeddings")
+	@Tag("embeddings.model")
 	@Test
 	void rejectsNonFloatEncodingFormatBeforeCallingTheApi() {
 		Fixture fixture = fixture(OpenRouterEmbeddingOptions.builder().model(MODEL).encodingFormat("base64").build());
@@ -201,6 +216,8 @@ class OpenRouterEmbeddingModelTests {
 			.hasMessageContaining("encoding_format");
 	}
 
+	@Tag("embeddings")
+	@Tag("embeddings.model")
 	@ParameterizedTest
 	@ValueSource(strings = { "[{\"index\":0,\"embedding\":[1,2]},{\"index\":1,\"embedding\":[3,4]}]",
 			"[{\"index\":1,\"embedding\":[3,4]},{\"index\":0,\"embedding\":[1,2]}]" })
@@ -218,6 +235,8 @@ class OpenRouterEmbeddingModelTests {
 		fixture.server().verify();
 	}
 
+	@Tag("embeddings")
+	@Tag("embeddings.model")
 	@ParameterizedTest
 	@ValueSource(strings = { "null", "[]", "[{\"index\":0,\"embedding\":[1]}]",
 			"[{\"index\":0,\"embedding\":[1]},{\"index\":1,\"embedding\":[2]},{\"index\":2,\"embedding\":[3]}]",
@@ -243,6 +262,8 @@ class OpenRouterEmbeddingModelTests {
 		fixture.server().verify();
 	}
 
+	@Tag("embeddings")
+	@Tag("embeddings.model")
 	@ParameterizedTest
 	@ValueSource(strings = { "-0.5", "0.5", "0.9999999999999999999999" })
 	void rejectsFractionalEmbeddingIndexes(String index) {
@@ -256,6 +277,8 @@ class OpenRouterEmbeddingModelTests {
 		fixture.server().verify();
 	}
 
+	@Tag("embeddings")
+	@Tag("embeddings.model")
 	@ParameterizedTest
 	@ValueSource(strings = { "0", "0.0", "0e0", "\"0\"" })
 	void preservesIntegralEmbeddingIndexes(String index) {
@@ -269,6 +292,8 @@ class OpenRouterEmbeddingModelTests {
 		fixture.server().verify();
 	}
 
+	@Tag("embeddings")
+	@Tag("embeddings.model")
 	@ParameterizedTest
 	@CsvSource({ "2, , true", "3, , false", "3, 2, true", "2, 3, false" })
 	void validatesMergedDimensions(int defaultDimensions, Integer runtimeDimensions, boolean valid) {
@@ -292,6 +317,8 @@ class OpenRouterEmbeddingModelTests {
 		fixture.server().verify();
 	}
 
+	@Tag("embeddings")
+	@Tag("embeddings.model")
 	@ParameterizedTest
 	@EnumSource(MetadataMode.class)
 	void formatsSingleAndBatchedDocumentsWithSelectedMetadataPolicy(MetadataMode mode) {
@@ -323,6 +350,8 @@ class OpenRouterEmbeddingModelTests {
 		fixture.server().verify();
 	}
 
+	@Tag("embeddings")
+	@Tag("embeddings.model")
 	@Test
 	void defaultMetadataPolicyPreservesRawTextEvenWithCustomFormatter() {
 		OpenRouterEmbeddingModel model = OpenRouterEmbeddingModel.builder()
@@ -335,6 +364,8 @@ class OpenRouterEmbeddingModelTests {
 			.isInstanceOf(IllegalArgumentException.class);
 	}
 
+	@Tag("embeddings")
+	@Tag("embeddings.model")
 	@Test
 	void configuredDimensionsUseSnapshotWithoutProbing() {
 		OpenRouterEmbeddingOptions options = OpenRouterEmbeddingOptions.builder().model(MODEL).dimensions(2).build();
@@ -346,6 +377,8 @@ class OpenRouterEmbeddingModelTests {
 		second.server().verify();
 	}
 
+	@Tag("embeddings")
+	@Tag("embeddings.model")
 	@ParameterizedTest
 	@ValueSource(ints = { 0, -1 })
 	void rejectsInvalidConfiguredDimensionsWithoutProbing(int dimensions) {
@@ -354,6 +387,8 @@ class OpenRouterEmbeddingModelTests {
 		fixture.server().verify();
 	}
 
+	@Tag("embeddings")
+	@Tag("embeddings.model")
 	@Test
 	void dimensionDiscoveryIsIsolatedFromOtherModelsAndRequestOverrides() {
 		OpenRouterEmbeddingOptions defaults = OpenRouterEmbeddingOptions.builder().model("synthetic/model-a").build();
@@ -381,6 +416,8 @@ class OpenRouterEmbeddingModelTests {
 		second.server().verify();
 	}
 
+	@Tag("embeddings")
+	@Tag("embeddings.model")
 	@ParameterizedTest
 	@ValueSource(strings = { "[]", "null", "http-error" })
 	void failedDimensionDiscoveryCanRecover(String vector) {
@@ -398,6 +435,8 @@ class OpenRouterEmbeddingModelTests {
 		fixture.server().verify();
 	}
 
+	@Tag("embeddings")
+	@Tag("embeddings.model")
 	@Test
 	@SuppressWarnings("PMD.CloseResource") // Java 17 has no ExecutorService.close(); the
 											// finally block shuts it down.
@@ -433,6 +472,8 @@ class OpenRouterEmbeddingModelTests {
 		fixture.server().verify();
 	}
 
+	@Tag("embeddings")
+	@Tag("embeddings.model")
 	@Test
 	void dimensionDiscoveryHoldsNoMonitorDuringTheProbe() {
 		// A virtual thread that blocks on I/O inside a monitor pins its carrier thread

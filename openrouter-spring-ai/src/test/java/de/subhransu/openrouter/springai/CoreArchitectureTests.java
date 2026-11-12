@@ -11,6 +11,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
+import com.tngtech.archunit.junit.ArchTag;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchCondition;
 import com.tngtech.archunit.lang.ArchRule;
@@ -19,6 +20,8 @@ import com.tngtech.archunit.lang.SimpleConditionEvent;
 import com.tngtech.archunit.library.dependencies.SlicesRuleDefinition;
 
 @AnalyzeClasses(packages = "de.subhransu.openrouter.springai", importOptions = ImportOption.DoNotIncludeTests.class)
+@ArchTag("build-release")
+@ArchTag("build-release.architecture")
 class CoreArchitectureTests {
 
 	private CoreArchitectureTests() {

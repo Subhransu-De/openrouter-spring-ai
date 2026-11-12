@@ -31,6 +31,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -46,6 +47,8 @@ import tools.jackson.databind.ObjectWriter;
 
 // Keep synthetic failure inputs explicit in each test.
 @SuppressWarnings("PMD.AvoidDuplicateLiterals")
+@Tag("samples")
+@Tag("samples.run-plan")
 class GarageRunServiceTests {
 
   private static final String DYNO = "{\"scenes\":[\"dyno-tuning\"]}";

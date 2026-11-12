@@ -12,6 +12,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
@@ -32,6 +33,8 @@ import org.springframework.mock.http.client.MockClientHttpResponse;
  * {@code toOptions()} mapping step fails a specific assertion here. JSON wire-name
  * coverage lives in {@code OpenRouterChatRequestSerializationTests}.
  */
+@Tag("configuration")
+@Tag("configuration.properties")
 class OpenRouterAutoConfigurationPropertyMatrixTests {
 
 	private static final String API_KEY = "spring.ai.openrouter.api-key=test-key";

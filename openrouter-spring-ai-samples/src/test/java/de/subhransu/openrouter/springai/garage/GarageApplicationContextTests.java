@@ -18,6 +18,7 @@ import de.subhransu.openrouter.springai.garage.web.GarageRunController;
 import de.subhransu.openrouter.springai.image.OpenRouterImageModel;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
+import org.junit.jupiter.api.Tag;
 import org.springframework.core.retry.RetryTemplate;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -41,6 +42,8 @@ import org.springframework.core.env.SimpleCommandLinePropertySource;
  * This catches missing beans or broken sample configuration without touching the network
  * or needing a real API key.
  */
+@Tag("samples")
+@Tag("samples.context")
 class GarageApplicationContextTests {
 
 	private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.core.io.ClassPathResource;
@@ -16,6 +17,8 @@ import tools.jackson.databind.ObjectMapper;
  * that must reach the next tool round unchanged. The first service-story round of each scenario
  * answers in one format; the follow-up request must carry every opaque value back.
  */
+@Tag("samples")
+@Tag("samples.integration")
 class GarageReasoningReplayIntegrationTests extends MockedGarageIntegrationTest {
 
   private static final ObjectMapper JSON = new ObjectMapper();

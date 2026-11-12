@@ -14,11 +14,14 @@ import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseExcept
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import java.util.Arrays;
 import java.util.List;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.model.ChatResponse;
 
 class OpenRouterChatResponseMapperTests {
 
+	@Tag("tools")
+	@Tag("tools.calls")
 	@Test
 	void supportedSynchronousToolCallTerminatorsProduceExecutableCalls() {
 		for (String reason : List.of("tool_calls", "function_call")) {
@@ -32,6 +35,8 @@ class OpenRouterChatResponseMapperTests {
 		}
 	}
 
+	@Tag("tools")
+	@Tag("tools.calls")
 	@Test
 	void unfinishedSynchronousToolCallsAreRejected() {
 		for (String reason : Arrays.asList(null, "stop", "length", "content_filter")) {
@@ -44,6 +49,8 @@ class OpenRouterChatResponseMapperTests {
 		}
 	}
 
+	@Tag("tools")
+	@Tag("tools.calls")
 	@Test
 	void blankToolCallNameFailsProtocolValidation() {
 		for (String name : List.of("", "  ")) {
@@ -58,6 +65,8 @@ class OpenRouterChatResponseMapperTests {
 		}
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@Test
 	void mapsResponseContentMetadataAndUsage() {
 		ChatCompletionResponse response = new ChatCompletionResponse("gen-1", "chat.completion", 123L,
@@ -75,6 +84,8 @@ class OpenRouterChatResponseMapperTests {
 		assertThat(((OpenRouterUsage) mapped.getMetadata().getUsage()).getCachedTokens()).isEqualTo(2);
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@Test
 	void emptyChoicesListFailsProtocolValidation() {
 		ChatCompletionResponse response = new ChatCompletionResponse("gen-empty", "chat.completion", 1L, "m", "p",
@@ -84,6 +95,8 @@ class OpenRouterChatResponseMapperTests {
 			.isInstanceOf(OpenRouterProtocolException.class);
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@Test
 	void nullChoicesListFailsProtocolValidation() {
 		ChatCompletionResponse response = new ChatCompletionResponse("gen-null", "chat.completion", 1L, "m", "p", null,
@@ -93,6 +106,8 @@ class OpenRouterChatResponseMapperTests {
 			.isInstanceOf(OpenRouterProtocolException.class);
 	}
 
+	@Tag("observability")
+	@Tag("observability.usage")
 	@Test
 	void readsCachedAndReasoningTokensFromNestedUsageDetails() {
 		Usage usage = new Usage(10, 5, 15, null, null, 0.001, new Usage.PromptTokensDetails(3),

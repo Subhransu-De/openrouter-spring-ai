@@ -15,6 +15,7 @@ import de.subhransu.openrouter.springai.api.dto.EmbeddingsResponse;
 import de.subhransu.openrouter.springai.errors.OpenRouterHttpException;
 import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
 import java.util.List;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -28,6 +29,8 @@ import org.springframework.web.client.RestClient;
  * serialized JSON field names are pinned so regressions fail a test instead of silently
  * shipping.
  */
+@Tag("embeddings")
+@Tag("embeddings.model")
 class OpenRouterApiEmbeddingsContractTests {
 
 	private static final String BASE_URL = "https://openrouter.test/api/v1";

@@ -2,6 +2,7 @@ package de.subhransu.openrouter.springai.autoconfigure;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -17,6 +18,8 @@ import org.springframework.boot.test.system.OutputCaptureExtension;
  * OpenRouter models do not use. They are reported instead of being ignored silently.
  */
 @ExtendWith(OutputCaptureExtension.class)
+@Tag("configuration")
+@Tag("configuration.http")
 class OpenRouterRetrySettingsTests {
 
 	private static final String WARNING = "do not apply to OpenRouter models";

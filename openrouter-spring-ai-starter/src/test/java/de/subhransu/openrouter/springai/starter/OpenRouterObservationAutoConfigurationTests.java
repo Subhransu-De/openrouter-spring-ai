@@ -18,6 +18,7 @@ import de.subhransu.openrouter.springai.image.OpenRouterImageModel;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
 import java.util.List;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.observation.ChatModelMeterObservationHandler;
 import org.springframework.ai.chat.observation.ChatModelObservationConvention;
@@ -37,6 +38,8 @@ import org.springframework.context.annotation.Configuration;
  * context uses classpath auto-configuration, just as a consuming Boot application does,
  * and supplies only the external OpenRouter transport boundary.
  */
+@Tag("configuration")
+@Tag("configuration.observability")
 class OpenRouterObservationAutoConfigurationTests {
 
 	private static final String CHAT_MODEL = "openai/gpt-5.4-mini";

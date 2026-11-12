@@ -13,18 +13,21 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.messages.UserMessage;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 import tools.jackson.databind.ObjectMapper;
 
+@Tag("api")
 class OpenRouterExtensionTests {
 
 	private static final String CACHE_KEY = "prompt_cache_key";
 
 	private final ObjectMapper json = new ObjectMapper();
 
+	@Tag("api.extensions")
 	@Test
 	@SuppressWarnings("unchecked")
 	void responseExtensionsRemainDetachedImmutableCumulativeSnapshots() {
@@ -74,6 +77,7 @@ class OpenRouterExtensionTests {
 		}
 	}
 
+	@Tag("api.options")
 	@Test
 	void numericExtensionMapsRejectNonNumericLeavesAndNonFiniteValues() {
 		for (String key : List.of("logit_bias", "max_price", "preferred_min_throughput", "preferred_max_latency")) {
@@ -93,6 +97,7 @@ class OpenRouterExtensionTests {
 		}
 	}
 
+	@Tag("api.extensions")
 	@Test
 	void streamedLogprobsAccumulateThroughToolBufferingAndResubscription() {
 		for (boolean tools : List.of(false, true)) {
@@ -126,6 +131,7 @@ class OpenRouterExtensionTests {
 		}
 	}
 
+	@Tag("api.extensions")
 	@Test
 	void requestExtensionsAreFlattenedWithFalseZeroAndNullPreserved() {
 		Map<String, Object> fields = new LinkedHashMap<>();
@@ -154,6 +160,7 @@ class OpenRouterExtensionTests {
 			.hasMessageContaining("transforms");
 	}
 
+	@Tag("api.options")
 	@Test
 	void extensionsSnapshotNestedContainersAndRuntimeKeysOverrideDefaults() {
 		Map<String, Object> bias = new LinkedHashMap<>(Map.of("42", 1));
@@ -173,6 +180,7 @@ class OpenRouterExtensionTests {
 			.isInstanceOf(UnsupportedOperationException.class);
 	}
 
+	@Tag("api.extensions")
 	@Test
 	void reservedAndUnsupportedKeysCannotBypassEitherEndpoint() {
 		for (String key : List.of("model", "messages", "input", "provider", "stream", "tools", "n", "store", "unknown",
@@ -201,6 +209,7 @@ class OpenRouterExtensionTests {
 		}
 	}
 
+	@Tag("api.extensions")
 	@Test
 	void routingExtensionsReachBothEndpointsAndRejectSortCollisions() {
 		List<String> only = new ArrayList<>(List.of("synthetic-provider"));
@@ -230,6 +239,7 @@ class OpenRouterExtensionTests {
 			.hasMessageContaining("conflicts");
 	}
 
+	@Tag("api.extensions")
 	@Test
 	void unknownResponseFieldsRoundtripAndRemainInspectableWithoutReplay() {
 		String fixture = """
@@ -252,6 +262,7 @@ class OpenRouterExtensionTests {
 		assertThat(replay.messages().get(0).toolCalls().get(0).extensions()).isEmpty();
 	}
 
+	@Tag("api.extensions")
 	@Test
 	void responsesAnnotationsAndOpaqueToolFieldsRemainInOutputSnapshots() {
 		String fixture = """
@@ -273,6 +284,7 @@ class OpenRouterExtensionTests {
 		}
 	}
 
+	@Tag("api.extensions")
 	@Test
 	void plainTextStreamsRetainEarlierAnnotationsAtCompletion() {
 		var stream = new OpenRouterStreamingResponseMapper()
@@ -284,6 +296,7 @@ class OpenRouterExtensionTests {
 		}).verifyComplete();
 	}
 
+	@Tag("api.extensions")
 	@Test
 	void multipleChoicesKeepMessageAnnotationsSeparateAndRootFieldsOpaque() {
 		var first = this.json.readValue("""
@@ -311,6 +324,7 @@ class OpenRouterExtensionTests {
 		}).verifyComplete();
 	}
 
+	@Tag("api.extensions")
 	@Test
 	void streamedAnnotationsAndToolExtensionsSurviveAggregationAndResubscription() {
 		var first = chunk("""

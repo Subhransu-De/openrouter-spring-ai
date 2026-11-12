@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
@@ -58,6 +59,8 @@ class OpenRouterStarterSmokeTests {
 					OpenRouterChatAutoConfiguration.class, OpenRouterEmbeddingAutoConfiguration.class,
 					OpenRouterImageAutoConfiguration.class, ChatClientAutoConfiguration.class));
 
+	@Tag("build-release")
+	@Tag("build-release.starter")
 	@Test
 	void autoConfigurationImportsRegisterRequiredAutoConfigurations() {
 		// The starter's real contract is runtime registration: Boot merges the imports
@@ -74,6 +77,8 @@ class OpenRouterStarterSmokeTests {
 			.hasSize(1);
 	}
 
+	@Tag("build-release")
+	@Tag("build-release.starter")
 	@Test
 	void ownImportsFileListsOnlyOpenRouterAutoConfigurations() throws IOException {
 		Enumeration<URL> imports = getClass().getClassLoader()
@@ -94,6 +99,8 @@ class OpenRouterStarterSmokeTests {
 			.allSatisfy(entry -> assertThat(entry).startsWith("de.subhransu.openrouter.springai.autoconfigure."));
 	}
 
+	@Tag("configuration")
+	@Tag("configuration.http")
 	@Test
 	void retryPropertiesConfigureOneTemplateForEveryBlockingModel() {
 		contextRunner
@@ -138,6 +145,8 @@ class OpenRouterStarterSmokeTests {
 			});
 	}
 
+	@Tag("configuration")
+	@Tag("configuration.http")
 	@Test
 	void userRetryTemplateOverridesTheStandardAutoConfiguredBean() {
 		contextRunner.withUserConfiguration(UserRetryConfiguration.class)
@@ -155,6 +164,8 @@ class OpenRouterStarterSmokeTests {
 			});
 	}
 
+	@Tag("build-release")
+	@Tag("build-release.starter")
 	@Test
 	void minimalContextStartsWithApiKeyAndNoNetworkCall() {
 		contextRunner.withPropertyValues(API_KEY_PROPERTY)
@@ -173,6 +184,8 @@ class OpenRouterStarterSmokeTests {
 			});
 	}
 
+	@Tag("configuration")
+	@Tag("configuration.tools")
 	@Test
 	void userOwnedSharedInfrastructureTakesPrecedence() {
 		contextRunner.withUserConfiguration(UserInfrastructureConfiguration.class)

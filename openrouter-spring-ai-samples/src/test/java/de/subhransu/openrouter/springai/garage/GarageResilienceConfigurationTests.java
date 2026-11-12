@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.ai.retry.NonTransientAiException;
@@ -12,6 +13,8 @@ import org.springframework.ai.retry.TransientAiException;
 import org.springframework.core.retry.RetryException;
 import org.springframework.web.client.ResourceAccessException;
 
+@Tag("samples")
+@Tag("samples.run-plan")
 class GarageResilienceConfigurationTests {
 
   @ParameterizedTest

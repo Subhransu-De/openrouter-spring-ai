@@ -156,6 +156,7 @@ subprojects {
 		"testImplementation"(platform("org.springframework.ai:spring-ai-bom:$springAiVersion"))
 		"testImplementation"(platform("org.junit:junit-bom:$junitJupiterVersion"))
 		"testRuntimeOnly"("org.junit.platform:junit-platform-launcher")
+		"testRuntimeOnly"("org.junit.platform:junit-platform-reporting")
 		"checkstyle"("com.puppycrawl.tools:checkstyle:$checkstyleVersion")
 		"checkstyle"("io.spring.javaformat:spring-javaformat-checkstyle:$springJavaFormatVersion")
 	}
@@ -218,6 +219,9 @@ subprojects {
 
 	tasks.withType<Test>().configureEach {
 		useJUnitPlatform()
+		// Open Test Reporting XML: per-test duration, tags and display names in one file per run.
+		systemProperty("junit.platform.reporting.open.xml.enabled", "true")
+		systemProperty("junit.platform.reporting.output.dir", "build/junit-reports/$name")
 		finalizedBy(tasks.named<JacocoReport>("jacocoTestReport"))
 	}
 

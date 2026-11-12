@@ -29,6 +29,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -106,6 +107,8 @@ class OpenRouterApiStreamingContractTests {
 				null, null, null, null);
 	}
 
+	@Tag("http")
+	@Tag("http.client")
 	@Test
 	void chatCompletionStreamTargetsChatCompletionsEndpoint() {
 		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE, DONE_ONLY_SSE);
@@ -116,6 +119,8 @@ class OpenRouterApiStreamingContractTests {
 		assertThat(capture.request().get().headers().getAccept()).contains(MediaType.TEXT_EVENT_STREAM);
 	}
 
+	@Tag("api")
+	@Tag("api.extensions")
 	@Test
 	void emptyStreamExtensionsRetainNullQueriesAndRejectMutation() {
 		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE,
@@ -131,6 +136,8 @@ class OpenRouterApiStreamingContractTests {
 		}).verifyComplete();
 	}
 
+	@Tag("http")
+	@Tag("http.client")
 	@Test
 	void responsesStreamTargetsResponsesEndpoint() {
 		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE, RESPONSES_COMPLETED_SSE);
@@ -141,6 +148,8 @@ class OpenRouterApiStreamingContractTests {
 		assertThat(capture.request().get().headers().getAccept()).contains(MediaType.TEXT_EVENT_STREAM);
 	}
 
+	@Tag("http")
+	@Tag("http.client")
 	@Test
 	void chatCompletionStreamSendsAuthorizationAndStreamTrueOnTheWire() {
 		// The streaming WebClient is a separate code path from the blocking RestClient
@@ -155,6 +164,8 @@ class OpenRouterApiStreamingContractTests {
 		assertThat(serializedBody(request)).contains("\"stream\":true");
 	}
 
+	@Tag("http")
+	@Tag("http.client")
 	@Test
 	void responsesStreamSendsAuthorizationAndStreamTrueOnTheWire() {
 		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE, RESPONSES_COMPLETED_SSE);
@@ -166,6 +177,8 @@ class OpenRouterApiStreamingContractTests {
 		assertThat(serializedBody(request)).contains("\"stream\":true");
 	}
 
+	@Tag("http")
+	@Tag("http.client")
 	@Test
 	void streamingRequestsCarryConfiguredAttributionHeaders() {
 		// Attribution on the streaming path goes through WebClient defaultHeaders, a
@@ -196,6 +209,8 @@ class OpenRouterApiStreamingContractTests {
 		assertThat(headers.getFirst("X-OpenRouter-Categories")).isEqualTo("translation,programming");
 	}
 
+	@Tag("http")
+	@Tag("http.client")
 	@Test
 	void streamingRequestsOmitAttributionHeadersWhenNotConfigured() {
 		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE, DONE_ONLY_SSE);
@@ -213,6 +228,8 @@ class OpenRouterApiStreamingContractTests {
 		return mockRequest.getBodyAsString().block(Duration.ofSeconds(5));
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.sse")
 	@Test
 	void passesMidStreamErrorChunkThroughWithoutFailingTheFlux() {
 		// A normal token event, then a top-level error chunk over the same HTTP 200
@@ -239,6 +256,8 @@ class OpenRouterApiStreamingContractTests {
 			.verifyComplete();
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@Test
 	void streamFailsWithApiExceptionPreservingStatusAndBodyOnErrorStatus() {
 		Capture capture = capturingApi(HttpStatus.PAYMENT_REQUIRED, MediaType.APPLICATION_JSON_VALUE,
@@ -253,6 +272,8 @@ class OpenRouterApiStreamingContractTests {
 		}).verify();
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.sse")
 	@ParameterizedTest
 	@ValueSource(strings = { "{}", "{\"choices\":null}", "{\"choices\":[]}",
 			"{\"choices\":[null],\"usage\":{\"total_tokens\":1}}" })
@@ -266,6 +287,8 @@ class OpenRouterApiStreamingContractTests {
 			.verify();
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.sse")
 	@ParameterizedTest
 	@ValueSource(strings = { "[", "[bad]", "42 trailing", "true false", "\"unterminated", "{} {}" })
 	void keepsJacksonCauseForMalformedChunks(String json) {
@@ -279,6 +302,8 @@ class OpenRouterApiStreamingContractTests {
 			.verify();
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.sse")
 	@ParameterizedTest
 	@ValueSource(strings = {
 			"{\"probe\":1,\"choices\":\"bad\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"OK\"}}],\"probe\":\"OK\"}",
@@ -293,6 +318,8 @@ class OpenRouterApiStreamingContractTests {
 		}).verifyComplete();
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.sse")
 	@ParameterizedTest
 	@CsvSource({ "1.50,1.5", "-0,0", "1e400,Infinity", "502,502" })
 	void numbersInStringFieldsKeepTheTreeBindingText(String literal, String expected) {
@@ -304,6 +331,8 @@ class OpenRouterApiStreamingContractTests {
 			.verifyComplete();
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.sse")
 	@Test
 	void bigDecimalMappersKeepTheTreeRangeCheck() {
 		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE,
@@ -316,6 +345,8 @@ class OpenRouterApiStreamingContractTests {
 			.verify();
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.sse")
 	@Test
 	void treeNullPropertySettingAppliesToExtensions() {
 		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE,
@@ -327,6 +358,8 @@ class OpenRouterApiStreamingContractTests {
 			.verifyComplete();
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.sse")
 	@Test
 	void providerErrorTakesPrecedenceOverNullChoiceValidation() {
 		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE,
@@ -337,6 +370,8 @@ class OpenRouterApiStreamingContractTests {
 			.verifyComplete();
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@Test
 	void responsesStreamFailsWithApiExceptionOnErrorStatus() {
 		Capture capture = capturingApi(HttpStatus.SERVICE_UNAVAILABLE, MediaType.APPLICATION_JSON_VALUE,
@@ -350,6 +385,8 @@ class OpenRouterApiStreamingContractTests {
 		}).verify();
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@Test
 	void imageStreamUsesSameTransientClassificationOnErrorStatus() {
 		Capture capture = capturingApi(HttpStatus.BAD_GATEWAY, MediaType.APPLICATION_JSON_VALUE,
@@ -363,6 +400,8 @@ class OpenRouterApiStreamingContractTests {
 		}).verify();
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.sse")
 	@Test
 	void emitsFinalUsageChunkWhenUsageRequested() {
 		String sse = """
@@ -384,6 +423,8 @@ class OpenRouterApiStreamingContractTests {
 			.verifyComplete();
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.sse")
 	@Test
 	void parsesSingleLineDataEventFollowedByDoneMarker() {
 		// A complete chat-completion chunk delivered on one SSE "data:" line, then the
@@ -402,6 +443,8 @@ class OpenRouterApiStreamingContractTests {
 			.verifyComplete();
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.sse")
 	@ParameterizedTest
 	@CsvSource({ "chat,1", "chat,7", "chat,4096", "responses,1", "responses,7", "responses,4096", "images,1",
 			"images,7", "images,4096" })
@@ -442,6 +485,8 @@ class OpenRouterApiStreamingContractTests {
 		}
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.sse")
 	@Test
 	void splitsCoalescedJsonDocumentsInOneSsePayloadIntoSeparateChunks() {
 		// Some proxies and providers coalesce several complete JSON events into a
@@ -464,6 +509,8 @@ class OpenRouterApiStreamingContractTests {
 			.verifyComplete();
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.sse")
 	@Test
 	void ignoresKeepAliveCommentLines() {
 		String sse = """
@@ -481,6 +528,8 @@ class OpenRouterApiStreamingContractTests {
 			.verifyComplete();
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.sse")
 	@ParameterizedTest
 	@ValueSource(strings = { "data: {not valid json}\n\n", "data: {\ndata: \"choices\": [\ndata: }\n\n" })
 	void malformedJsonStreamLineFailsWithProtocolErrorNotApiException(String sse) {
@@ -494,6 +543,8 @@ class OpenRouterApiStreamingContractTests {
 			.verify();
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.sse")
 	@ParameterizedTest
 	@ValueSource(strings = { "synthetic-invalid", "{invalid}", "[]", "[{}]", "null", "42", "true", "\"text\"",
 			"{} trailing" })
@@ -549,6 +600,8 @@ class OpenRouterApiStreamingContractTests {
 		}
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.sse")
 	@ParameterizedTest
 	@ValueSource(strings = { "response.completed", "response.incomplete", "response.failed" })
 	void malformedResponsesTerminalPayloadFailsDecoding(String type) {
@@ -562,6 +615,8 @@ class OpenRouterApiStreamingContractTests {
 			.verify();
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.sse")
 	@Test
 	void responsesStreamParsesEventsAsTypedStreamEvents() {
 		String sse = """
@@ -578,6 +633,8 @@ class OpenRouterApiStreamingContractTests {
 		}).expectError(OpenRouterTruncatedResponseException.class).verify();
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.lifecycle")
 	@ParameterizedTest
 	@CsvSource({ "chat,false", "chat,true", "images,false", "images,true" })
 	void doneCompletesAndCancelsOpenBody(String endpoint, boolean timeout) {
@@ -585,6 +642,8 @@ class OpenRouterApiStreamingContractTests {
 				1);
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.lifecycle")
 	@ParameterizedTest
 	@ValueSource(strings = { "chat", "images" })
 	void coalescedDoneStopsBeforeTrailingMalformedData(String endpoint) {
@@ -592,6 +651,8 @@ class OpenRouterApiStreamingContractTests {
 				"data: {\"choices\":[{\"index\":0,\"delta\":{}}]}\ndata: data: [DONE]\ndata: {invalid}\n\n", 1);
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.lifecycle")
 	@ParameterizedTest
 	@CsvSource({ "responses,response.completed", "responses,response.failed", "responses,response.incomplete",
 			"responses,error", "responses,response.failed.error", "responses,response.output_text.error",
@@ -600,6 +661,8 @@ class OpenRouterApiStreamingContractTests {
 		assertTerminalBody(endpoint, false, "data: {\"type\":\"" + type + "\"}\n\ndata: {invalid}\n\n", 1);
 	}
 
+	@Tag("multimodal")
+	@Tag("multimodal.image-model")
 	@ParameterizedTest
 	@ValueSource(booleans = { false, true })
 	void imageStreamPreservesMultipleImagesAndFinalUsage(boolean sse) {
@@ -630,6 +693,8 @@ class OpenRouterApiStreamingContractTests {
 			.verifyComplete();
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.lifecycle")
 	@Test
 	void completedImageWithoutDoneIsTruncated() {
 		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE,
@@ -640,6 +705,8 @@ class OpenRouterApiStreamingContractTests {
 			.verify();
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.lifecycle")
 	@Test
 	void imageCompletionDoesNotHideLaterErrorsAndDoneCancelsOpenBody() {
 		String completed = "data: {\"type\":\"image_generation.completed\",\"b64_json\":\"aW1hZ2U=\"}\n\n";
@@ -678,6 +745,8 @@ class OpenRouterApiStreamingContractTests {
 		assertThat(cancelled).isTrue();
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.lifecycle")
 	@ParameterizedTest
 	@ValueSource(strings = { "responses", "images" })
 	void prematureEofFailsWithoutReplayAndTerminalStateIsPerSubscription(String endpoint) {

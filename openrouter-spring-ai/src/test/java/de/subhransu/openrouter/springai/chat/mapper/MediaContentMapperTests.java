@@ -13,6 +13,7 @@ import java.util.Base64;
 import java.util.Random;
 import de.subhransu.openrouter.springai.chat.OpenRouterCacheBreakpoint;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
+import org.junit.jupiter.api.Tag;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -28,6 +29,8 @@ class MediaContentMapperTests {
 
 	private static final String PDF_URL = "https://example.test/report.pdf";
 
+	@Tag("multimodal")
+	@Tag("multimodal.input")
 	@ParameterizedTest
 	@ValueSource(strings = { "", "data:image/png;base64,", "data:image/png;name=é;base64,",
 			"data:image/png;name=λ;base64," })
@@ -42,6 +45,8 @@ class MediaContentMapperTests {
 		}
 	}
 
+	@Tag("multimodal")
+	@Tag("multimodal.input")
 	@ParameterizedTest
 	@CsvSource({ "application/pdf,file,input_file", "audio/wav,input_audio,input_audio",
 			"audio/mpeg,input_audio,input_audio", "video/mp4,video_url,input_video", "video/mpeg,video_url,input_video",
@@ -67,6 +72,8 @@ class MediaContentMapperTests {
 		}
 	}
 
+	@Tag("multimodal")
+	@Tag("multimodal.input")
 	@Test
 	void mapsRemotePdfToEndpointSpecificFieldsAndPreservesFilename() {
 		Media pdf = media("application/pdf", PDF_URL);
@@ -77,6 +84,8 @@ class MediaContentMapperTests {
 		assertThat(part.filename()).isEqualTo("fixture.pdf");
 	}
 
+	@Tag("multimodal")
+	@Tag("multimodal.input")
 	@ParameterizedTest
 	@ValueSource(strings = { "AQ==", "AQ", "AQI=", "AQI", "AQID" })
 	void preservesPaddedAndUnpaddedAudioPayloads(String payload) {
@@ -85,6 +94,8 @@ class MediaContentMapperTests {
 		assertThat(MediaContentMapper.responses(inline).inputAudio().data()).isEqualTo(payload);
 	}
 
+	@Tag("multimodal")
+	@Tag("multimodal.input")
 	@ParameterizedTest
 	@ValueSource(strings = { "AQ===", "AQ==tail", "\u0100", "\uD83D\uDE00" })
 	void preservesMalformedPayloadDiagnostics(String payload) {
@@ -104,6 +115,8 @@ class MediaContentMapperTests {
 			.hasRootCauseMessage(expected.getMessage());
 	}
 
+	@Tag("multimodal")
+	@Tag("multimodal.input")
 	@ParameterizedTest
 	@CsvSource({ "application/pdf,data:application/pdf;base64,", "application/pdf,data:application/pdf;base64,!!!",
 			"application/pdf,data:audio/wav;base64,AQID", "application/pdf,data:application/pdf,AQID" })
@@ -111,6 +124,8 @@ class MediaContentMapperTests {
 		assertRejected(media(mime, prefix + "," + (payload == null ? "" : payload)));
 	}
 
+	@Tag("multimodal")
+	@Tag("multimodal.input")
 	@ParameterizedTest
 	@ValueSource(strings = { "application/pdf", "audio/wav", "video/mp4" })
 	void preservesBase64DecodingCauseInBothRequestModes(String mime) {
@@ -123,6 +138,8 @@ class MediaContentMapperTests {
 			.hasCauseInstanceOf(IllegalArgumentException.class);
 	}
 
+	@Tag("multimodal")
+	@Tag("multimodal.input")
 	@ParameterizedTest
 	@CsvSource({ "audio/wav,https://example.test/clip.wav", "audio/mpeg,https://example.test/clip.mp3",
 			"application/pdf,file:///report.pdf", "video/mp4,relative.mp4", "application/pdf,https:/missing-host",
@@ -132,6 +149,8 @@ class MediaContentMapperTests {
 		assertRejected(media(mime, source));
 	}
 
+	@Tag("multimodal")
+	@Tag("multimodal.input")
 	@ParameterizedTest
 	@ValueSource(ints = { 0, MediaContentMapper.MAX_INLINE_BYTES + 1 })
 	void rejectsEmptyAndOversizedBytes(int size) {
@@ -139,12 +158,16 @@ class MediaContentMapperTests {
 				Media.builder().mimeType(MimeTypeUtils.parseMimeType("application/pdf")).data(new byte[size]).build());
 	}
 
+	@Tag("multimodal")
+	@Tag("multimodal.input")
 	@Test
 	void rejectsOversizedBase64BeforeDecoding() {
 		assertRejected(media("application/pdf",
 				"data:application/pdf;base64," + "A".repeat(4 * ((MediaContentMapper.MAX_INLINE_BYTES + 2) / 3) + 4)));
 	}
 
+	@Tag("multimodal")
+	@Tag("multimodal.input")
 	@Test
 	void acceptsTheInlineSizeBoundary() {
 		Media media = Media.builder()
@@ -158,6 +181,8 @@ class MediaContentMapperTests {
 			.data()).isEqualTo(encoded);
 	}
 
+	@Tag("multimodal")
+	@Tag("multimodal.input")
 	@Test
 	void preservesAttachmentsAfterCacheBreakpointsAndWithoutText() {
 		ObjectMapper json = new ObjectMapper();
@@ -180,6 +205,8 @@ class MediaContentMapperTests {
 		assertThat(responses.at("/input/0/content").size()).isEqualTo(1);
 	}
 
+	@Tag("api")
+	@Tag("api.wire")
 	@Test
 	void newWireRecordsTolerateUnknownFields() {
 		ObjectMapper mapper = new ObjectMapper();

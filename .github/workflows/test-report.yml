@@ -1,0 +1,87 @@
+name: Test report
+
+# Pull requests from forks and from Dependabot run CI with a read-only token, so CI cannot comment on them.
+# This workflow runs from main after CI completes, in the base repository's context, and never runs pull
+# request code: it only reads the test reports CI uploaded, as data.
+on:
+  workflow_run:
+    workflows: ["Build, Test, and Compatibility"]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  comment:
+    name: Test report comments
+    if: >-
+      github.event.workflow_run.event == 'pull_request'
+      && github.event.workflow_run.conclusion != 'cancelled'
+      && (github.event.workflow_run.head_repository.full_name != github.repository
+          || github.event.workflow_run.actor.login == 'dependabot[bot]')
+    runs-on: ubuntu-latest
+    # One report job at a time per pull request branch, so an older commit cannot post over a newer one.
+    concurrency:
+      group: test-report-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
+      cancel-in-progress: false
+    permissions:
+      actions: read # download the test reports of CI runs
+      contents: read
+      pull-requests: write # post the two comments
+    steps:
+      - name: Check out the report scripts from main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - name: Set up Java
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Find the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          # Trust the API, not the artifact: the open pull request whose head is the tested commit.
+          pr=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --search "$HEAD_SHA" --json number,headRefOid \
+            --jq "[.[] | select(.headRefOid == \"$HEAD_SHA\")][0].number // empty")
+          [[ "$pr" =~ ^[0-9]+$ ]] || { echo "No open pull request for $HEAD_SHA."; exit 1; }
+          base_sha=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$pr" --jq .base.sha)
+          { echo "PR=$pr"; echo "BASE_SHA=$base_sha"; } >> "$GITHUB_ENV"
+
+      - name: Download the test reports
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern 'test-report-java*' --dir head
+          base_run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$BASE_SHA&status=success&per_page=10" \
+            --jq '[.workflow_runs[] | select(.head_branch == "main") | select(.event == "push" or .event == "schedule")
+                   | select(.head_repository.full_name == env.GITHUB_REPOSITORY)][0].id // empty')
+          if [ -n "$base_run" ]; then
+            gh run download "$base_run" --repo "$GITHUB_REPOSITORY" --pattern 'test-report-java*' --dir base/0 || true
+          fi
+          n=0
+          for id in $(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=main&status=success&per_page=30" \
+            --jq '.workflow_runs[] | select(.event == "push" or .event == "schedule")
+                  | select(.head_repository.full_name == env.GITHUB_REPOSITORY) | .id'); do
+            if [ "$id" = "$base_run" ]; then continue; fi
+            if gh run download "$id" --repo "$GITHUB_REPOSITORY" --pattern 'test-report-java*' --dir "base/$((n + 1))"; then
+              n=$((n + 1))
+            fi
+            if [ "$n" -ge 5 ]; then break; fi
+          done
+
+      - name: Build and post the comments
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          java .github/scripts/TestReport.java diff --head head --base base --pr "$PR" \
+            --head-commit "$HEAD_SHA" --base-commit "$BASE_SHA" --java 25,21,17 --tables-from 25 --out comments
+          cat comments/counts.md comments/timing.md >> "$GITHUB_STEP_SUMMARY"
+          bash .github/scripts/post-test-report.sh "$PR" "$HEAD_SHA" comments

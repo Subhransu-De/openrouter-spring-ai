@@ -7,6 +7,7 @@ import de.subhransu.openrouter.springai.api.OpenRouterSerializationRuntimeHints;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorResponse;
 import de.subhransu.openrouter.springai.errors.TolerantJsonStringDeserializer;
 import java.util.Arrays;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.model.tool.DefaultToolCallingManager;
 import org.springframework.aot.hint.RuntimeHints;
@@ -19,6 +20,8 @@ import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.core.io.support.SpringFactoriesLoader;
 import org.springframework.core.type.classreading.SimpleMetadataReaderFactory;
 
+@Tag("build-release")
+@Tag("build-release.native")
 class OpenRouterSerializationRuntimeHintsTests {
 
 	@Test

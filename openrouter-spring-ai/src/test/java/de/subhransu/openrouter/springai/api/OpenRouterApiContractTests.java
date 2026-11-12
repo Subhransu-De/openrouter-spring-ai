@@ -23,6 +23,7 @@ import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiExceptio
 import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -108,6 +109,8 @@ class OpenRouterApiContractTests {
 	// Endpoint, method, headers, content type
 	// ---------------------------------------------------------------------
 
+	@Tag("http")
+	@Tag("http.client")
 	@Test
 	void chatCompletionPostsToChatCompletionsEndpointAsJson() {
 		Fixture fixture = fixture(baseBuilder());
@@ -122,6 +125,8 @@ class OpenRouterApiContractTests {
 		fixture.server().verify();
 	}
 
+	@Tag("http")
+	@Tag("http.client")
 	@Test
 	void responsesPostsToResponsesEndpointAsJson() {
 		Fixture fixture = fixture(baseBuilder());
@@ -140,6 +145,8 @@ class OpenRouterApiContractTests {
 	// Attribution headers
 	// ---------------------------------------------------------------------
 
+	@Tag("http")
+	@Tag("http.client")
 	@Test
 	void sendsConfiguredAttributionHeaders() {
 		Fixture fixture = fixture(baseBuilder().httpReferer("https://app.example")
@@ -156,6 +163,8 @@ class OpenRouterApiContractTests {
 		fixture.server().verify();
 	}
 
+	@Tag("http")
+	@Tag("http.client")
 	@Test
 	void omitsAttributionHeadersWhenAbsent() {
 		Fixture fixture = fixture(baseBuilder());
@@ -170,6 +179,8 @@ class OpenRouterApiContractTests {
 		fixture.server().verify();
 	}
 
+	@Tag("http")
+	@Tag("http.client")
 	@Test
 	void omitsAttributionHeadersWhenBlank() {
 		Fixture fixture = fixture(baseBuilder().httpReferer("   ").applicationTitle("").applicationCategories("  \t "));
@@ -184,6 +195,8 @@ class OpenRouterApiContractTests {
 		fixture.server().verify();
 	}
 
+	@Tag("http")
+	@Tag("http.client")
 	@ParameterizedTest(name = "categories \"{0}\" forwarded verbatim")
 	@ValueSource(strings = { "programming", "translation,programming", "a,b,c" })
 	void forwardsCategoriesVerbatim(String categories) {
@@ -201,6 +214,8 @@ class OpenRouterApiContractTests {
 	// Serialized JSON wire names (camelCase regression guards)
 	// ---------------------------------------------------------------------
 
+	@Tag("api")
+	@Tag("api.wire")
 	@Test
 	void serializesFullChatRequestWithOpenRouterWireNames() {
 		ChatCompletionRequest request = ChatCompletionRequest.builder()
@@ -278,6 +293,8 @@ class OpenRouterApiContractTests {
 		fixture.server().verify();
 	}
 
+	@Tag("api")
+	@Tag("api.wire")
 	@Test
 	void omitsNullChatFieldsFromSerializedBody() {
 		Fixture fixture = fixture(baseBuilder());
@@ -293,6 +310,8 @@ class OpenRouterApiContractTests {
 		fixture.server().verify();
 	}
 
+	@Tag("api")
+	@Tag("api.wire")
 	@Test
 	void serializesResponsesRequestWithWireNames() {
 		ResponsesRequest request = ResponsesRequest.builder()
@@ -341,6 +360,8 @@ class OpenRouterApiContractTests {
 	// Synchronous error handling
 	// ---------------------------------------------------------------------
 
+	@Tag("http")
+	@Tag("http.errors")
 	@ParameterizedTest(name = "chat completion HTTP {0} preserves classified status + body")
 	@ValueSource(ints = { 400, 401, 402, 429, 502, 503 })
 	void chatCompletionPreservesProviderErrorStatusAndBody(int status) {
@@ -365,6 +386,8 @@ class OpenRouterApiContractTests {
 		fixture.server().verify();
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@Test
 	void responsesPreservesClientErrorStatusAndBody() {
 		Fixture fixture = fixture(baseBuilder());
@@ -384,6 +407,8 @@ class OpenRouterApiContractTests {
 		fixture.server().verify();
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@Test
 	void responsesPreservesUpstreamErrorStatusAndBody() {
 		Fixture fixture = fixture(baseBuilder());
@@ -401,6 +426,8 @@ class OpenRouterApiContractTests {
 		fixture.server().verify();
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@Test
 	void emptyErrorBodyStillProducesUsefulException() {
 		Fixture fixture = fixture(baseBuilder());
@@ -418,6 +445,8 @@ class OpenRouterApiContractTests {
 		fixture.server().verify();
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@Test
 	void longErrorBodyIsExcludedFromMessageAndBoundedInDiagnosticGetter() {
 		Fixture fixture = fixture(baseBuilder());
@@ -437,6 +466,8 @@ class OpenRouterApiContractTests {
 		fixture.server().verify();
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@Test
 	void errorMessageNeverLeaksApiKeyOrAuthorizationHeader() {
 		Fixture fixture = fixture(baseBuilder().apiKey("sk-or-secret-key-value"));

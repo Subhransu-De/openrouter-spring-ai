@@ -8,8 +8,11 @@ import de.subhransu.openrouter.springai.api.dto.ImagesStreamEvent;
 import de.subhransu.openrouter.springai.api.dto.StreamError;
 import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
+@Tag("http")
+@Tag("http.errors")
 class OpenRouterImageResponseMapperTests {
 
 	@Test

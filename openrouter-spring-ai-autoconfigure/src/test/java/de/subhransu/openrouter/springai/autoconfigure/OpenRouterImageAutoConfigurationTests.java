@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import de.subhransu.openrouter.springai.image.OpenRouterImageModel;
 import de.subhransu.openrouter.springai.image.OpenRouterImageOptions;
 import io.micrometer.observation.ObservationRegistry;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.image.ImageModel;
 import org.springframework.ai.image.ImagePrompt;
@@ -15,6 +16,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.test.util.ReflectionTestUtils;
 
+@Tag("configuration")
 class OpenRouterImageAutoConfigurationTests {
 
 	private static final String API_KEY_PROPERTY = "spring.ai.openrouter.api-key=test-key";
@@ -22,6 +24,7 @@ class OpenRouterImageAutoConfigurationTests {
 	private final ApplicationContextRunner contextRunner = new ApplicationContextRunner().withConfiguration(
 			AutoConfigurations.of(OpenRouterApiAutoConfiguration.class, OpenRouterImageAutoConfiguration.class));
 
+	@Tag("configuration.beans")
 	@Test
 	void createsImageModelWhenApiKeyIsConfigured() {
 		this.contextRunner.withPropertyValues(API_KEY_PROPERTY).run(context -> {
@@ -30,6 +33,7 @@ class OpenRouterImageAutoConfigurationTests {
 		});
 	}
 
+	@Tag("configuration.properties")
 	@Test
 	void bindsImageOptionsFromProperties() {
 		this.contextRunner
@@ -62,12 +66,14 @@ class OpenRouterImageAutoConfigurationTests {
 			});
 	}
 
+	@Tag("configuration.model-selection")
 	@Test
 	void disablesImageModelWhenAnotherProviderIsSelected() {
 		this.contextRunner.withPropertyValues(API_KEY_PROPERTY, "spring.ai.model.image=other")
 			.run(context -> assertThat(context).doesNotHaveBean(OpenRouterImageModel.class));
 	}
 
+	@Tag("configuration.beans")
 	@Test
 	void backsOffWhenUserDefinesOwnImageModel() {
 		this.contextRunner.withUserConfiguration(CustomImageModelConfiguration.class)
@@ -78,6 +84,7 @@ class OpenRouterImageAutoConfigurationTests {
 			});
 	}
 
+	@Tag("configuration.observability")
 	@Test
 	void injectsUserDefinedObservationRegistryIntoImageModel() {
 		this.contextRunner.withUserConfiguration(ObservationRegistryConfiguration.class)

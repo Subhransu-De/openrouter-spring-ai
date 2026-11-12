@@ -8,6 +8,7 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -18,6 +19,8 @@ import tools.jackson.databind.json.JsonMapper;
  * in the generated metadata. Keys of nested types from the core module get theirs from
  * {@code additional-spring-configuration-metadata.json}, which the processor merges in.
  */
+@Tag("configuration")
+@Tag("configuration.metadata")
 class OpenRouterConfigurationMetadataTests {
 
 	private static final String PREFIX = "spring.ai.openrouter.";

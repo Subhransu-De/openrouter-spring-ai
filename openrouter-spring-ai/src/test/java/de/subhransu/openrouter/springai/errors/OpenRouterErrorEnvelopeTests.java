@@ -10,12 +10,15 @@ import de.subhransu.openrouter.springai.api.dto.StreamError;
 import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
 import de.subhransu.openrouter.springai.api.errors.OpenRouterApiExceptionFactory;
 import java.util.List;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 
+@Tag("http")
+@Tag("http.errors")
 class OpenRouterErrorEnvelopeTests {
 
 	private final OpenRouterHttpExceptionFactory httpFactory = new OpenRouterHttpExceptionFactory(new ObjectMapper(),

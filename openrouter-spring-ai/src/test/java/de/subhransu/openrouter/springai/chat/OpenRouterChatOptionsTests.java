@@ -6,6 +6,7 @@ import static org.mockito.Mockito.mock;
 
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
@@ -13,6 +14,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.ai.tool.ToolCallback;
 
+@Tag("api")
+@Tag("api.options")
 class OpenRouterChatOptionsTests {
 
 	private static final String MODEL = "openai/gpt-5.4-mini";

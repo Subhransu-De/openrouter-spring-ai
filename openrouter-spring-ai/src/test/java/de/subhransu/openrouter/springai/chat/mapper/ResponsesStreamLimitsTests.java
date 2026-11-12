@@ -16,6 +16,7 @@ import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException;
 import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException.Limit;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -25,6 +26,7 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 import tools.jackson.databind.ObjectMapper;
 
+@Tag("streaming")
 class ResponsesStreamLimitsTests {
 
 	private static final String REASONING_DELTA = "response.reasoning_text.delta";
@@ -35,6 +37,7 @@ class ResponsesStreamLimitsTests {
 			{"type":"response.completed","response":{"status":"completed","output":[]}}
 			""");
 
+	@Tag("streaming.limits")
 	@ParameterizedTest
 	@ValueSource(strings = { REASONING_DELTA, "response.reasoning_summary_text.delta",
 			"response.function_call_arguments.delta", "response.refusal.delta", "response.output_text.delta" })
@@ -50,6 +53,7 @@ class ResponsesStreamLimitsTests {
 			.verify();
 	}
 
+	@Tag("streaming.limits")
 	@Test
 	void chunksIncludeTextAndKeepalives() {
 		var fragment = new ResponsesStreamEvent(REASONING_DELTA, "a", null, null, null);
@@ -64,6 +68,7 @@ class ResponsesStreamLimitsTests {
 			.verify();
 	}
 
+	@Tag("streaming.limits")
 	@Test
 	void terminalSnapshotCannotBypassItemLimitOrReleaseTools() {
 		var terminal = event("""
@@ -81,6 +86,7 @@ class ResponsesStreamLimitsTests {
 		}).verifyComplete();
 	}
 
+	@Tag("streaming.limits")
 	@Test
 	void manyDoneItemsAndLargeUnfinishedCallAreBounded() {
 		var item = event("""
@@ -97,6 +103,7 @@ class ResponsesStreamLimitsTests {
 			.verify();
 	}
 
+	@Tag("streaming.limits")
 	@ParameterizedTest
 	@ValueSource(booleans = { false, true })
 	void absoluteDeadlineCancelsSilentOrActiveUpstream(boolean keepalives) {
@@ -117,6 +124,7 @@ class ResponsesStreamLimitsTests {
 		assertThat(cancelled).isTrue();
 	}
 
+	@Tag("streaming.lifecycle")
 	@Test
 	void cancellationFailureAndCompletionDoNotContaminateOtherSubscriptions() {
 		var mapper = mapper(10000, 2);
@@ -131,6 +139,7 @@ class ResponsesStreamLimitsTests {
 		StepVerifier.create(Flux.merge(stream, stream)).expectNextCount(4).verifyComplete();
 	}
 
+	@Tag("streaming.limits")
 	@Test
 	void deadlineStartsWithStateAndTerminalCompletionCancelsUpstream() {
 		AtomicBoolean cancelled = new AtomicBoolean();
@@ -149,6 +158,7 @@ class ResponsesStreamLimitsTests {
 		assertThat(cancelled).isTrue();
 	}
 
+	@Tag("streaming.lifecycle")
 	@Test
 	void overlappingSubscriptionsRetainIndependentReasoning() {
 		StepVerifier.withVirtualTime(() -> {
@@ -163,6 +173,7 @@ class ResponsesStreamLimitsTests {
 		}).thenAwait(Duration.ofSeconds(3)).expectNext("a", "a", "ab", "ab", "ab", "ab").verifyComplete();
 	}
 
+	@Tag("streaming.limits")
 	@Test
 	void modelBuilderAppliesLimitsToResponses() {
 		OpenRouterApi api = mock(OpenRouterApi.class);
@@ -179,6 +190,7 @@ class ResponsesStreamLimitsTests {
 			.verify();
 	}
 
+	@Tag("streaming.limits")
 	@Test
 	void rejectsInvalidLimits() {
 		assertThatThrownBy(() -> mapper(0, 1)).isInstanceOf(IllegalArgumentException.class);

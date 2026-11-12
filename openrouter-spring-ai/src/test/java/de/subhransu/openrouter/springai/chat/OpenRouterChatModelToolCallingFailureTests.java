@@ -23,6 +23,7 @@ import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
 import de.subhransu.openrouter.springai.api.dto.ToolCall;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.mockito.ArgumentCaptor;
@@ -49,6 +50,7 @@ import org.springframework.ai.tool.metadata.ToolMetadata;
  * {@code ToolCallingManager}, so tool resolution, JSON binding, callback invocation, and
  * this library's request/response mapping behave exactly as they do in production.
  */
+@Tag("tools")
 class OpenRouterChatModelToolCallingFailureTests {
 
 	private static final String MODEL = "openai/gpt-5.4-mini";
@@ -123,6 +125,7 @@ class OpenRouterChatModelToolCallingFailureTests {
 	// Failure modes
 	// ---------------------------------------------------------------------
 
+	@Tag("tools.execution")
 	@Test
 	void unknownToolNameSurfacesAsClearError() {
 		OpenRouterApi api = mock(OpenRouterApi.class);
@@ -134,6 +137,7 @@ class OpenRouterChatModelToolCallingFailureTests {
 			.hasMessageContaining("does_not_exist");
 	}
 
+	@Tag("tools.execution")
 	@Test
 	void toolCallbackFailureBecomesSafeToolOutputAndLoopContinues() {
 		OpenRouterApi api = mock(OpenRouterApi.class);
@@ -155,6 +159,7 @@ class OpenRouterChatModelToolCallingFailureTests {
 		});
 	}
 
+	@Tag("tools.execution")
 	@Test
 	void responsesModeUsesTheSameSafeToolFailurePayload() {
 		OpenRouterApi api = mock(OpenRouterApi.class);
@@ -180,6 +185,7 @@ class OpenRouterChatModelToolCallingFailureTests {
 				.isEqualTo(OpenRouterToolExecutionExceptionProcessor.DEFAULT_FAILURE_PAYLOAD));
 	}
 
+	@Tag("tools.execution")
 	@Test
 	void toolCallbackFailureIsRethrownWhenExecutionProcessorAlwaysThrows() {
 		// A caller who installs an always-throwing exception processor gets the original
@@ -199,6 +205,7 @@ class OpenRouterChatModelToolCallingFailureTests {
 			.hasMessageContaining("tool exploded");
 	}
 
+	@Tag("tools.execution")
 	@Test
 	void invalidJsonArgumentsSurfaceAsError() {
 		OpenRouterApi api = mock(OpenRouterApi.class);
@@ -209,6 +216,7 @@ class OpenRouterChatModelToolCallingFailureTests {
 			.hasMessageContaining("Conversion from JSON");
 	}
 
+	@Tag("tools.execution")
 	@Test
 	void optingOutOfToolExecutionSurfacesToolCallsWithoutExecuting() {
 		// ChatClient auto-registers a ToolCallingAdvisor by default; opting out via
@@ -231,6 +239,7 @@ class OpenRouterChatModelToolCallingFailureTests {
 		verify(api, times(1)).chatCompletion(any());
 	}
 
+	@Tag("tools.execution")
 	@Test
 	void returnDirectReturnsToolOutputWithoutAnotherModelCall() {
 		ToolCallback directTool = FunctionToolCallback.builder("get_weather", (Map<String, Object> in) -> "sunny")
@@ -252,6 +261,7 @@ class OpenRouterChatModelToolCallingFailureTests {
 	// Multi-round flow and history accumulation
 	// ---------------------------------------------------------------------
 
+	@Tag("tools.calls")
 	@Test
 	void twoSequentialToolRoundsBeforeFinalAnswer() {
 		OpenRouterApi api = mock(OpenRouterApi.class);
@@ -284,6 +294,7 @@ class OpenRouterChatModelToolCallingFailureTests {
 	// Runaway-provider safety: documented current behavior
 	// ---------------------------------------------------------------------
 
+	@Tag("tools.execution")
 	@Test
 	@Timeout(5)
 	void providerThatNeverStopsAskingForToolsLoopsUntilItDoes() {
@@ -304,6 +315,7 @@ class OpenRouterChatModelToolCallingFailureTests {
 		verify(api, times(4)).chatCompletion(any());
 	}
 
+	@Tag("tools.calls")
 	@Test
 	void toolCallWithoutIdExecutesToolAndCompletesTheLoop() {
 		// Some providers emit a tool call with a null id. The DTO allows it; the loop

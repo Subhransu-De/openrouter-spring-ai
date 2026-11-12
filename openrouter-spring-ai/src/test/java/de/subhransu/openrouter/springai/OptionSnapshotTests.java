@@ -17,11 +17,14 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.tool.ToolCallback;
 
 class OptionSnapshotTests {
 
+	@Tag("api")
+	@Tag("api.options")
 	@Test
 	void emptyMapSnapshotsRetainNullQueriesAndRejectAllMutations() {
 		var input = new LinkedHashMap<String, Object>();
@@ -36,6 +39,8 @@ class OptionSnapshotTests {
 		assertThatThrownBy(snapshot::clear).isInstanceOf(UnsupportedOperationException.class);
 	}
 
+	@Tag("api")
+	@Tag("api.options")
 	@Test
 	void mapSnapshotsRetainInsertionOrderAndNullableEntries() {
 		for (int size : List.of(1, 2, 3, 8, 9)) {
@@ -54,6 +59,8 @@ class OptionSnapshotTests {
 		assertThat(OptionSnapshots.map(null)).isNull();
 	}
 
+	@Tag("api")
+	@Tag("api.options")
 	@Test
 	void listSnapshotsRetainNullsOrderDuplicatesAndOpaqueIdentity() {
 		Object opaque = new Object();
@@ -74,6 +81,8 @@ class OptionSnapshotTests {
 		assertThatThrownBy(() -> empty.add(opaque)).isInstanceOf(UnsupportedOperationException.class);
 	}
 
+	@Tag("api")
+	@Tag("api.options")
 	@Test
 	void recursiveListsRetainNullsOrderAndOpaqueIdentity() {
 		Object opaque = new Object();
@@ -98,6 +107,8 @@ class OptionSnapshotTests {
 		assertThatThrownBy(child::clear).isInstanceOf(UnsupportedOperationException.class);
 	}
 
+	@Tag("api")
+	@Tag("api.options")
 	@Test
 	void providerListsStayDetachedAcrossModelAndRequestSnapshots() {
 		var routes = new ArrayList<>(List.of("synthetic-route"));
@@ -121,6 +132,8 @@ class OptionSnapshotTests {
 		assertThat(new OpenRouterProviderPreferences(null, null, null, null, List.of(), null, null).order()).isNull();
 	}
 
+	@Tag("api")
+	@Tag("api.options")
 	@Test
 	void modelsReturnTypedCopiesOfTheirDefaultOptions() {
 		// Typed getters let callers derive per-request options with OpenRouter-only
@@ -152,6 +165,8 @@ class OptionSnapshotTests {
 		assertThat(image).isNotSameAs(imageDefaults);
 	}
 
+	@Tag("api")
+	@Tag("api.options")
 	@Test
 	void nestedContainersAreOwnedAcrossChatCopyMergeMutateAndBuilderReuse() {
 		var values = new ArrayList<Object>();
@@ -196,6 +211,8 @@ class OptionSnapshotTests {
 		assertThat(mutated.getToolCallbacks()).containsExactly(callback);
 	}
 
+	@Tag("multimodal")
+	@Tag("multimodal.image-model")
 	@Test
 	void imageCollectionsAreOwnedAndGettersCannotMutateSnapshots() {
 		var references = new ArrayList<>(List.of("https://example.com/synthetic.png"));
@@ -218,6 +235,8 @@ class OptionSnapshotTests {
 		}
 	}
 
+	@Tag("embeddings")
+	@Tag("embeddings.options")
 	@Test
 	void embeddingBuildsAreIndependentInBothDirections() {
 		var builder = OpenRouterEmbeddingOptions.builder()

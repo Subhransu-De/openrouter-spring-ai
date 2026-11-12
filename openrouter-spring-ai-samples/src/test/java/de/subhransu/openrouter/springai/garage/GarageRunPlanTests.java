@@ -9,6 +9,7 @@ import de.subhransu.openrouter.springai.garage.run.GarageRunPlan;
 import de.subhransu.openrouter.springai.garage.run.GarageRunPlan.ImageSurface;
 import de.subhransu.openrouter.springai.garage.run.GarageSweepRequest;
 import java.util.List;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -16,6 +17,8 @@ import tools.jackson.core.JacksonException;
 
 // Keep request bodies and expected scene names explicit in each test.
 @SuppressWarnings("PMD.AvoidDuplicateLiterals")
+@Tag("samples")
+@Tag("samples.run-plan")
 class GarageRunPlanTests {
 
   private final GarageProperties properties = new GarageProperties();

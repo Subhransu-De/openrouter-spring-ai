@@ -21,6 +21,7 @@ import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.SystemMessage;
@@ -35,6 +36,8 @@ class OpenRouterResponsesMapperTests {
 
 	private static final String WEATHER_ARGUMENTS = "{\"city\":\"Berlin\"}";
 
+	@Tag("api")
+	@Tag("api.request")
 	@Test
 	void mapsTextPromptToResponsesRequest() {
 		ResponsesRequest request = new OpenRouterResponsesRequestMapper(new ObjectMapper()).map(
@@ -57,6 +60,8 @@ class OpenRouterResponsesMapperTests {
 		assertThat(request.stream()).isTrue();
 	}
 
+	@Tag("tools")
+	@Tag("tools.calls")
 	@Test
 	void mapsToolsAndToolExchangeIntoResponsesRequest() {
 		ToolDefinition weather = ToolDefinition.builder()
@@ -99,6 +104,8 @@ class OpenRouterResponsesMapperTests {
 		assertThat(output.output()).isEqualTo("\"sunny\"");
 	}
 
+	@Tag("api")
+	@Tag("api.request")
 	@Test
 	void forwardsModalitiesAndImageConfigToResponsesRequest() {
 		ResponsesRequest request = new OpenRouterResponsesRequestMapper(new ObjectMapper()).map(
@@ -114,6 +121,8 @@ class OpenRouterResponsesMapperTests {
 		assertThat(request.imageConfig()).containsEntry("aspect_ratio", "16:9");
 	}
 
+	@Tag("multimodal")
+	@Tag("multimodal.image-output")
 	@Test
 	void mapsImageGenerationCallOutputItemsToMedia() {
 		ResponsesResult result = new ResponsesResult("resp-1", "response", 123L, "google/gemini-2.5-flash-image",
@@ -132,6 +141,8 @@ class OpenRouterResponsesMapperTests {
 			.isEqualTo("data:image/png;base64,aW1hZ2Ux");
 	}
 
+	@Tag("multimodal")
+	@Tag("multimodal.image-output")
 	@Test
 	void mapsCompletedImageGenerationCallItemsFromResponsesStream() throws Exception {
 		ChatResponse mapped = new OpenRouterResponsesStreamingResponseMapper().map(streamEvent("""
@@ -152,6 +163,8 @@ class OpenRouterResponsesMapperTests {
 			.isEqualTo("data:image/png;base64,aW1hZ2Ux");
 	}
 
+	@Tag("tools")
+	@Tag("tools.calls")
 	@Test
 	void mapsFunctionCallOutputItemsToToolCalls() {
 		ResponsesResult result = new ResponsesResult(
@@ -169,6 +182,8 @@ class OpenRouterResponsesMapperTests {
 		assertThat(toolCall.arguments()).isEqualTo(WEATHER_ARGUMENTS);
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@Test
 	void mapsResponsesResultToChatResponse() {
 		ResponsesResult result = new ResponsesResult("resp-1", "response", 123L, "openai/gpt-5.4", "completed",
@@ -185,6 +200,8 @@ class OpenRouterResponsesMapperTests {
 		assertThat(mapped.getMetadata().getUsage().getTotalTokens()).isEqualTo(6);
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.aggregation")
 	@Test
 	void mapsResponsesTextDeltaStreamEvent() throws Exception {
 		ChatResponse mapped = new OpenRouterResponsesStreamingResponseMapper().map(streamEvent("""
@@ -200,6 +217,8 @@ class OpenRouterResponsesMapperTests {
 		assertThat(mapped.getResult().getMetadata().getContentFilters()).isEmpty();
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.aggregation")
 	@Test
 	void aggregatedPerEventResultsKeepTheLastEventMetadata() throws Exception {
 		OpenRouterResponsesStreamingResponseMapper mapper = new OpenRouterResponsesStreamingResponseMapper();
@@ -218,6 +237,8 @@ class OpenRouterResponsesMapperTests {
 			.satisfies(response -> assertThat(response.getResult().getMetadata().isEmpty()).isTrue());
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.aggregation")
 	@Test
 	void doesNotRepeatStreamedTextOnTerminalEvents() throws Exception {
 		// output_text.done and output_item.done carry the full text already sent as
@@ -251,6 +272,8 @@ class OpenRouterResponsesMapperTests {
 			.containsExactly("already streamed", "", "");
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.lifecycle")
 	@Test
 	void mapsResponsesCompletedEventToFinishReason() throws Exception {
 		ChatResponse mapped = new OpenRouterResponsesStreamingResponseMapper().map(streamEvent("""
@@ -264,6 +287,8 @@ class OpenRouterResponsesMapperTests {
 		assertThat(mapped.getResult().getMetadata().getFinishReason()).isEqualTo("STOP");
 	}
 
+	@Tag("tools")
+	@Tag("tools.calls")
 	@Test
 	void doesNotExposeFunctionCallBeforeTerminalResponse() throws Exception {
 		ChatResponse mapped = new OpenRouterResponsesStreamingResponseMapper().map(streamEvent("""
@@ -283,6 +308,8 @@ class OpenRouterResponsesMapperTests {
 		assertThat(mapped.getResult().getMetadata().getFinishReason()).isNull();
 	}
 
+	@Tag("observability")
+	@Tag("observability.usage")
 	@Test
 	void mapsUsageAndIdentityFromResponsesCompletedEvent() throws Exception {
 		ChatResponse mapped = new OpenRouterResponsesStreamingResponseMapper().map(streamEvent("""
@@ -307,6 +334,8 @@ class OpenRouterResponsesMapperTests {
 		assertThat(mapped.getMetadata().getUsage().getTotalTokens()).isEqualTo(6);
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@Test
 	void throwsOnResponsesFailedStreamEvent() throws Exception {
 		assertThatThrownBy(() -> new OpenRouterResponsesStreamingResponseMapper().map(streamEvent("""
@@ -324,6 +353,8 @@ class OpenRouterResponsesMapperTests {
 		}).hasMessage("OpenRouter responses stream failed");
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@Test
 	void failedResponsesStreamKeepsTaxonomyWithNonStringMessage() throws Exception {
 		assertThatThrownBy(() -> new OpenRouterResponsesStreamingResponseMapper().map(streamEvent("""
@@ -341,6 +372,8 @@ class OpenRouterResponsesMapperTests {
 		});
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@Test
 	void failedResponsesStreamPreservesNonStringRootErrorType() throws Exception {
 		assertThatThrownBy(() -> new OpenRouterResponsesStreamingResponseMapper().map(streamEvent("""
@@ -359,6 +392,8 @@ class OpenRouterResponsesMapperTests {
 		});
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@Test
 	void failedResponsesResultPreservesNonStringRootErrorType() throws Exception {
 		ResponsesResult result = new ObjectMapper().readValue("""
@@ -374,6 +409,8 @@ class OpenRouterResponsesMapperTests {
 			});
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@Test
 	void throwsOnFailedResponsesResult() {
 		ResponsesResult result = new ResponsesResult("resp-1", "response", 123L, "openai/gpt-5.4", "failed", List.of(),
@@ -385,6 +422,8 @@ class OpenRouterResponsesMapperTests {
 			.hasMessage("OpenRouter responses request failed");
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@Test
 	void throwsOnResponsesStreamErrorEvents() throws Exception {
 		assertThatThrownBy(() -> new OpenRouterResponsesStreamingResponseMapper().map(streamEvent("""
@@ -396,6 +435,8 @@ class OpenRouterResponsesMapperTests {
 			.hasMessage("OpenRouter responses stream failed");
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@Test
 	void eventLevelResponsesStreamErrorPreservesTypedDetails() throws Exception {
 		assertThatThrownBy(() -> new OpenRouterResponsesStreamingResponseMapper().map(streamEvent("""

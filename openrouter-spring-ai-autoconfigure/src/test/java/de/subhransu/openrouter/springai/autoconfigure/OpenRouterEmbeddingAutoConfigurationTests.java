@@ -8,6 +8,7 @@ import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingOptions;
 import io.micrometer.observation.ObservationRegistry;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.embedding.EmbeddingModel;
@@ -19,6 +20,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.test.util.ReflectionTestUtils;
 
+@Tag("configuration")
 class OpenRouterEmbeddingAutoConfigurationTests {
 
 	private static final String API_KEY_PROPERTY = "spring.ai.openrouter.api-key=test-key";
@@ -26,6 +28,7 @@ class OpenRouterEmbeddingAutoConfigurationTests {
 	private final ApplicationContextRunner contextRunner = new ApplicationContextRunner().withConfiguration(
 			AutoConfigurations.of(OpenRouterApiAutoConfiguration.class, OpenRouterEmbeddingAutoConfiguration.class));
 
+	@Tag("configuration.beans")
 	@Test
 	void createsEmbeddingModelWhenApiKeyIsConfigured() {
 		this.contextRunner.withPropertyValues(API_KEY_PROPERTY).run(context -> {
@@ -37,6 +40,7 @@ class OpenRouterEmbeddingAutoConfigurationTests {
 		});
 	}
 
+	@Tag("configuration.properties")
 	@Test
 	void bindsEmbeddingOptionsFromProperties() {
 		this.contextRunner
@@ -65,12 +69,14 @@ class OpenRouterEmbeddingAutoConfigurationTests {
 			});
 	}
 
+	@Tag("configuration.model-selection")
 	@Test
 	void disablesEmbeddingModelWhenAnotherProviderIsSelected() {
 		this.contextRunner.withPropertyValues(API_KEY_PROPERTY, "spring.ai.model.embedding=other")
 			.run(context -> assertThat(context).doesNotHaveBean(OpenRouterEmbeddingModel.class));
 	}
 
+	@Tag("configuration.beans")
 	@Test
 	void backsOffWhenUserDefinesOwnEmbeddingModel() {
 		this.contextRunner.withUserConfiguration(CustomEmbeddingModelConfiguration.class)
@@ -81,6 +87,7 @@ class OpenRouterEmbeddingAutoConfigurationTests {
 			});
 	}
 
+	@Tag("configuration.observability")
 	@Test
 	void injectsUserDefinedObservationRegistryIntoEmbeddingModel() {
 		this.contextRunner.withUserConfiguration(ObservationRegistryConfiguration.class)

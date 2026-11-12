@@ -40,6 +40,7 @@ import java.nio.file.Path;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.List;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -52,6 +53,8 @@ import org.springframework.core.env.StandardEnvironment;
 import org.springframework.core.io.ClassPathResource;
 import reactor.core.publisher.Flux;
 
+@Tag("samples")
+@Tag("samples.scenes")
 class GarageToolSceneContractTests {
 
   @TempDir Path output;

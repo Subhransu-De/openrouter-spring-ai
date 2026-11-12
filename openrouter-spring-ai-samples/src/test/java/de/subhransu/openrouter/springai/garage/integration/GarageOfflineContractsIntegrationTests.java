@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,6 +27,8 @@ import tools.jackson.databind.ObjectMapper;
     "spring.ai.openrouter.api-key=garage-missing-api-key",
     "spring.ai.openrouter.base-url=http://127.0.0.1:1/api/v1"})
 @AutoConfigureMockMvc
+@Tag("samples")
+@Tag("samples.integration")
 class GarageOfflineContractsIntegrationTests {
 
   @TempDir static Path output;

@@ -6,8 +6,11 @@ import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.lang.ArchRule;
 import de.subhransu.openrouter.springai.api.dto.ArchitectureDtoFixtures;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
+@Tag("build-release")
+@Tag("build-release.architecture")
 class ArchitectureRuleTests {
 
 	@Test

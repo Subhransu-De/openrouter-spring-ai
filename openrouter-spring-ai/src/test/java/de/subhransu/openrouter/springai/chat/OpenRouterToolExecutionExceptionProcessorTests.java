@@ -13,6 +13,7 @@ import io.micrometer.observation.ObservationRegistry;
 import io.micrometer.observation.tck.TestObservationRegistry;
 import java.io.IOException;
 import java.util.List;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.tool.definition.ToolDefinition;
@@ -30,6 +31,8 @@ class OpenRouterToolExecutionExceptionProcessorTests {
 		.inputSchema("{\"type\":\"object\"}")
 		.build();
 
+	@Tag("tools")
+	@Tag("tools.execution")
 	@Test
 	void defaultPayloadNeverContainsExceptionDetails() {
 		ToolExecutionException exception = nestedFailure();
@@ -40,6 +43,8 @@ class OpenRouterToolExecutionExceptionProcessorTests {
 			.doesNotContain(SECRET, "local path", NESTED_DETAIL, "\n", "IllegalStateException");
 	}
 
+	@Tag("tools")
+	@Tag("tools.execution")
 	@Test
 	void logMessagesKeepToolNamesOnOneLineAndRetainTheOriginalDebugException() {
 		Logger logger = (Logger) LoggerFactory.getLogger(OpenRouterToolExecutionExceptionProcessor.class);
@@ -70,6 +75,8 @@ class OpenRouterToolExecutionExceptionProcessorTests {
 		}
 	}
 
+	@Tag("observability")
+	@Tag("observability.observations")
 	@Test
 	void recordsTheOriginalNestedExceptionOnTheActiveObservation() {
 		TestObservationRegistry registry = TestObservationRegistry.create();
@@ -89,6 +96,8 @@ class OpenRouterToolExecutionExceptionProcessorTests {
 			}));
 	}
 
+	@Tag("tools")
+	@Tag("tools.execution")
 	@Test
 	void customRendererIsAnExplicitOptInForDetailedProviderOutput() {
 		ToolExecutionException exception = nestedFailure();
@@ -99,6 +108,8 @@ class OpenRouterToolExecutionExceptionProcessorTests {
 		assertThat(processor.process(exception)).contains(SECRET, NESTED_DETAIL);
 	}
 
+	@Tag("tools")
+	@Tag("tools.execution")
 	@Test
 	void checkedExceptionsAndErrorsPropagateAsInSpringAisDefaultProcessor() {
 		// They are not tool results: an IOException or an Error must reach the caller
@@ -113,6 +124,8 @@ class OpenRouterToolExecutionExceptionProcessorTests {
 		assertThatThrownBy(() -> processor.process(error)).isSameAs(error);
 	}
 
+	@Tag("tools")
+	@Tag("tools.execution")
 	@Test
 	void configuredExceptionTypesPropagateAndOtherRuntimeFailuresStayResults() {
 		OpenRouterToolExecutionExceptionProcessor processor = new OpenRouterToolExecutionExceptionProcessor(

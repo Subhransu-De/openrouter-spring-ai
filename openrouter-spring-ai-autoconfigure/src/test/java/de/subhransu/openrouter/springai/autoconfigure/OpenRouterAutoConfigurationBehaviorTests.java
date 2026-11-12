@@ -16,6 +16,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.ai.model.tool.ToolCallingManager;
@@ -46,6 +47,7 @@ import org.springframework.core.retry.RetryTemplate;
  * {@code OpenRouterAutoConfigurationPropertyMatrixTests}.
  */
 @ExtendWith(OutputCaptureExtension.class)
+@Tag("configuration")
 class OpenRouterAutoConfigurationBehaviorTests {
 
 	private static final String DEFAULT_MAPPER_WARNING = "OpenRouter uses a default JsonMapper";
@@ -59,6 +61,7 @@ class OpenRouterAutoConfigurationBehaviorTests {
 	// Bean back-off and custom collaborators
 	// ---------------------------------------------------------------------
 
+	@Tag("configuration.beans")
 	@Test
 	void backsOffWhenUserDefinesOwnApiBean() {
 		contextRunner.withUserConfiguration(CustomApiConfiguration.class).withPropertyValues(API_KEY).run(context -> {
@@ -68,6 +71,7 @@ class OpenRouterAutoConfigurationBehaviorTests {
 		});
 	}
 
+	@Tag("configuration.beans")
 	@Test
 	void usesCustomJsonMapperRetryTemplateAndToolCallingManager() {
 		contextRunner.withUserConfiguration(CustomCollaboratorsConfiguration.class)
@@ -88,6 +92,7 @@ class OpenRouterAutoConfigurationBehaviorTests {
 			});
 	}
 
+	@Tag("configuration.beans")
 	@Test
 	void otherFormatMappersDoNotMakeTheJsonMapperLookupAmbiguous(CapturedOutput output) {
 		// Boot 4 defines an XmlMapper or CBORMapper next to the JsonMapper when those
@@ -106,6 +111,7 @@ class OpenRouterAutoConfigurationBehaviorTests {
 			});
 	}
 
+	@Tag("configuration.beans")
 	@Test
 	void ambiguousRetryTemplatesAndRegistriesFallBackLikeTheOfficialProviders() {
 		// Framework 7 core retry makes application RetryTemplate beans common. Two of
@@ -127,6 +133,7 @@ class OpenRouterAutoConfigurationBehaviorTests {
 			});
 	}
 
+	@Tag("configuration.beans")
 	@Test
 	void ambiguousJsonMappersFallBackToADefaultMapperAndSayWhy(CapturedOutput output) {
 		contextRunner.withUserConfiguration(TwoJsonMappersConfiguration.class)
@@ -140,6 +147,7 @@ class OpenRouterAutoConfigurationBehaviorTests {
 			});
 	}
 
+	@Tag("configuration.beans")
 	@Test
 	void plainObjectMapperBeanIsNotUsedForTheJsonWireProtocolAndSayWhy(CapturedOutput output) {
 		contextRunner.withUserConfiguration(PlainObjectMapperConfiguration.class)
@@ -154,6 +162,7 @@ class OpenRouterAutoConfigurationBehaviorTests {
 			});
 	}
 
+	@Tag("configuration.model-selection")
 	@Test
 	void anotherChatProviderLeavesApiForOtherDefaultOpenRouterModels() {
 		contextRunner.withPropertyValues(API_KEY, "spring.ai.model.chat=other").run(context -> {
@@ -166,22 +175,26 @@ class OpenRouterAutoConfigurationBehaviorTests {
 	// Attribution categories join behavior (observed on the wire)
 	// ---------------------------------------------------------------------
 
+	@Tag("configuration.properties")
 	@Test
 	void multipleCategoriesAreJoinedWithCommasOnTheWire() {
 		assertCategoriesHeader(new String[] { "spring.ai.openrouter.app.categories[0]=translation",
 				"spring.ai.openrouter.app.categories[1]=programming" }, "translation,programming");
 	}
 
+	@Tag("configuration.properties")
 	@Test
 	void singleCategoryIsSentVerbatim() {
 		assertCategoriesHeader(new String[] { "spring.ai.openrouter.app.categories[0]=samples" }, "samples");
 	}
 
+	@Tag("configuration.properties")
 	@Test
 	void absentCategoriesOmitTheHeader() {
 		assertCategoriesHeader(new String[0], null);
 	}
 
+	@Tag("configuration.properties")
 	@Test
 	void emptyCategoriesListOmitsTheHeader() {
 		// An explicitly empty list must not emit a blank header.

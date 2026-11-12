@@ -9,10 +9,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import java.util.ArrayList;
 import java.util.List;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 
 /** A full run over HTTP: every scene in both request modes, all modalities and image surfaces. */
+@Tag("samples")
+@Tag("samples.integration")
 class GarageFullRunIntegrationTests extends MockedGarageIntegrationTest {
 
   private static final String TOPIC = "SENTINEL-TOPIC-7F3A a pickup that overheats";

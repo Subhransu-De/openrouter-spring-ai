@@ -11,6 +11,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
@@ -28,6 +29,8 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.client.RestClient;
 import reactor.core.publisher.Mono;
 
+@Tag("http")
+@Tag("http.client")
 class OpenRouterApiBuilderIsolationTests {
 
 	private static final String APP_REFERER = "https://app.test";

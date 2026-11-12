@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -81,6 +82,8 @@ class OpenRouterStreamingToolCallAggregationTests {
 				OpenRouterChatOptions.builder().model(MODEL).build());
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@Test
 	void fragmentedToolCallArgumentsAreMergedIntoOneCompleteToolCall() {
 		OpenRouterApi api = mock(OpenRouterApi.class);
@@ -100,6 +103,8 @@ class OpenRouterStreamingToolCallAggregationTests {
 		assertThat(merged.getResult().getMetadata().getFinishReason()).isEqualTo("TOOL_CALLS");
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@Test
 	void parallelToolCallsSplitByIndexAreEachMergedCompletely() {
 		OpenRouterApi api = mock(OpenRouterApi.class);
@@ -120,6 +125,8 @@ class OpenRouterStreamingToolCallAggregationTests {
 		assertThat(toolCalls.get(1).arguments()).isEqualTo("{\"zone\":\"UTC\"}");
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@Test
 	void textChunksKeepStreamingIndividuallyAroundTheToolCallBuffer() {
 		OpenRouterApi api = mock(OpenRouterApi.class);
@@ -136,6 +143,8 @@ class OpenRouterStreamingToolCallAggregationTests {
 		assertThat(responses.get(2).hasToolCalls()).isTrue();
 	}
 
+	@Tag("observability")
+	@Tag("observability.usage")
 	@Test
 	void usageOnlyChunkAfterTheFinishChunkPassesThroughSeparately() {
 		ChatCompletionChunk usageChunk = new ChatCompletionChunk("gen-1", "chat.completion.chunk", 123L, MODEL,
@@ -152,6 +161,8 @@ class OpenRouterStreamingToolCallAggregationTests {
 		assertThat(responses.get(1).getMetadata().getUsage().getTotalTokens()).isEqualTo(15);
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@Test
 	void fragmentsWithoutAWireIndexFallBackToIdThenLastCallCorrelation() {
 		Choice idFragment = new Choice(0, null,
@@ -173,6 +184,8 @@ class OpenRouterStreamingToolCallAggregationTests {
 		assertThat(toolCalls.get(0).arguments()).isEqualTo("{\"city\":\"Berlin\"}");
 	}
 
+	@Tag("tools")
+	@Tag("tools.execution")
 	@Test
 	void streamedToolCallsExecuteEndToEndThroughTheChatClientAdvisor() {
 		AtomicBoolean toolInvoked = new AtomicBoolean(false);
@@ -201,6 +214,8 @@ class OpenRouterStreamingToolCallAggregationTests {
 		verify(api, times(2)).chatCompletionStream(any());
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@Test
 	void defaultLimitsAssembleSixKilobyteArgumentsStreamedInFourCharacterFragments() {
 		String arguments = noteArguments(6_000);
@@ -214,6 +229,8 @@ class OpenRouterStreamingToolCallAggregationTests {
 		}).verifyComplete();
 	}
 
+	@Tag("tools")
+	@Tag("tools.execution")
 	@Test
 	void chatClientRunsTheToolOnceForSixKilobyteStreamedArguments() {
 		String arguments = noteArguments(6_000);
@@ -239,6 +256,8 @@ class OpenRouterStreamingToolCallAggregationTests {
 		verify(api, times(2)).chatCompletionStream(any());
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@Test
 	void defaultByteLimitStillBoundsArgumentsBelowTheChunkLimit() {
 		OpenRouterApi api = mock(OpenRouterApi.class);
@@ -254,6 +273,8 @@ class OpenRouterStreamingToolCallAggregationTests {
 			.verify(Duration.ofSeconds(10));
 	}
 
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
 	@Test
 	void defaultChunkLimitStillRejectsOneFragmentMoreThanItAllows() {
 		int fragments = OpenRouterStreamingToolCallAggregator.DEFAULT_MAX_CHUNKS + 1;
@@ -276,6 +297,8 @@ class OpenRouterStreamingToolCallAggregationTests {
 			.verify(Duration.ofSeconds(10));
 	}
 
+	@Tag("observability")
+	@Tag("observability.usage")
 	@Test
 	void newestUsageAndExtensionsWinWhenAUsageOnlyChunkPrecedesTheToolCallFinish() {
 		OpenRouterApi api = mock(OpenRouterApi.class);
@@ -292,6 +315,8 @@ class OpenRouterStreamingToolCallAggregationTests {
 		}).verifyComplete();
 	}
 
+	@Tag("observability")
+	@Tag("observability.usage")
 	@Test
 	void usageOnlyChunkStillReplacesOlderUsageFromABufferedToolFragment() {
 		OpenRouterApi api = mock(OpenRouterApi.class);
@@ -309,6 +334,8 @@ class OpenRouterStreamingToolCallAggregationTests {
 		}).verifyComplete();
 	}
 
+	@Tag("observability")
+	@Tag("observability.usage")
 	@Test
 	void newestUsageWinsWhenAUsageOnlyChunkPrecedesThePlainTextFinish() {
 		OpenRouterApi api = mock(OpenRouterApi.class);
@@ -324,6 +351,8 @@ class OpenRouterStreamingToolCallAggregationTests {
 			.satisfies(response -> assertUsage(response, 15, 0.2));
 	}
 
+	@Tag("observability")
+	@Tag("observability.usage")
 	@Test
 	void olderSharedUsageIsNotReportedAfterANewerToolChoiceFinish() {
 		List<ChatResponse> observed = new ArrayList<>();

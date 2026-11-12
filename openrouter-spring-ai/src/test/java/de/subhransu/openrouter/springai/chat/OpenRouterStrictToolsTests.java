@@ -15,6 +15,7 @@ import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -30,6 +31,8 @@ import reactor.test.StepVerifier;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+@Tag("tools")
+@Tag("tools.definition")
 class OpenRouterStrictToolsTests {
 
 	private static final String SCHEMA = """

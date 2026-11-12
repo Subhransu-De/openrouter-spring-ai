@@ -16,10 +16,13 @@ import de.subhransu.openrouter.springai.garage.scenes.SceneResult;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.model.ChatResponse;
 import reactor.core.publisher.Flux;
 
+@Tag("samples")
+@Tag("samples.scenes")
 class GarageAttributionSceneTests {
 
   @Test

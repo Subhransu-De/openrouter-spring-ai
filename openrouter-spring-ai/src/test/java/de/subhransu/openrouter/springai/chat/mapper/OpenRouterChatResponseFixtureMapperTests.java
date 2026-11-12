@@ -23,6 +23,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -47,6 +48,8 @@ class OpenRouterChatResponseFixtureMapperTests {
 
 	private final OpenRouterStreamingResponseMapper streamingMapper = new OpenRouterStreamingResponseMapper();
 
+	@Tag("api")
+	@Tag("api.response")
 	@ParameterizedTest(name = "blocking native failure {0} -> {1}")
 	@CsvSource({ "error, UNKNOWN", "insufficient_system_resources, PROVIDER_UNAVAILABLE",
 			"insufficient_quota, BILLING_CREDITS" })
@@ -64,6 +67,8 @@ class OpenRouterChatResponseFixtureMapperTests {
 			});
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@Test
 	void sparseChoiceErrorFallsBackToNativeFailureCategory() {
 		ChoiceError error = new ChoiceError(null, null, Map.of());
@@ -77,6 +82,8 @@ class OpenRouterChatResponseFixtureMapperTests {
 					.isEqualTo(OpenRouterErrorCategory.PROVIDER_UNAVAILABLE));
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@Test
 	void unknownCanonicalChoiceTypeRemainsFailClosedWithNativeFailureReason() {
 		ChoiceError error = new ChoiceError(null, null, Map.of("error_type", "future_error"));
@@ -92,6 +99,8 @@ class OpenRouterChatResponseFixtureMapperTests {
 			});
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.lifecycle")
 	@ParameterizedTest(name = "streaming native failure {0} -> {1}")
 	@CsvSource({ "error, UNKNOWN", "insufficient_system_resources, PROVIDER_UNAVAILABLE",
 			"insufficient_quota, BILLING_CREDITS" })
@@ -117,6 +126,8 @@ class OpenRouterChatResponseFixtureMapperTests {
 		}
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@Test
 	void mapsRealisticSuccessFixtureIncludingNestedUsageAndUnknownFields() throws IOException {
 		ChatCompletionResponse response = parseFixture("chat-completion-success.json", ChatCompletionResponse.class);
@@ -139,6 +150,8 @@ class OpenRouterChatResponseFixtureMapperTests {
 		assertThat(usage.getCost()).isEqualTo(0.00031);
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@Test
 	void mapsMultipleChoicesToMultipleGenerations() throws IOException {
 		ChatCompletionResponse response = parseFixture("chat-completion-multi-choice.json",
@@ -153,6 +166,8 @@ class OpenRouterChatResponseFixtureMapperTests {
 		assertThat(mapped.getResults().get(1).getMetadata().getFinishReason()).isEqualTo("LENGTH");
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@Test
 	void choiceErrorFixtureDeserializesAndRaisesTransientFailureWithDiagnostics() throws IOException {
 		ChatCompletionResponse response = parseFixture("chat-completion-choice-error.json",
@@ -185,6 +200,8 @@ class OpenRouterChatResponseFixtureMapperTests {
 			});
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@Test
 	void anyFailedChoiceMakesTheWholeMultiChoiceResponseFail() throws IOException {
 		ChatCompletionResponse response = parseFixture("chat-completion-mixed-choice-error.json",
@@ -198,6 +215,8 @@ class OpenRouterChatResponseFixtureMapperTests {
 			});
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@Test
 	void symbolicTransientCodeWithoutMetadataRaisesTransientFailure() {
 		ChatCompletionResponse response = choiceErrorResponse("server_error", Map.of());
@@ -209,6 +228,8 @@ class OpenRouterChatResponseFixtureMapperTests {
 			});
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@Test
 	void symbolicDeterministicCodeWithoutMetadataRaisesNonTransientFailure() {
 		ChatCompletionResponse response = choiceErrorResponse("invalid_request_error", Map.of());
@@ -220,6 +241,8 @@ class OpenRouterChatResponseFixtureMapperTests {
 			});
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@Test
 	void metadataErrorTypeTakesPrecedenceOverSymbolicTransientCode() {
 		ChatCompletionResponse response = choiceErrorResponse("server_error", Map.of("error_type", "invalid_request"));
@@ -229,6 +252,8 @@ class OpenRouterChatResponseFixtureMapperTests {
 				exception -> assertThat(exception.getErrorDetails().errorType()).isEqualTo("invalid_request"));
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@Test
 	void normalizedSymbolicTransientCodeRaisesTransientFailure() {
 		ChatCompletionResponse response = choiceErrorResponse("SERVER_ERROR", Map.of());
@@ -239,6 +264,8 @@ class OpenRouterChatResponseFixtureMapperTests {
 					.isEqualTo(OpenRouterErrorCategory.PROVIDER_UNAVAILABLE));
 	}
 
+	@Tag("http")
+	@Tag("http.retry")
 	@Test
 	void transientChoiceFailureParticipatesInSpringAiRetryPolicy() throws IOException {
 		ChatCompletionResponse failed = parseFixture("chat-completion-choice-error.json", ChatCompletionResponse.class);
@@ -256,6 +283,8 @@ class OpenRouterChatResponseFixtureMapperTests {
 		assertThat(response.getResult().getOutput().getText()).isEqualTo("The capital of France is Paris.");
 	}
 
+	@Tag("http")
+	@Tag("http.retry")
 	@Test
 	void deterministicChoiceFailureIsNotRetried() throws IOException {
 		ChatCompletionResponse failed = parseFixture("chat-completion-mixed-choice-error.json",
@@ -269,6 +298,8 @@ class OpenRouterChatResponseFixtureMapperTests {
 		assertThat(attempts).hasValue(1);
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@Test
 	void partialOutputInDiagnosticsIsBounded() {
 		String partial = "x".repeat(600);
@@ -285,6 +316,8 @@ class OpenRouterChatResponseFixtureMapperTests {
 			});
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@Test
 	void everyProviderControlledDiagnosticFieldIsBoundedAndExcludedFromMessage() {
 		String tailMarker = "must-not-reach-the-exception-message";
@@ -307,6 +340,8 @@ class OpenRouterChatResponseFixtureMapperTests {
 			});
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@Test
 	void credentialShapedChoiceDiagnosticsAreRedactedFromStructuredFields() {
 		String providerSecret = "sk-provider-secret";
@@ -334,6 +369,8 @@ class OpenRouterChatResponseFixtureMapperTests {
 			});
 	}
 
+	@Tag("http")
+	@Tag("http.errors")
 	@Test
 	void nativeFinishReasonIsDetachedBoundedAndCredentialSafe() {
 		String nativeSecret = "sk-native-secret";
@@ -356,6 +393,8 @@ class OpenRouterChatResponseFixtureMapperTests {
 			});
 	}
 
+	@Tag("tools")
+	@Tag("tools.calls")
 	@Test
 	void mapsToolCallFixture() throws IOException {
 		ChatCompletionResponse response = parseFixture("chat-completion-tool-call.json", ChatCompletionResponse.class);
@@ -371,6 +410,8 @@ class OpenRouterChatResponseFixtureMapperTests {
 		assertThat(mapped.getResult().getMetadata().getFinishReason()).isEqualTo("TOOL_CALLS");
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.aggregation")
 	@Test
 	void mapsStreamingChunkFixtureWithReasoningAndUnknownFields() throws IOException {
 		ChatCompletionChunk chunk = parseFixture("chat-completion-chunk.json", ChatCompletionChunk.class);
@@ -381,6 +422,8 @@ class OpenRouterChatResponseFixtureMapperTests {
 		assertThat(mapped.getResult().getMetadata().<String>get("openrouter.reasoning")).isEqualTo("warming up");
 	}
 
+	@Tag("observability")
+	@Tag("observability.usage")
 	@Test
 	void usageJsonAliasesForResponsesApiNamesDeserialize() {
 		// The Responses API reports usage as input_tokens/output_tokens (and
@@ -395,6 +438,8 @@ class OpenRouterChatResponseFixtureMapperTests {
 		assertThat(usage.cachedTokens()).isEqualTo(2);
 	}
 
+	@Tag("observability")
+	@Tag("observability.usage")
 	@Test
 	void mapsFinalStreamingUsageChunkFixture() throws IOException {
 		ChatCompletionChunk chunk = parseFixture("chat-completion-chunk-usage.json", ChatCompletionChunk.class);
@@ -405,6 +450,8 @@ class OpenRouterChatResponseFixtureMapperTests {
 		assertThat(mapped.getMetadata().getUsage().getTotalTokens()).isEqualTo(26);
 	}
 
+	@Tag("streaming")
+	@Tag("streaming.lifecycle")
 	@Test
 	void streamingErrorChunkFixtureRaisesApiException() throws IOException {
 		ChatCompletionChunk chunk = parseFixture("chat-completion-chunk-error.json", ChatCompletionChunk.class);
@@ -421,6 +468,8 @@ class OpenRouterChatResponseFixtureMapperTests {
 	// In-memory edge cases that complement the fixtures
 	// ---------------------------------------------------------------------
 
+	@Tag("api")
+	@Tag("api.response")
 	@Test
 	void nullMessageIsRejected() {
 		ChatCompletionResponse response = new ChatCompletionResponse("gen-1", "chat.completion", 1L, "m", "p",
@@ -430,6 +479,8 @@ class OpenRouterChatResponseFixtureMapperTests {
 			.isInstanceOf(de.subhransu.openrouter.springai.errors.OpenRouterProtocolException.class);
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@Test
 	void nullContentMapsToEmptyText() {
 		ChatCompletionResponse response = new ChatCompletionResponse("gen-1", "chat.completion", 1L, "m", "p",
@@ -441,6 +492,8 @@ class OpenRouterChatResponseFixtureMapperTests {
 		assertThat(mapped.getResult().getOutput().getText()).isEmpty();
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@Test
 	void mapsStructuredContentPartsToTextAndMedia() throws IOException {
 		ChatCompletionResponse response = parseFixture("chat-completion-content-parts.json",
@@ -455,6 +508,8 @@ class OpenRouterChatResponseFixtureMapperTests {
 		});
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@Test
 	void missingFinishReasonPassesThroughAsNull() {
 		ChatCompletionResponse response = new ChatCompletionResponse("gen-1", "chat.completion", 1L, "m", "p",
@@ -465,6 +520,8 @@ class OpenRouterChatResponseFixtureMapperTests {
 		assertThat(mapped.getResult().getMetadata().getFinishReason()).isNull();
 	}
 
+	@Tag("api")
+	@Tag("api.response")
 	@Test
 	void unknownFinishReasonPassesThroughVerbatim() {
 		ChatCompletionResponse response = new ChatCompletionResponse("gen-1", "chat.completion", 1L, "m", "p",
@@ -477,6 +534,8 @@ class OpenRouterChatResponseFixtureMapperTests {
 		assertThat(mapped.getResult().getMetadata().getFinishReason()).isEqualTo("guardrail_triggered");
 	}
 
+	@Tag("observability")
+	@Tag("observability.usage")
 	@Test
 	void missingUsageKeepsSpringAiEmptyUsageDefault() {
 		ChatCompletionResponse response = new ChatCompletionResponse("gen-1", "chat.completion", 1L, "m", "p",

@@ -11,6 +11,7 @@ import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.UserMessage;
@@ -29,6 +30,8 @@ class OpenRouterChatImageOutputMapperTests {
 
 	private final ObjectMapper objectMapper = new ObjectMapper();
 
+	@Tag("api")
+	@Tag("api.response")
 	@Test
 	void joinsMixedContentWithoutChangingWhitespaceOrNullHandling() {
 		var content = Arrays.asList(null, 42, " first ", ContentPart.text(""),
@@ -42,6 +45,8 @@ class OpenRouterChatImageOutputMapperTests {
 		assertThat(AssistantContentMapper.map(List.of()).text()).isEmpty();
 	}
 
+	@Tag("multimodal")
+	@Tag("multimodal.image-output")
 	@Test
 	void putsModalitiesAndImageConfigOnTheWire() {
 		OpenRouterChatRequestMapper mapper = new OpenRouterChatRequestMapper(this.objectMapper);
@@ -59,6 +64,8 @@ class OpenRouterChatImageOutputMapperTests {
 			.contains("\"image_config\":{\"aspect_ratio\":\"16:9\"}");
 	}
 
+	@Tag("multimodal")
+	@Tag("multimodal.image-output")
 	@Test
 	void surfacesGeneratedImagesAsAssistantMedia() {
 		String body = """
@@ -92,6 +99,8 @@ class OpenRouterChatImageOutputMapperTests {
 		assertThat(media.getData()).isEqualTo(DATA_URL);
 	}
 
+	@Tag("multimodal")
+	@Tag("multimodal.image-output")
 	@Test
 	void surfacesStreamedDeltaImagesAsAssistantMedia() {
 		String chunk = """
@@ -120,6 +129,8 @@ class OpenRouterChatImageOutputMapperTests {
 		assertThat(chatResponse.getResult().getOutput().getMedia().get(0).getData()).isEqualTo(DATA_URL);
 	}
 
+	@Tag("multimodal")
+	@Tag("multimodal.image-output")
 	@Test
 	void ignoresAbsentImagesArray() {
 		String body = """
