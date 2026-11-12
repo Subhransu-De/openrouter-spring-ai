@@ -394,8 +394,9 @@ jobs:
           java .github/scripts/TestReport.java collect --java "$JAVA_VERSION" --commit "$COMMIT" \
             --out test-report/head.tsv openrouter-spring-ai*/target
 
-      # Pull requests compare with the reports of main runs. Until main has one, also test the base commit here.
-      - name: Test the base commit while main has no test report
+      # Test counts compare with the exact main commit the pull request was tested against. When main has no
+      # report for that commit yet, test it here too. JaCoCo stays on, as in the pull request's own run.
+      - name: Test the base commit when main has no report for it
         if: ${{ !cancelled() && github.event_name == 'pull_request' }}
         env:
           GH_TOKEN: ${{ github.token }}
@@ -403,9 +404,10 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           found=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=test-report-java$JAVA_VERSION&per_page=100" \
-            --jq '[.artifacts[] | select(.expired | not) | select(.workflow_run.head_branch == "main")] | length')
+            --jq '[.artifacts[] | select(.expired | not) | select(.workflow_run.head_branch == "main")
+                   | select(.workflow_run.head_sha == env.BASE_SHA)] | length')
           if [ "$found" -gt 0 ]; then
-            echo "main already has a test report for Java $JAVA_VERSION."
+            echo "main already has a Java $JAVA_VERSION test report for $BASE_SHA."
             exit 0
           fi
           git fetch --no-tags --depth=1 origin "$BASE_SHA"
@@ -442,9 +444,13 @@ jobs:
     if: ${{ !cancelled() && github.event_name == 'pull_request' }}
     needs: maven-test
     runs-on: ubuntu-latest
+    # One report job at a time per pull request, so an older commit cannot post over a newer one.
+    concurrency:
+      group: test-report-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
     permissions:
       actions: read # download the test reports of main runs
-      contents: write # push the chart images to the test-report-charts branch
+      contents: read
       pull-requests: write # post the two comments
     steps:
       - name: Check out the report scripts
@@ -465,35 +471,38 @@ jobs:
           pattern: test-report-java*
           path: head
 
-      - name: Download the test reports of the last five main runs
+      - name: Download the test reports of the base commit and the last five main runs
         env:
           GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
+          base_run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$BASE_SHA&status=success&per_page=10" \
+            --jq '[.workflow_runs[] | select(.head_branch == "main") | select(.event == "push" or .event == "schedule")
+                   | select(.head_repository.full_name == env.GITHUB_REPOSITORY)][0].id // empty')
+          if [ -n "$base_run" ]; then
+            gh run download "$base_run" --repo "$GITHUB_REPOSITORY" --pattern 'test-report-java*' --dir base/0 || true
+          fi
           n=0
           for id in $(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=main&status=success&per_page=30" \
             --jq '.workflow_runs[] | select(.event == "push" or .event == "schedule")
                   | select(.head_repository.full_name == env.GITHUB_REPOSITORY) | .id'); do
+            if [ "$id" = "$base_run" ]; then continue; fi
             if gh run download "$id" --repo "$GITHUB_REPOSITORY" --pattern 'test-report-java*' --dir "base/$((n + 1))"; then
               n=$((n + 1))
             fi
             if [ "$n" -ge 5 ]; then break; fi
           done
-          echo "Found test reports in $n main runs."
+          echo "Found test reports in $n main runs besides the base commit's."
 
       - name: Build the comments
         env:
           PR: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          # Charts only where this job can push them; forks and Dependabot get them from test-report.yml.
-          CHART_URL: >-
-            ${{ github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
-            && format('https://raw.githubusercontent.com/{0}/test-report-charts/pr-{1}/{2}', github.repository,
-            github.event.pull_request.number, github.event.pull_request.head.sha) || '' }}
         run: |
           java .github/scripts/TestReport.java selftest
-          java .github/scripts/TestReport.java diff --head head --base base --pr "$PR" --head-commit "$HEAD_SHA" \
-            --base-commit "$BASE_SHA" --java 25,21,17 --tables-from 25 --chart-url "$CHART_URL" --out comments
+          java .github/scripts/TestReport.java diff --head head --base base --pr "$PR" \
+            --head-commit "$HEAD_SHA" --base-commit "$BASE_SHA" --java 25,21,17 --tables-from 25 --out comments
           cat comments/counts.md comments/timing.md >> "$GITHUB_STEP_SUMMARY"
 
       # Pull requests from forks and from Dependabot get a read-only token here; test-report.yml comments on those.

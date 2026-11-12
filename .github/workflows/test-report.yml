@@ -19,9 +19,13 @@ jobs:
       && (github.event.workflow_run.head_repository.full_name != github.repository
           || github.event.workflow_run.actor.login == 'dependabot[bot]')
     runs-on: ubuntu-latest
+    # One report job at a time per pull request branch, so an older commit cannot post over a newer one.
+    concurrency:
+      group: test-report-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
+      cancel-in-progress: false
     permissions:
       actions: read # download the test reports of CI runs
-      contents: write # push the chart images to the test-report-charts branch
+      contents: read
       pull-requests: write # post the two comments
     steps:
       - name: Check out the report scripts from main
@@ -55,10 +59,17 @@ jobs:
           RUN_ID: ${{ github.event.workflow_run.id }}
         run: |
           gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern 'test-report-java*' --dir head
+          base_run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$BASE_SHA&status=success&per_page=10" \
+            --jq '[.workflow_runs[] | select(.head_branch == "main") | select(.event == "push" or .event == "schedule")
+                   | select(.head_repository.full_name == env.GITHUB_REPOSITORY)][0].id // empty')
+          if [ -n "$base_run" ]; then
+            gh run download "$base_run" --repo "$GITHUB_REPOSITORY" --pattern 'test-report-java*' --dir base/0 || true
+          fi
           n=0
           for id in $(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=main&status=success&per_page=30" \
             --jq '.workflow_runs[] | select(.event == "push" or .event == "schedule")
                   | select(.head_repository.full_name == env.GITHUB_REPOSITORY) | .id'); do
+            if [ "$id" = "$base_run" ]; then continue; fi
             if gh run download "$id" --repo "$GITHUB_REPOSITORY" --pattern 'test-report-java*' --dir "base/$((n + 1))"; then
               n=$((n + 1))
             fi
@@ -70,8 +81,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          chart_url="https://raw.githubusercontent.com/$GITHUB_REPOSITORY/test-report-charts/pr-$PR/$HEAD_SHA"
-          java .github/scripts/TestReport.java diff --head head --base base --pr "$PR" --head-commit "$HEAD_SHA" \
-            --base-commit "$BASE_SHA" --java 25,21,17 --tables-from 25 --chart-url "$chart_url" --out comments
+          java .github/scripts/TestReport.java diff --head head --base base --pr "$PR" \
+            --head-commit "$HEAD_SHA" --base-commit "$BASE_SHA" --java 25,21,17 --tables-from 25 --out comments
           cat comments/counts.md comments/timing.md >> "$GITHUB_STEP_SUMMARY"
           bash .github/scripts/post-test-report.sh "$PR" "$HEAD_SHA" comments
