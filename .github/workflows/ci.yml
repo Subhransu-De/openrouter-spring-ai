@@ -410,7 +410,7 @@ jobs:
           fi
           git fetch --no-tags --depth=1 origin "$BASE_SHA"
           git worktree add --detach "$RUNNER_TEMP/base" "$BASE_SHA"
-          (cd "$RUNNER_TEMP/base" && mvn -B -ntp -Dmaven.test.failure.ignore=true -Djacoco.skip=true test) || true
+          (cd "$RUNNER_TEMP/base" && mvn -B -ntp -Dmaven.test.failure.ignore=true test) || true
           java .github/scripts/TestReport.java collect --java "$JAVA_VERSION" --commit "$BASE_SHA" \
             --out test-report/base.tsv "$RUNNER_TEMP"/base/openrouter-spring-ai*/target
 
@@ -444,7 +444,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       actions: read # download the test reports of main runs
-      contents: read
+      contents: write # push the chart images to the test-report-charts branch
       pull-requests: write # post the two comments
     steps:
       - name: Check out the report scripts
@@ -485,10 +485,15 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          # Charts only where this job can push them; forks and Dependabot get them from test-report.yml.
+          CHART_URL: >-
+            ${{ github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
+            && format('https://raw.githubusercontent.com/{0}/test-report-charts/pr-{1}/{2}', github.repository,
+            github.event.pull_request.number, github.event.pull_request.head.sha) || '' }}
         run: |
           java .github/scripts/TestReport.java selftest
-          java .github/scripts/TestReport.java diff --head head --base base --pr "$PR" \
-            --head-commit "$HEAD_SHA" --base-commit "$BASE_SHA" --java 25,21,17 --tables-from 25 --out comments
+          java .github/scripts/TestReport.java diff --head head --base base --pr "$PR" --head-commit "$HEAD_SHA" \
+            --base-commit "$BASE_SHA" --java 25,21,17 --tables-from 25 --chart-url "$CHART_URL" --out comments
           cat comments/counts.md comments/timing.md >> "$GITHUB_STEP_SUMMARY"
 
       # Pull requests from forks and from Dependabot get a read-only token here; test-report.yml comments on those.
