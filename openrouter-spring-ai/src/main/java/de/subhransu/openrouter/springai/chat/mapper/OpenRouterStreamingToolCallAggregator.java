@@ -249,7 +249,7 @@ public final class OpenRouterStreamingToolCallAggregator {
 		}
 		// Names are complete identifiers, unlike incremental JSON arguments.
 		if (StringUtils.hasText(later) && !earlier.equals(later)) {
-			throw new OpenRouterProtocolException(
+			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.CONTRACT, ENDPOINT,
 					"Conflicting streamed tool-call function names; fragmented names are not supported");
 		}
 		return earlier;

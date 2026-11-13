@@ -63,7 +63,7 @@ final class TransportFailures {
 		// retrieve() wraps a failure while reading the body, such as a connection closed
 		// mid-stream, in WebClientResponseException; exchangeToFlux() does not wrap it.
 		boolean transport = failure instanceof TimeoutException || failure instanceof WebClientRequestException
-				|| failure instanceof IOException
+				|| failure instanceof IOException || namedTimeout(failure)
 				|| failure instanceof WebClientResponseException && find(failure, IOException.class) != null;
 		return transport ? new OpenRouterTransportException(kind(failure), endpoint, failure) : failure;
 	}

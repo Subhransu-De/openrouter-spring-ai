@@ -236,8 +236,11 @@ class OpenRouterStreamingToolCallAggregatorTests {
 		StepVerifier
 			.create(this.aggregator.aggregate(Flux.just(chunk(toolFragment(0, 0, "call-0", "synthetic_", "{")),
 					chunk(toolFragment(0, 0, null, laterName, "}")), chunk(finishChoice(0)))))
-			.expectErrorMatches(error -> error instanceof OpenRouterProtocolException && error.getMessage()
-				.equals("Conflicting streamed tool-call function names; fragmented names are not supported"))
+			.expectErrorMatches(error -> error instanceof OpenRouterProtocolException protocol
+					&& protocol.getKind() == OpenRouterProtocolException.Kind.CONTRACT
+					&& "/chat/completions".equals(protocol.getEndpoint())
+					&& error.getMessage()
+						.equals("Conflicting streamed tool-call function names; fragmented names are not supported"))
 			.verify();
 	}
 
