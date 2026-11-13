@@ -32,8 +32,8 @@ public final class UsageMapper {
 	// Never null, so callers read a breakdown value without first checking for the
 	// object.
 	public static OpenRouterCostDetails costDetails(@Nullable Object nativeUsage) {
-		if (nativeUsage instanceof Usage usage && usage.costDetails() != null) {
-			var details = usage.costDetails();
+		var details = nativeUsage instanceof Usage usage ? usage.costDetails() : null;
+		if (details != null) {
 			return new OpenRouterCostDetails(details.upstreamInferenceCost(), details.upstreamInferencePromptCost(),
 					details.upstreamInferenceCompletionsCost(), details.serverToolCost());
 		}
