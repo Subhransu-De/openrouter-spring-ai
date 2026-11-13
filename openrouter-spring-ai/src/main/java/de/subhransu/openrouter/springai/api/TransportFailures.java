@@ -68,7 +68,7 @@ final class TransportFailures {
 		return transport ? new OpenRouterTransportException(kind(failure), endpoint, failure) : failure;
 	}
 
-	static OpenRouterTransportException.Kind kind(Throwable failure) {
+	private static OpenRouterTransportException.Kind kind(Throwable failure) {
 		if (find(failure, SocketTimeoutException.class) != null || find(failure, HttpTimeoutException.class) != null
 				|| find(failure, TimeoutException.class) != null || namedTimeout(failure)) {
 			return OpenRouterTransportException.Kind.TIMEOUT;
