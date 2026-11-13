@@ -47,4 +47,19 @@ class OpenRouterReasoningOptionsTests {
 		assertThat(reasoning.effort()).isEqualTo(" future-effort ");
 	}
 
+	@Test
+	void builderSetsNamedControlsAndLeavesTheRestUnset() {
+		assertThat(OpenRouterReasoningOptions.builder().effort("high").build())
+			.isEqualTo(new OpenRouterReasoningOptions("high", null, null, null));
+		assertThat(OpenRouterReasoningOptions.builder().maxTokens(2048).exclude(true).enabled(true).build())
+			.isEqualTo(new OpenRouterReasoningOptions(null, 2048, true, true));
+	}
+
+	@Test
+	void builderAppliesTheSameValidation() {
+		assertThatIllegalArgumentException()
+			.isThrownBy(() -> OpenRouterReasoningOptions.builder().effort("high").maxTokens(256).build())
+			.withMessageContaining("not both");
+	}
+
 }

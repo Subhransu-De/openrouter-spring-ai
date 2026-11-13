@@ -5,7 +5,7 @@ Reasoning models can think before they answer. Turn it on with `reasoning(...)` 
 ```java
 ChatClient client = ChatClient.create(chatModel);
 OpenRouterChatOptions.Builder options = OpenRouterChatOptions.builder()
-	.reasoning(new OpenRouterReasoningOptions("medium", null, null, null));
+	.reasoning(OpenRouterReasoningOptions.builder().effort("medium").build());
 UserMessage question = new UserMessage("Plan a three-step migration.");
 ChatResponse first = client.prompt().messages(question).options(options).call().chatResponse();
 String thinking = first.getResult().getMetadata().get("openrouter.reasoning");

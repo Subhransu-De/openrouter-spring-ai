@@ -44,10 +44,11 @@ Set fallback models, provider preferences and a service tier as defaults or per 
 OpenRouterChatOptions options = OpenRouterChatOptions.builder()
     .model("openai/gpt-oss-120b")
     .models(List.of("openai/gpt-oss-20b"))
-    .provider(new OpenRouterProviderPreferences(
-        true /* allowFallbacks */, null /* requireParameters */, null /* dataCollection */,
-        List.of("openai") /* order */, null /* ignore */, null /* quantizations */,
-        "throughput" /* sort */))
+    .provider(OpenRouterProviderPreferences.builder()
+        .allowFallbacks(true)
+        .order(List.of("openai"))
+        .sort("throughput")
+        .build())
     .serviceTier(OpenRouterServiceTier.FLEX)
     .build();
 ```

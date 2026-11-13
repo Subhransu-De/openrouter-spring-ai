@@ -12,6 +12,10 @@ public class OpenRouterUsage extends DefaultUsage {
 
 	private final @Nullable Double cost;
 
+	private final OpenRouterCostDetails costDetails;
+
+	private final @Nullable Boolean byok;
+
 	public OpenRouterUsage(@Nullable Integer promptTokens, @Nullable Integer generationTokens,
 			@Nullable Integer totalTokens, @Nullable Integer cachedTokens, @Nullable Integer reasoningTokens,
 			@Nullable Double cost, @Nullable Object nativeUsage) {
@@ -20,6 +24,8 @@ public class OpenRouterUsage extends DefaultUsage {
 		this.cachedTokens = cachedTokens;
 		this.reasoningTokens = reasoningTokens;
 		this.cost = cost;
+		this.costDetails = UsageMapper.costDetails(nativeUsage);
+		this.byok = UsageMapper.byok(nativeUsage);
 	}
 
 	public @Nullable Integer getCachedTokens() {
@@ -32,6 +38,14 @@ public class OpenRouterUsage extends DefaultUsage {
 
 	public @Nullable Double getCost() {
 		return this.cost;
+	}
+
+	public OpenRouterCostDetails getCostDetails() {
+		return this.costDetails;
+	}
+
+	public @Nullable Boolean getByok() {
+		return this.byok;
 	}
 
 }
