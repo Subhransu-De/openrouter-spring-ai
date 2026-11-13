@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
+import de.subhransu.openrouter.springai.chat.OpenRouterMetadata;
 import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
 import de.subhransu.openrouter.springai.api.dto.ResponsesOutputItem;
@@ -11,12 +12,12 @@ import java.util.Map;
 // Provider reasoning is opaque conversation state; preserve its wire order.
 final class ReasoningMetadata {
 
-	static final String REASONING = "openrouter.reasoning";
+	static final String REASONING = OpenRouterMetadata.REASONING;
 
-	private static final String DETAILS = "openrouter.reasoning_details";
-	static final String RESPONSES_OUTPUT_ITEMS = "openrouter.responses.output_items";
+	private static final String DETAILS = OpenRouterMetadata.REASONING_DETAILS;
+	static final String RESPONSES_OUTPUT_ITEMS = OpenRouterMetadata.RESPONSES_OUTPUT_ITEMS;
 
-	static final String RESPONSES_ITEMS = "openrouter.responses.reasoning_items";
+	static final String RESPONSES_ITEMS = OpenRouterMetadata.RESPONSES_REASONING_ITEMS;
 
 	private ReasoningMetadata() {
 	}

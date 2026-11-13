@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
+import de.subhransu.openrouter.springai.chat.OpenRouterMetadata;
 import org.springframework.util.CollectionUtils;
 import java.util.Objects;
 import de.subhransu.openrouter.springai.api.dto.AudioOutput;
@@ -39,7 +40,7 @@ import org.springframework.util.StringUtils;
  */
 final class AudioOutputMapper {
 
-	private static final String METADATA = "openrouter.audio";
+	private static final String METADATA = OpenRouterMetadata.AUDIO;
 
 	private static final int MAX_BYTES = 16 * 1024 * 1024;
 

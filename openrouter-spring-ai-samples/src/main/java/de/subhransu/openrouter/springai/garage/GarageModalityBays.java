@@ -11,6 +11,7 @@ import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.USAGE;
 
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
+import de.subhransu.openrouter.springai.chat.OpenRouterMedia;
 import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
 import de.subhransu.openrouter.springai.chat.OpenRouterUsage;
 import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingOptions;
@@ -234,10 +235,7 @@ public final class GarageModalityBays {
       ImageResponse completed = null;
       for (ImageResponse event : events) {
         ImageGeneration generation = event.getResult();
-        if (generation != null
-            && generation.getMetadata()
-                instanceof OpenRouterImageGenerationMetadata openRouterMetadata
-            && openRouterMetadata.partialImageIndex() != null) {
+        if (generation != null && OpenRouterImageGenerationMetadata.of(generation).isPartial()) {
           partialEvents++;
         } else {
           completed = event;
@@ -299,7 +297,7 @@ public final class GarageModalityBays {
       return;
     }
     Media image = media.get(0);
-    byte[] bytes = decodeDataUrl(String.valueOf(image.getData()));
+    byte[] bytes = OpenRouterMedia.bytes(image);
     Path file =
         this.outputDirectory.resolve(
             "chat-paint-bay-image." + extension(image.getMimeType().toString()));
@@ -372,11 +370,8 @@ public final class GarageModalityBays {
       probe.put(ERROR, "image response carried no base64 image data");
       return;
     }
-    String mediaType = "image/png";
-    if (generation.getMetadata() instanceof OpenRouterImageGenerationMetadata openRouterMetadata
-        && StringUtils.hasText(openRouterMetadata.mediaType())) {
-      mediaType = openRouterMetadata.mediaType();
-    }
+    String reportedType = OpenRouterImageGenerationMetadata.of(generation).mediaType();
+    String mediaType = StringUtils.hasText(reportedType) ? reportedType : "image/png";
     byte[] bytes = Base64.getDecoder().decode(b64Json);
     Path file = this.outputDirectory.resolve(stem + "." + extension(mediaType));
     Files.write(file, bytes);
@@ -513,14 +508,6 @@ public final class GarageModalityBays {
   private void fail(Map<String, Object> probe, Exception ex) {
     probe.put(STATUS, FAILED);
     probe.put(ERROR, ex.getClass().getSimpleName() + ": " + ex.getMessage());
-  }
-
-  private byte[] decodeDataUrl(String data) {
-    int comma = data.indexOf(',');
-    if (data.startsWith("data:") && comma > 0) {
-      return Base64.getDecoder().decode(data.substring(comma + 1));
-    }
-    return Base64.getDecoder().decode(data);
   }
 
   private String extension(String mediaType) {

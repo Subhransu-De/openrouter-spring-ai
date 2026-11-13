@@ -83,10 +83,13 @@ String base64 = response.getResult().getOutput().getB64Json();
 
 ```java
 imageModel.stream(prompt).doOnNext(response -> response.getResults().forEach(result -> {
-    var meta = (OpenRouterImageGenerationMetadata) result.getMetadata();
-    boolean preview = meta.partialImageIndex() != null; // null for completed images
+    OpenRouterImageGenerationMetadata meta = OpenRouterImageGenerationMetadata.of(result); // never null
+    boolean preview = meta.isPartial();
+    String mediaType = meta.mediaType(); // null when the provider sent none
 })).blockLast();
 ```
+
+`OpenRouterImageGenerationMetadata.of(...)` works for calls and streams. `mediaType()` is `null` when the provider does not report one; the library does not guess it, because `outputFormat` can select another encoding than PNG.
 
 - The stream ends at `[DONE]`, not at the first completed image.
 - It fails with `OpenRouterTruncatedResponseException` if no completed image arrives, or if the connection closes without `[DONE]`, even after a completed image.
@@ -107,7 +110,7 @@ Set `OpenRouterChatOptions.builder().modalities(OpenRouterModality.IMAGE, OpenRo
 
 Modalities are lower-cased when the options are built, because OpenRouter documents lower-case values. A modality other than `text`, `image` or `audio` is sent and logged once as a warning. `imageConfig` is sent as `image_config` whenever it is set; the library does not check the modalities, because its keys are model-specific. Include `image` in the modalities to get image output.
 
-Attach generated media to a new `UserMessage` for image edits or follow-up questions. Responses base64 results are exposed as complete data URLs. A supplied `output_format` sets the MIME type (PNG by default). An existing data URL keeps its own MIME type.
+Attach generated media to a new `UserMessage` for image edits or follow-up questions. Responses base64 results are exposed as complete data URLs. To get the bytes, call `OpenRouterMedia.bytes(media)`. It decodes a base64 data URL and returns raw bytes unchanged, so it also reads [chat audio output](#chat-audio-output). It does not download a remote `https` URL; it throws `IllegalArgumentException` for one. A supplied `output_format` sets the MIME type (PNG by default). An existing data URL keeps its own MIME type.
 
 ### Assistant media history
 
@@ -127,11 +130,10 @@ chatModel.stream(new Prompt("Say hello.", options))
     .doOnNext(response -> response.getResults().forEach(generation -> {
         AssistantMessage message = generation.getOutput();
         message.getMedia().forEach(media -> {
-            byte[] completeAudio = media.getDataAsByteArray(); // decode per the requested format
+            byte[] completeAudio = OpenRouterMedia.bytes(media); // decode per the requested format
         });
-        if (message.getMetadata().get("openrouter.audio") instanceof Map<?, ?> audio) {
-            Object transcript = audio.get("transcript");
-        }
+        OpenRouterAudioOutput.from(message)
+            .ifPresent(audio -> System.out.println(audio.transcript()));
     }))
     .blockLast(); // waits for successful completion; in a web application, return the Flux
 ```
@@ -144,7 +146,7 @@ The audio arrives as one complete Spring AI `Media` per choice, never as partial
 
 ![Streamed audio.data chunks are each decoded from base64 and appended per choice. Path A: a stop finish reason delivers one complete Media in that same response. Path B: the last delta has only expires_at and no finish reason, as with OpenAI audio models; the Media arrives in one extra response after [DONE] with empty text, no usage and no finish reason. A max_tokens cut-off looks the same, so leave enough room. The transcript goes once into the final assistant metadata as openrouter.audio, not into the text. call() and Responses mode reject output audio.](images/audio-output.svg)
 
-The transcript is not part of the text, so `ChatClient` `.content()` does not return it. Read it from the assistant message metadata key `openrouter.audio`, a map with `transcript` and `format` and, when supplied, `id` and `expires_at`. Normal text stays incremental. Treat the request as successful only when the stream completes, because a later transport or provider error still fails it.
+The transcript is not part of the text, so `ChatClient` `.content()` does not return it. Read it with `OpenRouterAudioOutput.from(message)`, which is empty until the message that carries the completed audio. The record holds `transcript()` and `format()` and, when the provider sends them, `id()` and `expiresAt()` (epoch seconds); otherwise those two are `null`. The same values stay in the assistant message metadata under `OpenRouterMetadata.AUDIO` (`openrouter.audio`), a map with `transcript`, `format`, `id` and `expires_at`. Normal text stays incremental. Treat the request as successful only when the stream completes, because a later transport or provider error still fails it.
 
 A `max_tokens` cut-off fails the stream when the provider reports a non-`stop` finish reason, but goes unnoticed on path B, which sends none. Leave enough `max_tokens`.
 

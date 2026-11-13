@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
+import de.subhransu.openrouter.springai.chat.OpenRouterMetadata;
 import de.subhransu.openrouter.springai.api.dto.ResponsesContent;
 import de.subhransu.openrouter.springai.api.dto.ResponsesOutputItem;
 import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
@@ -52,11 +53,11 @@ public final class OpenRouterResponsesResponseMapper {
 		ChatGenerationMetadata.Builder generationMetadataBuilder = ChatGenerationMetadata.builder();
 		generationMetadataBuilder.finishReason(finishReason);
 		ResponseValues.ifPresent(nativeReason,
-				value -> generationMetadataBuilder.metadata("openrouter.native_finish_reason", value));
+				value -> generationMetadataBuilder.metadata(OpenRouterMetadata.NATIVE_FINISH_REASON, value));
 		ResponseValues.ifPresent(response.status(),
-				value -> generationMetadataBuilder.metadata("openrouter.responses.status", value));
+				value -> generationMetadataBuilder.metadata(OpenRouterMetadata.RESPONSES_STATUS, value));
 		ResponseValues.ifPresent(response.incompleteDetails(),
-				value -> generationMetadataBuilder.metadata("openrouter.responses.incomplete_details", value));
+				value -> generationMetadataBuilder.metadata(OpenRouterMetadata.RESPONSES_INCOMPLETE_DETAILS, value));
 		ResponseValues.ifPresent(properties.get(RefusalMetadata.REFUSAL),
 				value -> generationMetadataBuilder.metadata(RefusalMetadata.REFUSAL, value));
 		ResponseValues.ifPresent(assistantMessage.getMetadata().get(ReasoningMetadata.REASONING),
@@ -66,8 +67,8 @@ public final class OpenRouterResponsesResponseMapper {
 		ResponseValues.ifPresent(response.id(), responseMetadataBuilder::id);
 		ResponseValues.ifPresent(response.model(), responseMetadataBuilder::model);
 		ResponseValues.ifPresent(UsageMapper.map(response.usage()), responseMetadataBuilder::usage);
-		responseMetadataBuilder.keyValue("openrouter.object", response.object());
-		responseMetadataBuilder.keyValue("openrouter.created", response.createdAt());
+		responseMetadataBuilder.keyValue(OpenRouterMetadata.OBJECT, response.object());
+		responseMetadataBuilder.keyValue(OpenRouterMetadata.CREATED, response.createdAt());
 		ChatResponseMetadata responseMetadata = responseMetadataBuilder.build();
 		return new ChatResponse(List.of(new Generation(assistantMessage, generationMetadata)), responseMetadata);
 	}

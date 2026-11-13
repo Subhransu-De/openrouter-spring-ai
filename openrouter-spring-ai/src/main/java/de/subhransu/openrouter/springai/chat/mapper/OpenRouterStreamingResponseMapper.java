@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
+import de.subhransu.openrouter.springai.chat.OpenRouterMetadata;
 import java.util.Objects;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionChunk;
 import de.subhransu.openrouter.springai.api.dto.Choice;
@@ -107,8 +108,8 @@ public final class OpenRouterStreamingResponseMapper {
 				.build();
 			// No finish reason is fabricated: the provider did not send one.
 			ChatGenerationMetadata.Builder metadata = ChatGenerationMetadata.builder()
-				.metadata("openrouter.choice_index", completion.index());
-			ResponseValues.ifPresent(last.model(), value -> metadata.metadata("openrouter.model", value));
+				.metadata(OpenRouterMetadata.CHOICE_INDEX, completion.index());
+			ResponseValues.ifPresent(last.model(), value -> metadata.metadata(OpenRouterMetadata.MODEL, value));
 			return new Generation(message, metadata.build());
 		}).toList();
 		// Usage was already reported by the stream; repeating it here would duplicate it.
@@ -233,14 +234,15 @@ public final class OpenRouterStreamingResponseMapper {
 			.build();
 		ChatGenerationMetadata.Builder metadataBuilder = ChatGenerationMetadata.builder();
 		metadataBuilder.finishReason(FinishReasonMapper.map(choice.finishReason()));
-		ResponseValues.ifPresent(model, value -> metadataBuilder.metadata("openrouter.model", value));
-		ResponseValues.ifPresent(choice.index(), value -> metadataBuilder.metadata("openrouter.choice_index", value));
+		ResponseValues.ifPresent(model, value -> metadataBuilder.metadata(OpenRouterMetadata.MODEL, value));
+		ResponseValues.ifPresent(choice.index(),
+				value -> metadataBuilder.metadata(OpenRouterMetadata.CHOICE_INDEX, value));
 		ResponseValues.ifPresent(choice.nativeFinishReason(),
-				value -> metadataBuilder.metadata("openrouter.native_finish_reason", value));
+				value -> metadataBuilder.metadata(OpenRouterMetadata.NATIVE_FINISH_REASON, value));
 		ResponseValues.ifPresent(snapshot.get(RefusalMetadata.REFUSAL),
 				value -> metadataBuilder.metadata(RefusalMetadata.REFUSAL, value));
 		ResponseValues.ifPresent(delta != null ? delta.reasoning() : null,
-				value -> metadataBuilder.metadata("openrouter.reasoning", value));
+				value -> metadataBuilder.metadata(OpenRouterMetadata.REASONING, value));
 		ChatGenerationMetadata metadata = metadataBuilder.build();
 		return new Generation(assistantMessage, metadata);
 	}
@@ -280,9 +282,9 @@ public final class OpenRouterStreamingResponseMapper {
 			ResponseValues.ifPresent(UsageMapper.map(chunk.usage()), metadataBuilder::usage);
 		}
 		metadataBuilder.keyValue(ExtensionMetadata.RESPONSE, extensions);
-		metadataBuilder.keyValue("openrouter.provider", chunk.provider());
-		metadataBuilder.keyValue("openrouter.object", chunk.object());
-		metadataBuilder.keyValue("openrouter.created", chunk.created());
+		metadataBuilder.keyValue(OpenRouterMetadata.PROVIDER, chunk.provider());
+		metadataBuilder.keyValue(OpenRouterMetadata.OBJECT, chunk.object());
+		metadataBuilder.keyValue(OpenRouterMetadata.CREATED, chunk.created());
 		return metadataBuilder.build();
 	}
 

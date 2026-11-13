@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
+import de.subhransu.openrouter.springai.chat.OpenRouterMetadata;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionResponse;
 import de.subhransu.openrouter.springai.api.dto.Choice;
 import de.subhransu.openrouter.springai.api.dto.ToolCall;
@@ -94,10 +95,11 @@ public final class OpenRouterChatResponseMapper {
 
 		ChatGenerationMetadata.Builder metadataBuilder = ChatGenerationMetadata.builder();
 		metadataBuilder.finishReason(FinishReasonMapper.map(choice.finishReason()));
-		ResponseValues.ifPresent(model, value -> metadataBuilder.metadata("openrouter.model", value));
-		ResponseValues.ifPresent(message.reasoning(), value -> metadataBuilder.metadata("openrouter.reasoning", value));
+		ResponseValues.ifPresent(model, value -> metadataBuilder.metadata(OpenRouterMetadata.MODEL, value));
+		ResponseValues.ifPresent(message.reasoning(),
+				value -> metadataBuilder.metadata(OpenRouterMetadata.REASONING, value));
 		ResponseValues.ifPresent(choice.nativeFinishReason(),
-				value -> metadataBuilder.metadata("openrouter.native_finish_reason", value));
+				value -> metadataBuilder.metadata(OpenRouterMetadata.NATIVE_FINISH_REASON, value));
 		ResponseValues.ifPresent(properties.get(RefusalMetadata.REFUSAL),
 				value -> metadataBuilder.metadata(RefusalMetadata.REFUSAL, value));
 		ChatGenerationMetadata metadata = metadataBuilder.build();
@@ -127,9 +129,9 @@ public final class OpenRouterChatResponseMapper {
 		ResponseValues.ifPresent(response.model(), builder::model);
 		ResponseValues.ifPresent(UsageMapper.map(response.usage()), builder::usage);
 		builder.keyValue(ExtensionMetadata.RESPONSE, response.extensions());
-		builder.keyValue("openrouter.provider", response.provider());
-		builder.keyValue("openrouter.object", response.object());
-		builder.keyValue("openrouter.created", response.created());
+		builder.keyValue(OpenRouterMetadata.PROVIDER, response.provider());
+		builder.keyValue(OpenRouterMetadata.OBJECT, response.object());
+		builder.keyValue(OpenRouterMetadata.CREATED, response.created());
 		return builder.build();
 	}
 

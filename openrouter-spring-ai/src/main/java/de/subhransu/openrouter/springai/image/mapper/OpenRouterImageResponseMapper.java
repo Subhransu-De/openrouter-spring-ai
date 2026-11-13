@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.image.mapper;
 
+import de.subhransu.openrouter.springai.chat.OpenRouterMetadata;
 import de.subhransu.openrouter.springai.api.dto.ImagesResponse;
 import de.subhransu.openrouter.springai.api.OpenRouterImageResponseValidator;
 import de.subhransu.openrouter.springai.api.dto.ImagesStreamEvent;
@@ -70,7 +71,7 @@ public final class OpenRouterImageResponseMapper {
 				new OpenRouterImageGenerationMetadata(event.mediaType(), event.partialImageIndex()));
 		ImageResponseMetadata metadata = metadata(event.created(), event.usage());
 		if (event.type() != null) {
-			metadata.put("openrouter.event_type", event.type());
+			metadata.put(OpenRouterMetadata.IMAGE_EVENT_TYPE, event.type());
 		}
 		return new ImageResponse(List.of(generation), metadata);
 	}
@@ -79,7 +80,7 @@ public final class OpenRouterImageResponseMapper {
 		ImageResponseMetadata metadata = created != null ? new ImageResponseMetadata(created)
 				: new ImageResponseMetadata();
 		if (usage != null) {
-			metadata.put("openrouter.usage", UsageMapper.map(usage));
+			metadata.put(OpenRouterMetadata.IMAGE_USAGE, UsageMapper.map(usage));
 		}
 		return metadata;
 	}

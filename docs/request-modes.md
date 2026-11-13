@@ -61,13 +61,28 @@ Tool choice depends on the request's tools. Without tools, `auto` and `none` are
 
 ## Refusals and incomplete output
 
-Both modes put provider refusal explanations under `openrouter.refusal` in assistant message and generation metadata, separate from the answer text. Check this key to tell a refusal from empty output. A refusal can still have `STOP` as its finish reason. Streaming metadata holds the cumulative refusal text. Keep the original assistant message and its metadata in history so follow-up requests replay the refusal, including refusal-only turns.
+Both modes put provider refusal explanations under `OpenRouterMetadata.REFUSAL` (`openrouter.refusal`) in assistant message and generation metadata, separate from the answer text. Read it with `OpenRouterMetadata.refusal(generation)` to tell a refusal from empty output; it is empty when the model did not refuse. A refusal can still have `STOP` as its finish reason. Streaming metadata holds the cumulative refusal text. Keep the original assistant message and its metadata in history so follow-up requests replay the refusal, including refusal-only turns.
 
 Responses maps `max_output_tokens` to `LENGTH` and `content_filter` to `CONTENT_FILTER`, for calls and streams. Other incomplete reasons pass through. An absent reason falls back to the response status. Generation metadata keeps the raw values:
 
-- `openrouter.native_finish_reason`: the unmapped reason.
-- `openrouter.responses.status`: the response status.
+- `openrouter.native_finish_reason`: the unmapped reason. Read it with `OpenRouterMetadata.nativeFinishReason(generation)`.
+- `openrouter.responses.status`: the response status. Read it with `OpenRouterMetadata.responsesStatus(generation)`.
 - `openrouter.responses.incomplete_details`: the typed incomplete details.
+
+`getFinishReason()` returns `STOP`, `LENGTH`, `TOOL_CALLS` and `CONTENT_FILTER` in upper case, and any other reason as the provider wrote it, in both modes. `OpenRouterFinishReason.of(generation)` reads both spellings:
+
+```java
+OpenRouterFinishReason reason = OpenRouterFinishReason.of(generation);
+boolean cutOff = reason == OpenRouterFinishReason.LENGTH;
+```
+
+It returns `NONE` when there is no finish reason, as on an intermediate stream chunk, and `OTHER` for a reason it does not know; `getFinishReason()` still holds that reason as the provider wrote it. A choice that ends with `error` raises a choice exception instead (see [Errors and retries](errors-and-retries.md)), so a response from the model never carries `ERROR`.
+
+## Response metadata
+
+`OpenRouterMetadata` holds every metadata key this library sets on chat and image responses as a public constant, and typed readers for the common ones. A reader returns an empty `Optional` when the value is absent, never a `ClassCastException`.
+
+Streamed Chat Completions generations carry their choice index under `OpenRouterMetadata.CHOICE_INDEX` (`openrouter.choice_index`). Read it with `OpenRouterMetadata.choiceIndex(generation)`, which returns `0` when the key is absent: blocking calls and Responses mode do not set it, and in a blocking call the position in `getResults()` is the choice index.
 
 A `completed` status or `stop` finish reason does not prove that the output ended before the token limit. When it matters, compare the output token usage with the configured `maxCompletionTokens`.
 

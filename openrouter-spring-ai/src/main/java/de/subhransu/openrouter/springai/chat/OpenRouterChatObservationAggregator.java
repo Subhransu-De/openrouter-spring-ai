@@ -22,7 +22,7 @@ final class OpenRouterChatObservationAggregator {
 
 	void add(ChatResponse response) {
 		for (Generation generation : response.getResults()) {
-			Integer index = generation.getMetadata().get("openrouter.choice_index");
+			Integer index = generation.getMetadata().get(OpenRouterMetadata.CHOICE_INDEX);
 			this.choices.computeIfAbsent(index != null ? index : 0, key -> new Choice()).add(generation);
 		}
 		addMetadata(response.getMetadata());

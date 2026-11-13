@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
+import de.subhransu.openrouter.springai.chat.OpenRouterMetadata;
 import de.subhransu.openrouter.springai.api.dto.ToolCall;
 import de.subhransu.openrouter.springai.support.OptionSnapshots;
 import java.util.ArrayList;
@@ -16,13 +17,13 @@ import org.springframework.util.CollectionUtils;
  */
 final class ExtensionMetadata {
 
-	static final String MESSAGE = "openrouter.message.extensions";
+	static final String MESSAGE = OpenRouterMetadata.MESSAGE_EXTENSIONS;
 
-	static final String CHOICE = "openrouter.choice.extensions";
+	static final String CHOICE = OpenRouterMetadata.CHOICE_EXTENSIONS;
 
-	static final String TOOLS = "openrouter.tool_call.extensions";
+	static final String TOOLS = OpenRouterMetadata.TOOL_CALL_EXTENSIONS;
 
-	static final String RESPONSE = "openrouter.response.extensions";
+	static final String RESPONSE = OpenRouterMetadata.RESPONSE_EXTENSIONS;
 
 	private ExtensionMetadata() {
 	}

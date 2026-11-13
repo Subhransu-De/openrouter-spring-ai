@@ -1,6 +1,6 @@
 # Reasoning and prompt caching
 
-Reasoning models can think before they answer. Turn it on with `reasoning(...)` on `OpenRouterChatOptions`, or with `spring.ai.openrouter.chat.reasoning.*` (`effort` or `max-tokens`, not both, plus `exclude` and `enabled`). Read the text from the `openrouter.reasoning` key in the generation metadata. In a stream, that key holds each chunk's delta, and the same key on the assistant message holds the text so far.
+Reasoning models can think before they answer. Turn it on with `reasoning(...)` on `OpenRouterChatOptions`, or with `spring.ai.openrouter.chat.reasoning.*` (`effort` or `max-tokens`, not both, plus `exclude` and `enabled`). Read the text with `OpenRouterMetadata.reasoning(generation)`, which returns an empty `Optional` when the model sent no reasoning. In a stream, it returns each chunk's delta, and `OpenRouterMetadata.reasoning(assistantMessage)` returns the text so far. Both read the `OpenRouterMetadata.REASONING` key (`openrouter.reasoning`).
 
 ```java
 ChatClient client = ChatClient.create(chatModel);
@@ -8,7 +8,7 @@ OpenRouterChatOptions.Builder options = OpenRouterChatOptions.builder()
 	.reasoning(OpenRouterReasoningOptions.builder().effort(OpenRouterReasoningEffort.MEDIUM).build());
 UserMessage question = new UserMessage("Plan a three-step migration.");
 ChatResponse first = client.prompt().messages(question).options(options).call().chatResponse();
-String thinking = first.getResult().getMetadata().get("openrouter.reasoning");
+String thinking = OpenRouterMetadata.reasoning(first.getResult()).orElse("");
 AssistantMessage reply = first.getResult().getOutput(); // keep this whole message
 client.prompt().messages(question, reply, new UserMessage("Shorten step two.")).options(options)
 	.call().chatResponse();

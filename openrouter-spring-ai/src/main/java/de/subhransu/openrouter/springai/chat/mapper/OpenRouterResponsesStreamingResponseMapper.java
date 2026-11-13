@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
+import de.subhransu.openrouter.springai.chat.OpenRouterMetadata;
 import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -94,19 +95,21 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 			ChatGenerationMetadata.Builder generationMetadataBuilder = ChatGenerationMetadata.builder();
 			generationMetadataBuilder.finishReason(FinishReasonMapper.map(finishReason));
 			ResponseValues.ifPresent(nativeFinishReason,
-					value -> generationMetadataBuilder.metadata("openrouter.native_finish_reason", value));
+					value -> generationMetadataBuilder.metadata(OpenRouterMetadata.NATIVE_FINISH_REASON, value));
 			ResponseValues.ifPresent(status,
-					value -> generationMetadataBuilder.metadata("openrouter.responses.status", value));
-			ResponseValues.ifPresent(result, terminal -> ResponseValues.ifPresent(terminal.incompleteDetails(),
-					value -> generationMetadataBuilder.metadata("openrouter.responses.incomplete_details", value)));
+					value -> generationMetadataBuilder.metadata(OpenRouterMetadata.RESPONSES_STATUS, value));
+			ResponseValues.ifPresent(result,
+					terminal -> ResponseValues.ifPresent(terminal.incompleteDetails(),
+							value -> generationMetadataBuilder.metadata(OpenRouterMetadata.RESPONSES_INCOMPLETE_DETAILS,
+									value)));
 			ResponseValues.ifPresent(snapshot.get(RefusalMetadata.REFUSAL),
 					value -> generationMetadataBuilder.metadata(RefusalMetadata.REFUSAL, value));
 			ResponseValues.ifPresent(reasoning,
-					value -> generationMetadataBuilder.metadata("openrouter.reasoning", value));
+					value -> generationMetadataBuilder.metadata(OpenRouterMetadata.REASONING, value));
 			generationMetadata = generationMetadataBuilder.build();
 		}
 		ChatResponseMetadata.Builder responseMetadata = ChatResponseMetadata.builder();
-		responseMetadata.keyValue("openrouter.object", type);
+		responseMetadata.keyValue(OpenRouterMetadata.OBJECT, type);
 		if (result != null) {
 			ResponseValues.ifPresent(result.id(), responseMetadata::id);
 			ResponseValues.ifPresent(result.model(), responseMetadata::model);

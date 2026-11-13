@@ -20,6 +20,23 @@ public final class UsageMapper {
 				cachedTokens(usage), reasoningTokens(usage), usage.cost(), usage);
 	}
 
+	// Never null. This library sets OpenRouterUsage or Spring AI's EmptyUsage; other
+	// usage types (such as an aggregator's DefaultUsage) keep their token counts.
+	public static OpenRouterUsage from(org.springframework.ai.chat.metadata.@Nullable Usage usage) {
+		if (usage instanceof OpenRouterUsage openRouterUsage) {
+			return openRouterUsage;
+		}
+		if (usage == null) {
+			return new OpenRouterUsage(0, 0, 0, null, null, null, null);
+		}
+		if (usage.getNativeUsage() instanceof Usage wire) {
+			return map(wire);
+		}
+		Long cacheRead = usage.getCacheReadInputTokens();
+		return new OpenRouterUsage(usage.getPromptTokens(), usage.getCompletionTokens(), usage.getTotalTokens(),
+				cacheRead != null ? cacheRead.intValue() : null, null, null, usage.getNativeUsage());
+	}
+
 	public static @Nullable Long cacheWriteInputTokens(@Nullable Object nativeUsage) {
 		if (nativeUsage instanceof Usage usage) {
 			var details = usage.promptTokensDetails();
