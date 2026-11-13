@@ -16,6 +16,8 @@ Notable changes in each release. The full notes for each release are on the [Rel
 
 ### Added
 
+- `OpenRouterReasoningOptions.builder()` and `OpenRouterProviderPreferences.builder()` set only the fields you name, instead of a positional constructor with `null` for the rest. The constructors stay. See [Routing](docs/chat-options.md#routing-fallbacks-and-attribution).
+- `OpenRouterUsage.getCostDetails()` returns OpenRouter's cost breakdown (upstream total, prompt cost, completion cost and server-tool cost) for chat, embeddings and images in both request modes, and `getByok()` reports whether the request used your own provider key. See [Observability](docs/observability.md).
 - `OpenRouterRestClientCustomizer` and `OpenRouterWebClientCustomizer` beans customize only the OpenRouter clients, after Boot's global customizers and before OpenRouter's credentials and base URL. See [HTTP customization](docs/http-and-limits.md#http-customization-and-timeout-ownership).
 - `spring.ai.openrouter.connection.connect-timeout` sets an OpenRouter-only connect timeout for blocking calls.
 - Startup warns when OpenRouter's tool failure policy also handles another provider's chat model, which happens next to another provider starter with `spring.ai.model.chat` unset.

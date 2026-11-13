@@ -10,12 +10,14 @@ import de.subhransu.openrouter.springai.api.dto.ImagesStreamEvent;
 import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
 import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
 import de.subhransu.openrouter.springai.api.dto.Usage;
+import de.subhransu.openrouter.springai.chat.OpenRouterCostDetails;
 import de.subhransu.openrouter.springai.chat.OpenRouterUsage;
 import de.subhransu.openrouter.springai.embedding.mapper.OpenRouterEmbeddingResponseMapper;
 import de.subhransu.openrouter.springai.image.mapper.OpenRouterImageResponseMapper;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 import tools.jackson.databind.ObjectMapper;
@@ -75,6 +77,48 @@ class UsageWireMappingTests {
 				ImagesStreamEvent.class);
 		assertUsage(new OpenRouterImageResponseMapper().map(imageEvent).getMetadata().get("openrouter.usage"),
 				imageEvent.usage(), cached, reasoning, written);
+	}
+
+	@ParameterizedTest
+	@ValueSource(booleans = { true, false })
+	void mapsCostBreakdownFromEitherRequestModeNames(boolean responses) {
+		String split = responses ? "\"upstream_inference_input_cost\":0.002,\"upstream_inference_output_cost\":0.005"
+				: "\"upstream_inference_prompt_cost\":0.002,\"upstream_inference_completions_cost\":0.005";
+		String usage = """
+				{"cost":0.0071,"is_byok":true,"cost_details":{"upstream_inference_cost":0.007,%s,"server_tool_cost":0.0001,"future_cost":1}}
+				"""
+			.formatted(split);
+
+		OpenRouterUsage mapped = responses
+				? (OpenRouterUsage) new OpenRouterResponsesResponseMapper().map(this.mapper.readValue(
+						"{\"id\":\"r\",\"status\":\"completed\",\"output\":[],\"usage\":" + usage + "}",
+						ResponsesResult.class))
+					.getMetadata()
+					.getUsage()
+				: (OpenRouterUsage) new OpenRouterChatResponseMapper().map(this.mapper.readValue(
+						"{\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"ok\"}}],\"usage\":"
+								+ usage + "}",
+						ChatCompletionResponse.class))
+					.getMetadata()
+					.getUsage();
+
+		assertThat(mapped.getCost()).isEqualTo(0.0071);
+		assertThat(mapped.getByok()).isTrue();
+		assertThat(mapped.getCostDetails()).isEqualTo(new OpenRouterCostDetails(0.007, 0.002, 0.005, 0.0001));
+	}
+
+	@ParameterizedTest
+	@ValueSource(
+			strings = { "{\"cost\":0.003}", "{\"cost\":0.003,\"cost_details\":{\"upstream_inference_cost\":null}}" })
+	void absentCostBreakdownGivesNullValuesNotANullObject(String usage) {
+		ChatCompletionChunk chunk = this.mapper.readValue("{\"choices\":[],\"usage\":" + usage + "}",
+				ChatCompletionChunk.class);
+
+		StepVerifier.create(new OpenRouterStreamingResponseMapper().map(Flux.just(chunk))).assertNext(response -> {
+			OpenRouterUsage mapped = (OpenRouterUsage) response.getMetadata().getUsage();
+			assertThat(mapped.getByok()).isNull();
+			assertThat(mapped.getCostDetails()).isEqualTo(new OpenRouterCostDetails(null, null, null, null));
+		}).verifyComplete();
 	}
 
 	private String usageJson(boolean responses, Integer cached, Integer reasoning, Integer written) {

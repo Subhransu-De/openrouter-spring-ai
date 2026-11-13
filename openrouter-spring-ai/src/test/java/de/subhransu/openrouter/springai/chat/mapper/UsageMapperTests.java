@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import de.subhransu.openrouter.springai.api.dto.Usage;
 import de.subhransu.openrouter.springai.chat.OpenRouterUsage;
+import java.util.Map;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -75,6 +76,14 @@ class UsageMapperTests {
 		assertThat(usage.getCacheReadInputTokens()).isZero();
 		assertThat(usage.getReasoningTokens()).isZero();
 		assertThat(usage.getCacheWriteInputTokens()).isNull();
+	}
+
+	@Test
+	void costBreakdownIsNeverNullEvenWithoutAWireUsage() {
+		OpenRouterUsage usage = new OpenRouterUsage(1, 1, 2, null, null, 0.01, Map.of());
+
+		assertThat(usage.getCostDetails().upstreamInferencePromptCost()).isNull();
+		assertThat(usage.getCostDetails().upstreamInferenceCompletionsCost()).isNull();
 	}
 
 	@Test

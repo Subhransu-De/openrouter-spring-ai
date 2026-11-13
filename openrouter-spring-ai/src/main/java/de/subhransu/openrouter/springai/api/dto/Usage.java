@@ -17,7 +17,18 @@ public record Usage(@JsonAlias("input_tokens") @JsonProperty("prompt_tokens") @N
 		@JsonProperty("reasoning_tokens") @Nullable Integer reasoningTokens, @Nullable Double cost,
 		@JsonAlias("input_tokens_details") @JsonProperty("prompt_tokens_details") @Nullable PromptTokensDetails promptTokensDetails,
 		@JsonAlias("output_tokens_details") @JsonProperty("completion_tokens_details") @Nullable CompletionTokensDetails completionTokensDetails,
-		@Nullable Map<String, @Nullable Object> details) {
+		@Nullable Map<String, @Nullable Object> details,
+		@JsonProperty("cost_details") @Nullable CostDetails costDetails,
+		@JsonProperty("is_byok") @Nullable Boolean isByok) {
+
+	public Usage(@Nullable Integer promptTokens, @Nullable Integer completionTokens, @Nullable Integer totalTokens,
+			@Nullable Integer cachedTokens, @Nullable Integer reasoningTokens, @Nullable Double cost,
+			@Nullable PromptTokensDetails promptTokensDetails,
+			@Nullable CompletionTokensDetails completionTokensDetails,
+			@Nullable Map<String, @Nullable Object> details) {
+		this(promptTokens, completionTokens, totalTokens, cachedTokens, reasoningTokens, cost, promptTokensDetails,
+				completionTokensDetails, details, null, null);
+	}
 
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(Include.NON_NULL)
@@ -32,5 +43,15 @@ public record Usage(@JsonAlias("input_tokens") @JsonProperty("prompt_tokens") @N
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(Include.NON_NULL)
 	public record CompletionTokensDetails(@JsonProperty("reasoning_tokens") @Nullable Integer reasoningTokens) {
+	}
+
+	// Chat Completions names the upstream split prompt/completions; Responses names it
+	// input/output.
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	@JsonInclude(Include.NON_NULL)
+	public record CostDetails(@JsonProperty("upstream_inference_cost") @Nullable Double upstreamInferenceCost,
+			@JsonAlias("upstream_inference_input_cost") @JsonProperty("upstream_inference_prompt_cost") @Nullable Double upstreamInferencePromptCost,
+			@JsonAlias("upstream_inference_output_cost") @JsonProperty("upstream_inference_completions_cost") @Nullable Double upstreamInferenceCompletionsCost,
+			@JsonProperty("server_tool_cost") @Nullable Double serverToolCost) {
 	}
 }

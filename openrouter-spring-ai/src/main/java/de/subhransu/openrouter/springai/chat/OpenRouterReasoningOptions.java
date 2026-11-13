@@ -17,4 +17,47 @@ public record OpenRouterReasoningOptions(@Nullable String effort, @Nullable Inte
 		}
 	}
 
+	public static Builder builder() {
+		return new Builder();
+	}
+
+	public static final class Builder {
+
+		private @Nullable String effort;
+
+		private @Nullable Integer maxTokens;
+
+		private @Nullable Boolean exclude;
+
+		private @Nullable Boolean enabled;
+
+		private Builder() {
+		}
+
+		public Builder effort(@Nullable String effort) {
+			this.effort = effort;
+			return this;
+		}
+
+		public Builder maxTokens(@Nullable Integer maxTokens) {
+			this.maxTokens = maxTokens;
+			return this;
+		}
+
+		public Builder exclude(@Nullable Boolean exclude) {
+			this.exclude = exclude;
+			return this;
+		}
+
+		public Builder enabled(@Nullable Boolean enabled) {
+			this.enabled = enabled;
+			return this;
+		}
+
+		public OpenRouterReasoningOptions build() {
+			return new OpenRouterReasoningOptions(this.effort, this.maxTokens, this.exclude, this.enabled);
+		}
+
+	}
+
 }
