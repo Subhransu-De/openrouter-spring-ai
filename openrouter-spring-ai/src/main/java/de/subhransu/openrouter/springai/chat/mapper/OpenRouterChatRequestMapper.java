@@ -64,7 +64,7 @@ public final class OpenRouterChatRequestMapper {
 			.stream(stream)
 			.responseFormat(new OutputFormatMapper(this.objectMapper).map(options))
 			.tools(tools)
-			.toolChoice(ToolChoiceMapper.map(options.getToolChoice(), false, this.objectMapper))
+			.toolChoice(ToolChoiceMapper.map(options.getToolChoice(), false, this.objectMapper, toolDefinitions))
 			.parallelToolCalls(options.getParallelToolCalls())
 			.provider(mapProvider(options.getProvider(), options.getProviderExtraBody()))
 			.reasoning(mapReasoning(options.getReasoning()))

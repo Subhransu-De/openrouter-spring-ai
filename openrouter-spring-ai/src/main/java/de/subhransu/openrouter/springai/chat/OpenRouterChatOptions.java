@@ -1,13 +1,19 @@
 package de.subhransu.openrouter.springai.chat;
 
+import de.subhransu.openrouter.springai.support.OptionChecks;
 import de.subhransu.openrouter.springai.support.RequestExtensions;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.support.OptionSnapshots;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.jspecify.annotations.Nullable;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.model.tool.StructuredOutputChatOptions;
@@ -17,6 +23,10 @@ import org.springframework.lang.Contract;
 import org.springframework.util.Assert;
 
 public class OpenRouterChatOptions implements ToolCallingChatOptions, StructuredOutputChatOptions {
+
+	private static final Log logger = LogFactory.getLog(OpenRouterChatOptions.class);
+
+	private static final Set<String> TOOL_CHOICE_MODES = Set.of("auto", "none", "required");
 
 	private @Nullable String model;
 
@@ -144,7 +154,12 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 		builder.topA(value(runtimeOptions.topA, this.topA));
 		builder.seed(value(runtimeOptions.seed, this.seed));
 		builder.user(value(runtimeOptions.user, this.user));
-		builder.responseFormat(value(runtimeOptions.responseFormat, this.responseFormat));
+		// responseFormat and outputSchema both choose the output format. As in Spring
+		// AI's OpenAI options, where both write one field, a request that sets either
+		// replaces the default pair instead of combining with the other default.
+		boolean runtimeFormat = runtimeOptions.responseFormat != null || runtimeOptions.outputSchema != null;
+		builder.responseFormat(runtimeFormat ? runtimeOptions.responseFormat : this.responseFormat);
+		builder.outputSchema(runtimeFormat ? runtimeOptions.outputSchema : this.outputSchema);
 		builder.parallelToolCalls(value(runtimeOptions.parallelToolCalls, this.parallelToolCalls));
 		builder.toolStrict(value(runtimeOptions.toolStrict, this.toolStrict));
 		builder.toolChoice(value(runtimeOptions.toolChoice, this.toolChoice));
@@ -159,7 +174,6 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 		builder.imageConfig(value(runtimeOptions.imageConfig, this.imageConfig));
 		builder.extraBody(mergeMaps(this.extraBody, runtimeOptions.extraBody));
 		builder.providerExtraBody(mergeMaps(this.providerExtraBody, runtimeOptions.providerExtraBody));
-		builder.outputSchema(value(runtimeOptions.outputSchema, this.outputSchema));
 		// Framework merge semantics (ToolCallingChatOptions): runtime tool callbacks
 		// replace the defaults wholesale rather than accumulating, so the executing
 		// advisor sees exactly the tools that were advertised for this request.
@@ -447,7 +461,7 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 		}
 
 		public Builder models(@Nullable List<String> models) {
-			this.options.models = copyList(models);
+			this.options.models = copyList(OptionChecks.noNullElements("models", models));
 			return this;
 		}
 
@@ -481,7 +495,7 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 
 		@Override
 		public Builder stopSequences(@Nullable List<String> stopSequences) {
-			this.options.stopSequences = copyList(stopSequences);
+			this.options.stopSequences = copyList(OptionChecks.noNullElements("stopSequences", stopSequences));
 			return this;
 		}
 
@@ -551,10 +565,15 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 		/**
 		 * Accepts auto, none, required, or a named function in either endpoint's shape.
 		 * Legacy objects containing only a type of auto, none, or required are also
-		 * accepted. The mapper converts named choices to the selected mode and rejects
-		 * other shapes.
+		 * accepted. A string other than auto, none or required is rejected here; the
+		 * mapper converts named choices to the selected mode and rejects other shapes.
 		 */
 		public Builder toolChoice(@Nullable Object toolChoice) {
+			if (toolChoice instanceof String mode && !TOOL_CHOICE_MODES.contains(mode)) {
+				throw new IllegalArgumentException("toolChoice " + OptionChecks.describe(mode)
+						+ " is not supported; use auto, none, required or a named function "
+						+ "({type:function,name:...} or {type:function,function:{name:...}})");
+			}
 			this.options.toolChoice = OptionSnapshots.value(toolChoice);
 			return this;
 		}
@@ -599,11 +618,26 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 
 		/**
 		 * Output modalities to request, e.g. {@code ["image", "text"]} for
-		 * image-generating chat models.
+		 * image-generating chat models. Values are lower-cased, because OpenRouter
+		 * documents lower-case modalities; an undocumented value is sent and logged once
+		 * as a warning.
 		 */
 		public Builder modalities(@Nullable List<String> modalities) {
-			this.options.modalities = copyList(modalities);
+			OptionChecks.noNullElements("modalities", modalities);
+			this.options.modalities = modalities == null ? null
+					: new ArrayList<>(modalities.stream().map(modality -> modality.toLowerCase(Locale.ROOT)).toList());
+			if (this.options.modalities != null) {
+				for (String modality : this.options.modalities) {
+					OptionChecks.warnIfUnknown(logger, "modality", modality, OpenRouterModality.VALUES);
+				}
+			}
 			return this;
+		}
+
+		public Builder modalities(OpenRouterModality @Nullable ... modalities) {
+			// A null element stays null, so the list setter rejects it with its position.
+			return modalities(modalities == null ? null
+					: Arrays.stream(modalities).map(modality -> modality != null ? modality.value() : null).toList());
 		}
 
 		/**

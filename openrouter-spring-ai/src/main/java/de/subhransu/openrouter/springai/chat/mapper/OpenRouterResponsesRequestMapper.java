@@ -1,6 +1,9 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
 import java.util.Objects;
+import de.subhransu.openrouter.springai.support.OptionChecks;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.ObjectMapper;
 import de.subhransu.openrouter.springai.api.dto.ProviderPreferences;
@@ -34,6 +37,8 @@ import org.springframework.util.StringUtils;
 
 public final class OpenRouterResponsesRequestMapper {
 
+	private static final Log logger = LogFactory.getLog(OpenRouterResponsesRequestMapper.class);
+
 	private static final String MESSAGE_TYPE = "message";
 
 	private final ObjectMapper objectMapper;
@@ -63,8 +68,7 @@ public final class OpenRouterResponsesRequestMapper {
 			.models(options.getModels())
 			.input(mapInput(messages))
 			.instructions(mapInstructions(messages))
-			.maxOutputTokens(options.getMaxCompletionTokens() != null ? options.getMaxCompletionTokens()
-					: options.getMaxTokens())
+			.maxOutputTokens(maxOutputTokens(options))
 			.stream(stream)
 			.temperature(options.getTemperature())
 			.topP(options.getTopP())
@@ -78,13 +82,28 @@ public final class OpenRouterResponsesRequestMapper {
 			.serviceTier(serviceTier != null ? serviceTier.value() : null)
 			.user(options.getUser())
 			.parallelToolCalls(options.getParallelToolCalls())
-			.toolChoice(ToolChoiceMapper.map(options.getToolChoice(), true, this.objectMapper))
+			.toolChoice(ToolChoiceMapper.map(options.getToolChoice(), true, this.objectMapper, toolDefinitions))
 			.tools(mapTools(toolDefinitions, options.getToolStrict()))
 			.modalities(options.getModalities())
 			.imageConfig(options.getImageConfig())
 			.text(mapText(options))
 			.extraBody(options.getExtraBody())
 			.build();
+	}
+
+	// Rejecting both limits would break a default maxCompletionTokens with a request
+	// maxTokens, because options merge field by field. maxCompletionTokens wins, as in
+	// Spring AI's OpenAI options.
+	private static @Nullable Integer maxOutputTokens(OpenRouterChatOptions options) {
+		Integer maxCompletionTokens = options.getMaxCompletionTokens();
+		Integer maxTokens = options.getMaxTokens();
+		if (maxCompletionTokens != null && maxTokens != null && !maxCompletionTokens.equals(maxTokens)) {
+			OptionChecks.warnOnce(logger, "responses-max-output-tokens-" + maxCompletionTokens + "-" + maxTokens,
+					() -> "OPENAI_RESPONSES sends one output limit as max_output_tokens: using maxCompletionTokens "
+							+ maxCompletionTokens + " and ignoring maxTokens " + maxTokens
+							+ ". Set only one of them in this mode.");
+		}
+		return maxCompletionTokens != null ? maxCompletionTokens : maxTokens;
 	}
 
 	private static void rejectUnsupported(String name, @Nullable Object value) {

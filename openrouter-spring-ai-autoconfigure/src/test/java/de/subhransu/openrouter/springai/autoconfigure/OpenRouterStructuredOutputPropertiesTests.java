@@ -73,14 +73,13 @@ class OpenRouterStructuredOutputPropertiesTests {
 		assertRequests(mode, OpenRouterChatOptions.builder().outputSchema(SCHEMA).build(), "output-schema=" + SCHEMA);
 		for (Boolean strict : new Boolean[] { null, true, false }) {
 			List<String> properties = new ArrayList<>(List.of("response-format.type=json-schema",
-					"response-format.name=answer", "response-format.schema=" + SCHEMA, "output-schema=invalid"));
+					"response-format.name=answer", "response-format.schema=" + SCHEMA));
 			if (strict != null) {
 				properties.add("response-format.strict=" + strict);
 			}
 			assertRequests(mode,
 					OpenRouterChatOptions.builder()
 						.responseFormat(OpenRouterResponseFormat.jsonSchema("answer", strict, SCHEMA))
-						.outputSchema("invalid")
 						.build(),
 					properties.toArray(String[]::new));
 		}
@@ -155,7 +154,8 @@ class OpenRouterStructuredOutputPropertiesTests {
 
 	private void assertFormat(JsonNode request, OpenRouterRequestMode mode, OpenRouterChatOptions options) {
 		JsonNode format = request.at(formatPath(mode));
-		var explicit = options.getResponseFormat();
+		// The output schema wins over a response format set alongside it.
+		var explicit = options.getOutputSchema() != null ? null : options.getResponseFormat();
 		if (explicit == null && options.getOutputSchema() == null) {
 			assertThat(format.isMissingNode() || format.isNull()).isTrue();
 			return;
@@ -188,13 +188,19 @@ class OpenRouterStructuredOutputPropertiesTests {
 	}
 
 	@Tag("configuration.properties")
+	@Test
+	void rejectsABlankSchemaAtStartup() {
+		runner.withPropertyValues(PREFIX + "response-format.type=json-schema", PREFIX + "response-format.schema=")
+			.run(context -> assertThat(context.getStartupFailure()).rootCause()
+				.hasMessageContaining("Invalid JSON schema"));
+	}
+
+	@Tag("configuration.properties")
 	@ParameterizedTest
 	@EnumSource(OpenRouterRequestMode.class)
 	void malformedJsonFailsBeforeSendingRequests(OpenRouterRequestMode mode) {
-		for (String[] properties : List.of(new String[] { PREFIX + "output-schema={invalid" },
-				new String[] { PREFIX + "response-format.type=json-schema",
-						PREFIX + "response-format.schema={invalid" },
-				new String[] { PREFIX + "response-format.type=json-schema", PREFIX + "response-format.schema=" })) {
+		for (String[] properties : List.of(new String[] { PREFIX + "output-schema={invalid" }, new String[] {
+				PREFIX + "response-format.type=json-schema", PREFIX + "response-format.schema={invalid" })) {
 			OpenRouterApi api = mock(OpenRouterApi.class);
 			runner.withBean(OpenRouterApi.class, () -> api)
 				.withPropertyValues(PREFIX + "request-mode=" + mode)

@@ -1,23 +1,41 @@
 package de.subhransu.openrouter.springai.chat;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.jspecify.annotations.Nullable;
+import de.subhransu.openrouter.springai.support.OptionChecks;
 import de.subhransu.openrouter.springai.support.OptionSnapshots;
+import java.util.Arrays;
 import java.util.List;
 
 public record OpenRouterProviderPreferences(@Nullable Boolean allowFallbacks, @Nullable Boolean requireParameters,
 		@Nullable String dataCollection, @Nullable List<String> order, @Nullable List<String> ignore,
 		@Nullable List<String> quantizations, @Nullable String sort) {
 
+	private static final Log logger = LogFactory.getLog(OpenRouterProviderPreferences.class);
+
 	public OpenRouterProviderPreferences {
-		order = OptionSnapshots.list(order);
-		ignore = OptionSnapshots.list(ignore);
-		quantizations = OptionSnapshots.list(quantizations);
+		order = OptionSnapshots.list(OptionChecks.noNullElements("provider order", order));
+		ignore = OptionSnapshots.list(OptionChecks.noNullElements("provider ignore", ignore));
+		quantizations = OptionSnapshots.list(OptionChecks.noNullElements("provider quantizations", quantizations));
+		OptionChecks.warnIfUnknown(logger, "provider dataCollection", dataCollection, OpenRouterDataCollection.VALUES);
+		OptionChecks.warnIfUnknown(logger, "provider sort", sort, OpenRouterProviderSort.VALUES);
+		if (quantizations != null) {
+			for (String quantization : quantizations) {
+				OptionChecks.warnIfUnknown(logger, "provider quantization", quantization,
+						OpenRouterQuantization.VALUES);
+			}
+		}
 	}
 
 	public static Builder builder() {
 		return new Builder();
 	}
 
+	/**
+	 * The String setters also cover values that OpenRouter adds after this release. An
+	 * undocumented value is sent and logged once as a warning.
+	 */
 	public static final class Builder {
 
 		private @Nullable Boolean allowFallbacks;
@@ -52,6 +70,11 @@ public record OpenRouterProviderPreferences(@Nullable Boolean allowFallbacks, @N
 			return this;
 		}
 
+		public Builder dataCollection(@Nullable OpenRouterDataCollection dataCollection) {
+			this.dataCollection = dataCollection != null ? dataCollection.value() : null;
+			return this;
+		}
+
 		public Builder order(@Nullable List<String> order) {
 			this.order = order;
 			return this;
@@ -67,8 +90,21 @@ public record OpenRouterProviderPreferences(@Nullable Boolean allowFallbacks, @N
 			return this;
 		}
 
+		public Builder quantizations(OpenRouterQuantization @Nullable ... quantizations) {
+			this.quantizations = quantizations == null ? null
+					: Arrays.stream(quantizations)
+						.map(quantization -> quantization != null ? quantization.value() : null)
+						.toList();
+			return this;
+		}
+
 		public Builder sort(@Nullable String sort) {
 			this.sort = sort;
+			return this;
+		}
+
+		public Builder sort(@Nullable OpenRouterProviderSort sort) {
+			this.sort = sort != null ? sort.value() : null;
 			return this;
 		}
 

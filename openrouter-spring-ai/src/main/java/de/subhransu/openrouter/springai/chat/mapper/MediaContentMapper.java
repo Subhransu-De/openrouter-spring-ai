@@ -42,7 +42,9 @@ final class MediaContentMapper {
 			return new ContentPart("video_url", null, null, null, null, null,
 					new ContentPart.VideoUrl(dataUrl(media, false)));
 		}
-		throw new IllegalArgumentException("Unsupported input media MIME type: " + mime);
+		throw new IllegalArgumentException("Input media type " + mime + " is not supported; use image/*, "
+				+ "application/pdf, audio/wav, audio/mpeg or one of "
+				+ String.join(", ", VIDEO_TYPES.stream().sorted().toList()));
 	}
 
 	static ResponsesContent responses(Media media) {

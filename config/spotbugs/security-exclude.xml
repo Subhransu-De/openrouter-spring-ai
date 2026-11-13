@@ -22,6 +22,14 @@
     <Method name="reportUnusedRetrySettings" params="org.springframework.ai.retry.autoconfigure.SpringAiRetryProperties,org.springframework.beans.factory.ListableBeanFactory" returns="void"/>
     <Bug pattern="CRLF_INJECTION_LOGS"/>
   </Match>
+  <!-- warnOnce replaces CR and LF in the message before logging it.
+       OptionChecksTests checks the rendered warning. FindSecBugs does
+       not recognize this sanitization; keep this exclusion confined to this sink. -->
+  <Match>
+    <Class name="de.subhransu.openrouter.springai.support.OptionChecks"/>
+    <Method name="warnOnce" params="org.apache.commons.logging.Log,java.lang.String,java.util.function.Supplier" returns="void"/>
+    <Bug pattern="CRLF_INJECTION_LOGS"/>
+  </Match>
   <!-- URI.create validates the scheme's ASCII grammar before this comparison.
        equalsIgnoreCase therefore cannot admit Unicode lookalikes; mixed-case
        HTTP(S) schemes are valid and must remain supported. -->

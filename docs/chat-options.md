@@ -30,7 +30,7 @@ Portable Spring AI `ChatOptions` that are not `OpenRouterChatOptions` keep only 
 
 Embedding and image models merge supplied options with their defaults, and unset fields inherit. This differs from raw chat replacement.
 
-A null request option inherits the default; it cannot clear it, as the `seed` row in the diagram shows. To drop a default for one request, leave it out of the defaults or use a separate model or client.
+A null request option inherits the default; it cannot clear it, as the `seed` row in the diagram shows. The exception is the output format: a request that sets `responseFormat` or `outputSchema` replaces both defaults, as described in [Structured output](request-modes.md#structured-output). To drop a default for one request, leave it out of the defaults or use a separate model or client.
 
 ### Pitfall: switching the request mode
 
@@ -47,13 +47,15 @@ OpenRouterChatOptions options = OpenRouterChatOptions.builder()
     .provider(OpenRouterProviderPreferences.builder()
         .allowFallbacks(true)
         .order(List.of("openai"))
-        .sort("throughput")
+        .sort(OpenRouterProviderSort.THROUGHPUT)
         .build())
     .serviceTier(OpenRouterServiceTier.FLEX)
     .build();
 ```
 
 The service tier is `AUTO`, `DEFAULT`, `FLEX` or `PRIORITY`.
+
+`OpenRouterProviderSort`, `OpenRouterDataCollection` and `OpenRouterQuantization` hold the sort, data collection and quantization values that OpenRouter documents. The String setters also take values that OpenRouter adds later. An undocumented value is sent as written and each distinct value is logged once as a warning. Request lists such as `models`, `order` and `quantizations` must not contain `null`; the builder rejects a null element.
 
 The same defaults as Boot properties, plus the attribution headers:
 

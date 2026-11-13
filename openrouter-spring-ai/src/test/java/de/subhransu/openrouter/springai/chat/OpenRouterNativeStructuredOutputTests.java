@@ -19,7 +19,10 @@ import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import org.junit.jupiter.api.Tag;
 
+import java.util.stream.Stream;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.http.MediaType;
@@ -32,9 +35,17 @@ import tools.jackson.databind.ObjectMapper;
 @Tag("api.request")
 class OpenRouterNativeStructuredOutputTests {
 
+	static Stream<Arguments> modesWithAndWithoutDefaultFormat() {
+		return Stream.of(OpenRouterRequestMode.values())
+			.flatMap(mode -> Stream.of(Arguments.of(mode, null),
+					Arguments.of(mode, OpenRouterResponseFormat.jsonObject())));
+	}
+
+	// A default response format must not displace the schema that entity() supplies.
 	@ParameterizedTest
-	@EnumSource(OpenRouterRequestMode.class)
-	void chatClientSendsNativeSchemaToTheSelectedEndpoint(OpenRouterRequestMode mode) {
+	@MethodSource("modesWithAndWithoutDefaultFormat")
+	void chatClientSendsNativeSchemaToTheSelectedEndpoint(OpenRouterRequestMode mode,
+			OpenRouterResponseFormat defaultFormat) {
 		boolean responses = mode == OpenRouterRequestMode.OPENAI_RESPONSES;
 		ObjectMapper mapper = new ObjectMapper();
 		RestClient.Builder rest = RestClient.builder();
@@ -46,7 +57,11 @@ class OpenRouterNativeStructuredOutputTests {
 			.build();
 		OpenRouterChatModel model = OpenRouterChatModel.builder()
 			.openRouterApi(api)
-			.defaultOptions(OpenRouterChatOptions.builder().model("test/model").requestMode(mode).build())
+			.defaultOptions(OpenRouterChatOptions.builder()
+				.model("test/model")
+				.requestMode(mode)
+				.responseFormat(defaultFormat)
+				.build())
 			.build();
 		String body = responses
 				? "{\"id\":\"r1\",\"status\":\"completed\",\"output\":[{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"{\\\"answer\\\":\\\"ok\\\"}\"}]}]}"

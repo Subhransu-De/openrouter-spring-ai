@@ -1,20 +1,29 @@
 package de.subhransu.openrouter.springai.chat;
 
+import de.subhransu.openrouter.springai.support.OptionChecks;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.jspecify.annotations.Nullable;
 
 public record OpenRouterReasoningOptions(@Nullable String effort, @Nullable Integer maxTokens,
 		@Nullable Boolean exclude, @Nullable Boolean enabled) {
 
+	private static final Log logger = LogFactory.getLog(OpenRouterReasoningOptions.class);
+
 	public OpenRouterReasoningOptions {
 		if (effort != null && maxTokens != null) {
-			throw new IllegalArgumentException("OpenRouter reasoning accepts 'effort' or 'max-tokens', not both");
+			throw new IllegalArgumentException(
+					"OpenRouter reasoning accepts 'effort' or 'max-tokens', not both, but effort was "
+							+ OptionChecks.describe(effort) + " and max-tokens was " + maxTokens);
 		}
 		if (effort != null && effort.isBlank()) {
-			throw new IllegalArgumentException("reasoning 'effort' must not be blank");
+			throw new IllegalArgumentException("reasoning 'effort' must not be blank, but was "
+					+ OptionChecks.describe(effort) + "; use " + String.join(", ", OpenRouterReasoningEffort.VALUES));
 		}
 		if (maxTokens != null && maxTokens <= 0) {
 			throw new IllegalArgumentException("reasoning 'max-tokens' must be positive, but was " + maxTokens);
 		}
+		OptionChecks.warnIfUnknown(logger, "reasoning effort", effort, OpenRouterReasoningEffort.VALUES);
 	}
 
 	public static Builder builder() {
@@ -34,8 +43,17 @@ public record OpenRouterReasoningOptions(@Nullable String effort, @Nullable Inte
 		private Builder() {
 		}
 
+		/**
+		 * Sets the effort as a wire value, which also covers values that OpenRouter adds
+		 * after this release. An undocumented value is sent and logged once as a warning.
+		 */
 		public Builder effort(@Nullable String effort) {
 			this.effort = effort;
+			return this;
+		}
+
+		public Builder effort(@Nullable OpenRouterReasoningEffort effort) {
+			this.effort = effort != null ? effort.value() : null;
 			return this;
 		}
 

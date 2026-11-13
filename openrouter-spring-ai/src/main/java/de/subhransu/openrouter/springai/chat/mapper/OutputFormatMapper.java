@@ -1,5 +1,8 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
+import de.subhransu.openrouter.springai.support.OptionChecks;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.jspecify.annotations.Nullable;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
@@ -10,21 +13,32 @@ import org.springframework.util.StringUtils;
 
 final class OutputFormatMapper {
 
+	private static final Log logger = LogFactory.getLog(OutputFormatMapper.class);
+
 	private final ObjectMapper objectMapper;
 
 	OutputFormatMapper(ObjectMapper objectMapper) {
 		this.objectMapper = objectMapper;
 	}
 
+	/**
+	 * The output schema wins when both options are set: {@code ChatClient.entity(...)}
+	 * supplies it and parses the reply against it, as with Spring AI's OpenAI options,
+	 * where the output schema replaces the response format.
+	 */
 	@Nullable ObjectNode map(OpenRouterChatOptions options) {
 		var format = options.getResponseFormat();
-		if (format != null) {
-			return mapResponseFormat(format);
+		String outputSchema = options.getOutputSchema();
+		if (StringUtils.hasText(outputSchema)) {
+			if (format != null) {
+				OptionChecks.warnOnce(logger, "outputSchema-over-responseFormat-" + format.type(),
+						() -> "Both responseFormat (" + format.type() + ") and outputSchema are set; sending "
+								+ "outputSchema, which ChatClient.entity(...) parses the reply against, and ignoring "
+								+ "responseFormat. Set only one of them.");
+			}
+			return jsonSchemaFormat("response", null, outputSchema);
 		}
-		if (StringUtils.hasText(options.getOutputSchema())) {
-			return jsonSchemaFormat("response", null, options.getOutputSchema());
-		}
-		return null;
+		return format != null ? mapResponseFormat(format) : null;
 	}
 
 	private ObjectNode mapResponseFormat(OpenRouterResponseFormat format) {

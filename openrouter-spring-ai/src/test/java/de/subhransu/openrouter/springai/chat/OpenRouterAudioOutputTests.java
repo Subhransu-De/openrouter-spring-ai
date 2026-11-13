@@ -184,7 +184,9 @@ class OpenRouterAudioOutputTests {
 		StepVerifier.create(model.stream(new Prompt("synthetic", this.options.mutate().audio(null).build())))
 			.expectErrorMessage("Audio output requires both audio options and the audio modality")
 			.verify();
-		StepVerifier.create(model.stream(new Prompt("synthetic", this.options.mutate().modalities(null).build())))
+		StepVerifier
+			.create(model
+				.stream(new Prompt("synthetic", this.options.mutate().modalities((List<String>) null).build())))
 			.expectErrorMessage("Audio output requires both audio options and the audio modality")
 			.verify();
 		for (AssistantMessage assistant : List.of(
