@@ -4,6 +4,7 @@ import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
 import de.subhransu.openrouter.springai.chat.errors.OpenRouterChoiceFailure;
 import de.subhransu.openrouter.springai.errors.OpenRouterHttpException;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
+import de.subhransu.openrouter.springai.errors.OpenRouterTransportException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import java.util.List;
 import java.util.concurrent.TimeoutException;
@@ -108,9 +109,10 @@ public enum SceneFailureReason {
     if (cause instanceof OpenRouterTruncatedResponseException) {
       return TRUNCATED;
     }
-    // The client's response timeout surfaces as Reactor's TimeoutException.
-    if (cause instanceof ResourceAccessException || cause instanceof WebClientRequestException
-        || cause instanceof TimeoutException) {
+    // The library maps timeouts and connection failures to OpenRouterTransportException;
+    // the raw types remain for failures that do not pass through the library.
+    if (cause instanceof OpenRouterTransportException || cause instanceof ResourceAccessException
+        || cause instanceof WebClientRequestException || cause instanceof TimeoutException) {
       return TRANSPORT_ERROR;
     }
     return null;

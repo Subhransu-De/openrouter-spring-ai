@@ -14,6 +14,8 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
+import de.subhransu.openrouter.springai.errors.OpenRouterTransportException;
 import java.util.concurrent.TimeoutException;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -121,7 +123,8 @@ class OpenRouterApiStreamingTests {
 	void binderKeepsSuppliedDeserializerOnItsTreePath() {
 		ObjectMapper mapper = JsonMapper.builder().addMixIn(FunctionCall.class, FunctionMixin.class).build();
 		StreamEventBinder binder = new StreamEventBinder(mapper, false);
-		FunctionCall function = binder.bind("{}", binder.reader(FunctionCall.class), FunctionCall.class);
+		FunctionCall function = binder.bind("{}", binder.reader(FunctionCall.class), FunctionCall.class,
+				"/chat/completions");
 		assertThat(function.name()).isEqualTo("TreeTraversingParser");
 	}
 
@@ -255,7 +258,13 @@ class OpenRouterApiStreamingTests {
 
 		StepVerifier.create(api.chatCompletionStream(chatRequest()))
 			.assertNext(chunk -> assertThat(chunk.choices().get(0).delta().content()).isEqualTo("Hi"))
-			.expectError(TimeoutException.class)
+			.expectErrorSatisfies(
+					error -> assertThat(error).isInstanceOfSatisfying(OpenRouterTransportException.class, transport -> {
+						assertThat(transport.getKind()).isEqualTo(OpenRouterTransportException.Kind.TIMEOUT);
+						assertThat(transport.getEndpoint()).isEqualTo("/chat/completions");
+						assertThat(transport.getCategory()).isEqualTo(OpenRouterErrorCategory.TIMEOUT);
+						assertThat(transport).hasCauseInstanceOf(TimeoutException.class);
+					}))
 			.verify(Duration.ofSeconds(30));
 	}
 

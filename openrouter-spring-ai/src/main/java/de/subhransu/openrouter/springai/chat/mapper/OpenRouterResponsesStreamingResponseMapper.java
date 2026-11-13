@@ -125,7 +125,7 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 			throw OpenRouterResponsesResponseMapper.failure("OpenRouter responses stream failed", String.valueOf(event),
 					eventError(event), event.errorType(), this.sanitizer);
 		}
-		ResponseValues.requiredText(type, "Responses event type");
+		ResponseValues.RESPONSES.requiredText(type, "Responses event type");
 		if ("response.failed".equals(type)) {
 			// HTTP 200 can carry a failed generation; never emit an empty finish chunk.
 			ResponsesResult failed = event.response();

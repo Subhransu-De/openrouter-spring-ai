@@ -17,11 +17,11 @@ final class ReasoningDetailsMerger {
 
 	static List<JsonNode> merge(@Nullable List<? extends @Nullable JsonNode> earlier,
 			@Nullable List<? extends @Nullable JsonNode> fragments) {
-		List<JsonNode> result = new ArrayList<>(ResponseValues.items(earlier, "reasoning detail"));
+		List<JsonNode> result = new ArrayList<>(ResponseValues.CHAT_COMPLETIONS.items(earlier, "reasoning detail"));
 		ObjectNode active = null;
 		String activeField = null;
 		StringBuilder text = null;
-		for (JsonNode fragment : ResponseValues.items(fragments, "reasoning detail")) {
+		for (JsonNode fragment : ResponseValues.CHAT_COMPLETIONS.items(fragments, "reasoning detail")) {
 			JsonNode previous = result.isEmpty() ? null : result.get(result.size() - 1);
 			String field = payloadField(fragment);
 			if (previous != null && field != null && compatible(previous, fragment, field)) {

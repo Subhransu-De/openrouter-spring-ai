@@ -16,6 +16,7 @@ import de.subhransu.openrouter.springai.api.dto.ChatCompletionRequest;
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterChatRequestMapper;
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterResponsesRequestMapper;
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterStreamingResponseMapper;
+import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import java.util.Arrays;
@@ -168,7 +169,12 @@ class OpenRouterAudioOutputTests {
 		String megabyte = encoded(new byte[1024 * 1024]);
 		StepVerifier.create(map(Flux.range(0, 17).map(i -> chunk(0, null, megabyte, null, null))))
 			.expectNextCount(15)
-			.expectErrorMessage("Retained audio and transcript exceed the 16 MiB stream limit")
+			.expectErrorSatisfies(
+					error -> assertThat(error).isInstanceOfSatisfying(OpenRouterLimitExceededException.class, limit -> {
+						assertThat(limit.getLimit()).isEqualTo(OpenRouterLimitExceededException.Limit.CHAT_AUDIO_BYTES);
+						assertThat(limit.isLocal()).isTrue();
+						assertThat(limit.getConfiguredLimit()).isEqualTo(16L * 1024 * 1024);
+					}))
 			.verify();
 	}
 
@@ -464,6 +470,24 @@ class OpenRouterAudioOutputTests {
 			body.append("data: ").append(this.json.writeValueAsString(chunk)).append("\n\n");
 		}
 		return body.toString();
+	}
+
+	@Test
+	void audioChoiceLimitRaisesALocalLimitException() {
+		StepVerifier.create(map(Flux.range(0, 129).map(i -> chunk(i, null, "AA==", null, "stop"))))
+			.expectNextCount(128)
+			.expectErrorSatisfies(
+					error -> assertThat(error).isInstanceOfSatisfying(OpenRouterLimitExceededException.class, limit -> {
+						assertThat(limit.getLimit())
+							.isEqualTo(OpenRouterLimitExceededException.Limit.CHAT_AUDIO_CHOICES);
+						assertThat(limit.getConfiguredLimit()).isEqualTo(128);
+						assertThat(limit.getEndpoint()).isEqualTo("/chat/completions");
+						assertThat(limit.getStatusCode()).isNull();
+						assertThat(limit.getLimit().getProperty()).isNull();
+						assertThat(limit.isLocal()).isTrue();
+						assertThat(limit.getMessage()).contains("fixed").doesNotContain("Increase");
+					}))
+			.verify();
 	}
 
 	private Flux<ChatResponse> map(Flux<ChatCompletionChunk> chunks) {

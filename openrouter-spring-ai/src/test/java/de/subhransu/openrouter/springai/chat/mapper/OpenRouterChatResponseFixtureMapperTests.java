@@ -331,7 +331,8 @@ class OpenRouterChatResponseFixtureMapperTests {
 
 		assertThatThrownBy(() -> this.responseMapper.map(response))
 			.isInstanceOfSatisfying(OpenRouterNonTransientChoiceException.class, exception -> {
-				assertThat(exception.getMessage()).isEqualTo("OpenRouter chat-completion choice failed");
+				assertThat(exception.getMessage()).isEqualTo(
+						"OpenRouter chat-completion choice failed in /chat/completions for choice 0, category UNKNOWN");
 				assertThat(exception.getErrorDetails().provider()).hasSize(1003)
 					.endsWith("...")
 					.doesNotContain(tailMarker);
@@ -357,7 +358,8 @@ class OpenRouterChatResponseFixtureMapperTests {
 
 		assertThatThrownBy(() -> this.responseMapper.map(response))
 			.isInstanceOfSatisfying(OpenRouterNonTransientChoiceException.class, exception -> {
-				assertThat(exception.getMessage()).isEqualTo("OpenRouter chat-completion choice failed")
+				assertThat(exception.getMessage()).isEqualTo(
+						"OpenRouter chat-completion choice failed in /chat/completions for choice 0, category INVALID_REQUEST")
 					.doesNotContain(providerSecret, messageSecret, metadataSecret, partialSecret);
 				assertThat(exception.getErrorDetails().provider()).contains("[REDACTED]")
 					.doesNotContain(providerSecret);
@@ -458,7 +460,8 @@ class OpenRouterChatResponseFixtureMapperTests {
 
 		assertThatThrownBy(() -> this.streamingMapper.map(chunk)).isInstanceOfSatisfying(OpenRouterApiException.class,
 				exception -> {
-					assertThat(exception.getMessage()).isEqualTo("OpenRouter chat completion stream failed");
+					assertThat(exception.getMessage()).isEqualTo(
+							"OpenRouter chat completion stream failed in /chat/completions with status 500 INTERNAL_SERVER_ERROR, category PROVIDER_UNAVAILABLE");
 					assertThat(exception.getErrorDetails().message())
 						.isEqualTo("The upstream provider returned an error");
 				});

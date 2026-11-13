@@ -249,7 +249,7 @@ public final class OpenRouterStreamingToolCallAggregator {
 		}
 		// Names are complete identifiers, unlike incremental JSON arguments.
 		if (StringUtils.hasText(later) && !earlier.equals(later)) {
-			throw new OpenRouterProtocolException(
+			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.CONTRACT, ENDPOINT,
 					"Conflicting streamed tool-call function names; fragmented names are not supported");
 		}
 		return earlier;
@@ -260,8 +260,9 @@ public final class OpenRouterStreamingToolCallAggregator {
 	}
 
 	private static <T> List<T> items(@Nullable List<? extends @Nullable T> values, String field) {
-		return values != null && values.size() == 1 ? List.of(ResponseValues.required(values.get(0), field))
-				: ResponseValues.items(values, field);
+		return values != null && values.size() == 1
+				? List.of(ResponseValues.CHAT_COMPLETIONS.required(values.get(0), field))
+				: ResponseValues.CHAT_COMPLETIONS.items(values, field);
 	}
 
 	private static final class ChoiceBuffer {
@@ -345,7 +346,7 @@ public final class OpenRouterStreamingToolCallAggregator {
 			if (calls == null) {
 				calls = new TreeMap<>();
 				this.fragmentsByCall = calls;
-				for (ToolCall toolCall : ResponseValues.items(this.toolCalls, "tool call")) {
+				for (ToolCall toolCall : ResponseValues.CHAT_COMPLETIONS.items(this.toolCalls, "tool call")) {
 					lastKey = correlate(calls, Objects.requireNonNullElse(toolCall.index(), this.nextCallKey),
 							toolCall);
 				}
@@ -645,10 +646,10 @@ public final class OpenRouterStreamingToolCallAggregator {
 
 			List<ChatCompletionChunk> ready = new ArrayList<>();
 			if (choices.size() == 1) {
-				acceptChoice(chunk, ResponseValues.required(choices.get(0), "choice"), ready);
+				acceptChoice(chunk, ResponseValues.CHAT_COMPLETIONS.required(choices.get(0), "choice"), ready);
 			}
 			else {
-				ResponseValues.items(choices, "choice")
+				ResponseValues.CHAT_COMPLETIONS.items(choices, "choice")
 					.stream()
 					.sorted(Comparator.comparingInt(this::choiceIndex))
 					.forEach(choice -> acceptChoice(chunk, choice, ready));
@@ -682,7 +683,8 @@ public final class OpenRouterStreamingToolCallAggregator {
 			else {
 				var choiceDelta = choice.delta();
 				if (choiceDelta != null && choiceDelta.audio() != null) {
-					throw new OpenRouterProtocolException("Audio and tool calls in the same choice are unsupported");
+					throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.CONTRACT, ENDPOINT,
+							"Audio and tool calls in the same choice are unsupported");
 				}
 				long chunkBytes = serializedBytes(choiceChunk);
 				buffered.add(choiceChunk, chunkBytes);
@@ -703,12 +705,14 @@ public final class OpenRouterStreamingToolCallAggregator {
 			buffered.close();
 			ChatCompletionChunk merged = merge(buffered.chunks);
 			if (!OpenRouterChoiceErrorExceptionFactory.isFailure(choice)) {
-				Choice completed = ResponseValues.items(merged.choices(), "completed choice").get(0);
-				Delta delta = ResponseValues.required(completed.delta(), "completed tool-call delta");
-				for (ToolCall toolCall : ResponseValues.items(delta.toolCalls(), "completed tool call")) {
+				Choice completed = ResponseValues.CHAT_COMPLETIONS.items(merged.choices(), "completed choice").get(0);
+				Delta delta = ResponseValues.CHAT_COMPLETIONS.required(completed.delta(), "completed tool-call delta");
+				for (ToolCall toolCall : ResponseValues.CHAT_COMPLETIONS.items(delta.toolCalls(),
+						"completed tool call")) {
 					var function = toolCall.function();
 					if (function == null || !StringUtils.hasText(function.name())) {
-						throw new OpenRouterProtocolException("Completed streamed tool call has no function name");
+						throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.MISSING_FIELD, ENDPOINT,
+								"Completed streamed tool call has no function name");
 					}
 				}
 			}

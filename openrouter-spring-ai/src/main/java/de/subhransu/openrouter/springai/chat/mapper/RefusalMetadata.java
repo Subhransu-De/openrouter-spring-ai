@@ -28,11 +28,11 @@ final class RefusalMetadata {
 			return null;
 		}
 		String refusal = null;
-		for (ResponsesOutputItem item : ResponseValues.items(output, "output item")) {
+		for (ResponsesOutputItem item : ResponseValues.RESPONSES.items(output, "output item")) {
 			if (!"message".equals(item.type()) || item.content() == null) {
 				continue;
 			}
-			for (ResponsesContent part : ResponseValues.items(item.content(), "message content")) {
+			for (ResponsesContent part : ResponseValues.RESPONSES.items(item.content(), "message content")) {
 				if ("refusal".equals(part.type())) {
 					refusal = (refusal != null ? refusal : "") + (part.refusal() != null ? part.refusal() : "");
 				}
@@ -72,7 +72,7 @@ final class RefusalMetadata {
 			var response = event.response();
 			if (("response.completed".equals(event.type()) || "response.incomplete".equals(event.type()))
 					&& response != null && response.output() != null) {
-				List<ResponsesOutputItem> output = ResponseValues.items(response.output(), "output item");
+				List<ResponsesOutputItem> output = ResponseValues.RESPONSES.items(response.output(), "output item");
 				for (int index = 0; index < output.size(); index++) {
 					snapshot(index, output.get(index));
 				}
@@ -83,7 +83,8 @@ final class RefusalMetadata {
 			var messageContent = item.content();
 			if ("message".equals(item.type()) && messageContent != null) {
 				for (int index = 0; index < messageContent.size(); index++) {
-					ResponsesContent part = ResponseValues.required(messageContent.get(index), "message content");
+					ResponsesContent part = ResponseValues.RESPONSES.required(messageContent.get(index),
+							"message content");
 					if ("refusal".equals(part.type())) {
 						Map<Integer, String> content = this.parts.computeIfAbsent(outputIndex, key -> new TreeMap<>());
 						// Sparse snapshots must not erase an explanation already

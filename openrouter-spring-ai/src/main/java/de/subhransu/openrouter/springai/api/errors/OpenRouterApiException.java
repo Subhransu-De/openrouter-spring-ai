@@ -5,6 +5,7 @@ import de.subhransu.openrouter.springai.errors.OpenRouterExceptionMessage;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorClassifier;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorDetails;
+import de.subhransu.openrouter.springai.errors.OpenRouterFailure;
 import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
 import org.springframework.http.HttpStatusCode;
@@ -21,15 +22,20 @@ import org.springframework.http.HttpStatusCode;
  * choice-level exception taxonomy. Provider-controlled text is retained only as bounded,
  * credential-safe diagnostic fields and is never included in {@link #getMessage()}.
  *
+ * <p>
+ * This type is not a Spring AI {@code TransientAiException}, even when
+ * {@link #isTransient()} is {@code true}: a top-level error inside a stream raises it for
+ * every category, because OpenRouter already accepted that stream.
+ *
  * @author Subhransu De
  */
-public class OpenRouterApiException extends RuntimeException {
+public class OpenRouterApiException extends RuntimeException implements OpenRouterFailure {
 
 	private final @Nullable HttpStatusCode statusCode;
 
 	private final @Nullable String responseBody;
 
-	private final @Nullable OpenRouterErrorDetails errorDetails;
+	private final OpenRouterErrorDetails errorDetails;
 
 	public OpenRouterApiException(String message, @Nullable HttpStatusCode statusCode, @Nullable String responseBody) {
 		this(message, statusCode, responseBody, new OpenRouterErrorDetails(null, message, null, null, null,
@@ -41,7 +47,7 @@ public class OpenRouterApiException extends RuntimeException {
 		super(message);
 		this.statusCode = statusCode;
 		this.responseBody = OpenRouterExceptionMessage.sanitize(responseBody);
-		this.errorDetails = errorDetails;
+		this.errorDetails = errorDetails != null ? errorDetails : OpenRouterErrorDetails.empty();
 	}
 
 	public @Nullable HttpStatusCode getStatusCode() {
@@ -52,12 +58,17 @@ public class OpenRouterApiException extends RuntimeException {
 		return this.responseBody;
 	}
 
-	public @Nullable OpenRouterErrorDetails getErrorDetails() {
+	/**
+	 * Return the parsed error details.
+	 * @return the details, empty when the error had none; never {@code null}
+	 */
+	public OpenRouterErrorDetails getErrorDetails() {
 		return this.errorDetails;
 	}
 
+	@Override
 	public OpenRouterErrorCategory getCategory() {
-		return this.errorDetails != null ? this.errorDetails.category() : OpenRouterErrorCategory.UNKNOWN;
+		return this.errorDetails.category();
 	}
 
 }

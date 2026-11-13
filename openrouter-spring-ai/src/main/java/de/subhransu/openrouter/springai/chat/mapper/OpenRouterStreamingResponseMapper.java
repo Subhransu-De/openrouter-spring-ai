@@ -125,10 +125,10 @@ public final class OpenRouterStreamingResponseMapper {
 			// over HTTP 200; without this the truncated stream would look like a clean
 			// completion.
 			throw OpenRouterApiExceptionFactory.create("OpenRouter chat completion stream failed", error.toString(),
-					error, null, this.sanitizer);
+					error, null, "/chat/completions", this.sanitizer);
 		}
 		throwIfChoiceFailed(chunk, partialOutputs);
-		List<Choice> choices = ResponseValues.items(chunk.choices(), "choice");
+		List<Choice> choices = ResponseValues.CHAT_COMPLETIONS.items(chunk.choices(), "choice");
 		for (Choice choice : choices) {
 			if (!audio.finished(choice)) {
 				budget.open(choiceIndex(choice));
@@ -261,15 +261,16 @@ public final class OpenRouterStreamingResponseMapper {
 		if (toolCalls == null || toolCalls.isEmpty()) {
 			return List.of();
 		}
-		return ResponseValues.items(toolCalls, "tool call")
+		return ResponseValues.CHAT_COMPLETIONS.items(toolCalls, "tool call")
 			.stream()
 			.map(toolCall -> new AssistantMessage.ToolCall(toolCall.id() != null ? toolCall.id() : "",
-					ResponseValues.required(toolCall.type(), "tool call type"),
-					ResponseValues.required(ResponseValues.required(toolCall.function(), "tool call function").name(),
+					ResponseValues.CHAT_COMPLETIONS.required(toolCall.type(), "tool call type"),
+					ResponseValues.CHAT_COMPLETIONS.required(
+							ResponseValues.CHAT_COMPLETIONS.required(toolCall.function(), "tool call function").name(),
 							"tool call name"),
-					ResponseValues.required(
-							ResponseValues.required(toolCall.function(), "tool call function").arguments(),
-							"tool call arguments")))
+					ResponseValues.CHAT_COMPLETIONS
+						.required(ResponseValues.CHAT_COMPLETIONS.required(toolCall.function(), "tool call function")
+							.arguments(), "tool call arguments")))
 			.toList();
 	}
 

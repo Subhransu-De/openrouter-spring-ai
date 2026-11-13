@@ -57,7 +57,8 @@ class OpenRouterErrorEnvelopeTests {
 		OpenRouterHttpException truncated = this.httpFactory.createErrorBodyLimit("/responses",
 				HttpStatusCode.valueOf(503), json.substring(0, json.length() - 1), 10, 11);
 		OpenRouterApiException inBand = OpenRouterApiExceptionFactory.create("fallback", json,
-				new StreamError("503", "failure", metadata, nested), root, OpenRouterDiagnosticSanitizer.keyless());
+				new StreamError("503", "failure", metadata, nested), root, "/responses",
+				OpenRouterDiagnosticSanitizer.keyless());
 
 		for (OpenRouterErrorDetails details : List.of(http.getErrorDetails(), truncated.getErrorDetails(),
 				inBand.getErrorDetails())) {
@@ -76,7 +77,7 @@ class OpenRouterErrorEnvelopeTests {
 	void blankRootTypeWithoutAnErrorObjectLeavesNoErrorType(String root) {
 		OpenRouterHttpException http = (OpenRouterHttpException) this.httpFactory.create("/responses",
 				HttpStatusCode.valueOf(429), HttpHeaders.EMPTY, "{\"error_type\":\"" + root + "\"}");
-		OpenRouterApiException inBand = OpenRouterApiExceptionFactory.create("fallback", null, null, root,
+		OpenRouterApiException inBand = OpenRouterApiExceptionFactory.create("fallback", null, null, root, "/responses",
 				OpenRouterDiagnosticSanitizer.keyless());
 
 		assertThat(http.getErrorDetails().errorType()).isNull();

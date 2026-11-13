@@ -28,7 +28,7 @@ final class ReasoningMetadata {
 			metadata.put(REASONING, reasoning);
 		}
 		if (details != null) {
-			metadata.put(DETAILS, ResponseValues.items(details, "reasoning detail"));
+			metadata.put(DETAILS, ResponseValues.CHAT_COMPLETIONS.items(details, "reasoning detail"));
 		}
 		return metadata;
 	}
@@ -41,8 +41,8 @@ final class ReasoningMetadata {
 	static Map<String, Object> responses(@Nullable List<? extends @Nullable ResponsesOutputItem> output) {
 		Map<String, Object> metadata = new LinkedHashMap<>();
 		if (output != null) {
-			metadata.put(RESPONSES_OUTPUT_ITEMS, ResponseValues.items(output, "output item"));
-			List<ResponsesOutputItem> items = ResponseValues.<ResponsesOutputItem>items(output, "output item")
+			metadata.put(RESPONSES_OUTPUT_ITEMS, ResponseValues.RESPONSES.items(output, "output item"));
+			List<ResponsesOutputItem> items = ResponseValues.RESPONSES.<ResponsesOutputItem>items(output, "output item")
 				.stream()
 				.filter(item -> "reasoning".equals(item.type()))
 				.toList();
@@ -61,7 +61,7 @@ final class ReasoningMetadata {
 	private static void appendText(ResponsesOutputItem item, StringBuilder text) {
 		JsonNode raw = item.rawItem();
 		if (item.content() != null) {
-			ResponseValues.items(item.content(), "reasoning content")
+			ResponseValues.RESPONSES.items(item.content(), "reasoning content")
 				.stream()
 				.filter(content -> "reasoning_text".equals(content.type()) && content.text() != null)
 				.forEach(content -> text.append(content.text()));

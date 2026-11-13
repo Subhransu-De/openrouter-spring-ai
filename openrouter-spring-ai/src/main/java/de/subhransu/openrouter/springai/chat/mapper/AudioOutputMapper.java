@@ -7,6 +7,7 @@ import de.subhransu.openrouter.springai.api.dto.AudioOutput;
 import de.subhransu.openrouter.springai.api.dto.Choice;
 import de.subhransu.openrouter.springai.chat.OpenRouterAudioOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
+import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import java.io.ByteArrayOutputStream;
@@ -22,7 +23,6 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.content.Media;
-import org.springframework.ai.retry.NonTransientAiException;
 import org.springframework.lang.Contract;
 import org.springframework.util.Assert;
 import org.springframework.util.MimeTypeUtils;
@@ -42,7 +42,11 @@ final class AudioOutputMapper {
 
 	private static final String METADATA = OpenRouterMetadata.AUDIO;
 
+	private static final String ENDPOINT = "/chat/completions";
+
 	private static final int MAX_BYTES = 16 * 1024 * 1024;
+
+	private static final int MAX_CHOICES = 128;
 
 	private final @Nullable OpenRouterAudioOptions options;
 
@@ -97,8 +101,10 @@ final class AudioOutputMapper {
 		if (audio != null) {
 			require(this.options != null, "Received audio without configured output audio options");
 			if (assembly == null) {
-				if (this.pending.size() + this.finished.size() >= 128) {
-					throw new NonTransientAiException("Audio output exceeds the 128-choice limit");
+				if (this.pending.size() + this.finished.size() >= MAX_CHOICES) {
+					throw new OpenRouterLimitExceededException(
+							OpenRouterLimitExceededException.Limit.CHAT_AUDIO_CHOICES, MAX_CHOICES, MAX_CHOICES + 1L,
+							ENDPOINT, null, null, null);
 				}
 				assembly = new Assembly();
 				this.pending.put(index, assembly);
@@ -182,7 +188,7 @@ final class AudioOutputMapper {
 			// two bytes.
 			long upperBound = (data.length() + 3L) / 4 * 3;
 			if (upperBound > MAX_BYTES - this.retainedBytes + 2L) {
-				throw limit();
+				throw limit(this.retainedBytes + upperBound - 2L);
 			}
 			byte[] bytes = decode(data);
 			retain(assembly, bytes.length);
@@ -195,7 +201,8 @@ final class AudioOutputMapper {
 			return Base64.getDecoder().decode(data);
 		}
 		catch (IllegalArgumentException ex) {
-			throw new OpenRouterProtocolException("Audio output fragment is not valid base64", ex);
+			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.DECODE, ENDPOINT,
+					"Audio output fragment is not valid base64", ex);
 		}
 	}
 
@@ -204,20 +211,21 @@ final class AudioOutputMapper {
 	@Contract("false, _ -> fail")
 	private static void require(boolean valid, String message) {
 		if (!valid) {
-			throw new OpenRouterProtocolException(message);
+			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.CONTRACT, ENDPOINT, message);
 		}
 	}
 
 	private void retain(Assembly assembly, long bytes) {
 		if (bytes > MAX_BYTES - this.retainedBytes) {
-			throw limit();
+			throw limit(this.retainedBytes + bytes);
 		}
 		this.retainedBytes += (int) bytes;
 		assembly.retainedBytes += (int) bytes;
 	}
 
-	private static NonTransientAiException limit() {
-		return new NonTransientAiException("Retained audio and transcript exceed the 16 MiB stream limit");
+	private static OpenRouterLimitExceededException limit(long observed) {
+		return new OpenRouterLimitExceededException(OpenRouterLimitExceededException.Limit.CHAT_AUDIO_BYTES, MAX_BYTES,
+				observed, ENDPOINT, null, null, null);
 	}
 
 	/**

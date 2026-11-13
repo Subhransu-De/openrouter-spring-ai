@@ -122,7 +122,8 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 		assertThatThrownBy(() -> this.responseMapper.map(result("failed", List.of(), null,
 				new StreamError("server_error", "model crashed\r\nforged\u001B[31m Bearer response-secret"))))
 			.isInstanceOfSatisfying(OpenRouterTransientApiException.class, exception -> {
-				assertThat(exception.getMessage()).isEqualTo("OpenRouter responses request failed");
+				assertThat(exception.getMessage()).isEqualTo(
+						"OpenRouter responses request failed in /responses with status 500 INTERNAL_SERVER_ERROR, category PROVIDER_UNAVAILABLE");
 				assertThat(exception.getErrorDetails().code()).isEqualTo("server_error");
 				assertThat(exception.getStatusCode().value()).isEqualTo(500);
 				assertThat(exception.getEndpoint()).isEqualTo("/responses");
@@ -144,7 +145,8 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 
 		assertThatThrownBy(() -> this.streamingMapper.map(event))
 			.isInstanceOfSatisfying(OpenRouterTransientApiException.class, exception -> {
-				assertThat(exception.getMessage()).isEqualTo("OpenRouter responses stream failed");
+				assertThat(exception.getMessage()).isEqualTo(
+						"OpenRouter responses stream failed in /responses with status 500 INTERNAL_SERVER_ERROR, category PROVIDER_UNAVAILABLE");
 				assertThat(exception.getErrorDetails().message()).isEqualTo("line one line two Bearer [REDACTED]");
 				assertThat(exception.getResponseBody()).doesNotContain("\r", "\n", "response-stream-secret");
 			});

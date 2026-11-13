@@ -55,7 +55,8 @@ public record EmbeddingsResponse(@Nullable String object, @Nullable List<@Nullab
 		public @Nullable Integer deserialize(JsonParser parser, DeserializationContext context) {
 			if (parser.currentToken() == JsonToken.VALUE_NUMBER_FLOAT
 					&& parser.getDecimalValue().stripTrailingZeros().scale() > 0) {
-				throw new OpenRouterProtocolException("Embedding response index must be an integer");
+				throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.DECODE, "/embeddings",
+						"Embedding response index must be an integer");
 			}
 			return context.readValue(parser, Integer.class);
 		}

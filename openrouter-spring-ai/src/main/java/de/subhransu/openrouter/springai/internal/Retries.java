@@ -1,7 +1,7 @@
 package de.subhransu.openrouter.springai.internal;
 
 import de.subhransu.openrouter.springai.errors.OpenRouterHttpException;
-import de.subhransu.openrouter.springai.errors.OpenRouterRetryAfter;
+import de.subhransu.openrouter.springai.errors.OpenRouterTransportException;
 import java.lang.reflect.UndeclaredThrowableException;
 import java.time.Duration;
 import org.jspecify.annotations.Nullable;
@@ -70,11 +70,19 @@ public final class Retries {
 	}
 
 	private static @Nullable Duration retryAfter(Throwable throwable) {
-		if (throwable instanceof OpenRouterHttpException httpException) {
-			OpenRouterRetryAfter retryAfter = httpException.getRetryAfter();
-			return retryAfter != null ? retryAfter.delay() : null;
+		return throwable instanceof OpenRouterHttpException httpException ? httpException.getRetryDelay() : null;
+	}
+
+	/**
+	 * Return the exception the application's retry policy decides on. A transport failure
+	 * is shown as its original cause, the exception the policy saw before the library
+	 * mapped transport failures, so every existing policy retries exactly as before.
+	 */
+	private static Throwable policyView(Throwable throwable) {
+		if (throwable instanceof OpenRouterTransportException transport && transport.getCause() != null) {
+			return transport.getCause();
 		}
-		return null;
+		return throwable;
 	}
 
 	/**
@@ -120,7 +128,7 @@ public final class Retries {
 
 		@Override
 		public boolean shouldRetry(Throwable throwable) {
-			return this.delegate.shouldRetry(throwable);
+			return this.delegate.shouldRetry(policyView(throwable));
 		}
 
 		@Override

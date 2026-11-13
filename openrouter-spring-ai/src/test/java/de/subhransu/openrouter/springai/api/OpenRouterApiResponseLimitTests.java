@@ -14,6 +14,7 @@ import de.subhransu.openrouter.springai.api.dto.EmbeddingsRequest;
 import de.subhransu.openrouter.springai.api.dto.ImagesRequest;
 import de.subhransu.openrouter.springai.api.dto.ResponsesRequest;
 import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException;
+import de.subhransu.openrouter.springai.errors.OpenRouterTransportException;
 import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionResponse;
@@ -169,7 +170,8 @@ class OpenRouterApiResponseLimitTests {
 				.build();
 
 			if (transportFailure) {
-				assertThatThrownBy(() -> Endpoint.CHAT.invoke(api)).isInstanceOf(ResourceAccessException.class)
+				assertThatThrownBy(() -> Endpoint.CHAT.invoke(api)).isInstanceOf(OpenRouterTransportException.class)
+					.hasCauseInstanceOf(ResourceAccessException.class)
 					.rootCause()
 					.hasMessage("synthetic transport failure");
 			}
@@ -324,7 +326,14 @@ class OpenRouterApiResponseLimitTests {
 			.verifyComplete();
 		StepVerifier
 			.create(streamingSuccess(event, MediaType.TEXT_EVENT_STREAM, 32).chatCompletionStream(chatRequest()))
-			.expectErrorSatisfies(error -> assertThat(error).hasRootCauseInstanceOf(DataBufferLimitException.class))
+			.expectErrorSatisfies(
+					error -> assertThat(error).isInstanceOfSatisfying(OpenRouterLimitExceededException.class, limit -> {
+						assertThat(limit.getLimit())
+							.isEqualTo(OpenRouterLimitExceededException.Limit.STREAMING_EVENT_BYTES);
+						assertThat(limit.getConfiguredLimit()).isEqualTo(32);
+						assertThat(limit.getEndpoint()).isEqualTo("/chat/completions");
+						assertThat(limit.isLocal()).isFalse();
+					}).hasRootCauseInstanceOf(DataBufferLimitException.class))
 			.verify();
 	}
 
@@ -345,7 +354,11 @@ class OpenRouterApiResponseLimitTests {
 				.assertNext(event -> assertThat(event.b64Json()).isEqualTo(image))
 				.verifyComplete();
 			StepVerifier.create(streamingSuccess(body, contentType, 1024, suppliedMapper).imagesStream(request))
-				.expectError(DataBufferLimitException.class)
+				.expectErrorSatisfies(error -> assertThat(error)
+					.isInstanceOfSatisfying(OpenRouterLimitExceededException.class,
+							limit -> assertThat(limit.getLimit())
+								.isEqualTo(OpenRouterLimitExceededException.Limit.STREAMING_EVENT_BYTES))
+					.hasRootCauseInstanceOf(DataBufferLimitException.class))
 				.verify();
 		}
 	}

@@ -10,15 +10,15 @@ import org.springframework.ai.retry.TransientAiException;
  */
 public final class OpenRouterTransientChoiceException extends TransientAiException implements OpenRouterChoiceFailure {
 
-	private final @Nullable OpenRouterChoiceErrorDetails errorDetails;
+	private final OpenRouterChoiceErrorDetails errorDetails;
 
 	public OpenRouterTransientChoiceException(String message, @Nullable OpenRouterChoiceErrorDetails errorDetails) {
 		super(message);
-		this.errorDetails = errorDetails;
+		this.errorDetails = errorDetails != null ? errorDetails : OpenRouterChoiceErrorDetails.empty();
 	}
 
 	@Override
-	public @Nullable OpenRouterChoiceErrorDetails getErrorDetails() {
+	public OpenRouterChoiceErrorDetails getErrorDetails() {
 		return this.errorDetails;
 	}
 
