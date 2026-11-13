@@ -1,6 +1,6 @@
 package de.subhransu.openrouter.springai.chat;
 
-import java.util.Locale;
+import java.util.Map;
 import org.jspecify.annotations.Nullable;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.util.StringUtils;
@@ -58,6 +58,13 @@ public enum OpenRouterFinishReason {
 	 */
 	OTHER;
 
+	private static final Map<String, OpenRouterFinishReason> SPELLINGS = Map.ofEntries(Map.entry("STOP", STOP),
+			Map.entry("stop", STOP), Map.entry("completed", STOP), Map.entry("LENGTH", LENGTH),
+			Map.entry("length", LENGTH), Map.entry("max_output_tokens", LENGTH), Map.entry("TOOL_CALLS", TOOL_CALLS),
+			Map.entry("tool_calls", TOOL_CALLS), Map.entry("function_call", TOOL_CALLS),
+			Map.entry("CONTENT_FILTER", CONTENT_FILTER), Map.entry("content_filter", CONTENT_FILTER),
+			Map.entry("ERROR", ERROR), Map.entry("error", ERROR));
+
 	/**
 	 * Read the finish reason of a generation.
 	 * @param generation the generation to read
@@ -68,7 +75,8 @@ public enum OpenRouterFinishReason {
 	}
 
 	/**
-	 * Classify a finish reason in either spelling, ignoring case.
+	 * Classify a finish reason in either spelling: the upper-case mapped value or the
+	 * lower-case provider value.
 	 * @param finishReason the mapped or provider finish reason
 	 * @return the finish reason; {@link #NONE} for {@code null} or blank input
 	 */
@@ -76,14 +84,7 @@ public enum OpenRouterFinishReason {
 		if (!StringUtils.hasText(finishReason)) {
 			return NONE;
 		}
-		return switch (finishReason.toLowerCase(Locale.ROOT)) {
-			case "stop", "completed" -> STOP;
-			case "length", "max_output_tokens" -> LENGTH;
-			case "tool_calls", "function_call" -> TOOL_CALLS;
-			case "content_filter" -> CONTENT_FILTER;
-			case "error" -> ERROR;
-			default -> OTHER;
-		};
+		return SPELLINGS.getOrDefault(finishReason, OTHER);
 	}
 
 }
