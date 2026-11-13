@@ -41,7 +41,7 @@ final class ResponsesOutputState {
 
 	String done(ResponsesStreamEvent event) {
 		snapshot(index(event.outputIndex()), index(event.contentIndex()),
-				ResponseValues.required(event.text(), "output text snapshot"));
+				ResponseValues.RESPONSES.required(event.text(), "output text snapshot"));
 		return drain();
 	}
 
@@ -61,7 +61,7 @@ final class ResponsesOutputState {
 			throw protocol("Output snapshot omits a received text item");
 		}
 		for (int index = 0; index < output.size(); index++) {
-			snapshot(ResponseValues.required(output.get(index), "output item"), index);
+			snapshot(ResponseValues.RESPONSES.required(output.get(index), "output item"), index);
 		}
 		return drain();
 	}
@@ -89,7 +89,8 @@ final class ResponsesOutputState {
 
 	private void validateImageIdentity(ResponsesOutputItem item, @Nullable Integer outputIndex) {
 		if (item.id() == null && outputIndex == null) {
-			throw protocol("Generated image requires an item ID or output index");
+			throw protocol(OpenRouterProtocolException.Kind.MISSING_FIELD,
+					"Generated image requires an item ID or output index");
 		}
 		if (item.id() != null && outputIndex != null) {
 			String previousId = this.indexedImageIds.putIfAbsent(outputIndex, item.id());
@@ -118,7 +119,7 @@ final class ResponsesOutputState {
 	private void snapshot(ResponsesOutputItem item, int outputIndex) {
 		TextItem state = this.text.computeIfAbsent(outputIndex, ignored -> new TextItem());
 		List<ResponsesContent> content = "message".equals(item.type()) && item.content() != null
-				? ResponseValues.items(item.content(), "message content") : List.of();
+				? ResponseValues.RESPONSES.items(item.content(), "message content") : List.of();
 		for (int index = 0; index < content.size(); index++) {
 			ResponsesContent part = content.get(index);
 			snapshot(outputIndex, index, ("output_text".equals(part.type()) || "text".equals(part.type()))
@@ -188,7 +189,11 @@ final class ResponsesOutputState {
 	}
 
 	private static OpenRouterProtocolException protocol(String message) {
-		return new OpenRouterProtocolException("Responses stream: " + message);
+		return protocol(OpenRouterProtocolException.Kind.CONTRACT, message);
+	}
+
+	private static OpenRouterProtocolException protocol(OpenRouterProtocolException.Kind kind, String message) {
+		return new OpenRouterProtocolException(kind, "/responses", "Responses stream: " + message);
 	}
 
 	private static final class TextItem {

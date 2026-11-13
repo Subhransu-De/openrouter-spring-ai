@@ -55,7 +55,8 @@ public final class OpenRouterHttpExceptionFactory {
 			details = statusDetails(statusCode.value());
 		}
 		OpenRouterRetryAfter retryAfter = parseRetryAfter(headers.getFirst(HttpHeaders.RETRY_AFTER));
-		String message = "OpenRouter " + endpoint + " request failed with status " + statusCode;
+		String message = "OpenRouter " + endpoint + " request failed with status " + statusCode + ", category "
+				+ details.category();
 		if (OpenRouterErrorClassifier.isTransient(details.category())) {
 			return new OpenRouterTransientApiException(message, statusCode, safeBody, details, retryAfter, endpoint);
 		}

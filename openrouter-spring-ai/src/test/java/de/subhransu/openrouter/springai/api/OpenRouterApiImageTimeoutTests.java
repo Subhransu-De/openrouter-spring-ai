@@ -6,6 +6,8 @@ import de.subhransu.openrouter.springai.api.dto.ImagesRequest;
 import de.subhransu.openrouter.springai.api.dto.ImagesStreamEvent;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
+import de.subhransu.openrouter.springai.errors.OpenRouterTransportException;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Tag;
@@ -53,7 +55,13 @@ class OpenRouterApiImageTimeoutTests {
 			.expectSubscription()
 			.expectNoEvent(TIMEOUT.minusSeconds(1))
 			.thenAwait(Duration.ofSeconds(1))
-			.expectError(TimeoutException.class)
+			.expectErrorSatisfies(
+					error -> assertThat(error).isInstanceOfSatisfying(OpenRouterTransportException.class, transport -> {
+						assertThat(transport.getKind()).isEqualTo(OpenRouterTransportException.Kind.TIMEOUT);
+						assertThat(transport.getEndpoint()).isEqualTo("/images");
+						assertThat(transport.getCategory()).isEqualTo(OpenRouterErrorCategory.TIMEOUT);
+						assertThat(transport).hasCauseInstanceOf(TimeoutException.class);
+					}))
 			.verify(VERIFY_TIMEOUT);
 		assertThat(cancelled).isTrue();
 	}
@@ -75,7 +83,13 @@ class OpenRouterApiImageTimeoutTests {
 			.expectNextCount(event.startsWith(":") ? 0 : 3)
 			.expectNoEvent(TIMEOUT.minusSeconds(1))
 			.thenAwait(Duration.ofSeconds(1))
-			.expectError(TimeoutException.class)
+			.expectErrorSatisfies(
+					error -> assertThat(error).isInstanceOfSatisfying(OpenRouterTransportException.class, transport -> {
+						assertThat(transport.getKind()).isEqualTo(OpenRouterTransportException.Kind.TIMEOUT);
+						assertThat(transport.getEndpoint()).isEqualTo("/images");
+						assertThat(transport.getCategory()).isEqualTo(OpenRouterErrorCategory.TIMEOUT);
+						assertThat(transport).hasCauseInstanceOf(TimeoutException.class);
+					}))
 			.verify(VERIFY_TIMEOUT);
 		assertThat(cancelled).isTrue();
 	}

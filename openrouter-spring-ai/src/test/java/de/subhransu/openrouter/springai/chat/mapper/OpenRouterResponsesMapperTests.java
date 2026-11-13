@@ -350,7 +350,9 @@ class OpenRouterResponsesMapperTests {
 				"""))).isInstanceOfSatisfying(OpenRouterTransientApiException.class, exception -> {
 			assertThat(exception.getCategory()).isEqualTo(OpenRouterErrorCategory.PROVIDER_UNAVAILABLE);
 			assertThat(exception.getErrorDetails().errorType()).isEqualTo("provider_unavailable");
-		}).hasMessage("OpenRouter responses stream failed");
+		})
+			.hasMessage(
+					"OpenRouter responses stream failed in /responses with status 500 INTERNAL_SERVER_ERROR, category PROVIDER_UNAVAILABLE");
 	}
 
 	@Tag("http")
@@ -419,7 +421,8 @@ class OpenRouterResponsesMapperTests {
 		assertThatThrownBy(() -> new OpenRouterResponsesResponseMapper().map(result))
 			.isInstanceOfSatisfying(OpenRouterNonTransientApiException.class,
 					exception -> assertThat(exception.getCategory()).isEqualTo(OpenRouterErrorCategory.BILLING_CREDITS))
-			.hasMessage("OpenRouter responses request failed");
+			.hasMessage(
+					"OpenRouter responses request failed in /responses with status 402 PAYMENT_REQUIRED, category BILLING_CREDITS");
 	}
 
 	@Tag("http")
@@ -432,7 +435,8 @@ class OpenRouterResponsesMapperTests {
 				  "error": {"message": "boom"}
 				}
 				"""))).isInstanceOf(OpenRouterNonTransientApiException.class)
-			.hasMessage("OpenRouter responses stream failed");
+			.hasMessage(
+					"OpenRouter responses stream failed in /responses with status 500 INTERNAL_SERVER_ERROR, category UNKNOWN");
 	}
 
 	@Tag("http")
@@ -452,7 +456,9 @@ class OpenRouterResponsesMapperTests {
 			assertThat(exception.getErrorDetails().metadata().get("trace").stringValue()).isEqualTo("abc");
 			assertThat(exception.getErrorDetails().metadata().get("upstream_request_id").stringValue())
 				.isEqualTo("req-1");
-		}).hasMessage("OpenRouter responses stream failed");
+		})
+			.hasMessage(
+					"OpenRouter responses stream failed in /responses with status 401 UNAUTHORIZED, category AUTHENTICATION");
 	}
 
 	private static ResponsesStreamEvent streamEvent(String json) throws Exception {

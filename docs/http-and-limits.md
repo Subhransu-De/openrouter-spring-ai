@@ -93,7 +93,7 @@ Boot shares one `OpenRouterApi`. If chat, embeddings or images need different co
 
 ### Inspect response headers
 
-An interceptor or filter may read selected successful-response headers before it returns the response unchanged. Do not consume the body or log credentials. Successful response headers are not copied into model metadata, and reading them does not change retry behavior. HTTP errors expose the parsed `Retry-After` through `OpenRouterHttpException.getRetryAfter()`.
+An interceptor or filter may read selected successful-response headers before it returns the response unchanged. Do not consume the body or log credentials. Successful response headers are not copied into model metadata, and reading them does not change retry behavior. HTTP errors expose the parsed `Retry-After` through `OpenRouterHttpException.getRetryAfter()`, and its delay through `getRetryDelay()`.
 
 ### Not supported
 
@@ -107,11 +107,11 @@ An interceptor or filter may read selected successful-response headers before it
 
 Each limit applies to one part of a request or its stream. Defaults are shown:
 
-![Limits on a request and its SSE stream. Each inline PDF, audio or video file holds 1 byte to 20 MiB; images are not checked. max-response-body-size, 64MB, caps one blocking response body or one SSE event, not the whole stream; the stream's state budgets still apply. max-error-body-size, 64KB, caps error bodies. connection.timeout, 2m, caps the idle gap between SSE events and sets the blocking connect and read timeouts in Boot. Chat Completions and image streams end with [DONE]; Responses streams end with their own terminal event. Stream state budgets per subscription: Chat Completions keeps 1MB of retained metadata and 128 active choices under chat.streaming-state; Chat Completions tool-call assembly and all Responses state get 1MB, 8192 chunks or events and 2 minutes under chat.tool-call-aggregation; chat audio gets 16 MiB and 128 audio choices. Exceeding a blocking-body or error-body cap, or a state budget, raises OpenRouterLimitExceededException. Chat audio raises NonTransientAiException, and an SSE event over 64MB raises DataBufferLimitException.](images/limits.svg)
+![Limits on a request and its SSE stream. Each inline PDF, audio or video file holds 1 byte to 20 MiB; images are not checked. max-response-body-size, 64MB, caps one blocking response body or one SSE event, not the whole stream; the stream's state budgets still apply. max-error-body-size, 64KB, caps error bodies. connection.timeout, 2m, caps the idle gap between SSE events and sets the blocking connect and read timeouts in Boot. Chat Completions and image streams end with [DONE]; Responses streams end with their own terminal event. Stream state budgets per subscription: Chat Completions keeps 1MB of retained metadata and 128 active choices under chat.streaming-state; Chat Completions tool-call assembly and all Responses state get 1MB, 8192 chunks or events and 2 minutes under chat.tool-call-aggregation; chat audio gets 16 MiB and 128 audio choices. Exceeding a blocking-body, error-body or SSE-event cap, a state budget or a chat audio limit raises OpenRouterLimitExceededException.](images/limits.svg)
 
 ### Response buffering limits
 
-`spring.ai.openrouter.connection.max-response-body-size` caps one blocking success body, one SSE event, and the complete JSON fallback for streamed image requests. A blocking success body over the cap raises `OpenRouterLimitExceededException` (`BLOCKING_RESPONSE_BODY_BYTES`). Streaming success decoding uses Spring's codec limits and reports `DataBufferLimitException` when exceeded (wrapped in `WebClientResponseException` for chat and Responses).
+`spring.ai.openrouter.connection.max-response-body-size` caps one blocking success body, one SSE event, and the complete JSON fallback for streamed image requests. A blocking success body over the cap raises `OpenRouterLimitExceededException` (`BLOCKING_RESPONSE_BODY_BYTES`). A streamed event or image JSON body over the cap raises `OpenRouterLimitExceededException` (`STREAMING_EVENT_BYTES`), with Spring's `DataBufferLimitException` in its cause chain.
 
 An error body over `spring.ai.openrouter.connection.max-error-body-size` raises `OpenRouterLimitExceededException` with the endpoint, HTTP status, bounded sanitized excerpt, and any recoverable error details. Both settings accept 1 through 2147483646 bytes; invalid values fail property binding. Java callers can set the same limits on `OpenRouterApi.Builder`.
 

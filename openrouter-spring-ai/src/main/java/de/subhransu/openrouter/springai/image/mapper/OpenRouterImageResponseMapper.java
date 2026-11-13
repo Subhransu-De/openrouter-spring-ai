@@ -53,10 +53,11 @@ public final class OpenRouterImageResponseMapper {
 		var error = event.error();
 		if (error != null || ImagesStreamEvent.ERROR_EVENT.equals(event.type())) {
 			throw OpenRouterApiExceptionFactory.create("OpenRouter image generation stream failed",
-					error != null ? error.toString() : null, error, null, this.sanitizer);
+					error != null ? error.toString() : null, error, null, "/images", this.sanitizer);
 		}
 		if (!StringUtils.hasText(event.type())) {
-			throw new OpenRouterProtocolException("OpenRouter image event requires a type");
+			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.MISSING_FIELD, "/images",
+					"OpenRouter image event requires a type");
 		}
 		// Ignore additive lifecycle/metadata events without manufacturing an image.
 		if (!ImagesStreamEvent.PARTIAL_IMAGE.equals(event.type())
@@ -65,7 +66,8 @@ public final class OpenRouterImageResponseMapper {
 		}
 		if (ImagesStreamEvent.COMPLETED.equals(event.type()) && !StringUtils.hasText(event.b64Json())
 				&& !StringUtils.hasText(event.url())) {
-			throw new OpenRouterProtocolException("Completed OpenRouter image event requires image content");
+			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.MISSING_FIELD, "/images",
+					"Completed OpenRouter image event requires image content");
 		}
 		ImageGeneration generation = new ImageGeneration(new Image(event.url(), event.b64Json()),
 				new OpenRouterImageGenerationMetadata(event.mediaType(), event.partialImageIndex()));

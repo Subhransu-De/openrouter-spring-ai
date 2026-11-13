@@ -22,7 +22,8 @@ class OpenRouterImageResponseMapperTests {
 
 		assertThatThrownBy(() -> new OpenRouterImageResponseMapper().map(event))
 			.isInstanceOfSatisfying(OpenRouterApiException.class, exception -> {
-				assertThat(exception.getMessage()).isEqualTo("OpenRouter image generation stream failed");
+				assertThat(exception.getMessage()).isEqualTo(
+						"OpenRouter image generation stream failed in /images with status 500 INTERNAL_SERVER_ERROR, category UNKNOWN");
 				assertThat(exception.getErrorDetails().code()).isEqualTo("provider_error");
 				assertThat(exception.getErrorDetails().message()).isEqualTo("first second [31m Bearer [REDACTED]");
 				assertThat(exception.getResponseBody()).doesNotContain("\r", "\n", "\u001B", "image-secret");

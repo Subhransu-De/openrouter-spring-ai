@@ -35,22 +35,23 @@ final class StreamEventBinder {
 					.with(StreamReadFeature.STRICT_DUPLICATE_DETECTION);
 	}
 
-	<T> T bind(String line, @Nullable ObjectReader reader, Class<T> eventType) {
+	<T> T bind(String line, @Nullable ObjectReader reader, Class<T> eventType, String endpoint) {
 		if (reader != null && line.startsWith("{")) {
 			try {
 				return reader.readValue(line);
 			}
 			catch (JacksonException ex) {
-				return bindTree(line, eventType);
+				return bindTree(line, eventType, endpoint);
 			}
 		}
-		return bindTree(line, eventType);
+		return bindTree(line, eventType, endpoint);
 	}
 
-	private <T> T bindTree(String line, Class<T> eventType) {
+	private <T> T bindTree(String line, Class<T> eventType, String endpoint) {
 		var tree = this.objectMapper.reader().with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS).readTree(line);
 		if (tree == null || !tree.isObject()) {
-			throw new OpenRouterProtocolException("OpenRouter stream chunk must be a JSON object");
+			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.DECODE, endpoint,
+					"OpenRouter stream chunk must be a JSON object");
 		}
 		return this.objectMapper.treeToValue(tree, eventType);
 	}

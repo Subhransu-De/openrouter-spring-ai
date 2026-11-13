@@ -38,15 +38,18 @@ final class BlockingResponseDecoder {
 		}
 		if (failure instanceof JacksonException) {
 			if (input.size == 0) {
-				throw new OpenRouterProtocolException("Empty OpenRouter " + uri + " response");
+				throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.EMPTY_BODY, uri,
+						"Empty OpenRouter " + uri + " response");
 			}
-			throw new OpenRouterProtocolException("Failed to decode OpenRouter " + uri + " response", failure);
+			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.DECODE, uri,
+					"Failed to decode OpenRouter " + uri + " response", failure);
 		}
 		if (failure != null) {
 			throw failure;
 		}
 		if (decoded == null) {
-			throw new OpenRouterProtocolException("Null OpenRouter " + uri + " response");
+			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.EMPTY_BODY, uri,
+					"Null OpenRouter " + uri + " response");
 		}
 		return decoded;
 	}

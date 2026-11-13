@@ -72,9 +72,7 @@ public final class StreamRetries {
 			return Mono.error(failure);
 		}
 		Duration remaining = remainingTimeout(policy, started);
-		OpenRouterHttpException http = (OpenRouterHttpException) failure;
-		var retryAfter = http.getRetryAfter();
-		delay = Retries.effectiveBackOffMillis(delay, retryAfter != null ? retryAfter.delay() : null, remaining);
+		delay = Retries.effectiveBackOffMillis(delay, ((OpenRouterHttpException) failure).getRetryDelay(), remaining);
 		if (delay == BackOffExecution.STOP || remaining != null && remaining.compareTo(Duration.ofMillis(delay)) <= 0) {
 			return Mono.error(failure);
 		}

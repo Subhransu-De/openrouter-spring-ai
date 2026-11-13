@@ -66,6 +66,16 @@ public record OpenRouterChoiceErrorDetails(@Nullable String responseId, @Nullabl
 		category = category != null ? category : OpenRouterErrorCategory.UNKNOWN;
 	}
 
+	/**
+	 * Return details that carry nothing: every value {@code null}, empty metadata and the
+	 * {@link OpenRouterErrorCategory#UNKNOWN} category.
+	 * @return empty details
+	 */
+	public static OpenRouterChoiceErrorDetails empty() {
+		return new OpenRouterChoiceErrorDetails(null, null, null, null, null, null, null, null, null, null, null, null,
+				false, null);
+	}
+
 	public OpenRouterErrorCategory category() {
 		return Objects.requireNonNull(this.category);
 	}

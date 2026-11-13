@@ -63,6 +63,8 @@ public class OpenRouterApi {
 
 	public static final int DEFAULT_MAX_ERROR_BODY_BYTES = 64 * 1024;
 
+	private static final String IMAGES = "/images";
+
 	private static final ParameterizedTypeReference<ServerSentEvent<String>> STRING_SSE_TYPE = new ParameterizedTypeReference<>() {
 	};
 
@@ -187,7 +189,8 @@ public class OpenRouterApi {
 		else {
 			outgoing.body(request);
 		}
-		return outgoing.exchange((httpRequest, response) -> readResponse(uri, response, responseType));
+		return TransportFailures.blocking(uri,
+				() -> outgoing.exchange((httpRequest, response) -> readResponse(uri, response, responseType)));
 	}
 
 	private <T> T readResponse(String uri, ClientHttpResponse response, Class<T> responseType) throws IOException {
@@ -217,17 +220,20 @@ public class OpenRouterApi {
 			throw this.httpExceptionFactory.create(uri, statusCode, response.getHeaders(), errorBody);
 		}
 		if (body.size() == 0) {
-			throw new OpenRouterProtocolException("Empty OpenRouter " + uri + " response");
+			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.EMPTY_BODY, uri,
+					"Empty OpenRouter " + uri + " response");
 		}
 		try {
 			T decoded = body.decode(this.objectMapper, responseType);
 			if (decoded == null) {
-				throw new OpenRouterProtocolException("Null OpenRouter " + uri + " response");
+				throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.EMPTY_BODY, uri,
+						"Null OpenRouter " + uri + " response");
 			}
 			return decoded;
 		}
 		catch (JacksonException ex) {
-			throw new OpenRouterProtocolException("Failed to decode OpenRouter " + uri + " response", ex);
+			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.DECODE, uri,
+					"Failed to decode OpenRouter " + uri + " response", ex);
 		}
 	}
 
@@ -257,9 +263,9 @@ public class OpenRouterApi {
 	// (found live by the Garage paint bay). Branching on the response content type turns
 	// that answer into completed events, so callers see one uniform contract.
 	public Flux<ImagesStreamEvent> imagesStream(ImagesRequest request) {
-		return streamingPost("/images", request).exchangeToFlux((response) -> {
+		return streamingPost(IMAGES, request).exchangeToFlux((response) -> {
 			if (response.statusCode().isError()) {
-				return streamingError("/images", response).flatMapMany(Flux::error);
+				return streamingError(IMAGES, response).flatMapMany(Flux::error);
 			}
 			MediaType contentType = response.headers().contentType().orElse(MediaType.APPLICATION_JSON);
 			if (MediaType.TEXT_EVENT_STREAM.isCompatibleWith(contentType)) {
@@ -267,8 +273,10 @@ public class OpenRouterApi {
 			}
 			return readImagesResponse(response)
 				.onErrorMap(DecodingException.class,
-						ex -> new OpenRouterProtocolException("Invalid OpenRouter image response JSON"))
-				.switchIfEmpty(Mono.error(new OpenRouterProtocolException("Empty OpenRouter image response")))
+						ex -> new OpenRouterProtocolException(OpenRouterProtocolException.Kind.DECODE, IMAGES,
+								"Invalid OpenRouter image response JSON"))
+				.switchIfEmpty(Mono.error(new OpenRouterProtocolException(OpenRouterProtocolException.Kind.EMPTY_BODY,
+						IMAGES, "Empty OpenRouter image response")))
 				.map(images -> new ImageStreamBody(null, images))
 				.flux();
 		})
@@ -280,8 +288,10 @@ public class OpenRouterApi {
 				if (first != null && first.images() != null) {
 					return body.concatMapIterable(item -> completedEvents(Objects.requireNonNull(item.images())));
 				}
-				return decodeStream(body.map(item -> Objects.requireNonNull(item.event())), ImagesStreamEvent.class);
-			});
+				return decodeStream(body.map(item -> Objects.requireNonNull(item.event())), ImagesStreamEvent.class,
+						IMAGES);
+			})
+			.onErrorMap(error -> TransportFailures.stream(IMAGES, this.maxResponseBodyBytes, error));
 	}
 
 	private Mono<ImagesResponse> readImagesResponse(ClientResponse response) {
@@ -333,7 +343,8 @@ public class OpenRouterApi {
 			.onStatus(HttpStatusCode::isError, response -> streamingError(uri, response))
 			.bodyToFlux(STRING_SSE_TYPE)
 			.transform(this::applyTimeout)
-			.transform(events -> decodeStream(events, eventType));
+			.transform(events -> decodeStream(events, eventType, uri))
+			.onErrorMap(error -> TransportFailures.stream(uri, this.maxResponseBodyBytes, error));
 	}
 
 	private Mono<RuntimeException> streamingError(String uri, ClientResponse response) {
@@ -413,7 +424,7 @@ public class OpenRouterApi {
 		return Arrays.asList(data.split("\n"));
 	}
 
-	private <T> Flux<T> decodeStream(Flux<ServerSentEvent<String>> events, Class<T> eventType) {
+	private <T> Flux<T> decodeStream(Flux<ServerSentEvent<String>> events, Class<T> eventType, String uri) {
 		return Flux.defer(() -> {
 			AtomicBoolean protocolTerminated = new AtomicBoolean();
 			ObjectReader reader = this.eventBinder.reader(eventType);
@@ -433,7 +444,7 @@ public class OpenRouterApi {
 					}
 					return true;
 				})
-				.map(line -> readEvent(line, reader, eventType))
+				.map(line -> readEvent(line, reader, eventType, uri))
 				.doOnNext(event -> {
 					if (isTerminalEvent(event) || event instanceof ChatCompletionChunk chunk && chunk.error() != null) {
 						protocolTerminated.set(true);
@@ -462,29 +473,31 @@ public class OpenRouterApi {
 		return false;
 	}
 
-	private <T> T readEvent(String line, @Nullable ObjectReader reader, Class<T> eventType) {
+	private <T> T readEvent(String line, @Nullable ObjectReader reader, Class<T> eventType, String uri) {
 		try {
-			T event = this.eventBinder.bind(line, reader, eventType);
+			T event = this.eventBinder.bind(line, reader, eventType, uri);
 			if (event instanceof ResponsesStreamEvent response && "response.done".equals(response.type())) {
-				throw new OpenRouterProtocolException(
+				throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.CONTRACT, uri,
 						"Legacy response.done is unsupported; expected response.completed, "
 								+ "response.incomplete, or response.failed");
 			}
 			if (event instanceof ChatCompletionChunk chunk) {
-				validateChunk(chunk);
+				validateChunk(chunk, uri);
 			}
 			return event;
 		}
 		catch (JacksonException ex) {
-			throw new OpenRouterProtocolException("Failed to decode OpenRouter stream chunk", ex);
+			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.DECODE, uri,
+					"Failed to decode OpenRouter stream chunk", ex);
 		}
 	}
 
-	private void validateChunk(ChatCompletionChunk chunk) {
+	private void validateChunk(ChatCompletionChunk chunk, String uri) {
 		var choices = chunk.choices();
 		if (chunk.error() == null && ((CollectionUtils.isEmpty(choices) && chunk.usage() == null)
 				|| (choices != null && CollectionUtils.containsInstance(choices, null)))) {
-			throw new OpenRouterProtocolException("OpenRouter chat chunk requires non-null choices or usage");
+			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.MISSING_FIELD, uri,
+					"OpenRouter chat chunk requires non-null choices or usage");
 		}
 	}
 

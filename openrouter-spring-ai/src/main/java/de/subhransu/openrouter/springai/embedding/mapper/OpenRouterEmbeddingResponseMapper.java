@@ -15,6 +15,8 @@ import org.springframework.ai.embedding.EmbeddingResponseMetadata;
 
 public final class OpenRouterEmbeddingResponseMapper {
 
+	private static final String ENDPOINT = "/embeddings";
+
 	private final OpenRouterDiagnosticSanitizer sanitizer;
 
 	public OpenRouterEmbeddingResponseMapper() {
@@ -34,13 +36,15 @@ public final class OpenRouterEmbeddingResponseMapper {
 		throwIfError(response);
 		var items = response != null ? response.data() : null;
 		if (items == null || items.size() != inputCount) {
-			throw new OpenRouterProtocolException("Embedding response count must match input count");
+			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.CONTRACT, ENDPOINT,
+					"Embedding response count must match input count");
 		}
 		Embedding[] embeddings = new Embedding[inputCount];
 		for (EmbeddingsResponse.EmbeddingData data : items) {
 			var itemIndex = data != null ? data.index() : null;
 			if (data == null || itemIndex == null || itemIndex < 0 || itemIndex >= inputCount) {
-				throw new OpenRouterProtocolException("Embedding response index must be within input range");
+				throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.CONTRACT, ENDPOINT,
+						"Embedding response index must be within input range");
 			}
 			int index = itemIndex;
 			check(embeddings[index] == null, "Embedding response contains duplicate index");
@@ -68,14 +72,15 @@ public final class OpenRouterEmbeddingResponseMapper {
 	private float[] validatedVector(EmbeddingsResponse.EmbeddingData data) {
 		float[] vector = data.embedding();
 		if (vector == null || vector.length == 0) {
-			throw new OpenRouterProtocolException("Embedding response vector must not be empty");
+			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.MISSING_FIELD, ENDPOINT,
+					"Embedding response vector must not be empty");
 		}
 		return vector;
 	}
 
 	private static void check(boolean valid, String message) {
 		if (!valid) {
-			throw new OpenRouterProtocolException(message);
+			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.CONTRACT, ENDPOINT, message);
 		}
 	}
 

@@ -30,6 +30,9 @@ class OpenRouterStreamingResponseMapperTests {
 
 	private static final String CHUNK_OBJECT = "chat.completion.chunk";
 
+	private static final String MID_STREAM_FAILURE = "OpenRouter chat completion stream failed in /chat/completions"
+			+ " with status 500 INTERNAL_SERVER_ERROR, category PROVIDER_UNAVAILABLE";
+
 	private static final String MODEL = "openai/gpt-5.4-mini";
 
 	@Tag("streaming")
@@ -115,7 +118,7 @@ class OpenRouterStreamingResponseMapperTests {
 
 		assertThatThrownBy(() -> new OpenRouterStreamingResponseMapper().map(chunk))
 			.isInstanceOf(OpenRouterApiException.class)
-			.hasMessage("OpenRouter chat completion stream failed")
+			.hasMessage(MID_STREAM_FAILURE)
 			.satisfies(thrown -> {
 				OpenRouterApiException ex = (OpenRouterApiException) thrown;
 				// HTTP 200 carried the failure; the mapper synthesizes a 500 so callers
@@ -137,7 +140,7 @@ class OpenRouterStreamingResponseMapperTests {
 
 		assertThatThrownBy(() -> new OpenRouterStreamingResponseMapper().map(chunk))
 			.isInstanceOf(OpenRouterApiException.class)
-			.hasMessage("OpenRouter chat completion stream failed");
+			.hasMessage(MID_STREAM_FAILURE);
 	}
 
 	@Tag("http")

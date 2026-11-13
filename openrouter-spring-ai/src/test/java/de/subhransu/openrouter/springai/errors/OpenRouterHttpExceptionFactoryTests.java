@@ -413,7 +413,7 @@ class OpenRouterHttpExceptionFactoryTests {
 		assertThat(exception.getResponseBody()).contains("[REDACTED]")
 			.doesNotContain("configured-credential", "sk-anotherSecret123", "plain-secret", "nested-secret", "\n");
 		assertThat(exception.getMessage())
-			.isEqualTo("OpenRouter /embeddings request failed with status 401 UNAUTHORIZED");
+			.isEqualTo("OpenRouter /embeddings request failed with status 401 UNAUTHORIZED, category AUTHENTICATION");
 		assertThat(exception.getErrorDetails().message())
 			.isEqualTo("first line second line key [REDACTED] was rejected");
 		assertThat(exception.getErrorDetails().metadata().toString()).doesNotContain("plain-secret", "nested-secret")

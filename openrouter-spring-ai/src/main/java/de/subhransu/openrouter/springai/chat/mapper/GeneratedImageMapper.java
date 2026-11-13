@@ -49,7 +49,7 @@ final class GeneratedImageMapper {
 	}
 
 	private static Media responseMedia(ResponsesOutputItem item) {
-		String result = ResponseValues.required(item.result(), "generated image result");
+		String result = ResponseValues.RESPONSES.required(item.result(), "generated image result");
 		String format = item.outputFormat() != null ? item.outputFormat() : "png";
 		MimeType mimeType = result.startsWith(DATA_URL_PREFIX) ? mimeType(result)
 				: MimeTypeUtils.parseMimeType("image/" + format);

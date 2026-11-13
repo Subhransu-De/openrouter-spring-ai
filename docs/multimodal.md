@@ -154,6 +154,6 @@ These cases fail the stream:
 
 - `OpenRouterTruncatedResponseException`: the stream ends before `[DONE]`, or a choice ends without a `stop` finish reason or a final `expires_at` marker.
 - `OpenRouterProtocolException`: a fragment has invalid base64, identifiers or formats conflict within a choice, or a choice mixes audio with tool calls. Each data value must encode a complete byte fragment, and `message.audio` snapshots are unsupported.
-- `NonTransientAiException`: the audio buffer limits (16 MiB, 128 audio choices per stream) are exceeded; see [Size, time and state limits](http-and-limits.md#size-time-and-state-limits).
+- `OpenRouterLimitExceededException` with `CHAT_AUDIO_BYTES` or `CHAT_AUDIO_CHOICES`: the fixed audio buffer limits (16 MiB, 128 audio choices per stream) are exceeded; see [Size, time and state limits](http-and-limits.md#size-time-and-state-limits).
 
 Assistant audio replay is rejected in both request modes, including identifier-only metadata. To continue with only the transcript, create a new text-only assistant message. This discards audio continuation state. Audio IDs and expiry metadata are kept for you but not replayed to the provider.

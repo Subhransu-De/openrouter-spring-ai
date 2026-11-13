@@ -84,10 +84,12 @@ final class OpenRouterChoiceErrorExceptionFactory {
 				this.sanitizer.sanitizeDiagnosticValue(nativeFinishReason), sanitize(code), sanitize(errorMessage),
 				sanitize(errorType), sanitize(providerCode), this.sanitizer.sanitizeMetadata(metadata),
 				partialOutput.text(), partialOutput.truncated(), category);
+		String message = "OpenRouter chat-completion choice failed in /chat/completions"
+				+ (choice.index() != null ? " for choice " + choice.index() : "") + ", category " + category;
 		if (OpenRouterErrorClassifier.isTransient(category)) {
-			return new OpenRouterTransientChoiceException("OpenRouter chat-completion choice failed", details);
+			return new OpenRouterTransientChoiceException(message, details);
 		}
-		return new OpenRouterNonTransientChoiceException("OpenRouter chat-completion choice failed", details);
+		return new OpenRouterNonTransientChoiceException(message, details);
 	}
 
 	private static @Nullable String failureReason(Choice choice) {

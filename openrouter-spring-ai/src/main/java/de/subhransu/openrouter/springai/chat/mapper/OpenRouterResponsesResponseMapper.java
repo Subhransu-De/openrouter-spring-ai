@@ -35,7 +35,7 @@ public final class OpenRouterResponsesResponseMapper {
 	}
 
 	public ChatResponse map(@Nullable ResponsesResult response) {
-		response = ResponseValues.required(response, "Responses result");
+		response = ResponseValues.RESPONSES.required(response, "Responses result");
 		validateTerminal(response, null, this.sanitizer);
 		var details = response.incompleteDetails();
 		List<AssistantMessage.ToolCall> toolCalls = toolCalls(response.status(),
@@ -82,16 +82,17 @@ public final class OpenRouterResponsesResponseMapper {
 			throw failure("OpenRouter responses request failed", error != null ? error.toString() : response.status(),
 					response.error(), response.errorType(), sanitizer);
 		}
-		String status = ResponseValues.required(response.status(), "Responses status");
+		String status = ResponseValues.RESPONSES.required(response.status(), "Responses status");
 		if (!"completed".equals(status) && !"incomplete".equals(status)) {
 			throw new OpenRouterTruncatedResponseException(
 					"Responses result is not final: status=" + sanitizer.sanitize(status) + ", incomplete reason="
 							+ sanitizer.sanitize(details != null ? details.reason() : null));
 		}
 		if (expectedStatus != null && !expectedStatus.equals(status)) {
-			throw new OpenRouterProtocolException("Responses terminal event disagrees with response status");
+			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.CONTRACT, "/responses",
+					"Responses terminal event disagrees with response status");
 		}
-		ResponseValues.required(response.output(), "Responses output");
+		ResponseValues.RESPONSES.required(response.output(), "Responses output");
 	}
 
 	static RuntimeException failure(String message, @Nullable String responseBody, @Nullable StreamError error,
@@ -99,8 +100,9 @@ public final class OpenRouterResponsesResponseMapper {
 		RuntimeException failure = OpenRouterApiExceptionFactory.createRetryable(message, responseBody, error,
 				errorType, "/responses", sanitizer);
 		if (failure instanceof OpenRouterApiException permanent) {
-			return new OpenRouterNonTransientApiException(message, permanent.getStatusCode(),
-					permanent.getResponseBody(), permanent.getErrorDetails(), null, "/responses");
+			return new OpenRouterNonTransientApiException(Objects.requireNonNull(permanent.getMessage()),
+					permanent.getStatusCode(), permanent.getResponseBody(), permanent.getErrorDetails(), null,
+					"/responses");
 		}
 		return failure;
 	}
@@ -111,7 +113,7 @@ public final class OpenRouterResponsesResponseMapper {
 		if (CollectionUtils.isEmpty(output)) {
 			return List.of();
 		}
-		List<ResponsesOutputItem> calls = ResponseValues.<ResponsesOutputItem>items(output, "output item")
+		List<ResponsesOutputItem> calls = ResponseValues.RESPONSES.<ResponsesOutputItem>items(output, "output item")
 			.stream()
 			.filter(item -> "function_call".equals(item.type()))
 			.toList();
@@ -124,9 +126,10 @@ public final class OpenRouterResponsesResponseMapper {
 			}
 		}
 		return calls.stream()
-			.map(item -> new AssistantMessage.ToolCall(ResponseValues.requiredText(item.callId(), "tool call id"),
-					"function", ResponseValues.requiredText(item.name(), "tool call name"),
-					ResponseValues.required(item.arguments(), "tool call arguments")))
+			.map(item -> new AssistantMessage.ToolCall(
+					ResponseValues.RESPONSES.requiredText(item.callId(), "tool call id"), "function",
+					ResponseValues.RESPONSES.requiredText(item.name(), "tool call name"),
+					ResponseValues.RESPONSES.required(item.arguments(), "tool call arguments")))
 			.toList();
 	}
 
@@ -134,7 +137,7 @@ public final class OpenRouterResponsesResponseMapper {
 		if (CollectionUtils.isEmpty(output)) {
 			return "";
 		}
-		return ResponseValues.<ResponsesOutputItem>items(output, "output item")
+		return ResponseValues.RESPONSES.<ResponsesOutputItem>items(output, "output item")
 			.stream()
 			.filter(item -> "message".equals(item.type()))
 			.map(OpenRouterResponsesResponseMapper::text)
@@ -146,7 +149,7 @@ public final class OpenRouterResponsesResponseMapper {
 		if (CollectionUtils.isEmpty(item.content())) {
 			return "";
 		}
-		return ResponseValues.items(item.content(), "message content")
+		return ResponseValues.RESPONSES.items(item.content(), "message content")
 			.stream()
 			.filter(content -> "output_text".equals(content.type()) || "text".equals(content.type()))
 			.map(ResponsesContent::text)

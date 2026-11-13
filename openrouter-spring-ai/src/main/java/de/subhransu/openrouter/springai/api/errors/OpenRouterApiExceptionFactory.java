@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.api.errors;
 
+import java.util.Objects;
 import org.jspecify.annotations.Nullable;
 import de.subhransu.openrouter.springai.api.dto.StreamError;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
@@ -28,16 +29,23 @@ public final class OpenRouterApiExceptionFactory {
 	public static RuntimeException createRetryable(String message, @Nullable String responseBody,
 			@Nullable StreamError error, @Nullable String errorType, String endpoint,
 			OpenRouterDiagnosticSanitizer sanitizer) {
-		OpenRouterApiException failure = create(message, responseBody, error, errorType, sanitizer);
+		OpenRouterApiException failure = create(message, responseBody, error, errorType, endpoint, sanitizer);
 		if (OpenRouterErrorClassifier.isTransient(failure.getCategory())) {
-			return new OpenRouterTransientApiException(message, failure.getStatusCode(), failure.getResponseBody(),
-					failure.getErrorDetails(), null, endpoint);
+			return new OpenRouterTransientApiException(Objects.requireNonNull(failure.getMessage()),
+					failure.getStatusCode(), failure.getResponseBody(), failure.getErrorDetails(), null, endpoint);
 		}
 		return failure;
 	}
 
+	/**
+	 * Create the exception for an error in a successful response. Its message names the
+	 * endpoint, the actual or derived status and the category; provider text stays in the
+	 * details. The fallback message stands in for a missing provider message in the
+	 * details.
+	 */
 	public static OpenRouterApiException create(String fallbackMessage, @Nullable String responseBody,
-			@Nullable StreamError error, @Nullable String rootErrorType, OpenRouterDiagnosticSanitizer sanitizer) {
+			@Nullable StreamError error, @Nullable String rootErrorType, String endpoint,
+			OpenRouterDiagnosticSanitizer sanitizer) {
 		String parsedMessage = error != null ? error.message() : null;
 		String diagnosticMessage = StringUtils.hasText(parsedMessage) ? parsedMessage : fallbackMessage;
 		String code = error != null ? error.code() : null;
@@ -52,8 +60,10 @@ public final class OpenRouterApiExceptionFactory {
 				sanitizer.sanitize(envelope.message()), sanitizer.sanitize(envelope.errorType()),
 				sanitizer.sanitize(envelope.providerCode()), sanitizer.sanitizeMetadata(envelope.metadata()),
 				envelope.category());
-		return new OpenRouterApiException(fallbackMessage, HttpStatusCode.valueOf(statusCode),
-				sanitizer.sanitize(responseBody), details);
+		HttpStatusCode status = HttpStatusCode.valueOf(statusCode);
+		String message = fallbackMessage + " in " + endpoint + " with status " + status + ", category "
+				+ details.category();
+		return new OpenRouterApiException(message, status, sanitizer.sanitize(responseBody), details);
 	}
 
 	private static int numericCode(@Nullable String code) {

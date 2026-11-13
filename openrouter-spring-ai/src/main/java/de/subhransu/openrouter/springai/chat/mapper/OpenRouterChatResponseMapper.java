@@ -23,6 +23,8 @@ import org.springframework.util.CollectionUtils;
 
 public final class OpenRouterChatResponseMapper {
 
+	private static final String ENDPOINT = "/chat/completions";
+
 	private final OpenRouterDiagnosticSanitizer sanitizer;
 
 	private final OpenRouterChoiceErrorExceptionFactory choiceErrorExceptionFactory;
@@ -38,19 +40,21 @@ public final class OpenRouterChatResponseMapper {
 
 	public ChatResponse map(ChatCompletionResponse response) {
 		if (response == null) {
-			throw new OpenRouterProtocolException("Null OpenRouter chat completion response");
+			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.EMPTY_BODY, ENDPOINT,
+					"Null OpenRouter chat completion response");
 		}
 		var error = response.error();
 		if (error != null) {
 			throw OpenRouterApiExceptionFactory.createRetryable("OpenRouter chat completion failed", error.toString(),
-					error, null, "/chat/completions", this.sanitizer);
+					error, null, ENDPOINT, this.sanitizer);
 		}
 		var choices = response.choices();
 		if (CollectionUtils.isEmpty(choices) || choices.stream().anyMatch(Objects::isNull)) {
-			throw new OpenRouterProtocolException("OpenRouter chat completion requires non-null choices");
+			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.MISSING_FIELD, ENDPOINT,
+					"OpenRouter chat completion requires non-null choices");
 		}
 		throwIfChoiceFailed(response);
-		List<Generation> generations = ResponseValues.items(response.choices(), "choice")
+		List<Generation> generations = ResponseValues.CHAT_COMPLETIONS.items(response.choices(), "choice")
 			.stream()
 			.map(choice -> mapGeneration(choice, response.model()))
 			.toList();
@@ -72,7 +76,8 @@ public final class OpenRouterChatResponseMapper {
 	private Generation mapGeneration(Choice choice, @Nullable String model) {
 		var message = choice.message();
 		if (message == null) {
-			throw new OpenRouterProtocolException("OpenRouter chat completion choice requires a message");
+			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.MISSING_FIELD, ENDPOINT,
+					"OpenRouter chat completion choice requires a message");
 		}
 		if (!CollectionUtils.isEmpty(message.toolCalls())
 				&& !FinishReasonMapper.isToolCallCompletion(choice.finishReason())) {
@@ -110,16 +115,16 @@ public final class OpenRouterChatResponseMapper {
 		if (toolCalls == null || toolCalls.isEmpty()) {
 			return List.of();
 		}
-		return ResponseValues.items(toolCalls, "tool call")
+		return ResponseValues.CHAT_COMPLETIONS.items(toolCalls, "tool call")
 			.stream()
 			.map(toolCall -> new AssistantMessage.ToolCall(toolCall.id() != null ? toolCall.id() : "",
-					ResponseValues.required(toolCall.type(), "tool call type"),
-					ResponseValues.requiredText(
-							ResponseValues.required(toolCall.function(), "tool call function").name(),
+					ResponseValues.CHAT_COMPLETIONS.required(toolCall.type(), "tool call type"),
+					ResponseValues.CHAT_COMPLETIONS.requiredText(
+							ResponseValues.CHAT_COMPLETIONS.required(toolCall.function(), "tool call function").name(),
 							"tool call name"),
-					ResponseValues.required(
-							ResponseValues.required(toolCall.function(), "tool call function").arguments(),
-							"tool call arguments")))
+					ResponseValues.CHAT_COMPLETIONS
+						.required(ResponseValues.CHAT_COMPLETIONS.required(toolCall.function(), "tool call function")
+							.arguments(), "tool call arguments")))
 			.toList();
 	}
 

@@ -379,8 +379,8 @@ class OpenRouterApiContractTests {
 				assertThat(ex.getStatusCode().value()).isEqualTo(status);
 				assertThat(ex.getResponseBody()).isEqualTo(body);
 				assertThat(ex.getEndpoint()).isEqualTo("/chat/completions");
-				assertThat(ex.getMessage())
-					.isEqualTo("OpenRouter /chat/completions request failed with status " + HttpStatus.valueOf(status));
+				assertThat(ex.getMessage()).isEqualTo("OpenRouter /chat/completions request failed with status "
+						+ HttpStatus.valueOf(status) + ", category " + ex.getCategory());
 				assertThat(ex.getErrorDetails().message()).isEqualTo("upstream said no");
 			});
 		fixture.server().verify();
@@ -459,8 +459,8 @@ class OpenRouterApiContractTests {
 			.isInstanceOf(OpenRouterTransientApiException.class)
 			.satisfies(thrown -> {
 				OpenRouterHttpException ex = (OpenRouterHttpException) thrown;
-				assertThat(ex.getMessage())
-					.isEqualTo("OpenRouter /chat/completions request failed with status 429 TOO_MANY_REQUESTS");
+				assertThat(ex.getMessage()).isEqualTo(
+						"OpenRouter /chat/completions request failed with status 429 TOO_MANY_REQUESTS, category RATE_LIMIT");
 				assertThat(ex.getResponseBody()).hasSize(1003).endsWith("...");
 			});
 		fixture.server().verify();

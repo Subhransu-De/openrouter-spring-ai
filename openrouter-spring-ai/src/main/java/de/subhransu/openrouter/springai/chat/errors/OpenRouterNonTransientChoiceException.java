@@ -11,15 +11,15 @@ import org.springframework.ai.retry.NonTransientAiException;
 public final class OpenRouterNonTransientChoiceException extends NonTransientAiException
 		implements OpenRouterChoiceFailure {
 
-	private final @Nullable OpenRouterChoiceErrorDetails errorDetails;
+	private final OpenRouterChoiceErrorDetails errorDetails;
 
 	public OpenRouterNonTransientChoiceException(String message, @Nullable OpenRouterChoiceErrorDetails errorDetails) {
 		super(message);
-		this.errorDetails = errorDetails;
+		this.errorDetails = errorDetails != null ? errorDetails : OpenRouterChoiceErrorDetails.empty();
 	}
 
 	@Override
-	public @Nullable OpenRouterChoiceErrorDetails getErrorDetails() {
+	public OpenRouterChoiceErrorDetails getErrorDetails() {
 		return this.errorDetails;
 	}
 

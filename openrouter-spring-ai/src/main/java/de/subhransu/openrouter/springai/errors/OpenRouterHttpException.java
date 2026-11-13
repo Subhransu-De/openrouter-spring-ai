@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.errors;
 
+import java.time.Duration;
 import org.jspecify.annotations.Nullable;
 import org.springframework.http.HttpStatusCode;
 
@@ -14,7 +15,7 @@ import org.springframework.http.HttpStatusCode;
  *
  * @author Subhransu De
  */
-public sealed interface OpenRouterHttpException
+public sealed interface OpenRouterHttpException extends OpenRouterFailure
 		permits OpenRouterTransientApiException, OpenRouterNonTransientApiException, OpenRouterLimitExceededException {
 
 	@Nullable String getMessage();
@@ -42,17 +43,32 @@ public sealed interface OpenRouterHttpException
 		return getFailure().responseBody();
 	}
 
-	default @Nullable OpenRouterErrorDetails getErrorDetails() {
+	/**
+	 * Return the parsed error details. A limit the library raised on stream state has
+	 * empty details.
+	 * @return the details, never {@code null}
+	 */
+	default OpenRouterErrorDetails getErrorDetails() {
 		return getFailure().errorDetails();
 	}
 
+	@Override
 	default OpenRouterErrorCategory getCategory() {
-		OpenRouterErrorDetails details = getErrorDetails();
-		return details != null ? details.category() : OpenRouterErrorCategory.UNKNOWN;
+		return getErrorDetails().category();
 	}
 
 	default @Nullable OpenRouterRetryAfter getRetryAfter() {
 		return getFailure().retryAfter();
+	}
+
+	/**
+	 * Return the delay that the {@code Retry-After} header asks for.
+	 * @return the delay, or {@code null} when the response had no header or a value that
+	 * could not be parsed
+	 */
+	default @Nullable Duration getRetryDelay() {
+		OpenRouterRetryAfter retryAfter = getRetryAfter();
+		return retryAfter != null ? retryAfter.delay() : null;
 	}
 
 	default @Nullable String getEndpoint() {

@@ -19,7 +19,8 @@ public final class OpenRouterImageResponseValidator {
 
 	public static void validate(@Nullable ImagesResponse response, OpenRouterDiagnosticSanitizer sanitizer) {
 		if (response == null) {
-			throw new OpenRouterProtocolException("Null OpenRouter image response");
+			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.EMPTY_BODY, "/images",
+					"Null OpenRouter image response");
 		}
 		var error = response.error();
 		if (error != null) {
@@ -28,11 +29,13 @@ public final class OpenRouterImageResponseValidator {
 		}
 		var images = response.data();
 		if (images == null) {
-			throw new OpenRouterProtocolException("OpenRouter image response requires data");
+			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.MISSING_FIELD, "/images",
+					"OpenRouter image response requires data");
 		}
 		for (ImagesResponse.ImageData data : images) {
 			if (data == null || !StringUtils.hasText(data.b64Json()) && !StringUtils.hasText(data.url())) {
-				throw new OpenRouterProtocolException("OpenRouter image data requires image content");
+				throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.MISSING_FIELD, "/images",
+						"OpenRouter image data requires image content");
 			}
 		}
 	}
