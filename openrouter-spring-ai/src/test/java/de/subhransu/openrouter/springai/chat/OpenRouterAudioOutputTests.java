@@ -83,6 +83,32 @@ class OpenRouterAudioOutputTests {
 	}
 
 	@Test
+	void readsTheTranscriptAndAudioBytesWithoutCastsOnlyFromTheCompletedMessage() {
+		List<ChatResponse> responses = map(
+				Flux.just(chunk(0, "Hi", "AAE=", "Hello ", null), chunk(0, null, "Ag==", "world", "stop")))
+			.collectList()
+			.block();
+
+		AssistantMessage partial = responses.get(0).getResult().getOutput();
+		AssistantMessage completed = responses.get(1).getResult().getOutput();
+		assertThat(OpenRouterAudioOutput.from(partial)).isEmpty();
+		assertThat(OpenRouterAudioOutput.from(completed))
+			.contains(new OpenRouterAudioOutput("Hello world", "pcm16", "synthetic-audio", 123L));
+		assertThat(OpenRouterMedia.bytes(completed.getMedia().get(0))).containsExactly(0, 1, 2);
+		assertThat(completed.getMetadata().get(OpenRouterMetadata.AUDIO)).isInstanceOf(Map.class);
+	}
+
+	@Test
+	void readsOptionalAudioFieldsAsNullWhenAbsent() {
+		AssistantMessage message = AssistantMessage.builder()
+			.content("")
+			.properties(Map.of(OpenRouterMetadata.AUDIO, Map.of("transcript", "Hi", "format", "wav")))
+			.build();
+
+		assertThat(OpenRouterAudioOutput.from(message)).contains(new OpenRouterAudioOutput("Hi", "wav", null, null));
+	}
+
+	@Test
 	void isolatesChoicesAndRepeatSubscriptionsAndRetainsUsageOnlyChunks() {
 		Flux<ChatResponse> responses = map(Flux.just(chunk(0, null, "AA==", "a", null),
 				chunk(1, null, "AQ==", "b", "stop"), chunk(0, null, "Ag==", "c", "stop"),

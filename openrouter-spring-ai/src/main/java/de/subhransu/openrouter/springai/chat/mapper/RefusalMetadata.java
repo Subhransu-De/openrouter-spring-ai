@@ -1,5 +1,6 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
+import de.subhransu.openrouter.springai.chat.OpenRouterMetadata;
 import java.util.Objects;
 import de.subhransu.openrouter.springai.api.dto.ResponsesContent;
 import de.subhransu.openrouter.springai.api.dto.ResponsesOutputItem;
@@ -11,7 +12,7 @@ import org.jspecify.annotations.Nullable;
 
 final class RefusalMetadata {
 
-	static final String REFUSAL = "openrouter.refusal";
+	static final String REFUSAL = OpenRouterMetadata.REFUSAL;
 
 	private RefusalMetadata() {
 	}
