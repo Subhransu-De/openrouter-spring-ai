@@ -1,6 +1,7 @@
 package de.subhransu.openrouter.springai.image;
 
 import org.jspecify.annotations.Nullable;
+import de.subhransu.openrouter.springai.support.OptionChecks;
 import de.subhransu.openrouter.springai.support.OptionSnapshots;
 import java.util.List;
 import java.util.Map;
@@ -258,7 +259,8 @@ public class OpenRouterImageOptions implements ImageOptions {
 		}
 
 		public Builder inputReferences(@Nullable List<String> inputReferences) {
-			this.options.inputReferences = OptionSnapshots.list(inputReferences);
+			this.options.inputReferences = OptionSnapshots
+				.list(OptionChecks.noNullElements("inputReferences", inputReferences));
 			return this;
 		}
 

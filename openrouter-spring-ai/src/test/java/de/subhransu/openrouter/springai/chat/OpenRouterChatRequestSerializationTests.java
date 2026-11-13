@@ -212,16 +212,16 @@ class OpenRouterChatRequestSerializationTests {
 	@Tag("api")
 	@Tag("api.request")
 	@Test
-	void explicitResponseFormatTakesPrecedenceOverOutputSchema() {
+	void outputSchemaTakesPrecedenceOverResponseFormat() {
 		JsonNode json = serializeChat(base().responseFormat(OpenRouterResponseFormat.jsonObject()).outputSchema("""
 				{
 				  "type": "object"
 				}
 				""").build());
 
-		// When both are present, the explicit responseFormat wins (no json_schema
-		// wrapper).
-		assertThat(json.path("response_format").path("type").stringValue()).isEqualTo("json_object");
+		// ChatClient.entity(...) parses the reply against the output schema, so it wins.
+		assertThat(json.path("response_format").path("type").stringValue()).isEqualTo("json_schema");
+		assertThat(json.at("/response_format/json_schema/schema/type").stringValue()).isEqualTo("object");
 	}
 
 	@Tag("api")
@@ -274,7 +274,8 @@ class OpenRouterChatRequestSerializationTests {
 		// tool_choice accepts a named function object or a bare string
 		// ("none"/"auto"/"required"); the string form must not be wrapped or quoted
 		// differently.
-		JsonNode json = serializeChat(base().toolChoice("none").build());
+		JsonNode json = serializeChat(base().toolChoice("none").build(), List.of(new UserMessage("hello")),
+				List.of(weatherTool()));
 
 		assertThat(json.path("tool_choice").isString()).isTrue();
 		assertThat(json.path("tool_choice").stringValue()).isEqualTo("none");
@@ -581,8 +582,7 @@ class OpenRouterChatRequestSerializationTests {
 	void structuredFormatsAndNamedToolsArePortable(boolean stream) {
 		String schema = "{\"type\":\"object\"}";
 		for (Boolean strict : Arrays.asList(null, false, true)) {
-			var options = base().outputSchema("invalid but overridden")
-				.responseFormat(OpenRouterResponseFormat.jsonSchema("answer", strict, schema))
+			var options = base().responseFormat(OpenRouterResponseFormat.jsonSchema("answer", strict, schema))
 				.toolChoice(Map.of("type", "function", "function", Map.of("name", "get_weather")))
 				.build();
 			var messages = List.<Message>of(new UserMessage("hi"));
@@ -628,10 +628,11 @@ class OpenRouterChatRequestSerializationTests {
 		var options = base().toolChoice(this.objectMapper.readTree(choice)).build();
 		var messages = List.<Message>of(new UserMessage("hi"));
 		for (boolean stream : List.of(false, true)) {
-			assertThat(this.objectMapper.writeValueAsString(this.chatMapper.map(messages, options, stream, List.of())))
+			assertThat(this.objectMapper
+				.writeValueAsString(this.chatMapper.map(messages, options, stream, List.of(weatherTool()))))
 				.contains("\"tool_choice\":{\"type\":\"function\",\"function\":{\"name\":\"get_weather\"}}");
 			assertThat(this.objectMapper
-				.writeValueAsString(this.responsesMapper.map(messages, options, stream, List.of())))
+				.writeValueAsString(this.responsesMapper.map(messages, options, stream, List.of(weatherTool()))))
 				.contains("\"tool_choice\":{\"type\":\"function\",\"name\":\"get_weather\"}");
 		}
 	}
@@ -645,8 +646,9 @@ class OpenRouterChatRequestSerializationTests {
 	void acceptsBothNamedToolShapesAndStringChoices(String choice) {
 		Object value = choice.startsWith("{") ? this.objectMapper.readTree(choice) : choice;
 		var options = base().toolChoice(value).build();
-		JsonNode chat = serializeChat(options).path("tool_choice");
-		JsonNode responses = serializeResponses(options, List.of(new UserMessage("hi")), List.of()).path("tool_choice");
+		var messages = List.<Message>of(new UserMessage("hi"));
+		JsonNode chat = serializeChat(options, messages, List.of(weatherTool())).path("tool_choice");
+		JsonNode responses = serializeResponses(options, messages, List.of(weatherTool())).path("tool_choice");
 		if (choice.contains("function")) {
 			assertThat(chat.at("/function/name").stringValue()).isEqualTo("get_weather");
 			assertThat(responses.path("name").stringValue()).isEqualTo("get_weather");
@@ -687,7 +689,7 @@ class OpenRouterChatRequestSerializationTests {
 		method.invoke(builder, value);
 		var options = builder.build();
 		var messages = List.<Message>of(new UserMessage("hi"));
-		var tools = "toolCallbacks".equals(name) || "toolStrict".equals(name) ? List.of(weatherTool())
+		var tools = List.of("toolCallbacks", "toolStrict", "toolChoice").contains(name) ? List.of(weatherTool())
 				: List.<ToolDefinition>of();
 		for (boolean stream : List.of(false, true)) {
 			if ("rejected".equals(chatPath)) {

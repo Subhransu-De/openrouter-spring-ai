@@ -103,7 +103,9 @@ imageModel.stream(prompt).doOnNext(response -> response.getResults().forEach(res
 
 ### Chat models with image output
 
-Set `OpenRouterChatOptions.builder().modalities(List.of("image", "text"))`, optionally with `imageConfig`. Generated images arrive as `AssistantMessage` media, in sync calls and streams, in both request modes.
+Set `OpenRouterChatOptions.builder().modalities(OpenRouterModality.IMAGE, OpenRouterModality.TEXT)` or `modalities(List.of("image", "text"))`, optionally with `imageConfig`. Generated images arrive as `AssistantMessage` media, in sync calls and streams, in both request modes.
+
+Modalities are lower-cased when the options are built, because OpenRouter documents lower-case values. A modality other than `text`, `image` or `audio` is sent and logged once as a warning. `imageConfig` is sent as `image_config` whenever it is set; the library does not check the modalities, because its keys are model-specific. Include `image` in the modalities to get image output.
 
 Attach generated media to a new `UserMessage` for image edits or follow-up questions. Responses base64 results are exposed as complete data URLs. A supplied `output_format` sets the MIME type (PNG by default). An existing data URL keeps its own MIME type.
 

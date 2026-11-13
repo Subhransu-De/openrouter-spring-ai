@@ -58,7 +58,8 @@ public class OpenRouterChatProperties {
 	private @Nullable Integer maxTokens;
 
 	/**
-	 * Maximum number of completion tokens, sent as max_completion_tokens.
+	 * Maximum number of completion tokens, sent as max_completion_tokens. Responses mode
+	 * sends one limit and uses this one when max-tokens is also set.
 	 */
 	private @Nullable Integer maxCompletionTokens;
 
@@ -88,13 +89,15 @@ public class OpenRouterChatProperties {
 	private @Nullable String user;
 
 	/**
-	 * Explicit output format. Takes precedence over output-schema.
+	 * Explicit output format. When output-schema is also set, output-schema is sent and a
+	 * warning is logged.
 	 */
 	@NestedConfigurationProperty
 	private @Nullable OpenRouterResponseFormat responseFormat;
 
 	/**
 	 * Portable JSON schema document. Leaves strict unset and uses the name response.
+	 * Takes precedence over response-format.
 	 */
 	private @Nullable String outputSchema;
 
@@ -122,7 +125,8 @@ public class OpenRouterChatProperties {
 	private @Nullable Boolean parallelToolCalls;
 
 	/**
-	 * Tool choice: auto, none or required.
+	 * Tool choice: auto, none or required. Without tools, auto and none are left out and
+	 * required is rejected.
 	 */
 	private @Nullable String toolChoice;
 
@@ -153,7 +157,8 @@ public class OpenRouterChatProperties {
 	private @Nullable Boolean includeUsage;
 
 	/**
-	 * Comma-separated list of output modalities, such as text, image or audio.
+	 * Comma-separated list of output modalities: text, image or audio. Values are
+	 * lower-cased.
 	 */
 	private @Nullable List<String> modalities;
 
@@ -164,7 +169,8 @@ public class OpenRouterChatProperties {
 	private @Nullable OpenRouterAudioOptions audio;
 
 	/**
-	 * Image generation settings sent as image_config when the modalities include image.
+	 * Model-specific image generation settings, sent as image_config whenever set. Set
+	 * modalities to include image for image output.
 	 */
 	private @Nullable Map<String, @Nullable Object> imageConfig;
 

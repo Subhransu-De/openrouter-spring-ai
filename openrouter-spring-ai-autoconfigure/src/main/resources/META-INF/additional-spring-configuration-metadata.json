@@ -14,7 +14,7 @@
     },
     {
       "name": "spring.ai.openrouter.chat.provider.data-collection",
-      "description": "Data collection policy that upstream providers must meet, allow or deny."
+      "description": "Data collection policy that upstream providers must meet: allow or deny. Other values are sent and logged once as a warning."
     },
     {
       "name": "spring.ai.openrouter.chat.provider.order",
@@ -26,11 +26,11 @@
     },
     {
       "name": "spring.ai.openrouter.chat.provider.quantizations",
-      "description": "Comma-separated list of model quantization levels to accept, such as fp8 or int4."
+      "description": "Comma-separated list of model quantization levels to accept, such as fp8 or int4. Undocumented values are sent and logged once as a warning."
     },
     {
       "name": "spring.ai.openrouter.chat.provider.sort",
-      "description": "Upstream provider ordering, such as price, throughput or latency."
+      "description": "Upstream provider ordering: price, throughput, latency or exacto. Other values are sent and logged once as a warning."
     },
     {
       "name": "spring.ai.openrouter.embedding.provider.allow-fallbacks",
@@ -42,7 +42,7 @@
     },
     {
       "name": "spring.ai.openrouter.embedding.provider.data-collection",
-      "description": "Data collection policy that upstream providers must meet, allow or deny."
+      "description": "Data collection policy that upstream providers must meet: allow or deny. Other values are sent and logged once as a warning."
     },
     {
       "name": "spring.ai.openrouter.embedding.provider.order",
@@ -54,15 +54,15 @@
     },
     {
       "name": "spring.ai.openrouter.embedding.provider.quantizations",
-      "description": "Comma-separated list of model quantization levels to accept, such as fp8 or int4."
+      "description": "Comma-separated list of model quantization levels to accept, such as fp8 or int4. Undocumented values are sent and logged once as a warning."
     },
     {
       "name": "spring.ai.openrouter.embedding.provider.sort",
-      "description": "Upstream provider ordering, such as price, throughput or latency."
+      "description": "Upstream provider ordering: price, throughput, latency or exacto. Other values are sent and logged once as a warning."
     },
     {
       "name": "spring.ai.openrouter.chat.reasoning.effort",
-      "description": "Reasoning effort, such as low, medium or high. Mutually exclusive with max-tokens."
+      "description": "Reasoning effort: none, minimal, low, medium, high, xhigh or max. Other values are sent and logged once as a warning. Mutually exclusive with max-tokens."
     },
     {
       "name": "spring.ai.openrouter.chat.reasoning.max-tokens",
@@ -126,6 +126,208 @@
         {
           "value": "openrouter",
           "description": "Use OpenRouter for Spring AI image model auto-configuration."
+        }
+      ]
+    },
+    {
+      "name": "spring.ai.openrouter.chat.provider.sort",
+      "values": [
+        {
+          "value": "price",
+          "description": "Lowest price first."
+        },
+        {
+          "value": "throughput",
+          "description": "Highest throughput first."
+        },
+        {
+          "value": "latency",
+          "description": "Lowest latency first."
+        },
+        {
+          "value": "exacto"
+        }
+      ]
+    },
+    {
+      "name": "spring.ai.openrouter.chat.provider.data-collection",
+      "values": [
+        {
+          "value": "allow",
+          "description": "Allow providers that may store or train on request data."
+        },
+        {
+          "value": "deny",
+          "description": "Use only providers that do not collect request data."
+        }
+      ]
+    },
+    {
+      "name": "spring.ai.openrouter.chat.provider.quantizations",
+      "values": [
+        {
+          "value": "int4"
+        },
+        {
+          "value": "int8"
+        },
+        {
+          "value": "fp4"
+        },
+        {
+          "value": "mxfp4"
+        },
+        {
+          "value": "nvfp4"
+        },
+        {
+          "value": "fp6"
+        },
+        {
+          "value": "fp8"
+        },
+        {
+          "value": "mxfp8"
+        },
+        {
+          "value": "fp16"
+        },
+        {
+          "value": "bf16"
+        },
+        {
+          "value": "fp32"
+        },
+        {
+          "value": "unknown"
+        }
+      ]
+    },
+    {
+      "name": "spring.ai.openrouter.embedding.provider.sort",
+      "values": [
+        {
+          "value": "price",
+          "description": "Lowest price first."
+        },
+        {
+          "value": "throughput",
+          "description": "Highest throughput first."
+        },
+        {
+          "value": "latency",
+          "description": "Lowest latency first."
+        },
+        {
+          "value": "exacto"
+        }
+      ]
+    },
+    {
+      "name": "spring.ai.openrouter.embedding.provider.data-collection",
+      "values": [
+        {
+          "value": "allow",
+          "description": "Allow providers that may store or train on request data."
+        },
+        {
+          "value": "deny",
+          "description": "Use only providers that do not collect request data."
+        }
+      ]
+    },
+    {
+      "name": "spring.ai.openrouter.embedding.provider.quantizations",
+      "values": [
+        {
+          "value": "int4"
+        },
+        {
+          "value": "int8"
+        },
+        {
+          "value": "fp4"
+        },
+        {
+          "value": "mxfp4"
+        },
+        {
+          "value": "nvfp4"
+        },
+        {
+          "value": "fp6"
+        },
+        {
+          "value": "fp8"
+        },
+        {
+          "value": "mxfp8"
+        },
+        {
+          "value": "fp16"
+        },
+        {
+          "value": "bf16"
+        },
+        {
+          "value": "fp32"
+        },
+        {
+          "value": "unknown"
+        }
+      ]
+    },
+    {
+      "name": "spring.ai.openrouter.chat.reasoning.effort",
+      "values": [
+        {
+          "value": "none"
+        },
+        {
+          "value": "minimal"
+        },
+        {
+          "value": "low"
+        },
+        {
+          "value": "medium"
+        },
+        {
+          "value": "high"
+        },
+        {
+          "value": "xhigh"
+        },
+        {
+          "value": "max"
+        }
+      ]
+    },
+    {
+      "name": "spring.ai.openrouter.chat.modalities",
+      "values": [
+        {
+          "value": "text"
+        },
+        {
+          "value": "image"
+        },
+        {
+          "value": "audio"
+        }
+      ]
+    },
+    {
+      "name": "spring.ai.openrouter.chat.tool-choice",
+      "values": [
+        {
+          "value": "auto"
+        },
+        {
+          "value": "none"
+        },
+        {
+          "value": "required"
         }
       ]
     }

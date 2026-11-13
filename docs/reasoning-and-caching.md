@@ -5,7 +5,7 @@ Reasoning models can think before they answer. Turn it on with `reasoning(...)` 
 ```java
 ChatClient client = ChatClient.create(chatModel);
 OpenRouterChatOptions.Builder options = OpenRouterChatOptions.builder()
-	.reasoning(OpenRouterReasoningOptions.builder().effort("medium").build());
+	.reasoning(OpenRouterReasoningOptions.builder().effort(OpenRouterReasoningEffort.MEDIUM).build());
 UserMessage question = new UserMessage("Plan a three-step migration.");
 ChatResponse first = client.prompt().messages(question).options(options).call().chatResponse();
 String thinking = first.getResult().getMetadata().get("openrouter.reasoning");
@@ -15,6 +15,8 @@ client.prompt().messages(question, reply, new UserMessage("Shorten step two.")).
 ```
 
 The request options combine with the model's defaults, so the model and other settings stay.
+
+`OpenRouterReasoningEffort` holds the efforts OpenRouter documents: `none`, `minimal`, `low`, `medium`, `high`, `xhigh` and `max`. `effort(String)` also takes a value OpenRouter adds later. An undocumented effort is sent as written and logged once as a warning, so a typo such as `hgih` shows up in the log before the provider rejects or ignores it.
 
 ## Reasoning conversation state
 

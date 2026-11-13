@@ -12,12 +12,12 @@ Responses rejects these with `IllegalArgumentException` before sending a request
 
 - `stopSequences`, `seed`, `repetitionPenalty`, `minP` and `topA`.
 - `includeUsage`, with any non-null value.
-- The `extraBody` keys `logit_bias`, `logprobs`, `verbosity` and `transforms`.
+- The `extraBody` keys `logit_bias`, `logprobs`, `verbosity` and `transforms`. The error names the mode and lists the keys Responses accepts, `prompt_cache_key` and `top_logprobs`.
 - Cache breakpoints.
 - Chat audio output.
 - Assistant media history. Attach media to a `UserMessage` instead.
 
-Other options map to their wire fields.
+Other options map to their wire fields. Responses sends a single output limit, `max_output_tokens`. When both `maxTokens` and `maxCompletionTokens` are set, it sends `maxCompletionTokens` and logs a warning if the two differ. It does not reject the pair, because a default of one and a request value of the other is a valid combination; set only `maxCompletionTokens` when you use Responses.
 
 ## Structured output
 
@@ -26,7 +26,7 @@ Two options set the output format:
 - `outputSchema` is a JSON schema document. It is portable: the schema name is `response` and `strict` is unset.
 - `responseFormat` is a typed format: `text`, `json-object` or `json-schema` with a name, `strict` and a schema.
 
-An explicit `responseFormat` wins over `outputSchema`. `OpenRouterResponseFormat.jsonSchema(name, strict, schema)` keeps an explicit `true` or `false`. Schema enforcement depends on the selected provider. Function-tool strictness is separate: see [`toolStrict`](tool-calling.md#strict-function-tools).
+When both are set, `outputSchema` wins and a warning names both options, because `ChatClient.entity(...)` parses the reply against that schema. This follows Spring AI's OpenAI options, where the output schema replaces the response format. When options combine, a request that sets either option replaces both defaults: a request `responseFormat` drops a default `outputSchema`, and the reverse. `OpenRouterResponseFormat.jsonSchema(name, strict, schema)` keeps an explicit `true` or `false`. Schema enforcement depends on the selected provider. Function-tool strictness is separate: see [`toolStrict`](tool-calling.md#strict-function-tools).
 
 With `ChatClient`, `.entity(Type.class, spec -> spec.useProviderStructuredOutput())` passes the entity's schema as `outputSchema`.
 
@@ -45,7 +45,7 @@ spring:
             {"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"],"additionalProperties":false}
 ```
 
-For a portable schema, set `spring.ai.openrouter.chat.output-schema` to the JSON document instead. A JSON-schema format requires a nonblank schema. A blank schema or malformed JSON raises `IllegalArgumentException` before the request is sent.
+For a portable schema, set `spring.ai.openrouter.chat.output-schema` to the JSON document instead. A JSON-schema format requires a nonblank schema: a blank one raises `IllegalArgumentException` when the format is built, so a blank Boot property fails at startup. Malformed JSON raises `IllegalArgumentException` before the request is sent.
 
 ## Tool choice
 
@@ -55,7 +55,9 @@ For a portable schema, set `spring.ai.openrouter.chat.output-schema` to the JSON
 OpenRouterChatOptions.builder().toolChoice(Map.of("type", "function", "name", "lookup"))
 ```
 
-The mapper converts the named form to the selected endpoint's wire shape. `{type: "function", function: {name: "lookup"}}` is accepted too. Other shapes are rejected. A named choice serializes with `type` first.
+The mapper converts the named form to the selected endpoint's wire shape. `{type: "function", function: {name: "lookup"}}` is accepted too. Other shapes are rejected, and the error echoes the value. A string other than `auto`, `none` or `required` is rejected when the options are built. A named choice serializes with `type` first.
+
+Tool choice depends on the request's tools. Without tools, `auto` and `none` are left out of the request, and `required` or a named function raises `IllegalArgumentException` before the request is sent. A named function must name one of the request's tools.
 
 ## Refusals and incomplete output
 
