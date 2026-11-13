@@ -78,14 +78,15 @@ public final class OptionChecks {
 	}
 
 	/**
-	 * Logs a warning the first time a key is seen.
+	 * Logs a warning the first time a key is seen. CR and LF in the message are replaced,
+	 * because it can echo a configured value.
 	 * @param log the log to write to
 	 * @param key the identity of the warning
 	 * @param message the warning text
 	 */
 	public static void warnOnce(Log log, String key, Supplier<String> message) {
 		if (log.isWarnEnabled() && WARNED.size() < MAX_WARNINGS && WARNED.add(key)) {
-			log.warn(message.get());
+			log.warn(message.get().replace('\r', '_').replace('\n', '_'));
 		}
 	}
 
