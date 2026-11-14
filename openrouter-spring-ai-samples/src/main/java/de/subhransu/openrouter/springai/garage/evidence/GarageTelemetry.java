@@ -1,6 +1,7 @@
 package de.subhransu.openrouter.springai.garage.evidence;
 
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
+import de.subhransu.openrouter.springai.chat.OpenRouterMetadata;
 import de.subhransu.openrouter.springai.garage.GarageCosts;
 import de.subhransu.openrouter.springai.garage.GarageResponses;
 import io.micrometer.common.KeyValue;
@@ -157,7 +158,8 @@ public final class GarageTelemetry implements ObservationHandler<Observation.Con
       if (imageContext.getResponse() != null) {
         observation.put("count", imageContext.getResponse().getResults().size());
         outcome = CallOutcome.OK;
-        Object imageUsage = imageContext.getResponse().getMetadata().get("openrouter.image.usage");
+        Object imageUsage =
+            imageContext.getResponse().getMetadata().get(OpenRouterMetadata.IMAGE_USAGE);
         if (imageUsage instanceof Usage recordedUsage) {
           usage = recordedUsage;
         }

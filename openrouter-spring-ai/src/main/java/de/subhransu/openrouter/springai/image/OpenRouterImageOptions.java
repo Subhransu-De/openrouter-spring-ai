@@ -12,7 +12,7 @@ import org.springframework.ai.image.ImageOptions;
  * normalized OpenRouter fields: {@code n}, {@code size} (via width/height),
  * {@code resolution}, {@code aspect_ratio}, {@code quality}, {@code output_format},
  * {@code background}, {@code output_compression}, {@code seed}, {@code input_references}
- * (reference images for image-to-image work) and provider-specific passthrough options.
+ * (reference images for image-to-image work) and the {@code provider} object.
  *
  * <p>
  * Images always come back base64-encoded, so the portable {@code responseFormat} is fixed
@@ -275,8 +275,10 @@ public class OpenRouterImageOptions implements ImageOptions {
 		}
 
 		/**
-		 * Set the OpenRouter {@code provider} object, sent unchanged. Put settings for
-		 * one upstream provider under {@code options.<provider-slug>}.
+		 * Set the OpenRouter {@code provider} object, sent unchanged. Unlike the typed
+		 * {@code provider} of chat and embedding options, this is a raw map with wire
+		 * field names. Put settings for one upstream provider under
+		 * {@code options.<provider-slug>}.
 		 * @param provider the {@code provider} object, or {@code null}
 		 * @return this builder
 		 */

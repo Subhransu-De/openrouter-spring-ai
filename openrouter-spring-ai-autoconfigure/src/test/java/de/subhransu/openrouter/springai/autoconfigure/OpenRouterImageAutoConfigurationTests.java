@@ -8,16 +8,20 @@ import io.micrometer.observation.ObservationRegistry;
 import java.util.Map;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.ai.image.ImageModel;
 import org.springframework.ai.image.ImagePrompt;
 import org.springframework.ai.image.ImageResponse;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @Tag("configuration")
+@ExtendWith(OutputCaptureExtension.class)
 class OpenRouterImageAutoConfigurationTests {
 
 	private static final String API_KEY_PROPERTY = "spring.ai.openrouter.api-key=test-key";
@@ -70,7 +74,7 @@ class OpenRouterImageAutoConfigurationTests {
 
 	@Tag("configuration.properties")
 	@Test
-	void bindsTheOldProviderOptionsKeyForOneRelease() {
+	void bindsTheOldProviderOptionsKeyForOneRelease(CapturedOutput output) {
 		this.contextRunner
 			.withPropertyValues(API_KEY_PROPERTY,
 					"spring.ai.openrouter.image.provider-options.options.openai.moderation=low")
@@ -79,6 +83,7 @@ class OpenRouterImageAutoConfigurationTests {
 					.getField(context.getBean(OpenRouterImageModel.class), "defaultOptions");
 				assertThat(options.getProvider()).containsEntry("options",
 						Map.of("openai", Map.of("moderation", "low")));
+				assertThat(output).contains("spring.ai.openrouter.image.provider-options is deprecated");
 			});
 	}
 

@@ -162,6 +162,38 @@ class OptionSnapshotTests {
 		assertThat(image).isNotSameAs(imageDefaults);
 	}
 
+	@SuppressWarnings("removal") // The v0.1.0 names must keep working until 0.3.0.
+	@Tag("api")
+	@Tag("api.options")
+	@Test
+	void deprecatedBuilderNamesStillSetTheSameOptions() {
+		OpenRouterApi api = mock(OpenRouterApi.class);
+		OpenRouterChatOptions chat = OpenRouterChatModel.builder()
+			.openRouterApi(api)
+			.defaultOptions(OpenRouterChatOptions.builder().model("synthetic/old-chat").build())
+			.build()
+			.getOptions();
+		OpenRouterEmbeddingOptions embedding = OpenRouterEmbeddingModel.builder()
+			.openRouterApi(api)
+			.defaultOptions(OpenRouterEmbeddingOptions.builder().model("synthetic/old-embedding").build())
+			.build()
+			.getOptions();
+		OpenRouterImageOptions image = OpenRouterImageModel.builder()
+			.openRouterApi(api)
+			.defaultOptions(OpenRouterImageOptions.builder().model("synthetic/old-image").build())
+			.build()
+			.getOptions();
+		OpenRouterImageOptions imageOptions = OpenRouterImageOptions.builder()
+			.providerOptions(Map.of("options", Map.of("synthetic", Map.of("quality", "low"))))
+			.build();
+
+		assertThat(chat.getModel()).isEqualTo("synthetic/old-chat");
+		assertThat(embedding.getModel()).isEqualTo("synthetic/old-embedding");
+		assertThat(image.getModel()).isEqualTo("synthetic/old-image");
+		assertThat(imageOptions.getProviderOptions()).isEqualTo(imageOptions.getProvider())
+			.isEqualTo(Map.of("options", Map.of("synthetic", Map.of("quality", "low"))));
+	}
+
 	@Tag("api")
 	@Tag("api.options")
 	@Test

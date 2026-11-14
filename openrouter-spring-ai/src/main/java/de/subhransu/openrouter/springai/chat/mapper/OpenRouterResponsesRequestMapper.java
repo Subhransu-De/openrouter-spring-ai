@@ -53,7 +53,7 @@ public final class OpenRouterResponsesRequestMapper {
 		for (Message message : messages) {
 			if (message.getMetadata().containsKey(OpenRouterCacheBreakpoint.METADATA_KEY)) {
 				throw new IllegalArgumentException(
-						"RESPONSES does not support cache_control breakpoints; " + "use CHAT_COMPLETIONS");
+						"RESPONSES does not support cache_control breakpoints; use CHAT_COMPLETIONS");
 			}
 		}
 		rejectUnsupported("stopSequences", options.getStopSequences());

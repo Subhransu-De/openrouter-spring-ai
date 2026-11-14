@@ -145,6 +145,17 @@ class OpenRouterAutoConfigurationPropertyMatrixTests {
 	}
 
 	@Test
+	void failsStartupWithTheKeyForARequestModeValueFromBeforeTheRename() {
+		contextRunner.withPropertyValues(API_KEY, "spring.ai.openrouter.chat.request-mode=openai-responses")
+			.run(context -> {
+				assertThat(context).hasFailed();
+				assertThat(context.getStartupFailure())
+					.hasStackTraceContaining("spring.ai.openrouter.chat.request-mode")
+					.hasStackTraceContaining("openai-responses");
+			});
+	}
+
+	@Test
 	void bindsToolControlsAndMetadata() {
 		contextRunner
 			.withPropertyValues(API_KEY, "spring.ai.openrouter.chat.parallel-tool-calls=false",

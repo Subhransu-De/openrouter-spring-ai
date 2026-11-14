@@ -95,7 +95,7 @@ public enum SceneFailureReason {
     if (cause instanceof OpenRouterHttpFailure http) {
       return fromStatus(http.getStatusCode());
     }
-    // Image streams report in-band errors with this older exception type.
+    // Chat Completions and image in-band errors use this type.
     if (cause instanceof OpenRouterInBandErrorException api) {
       return fromStatus(api.getStatusCode());
     }

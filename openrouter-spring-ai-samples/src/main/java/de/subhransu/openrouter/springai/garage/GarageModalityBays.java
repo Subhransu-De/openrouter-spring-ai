@@ -12,6 +12,7 @@ import static de.subhransu.openrouter.springai.garage.GarageEvidenceKeys.USAGE;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterMedia;
+import de.subhransu.openrouter.springai.chat.OpenRouterMetadata;
 import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
 import de.subhransu.openrouter.springai.chat.OpenRouterUsage;
 import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingOptions;
@@ -358,7 +359,7 @@ public final class GarageModalityBays {
 
   private void recordGeneratedImage(Map<String, Object> probe, ImageResponse response, String stem)
       throws IOException {
-    Object usage = response.getMetadata().get("openrouter.image.usage");
+    Object usage = response.getMetadata().get(OpenRouterMetadata.IMAGE_USAGE);
     if (usage instanceof OpenRouterUsage openRouterUsage) {
       probe.put(USAGE, GarageResponses.usage(openRouterUsage));
     }

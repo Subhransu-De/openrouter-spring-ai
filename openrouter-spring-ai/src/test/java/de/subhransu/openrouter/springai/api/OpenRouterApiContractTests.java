@@ -48,6 +48,8 @@ class OpenRouterApiContractTests {
 
 	private static final String RESPONSES = BASE_URL + "/responses";
 
+	private static final String TITLE_HEADER = "X-OpenRouter-Title";
+
 	private static final String CATEGORIES_HEADER = "X-OpenRouter-Categories";
 
 	private static final String CHAT_SUCCESS_BODY = """
@@ -155,8 +157,24 @@ class OpenRouterApiContractTests {
 		fixture.server()
 			.expect(once(), requestTo(CHAT_COMPLETIONS))
 			.andExpect(header("HTTP-Referer", "https://app.example"))
-			.andExpect(header("X-OpenRouter-Title", "My App"))
+			.andExpect(header(TITLE_HEADER, "My App"))
 			.andExpect(header(CATEGORIES_HEADER, "translation,programming"))
+			.andRespond(withSuccess(CHAT_SUCCESS_BODY, MediaType.APPLICATION_JSON));
+
+		fixture.api().chatCompletion(minimalChatRequest());
+		fixture.server().verify();
+	}
+
+	@SuppressWarnings("removal") // The v0.1.0 names must keep working until 0.3.0.
+	@Tag("http")
+	@Tag("http.client")
+	@Test
+	void deprecatedAttributionMethodsStillSendTheHeaders() {
+		Fixture fixture = fixture(baseBuilder().applicationTitle("My App").applicationCategories("programming"));
+		fixture.server()
+			.expect(once(), requestTo(CHAT_COMPLETIONS))
+			.andExpect(header(TITLE_HEADER, "My App"))
+			.andExpect(header(CATEGORIES_HEADER, "programming"))
 			.andRespond(withSuccess(CHAT_SUCCESS_BODY, MediaType.APPLICATION_JSON));
 
 		fixture.api().chatCompletion(minimalChatRequest());
@@ -171,7 +189,7 @@ class OpenRouterApiContractTests {
 		fixture.server()
 			.expect(once(), requestTo(CHAT_COMPLETIONS))
 			.andExpect(headerDoesNotExist("HTTP-Referer"))
-			.andExpect(headerDoesNotExist("X-OpenRouter-Title"))
+			.andExpect(headerDoesNotExist(TITLE_HEADER))
 			.andExpect(headerDoesNotExist(CATEGORIES_HEADER))
 			.andRespond(withSuccess(CHAT_SUCCESS_BODY, MediaType.APPLICATION_JSON));
 
@@ -187,7 +205,7 @@ class OpenRouterApiContractTests {
 		fixture.server()
 			.expect(once(), requestTo(CHAT_COMPLETIONS))
 			.andExpect(headerDoesNotExist("HTTP-Referer"))
-			.andExpect(headerDoesNotExist("X-OpenRouter-Title"))
+			.andExpect(headerDoesNotExist(TITLE_HEADER))
 			.andExpect(headerDoesNotExist(CATEGORIES_HEADER))
 			.andRespond(withSuccess(CHAT_SUCCESS_BODY, MediaType.APPLICATION_JSON));
 

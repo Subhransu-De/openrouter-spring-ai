@@ -8,13 +8,13 @@ package de.subhransu.openrouter.springai.api;
 public enum OpenRouterRequestMode {
 
 	/**
-	 * OpenRouter Chat Completions API (`/chat/completions`). This is the
+	 * OpenRouter Chat Completions API ({@code /chat/completions}). This is the
 	 * production-supported default.
 	 */
 	CHAT_COMPLETIONS,
 
 	/**
-	 * OpenRouter Responses API (`/responses`). This is an experimental, explicitly
+	 * OpenRouter Responses API ({@code /responses}). This is an experimental, explicitly
 	 * selected compatibility mode.
 	 */
 	RESPONSES
