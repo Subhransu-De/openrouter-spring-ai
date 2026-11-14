@@ -58,7 +58,7 @@ class OpenRouterTransportFailureRetryTests {
 	private static final String BASE_URL = "https://openrouter.test/api/v1";
 
 	@ParameterizedTest
-	@EnumSource(value = OpenRouterRequestMode.class, names = { "OPENAI_CHAT_COMPLETIONS", "OPENAI_RESPONSES" })
+	@EnumSource(value = OpenRouterRequestMode.class, names = { "CHAT_COMPLETIONS", "RESPONSES" })
 	void blockingTimeoutIsStillRetriedBySpringAiDefaultPolicyShape(OpenRouterRequestMode mode) {
 		AtomicInteger attempts = new AtomicInteger();
 		OpenRouterChatModel model = OpenRouterChatModel.builder()
@@ -71,7 +71,7 @@ class OpenRouterTransportFailureRetryTests {
 			.isInstanceOfSatisfying(OpenRouterTransportException.class, transport -> {
 				assertThat(transport.getKind()).isEqualTo(OpenRouterTransportException.Kind.TIMEOUT);
 				assertThat(transport.getEndpoint())
-					.isEqualTo(mode == OpenRouterRequestMode.OPENAI_RESPONSES ? "/responses" : "/chat/completions");
+					.isEqualTo(mode == OpenRouterRequestMode.RESPONSES ? "/responses" : "/chat/completions");
 				assertThat(transport.getCategory()).isEqualTo(OpenRouterErrorCategory.TIMEOUT);
 				assertThat(transport.isTransient()).isTrue();
 				assertThat(transport.getMessage()).doesNotContain(BASE_URL);
@@ -89,7 +89,7 @@ class OpenRouterTransportFailureRetryTests {
 			.retryTemplate(retryTemplate(RetryPolicy.builder().includes(TransientAiException.class)))
 			.build();
 
-		assertThatThrownBy(() -> model.call(prompt(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS)))
+		assertThatThrownBy(() -> model.call(prompt(OpenRouterRequestMode.CHAT_COMPLETIONS)))
 			.isInstanceOf(OpenRouterTransportException.class);
 		assertThat(attempts).hasValue(1);
 	}
@@ -103,7 +103,7 @@ class OpenRouterTransportFailureRetryTests {
 					RetryPolicy.builder().predicate(failure -> failure.getClass() == ResourceAccessException.class)))
 			.build();
 
-		assertThatThrownBy(() -> model.call(prompt(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS)))
+		assertThatThrownBy(() -> model.call(prompt(OpenRouterRequestMode.CHAT_COMPLETIONS)))
 			.isInstanceOf(OpenRouterTransportException.class);
 		assertThat(attempts).hasValue(3);
 	}
@@ -154,7 +154,7 @@ class OpenRouterTransportFailureRetryTests {
 			.retryTemplate(retryTemplate(RetryPolicy.builder()))
 			.build();
 
-		StepVerifier.create(model.stream(prompt(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS)))
+		StepVerifier.create(model.stream(prompt(OpenRouterRequestMode.CHAT_COMPLETIONS)))
 			.assertNext(response -> assertThat(response.getResult().getOutput().getText()).isEqualTo("Hi"))
 			.expectErrorSatisfies(error -> assertThat(error)
 				.isInstanceOfSatisfying(OpenRouterTransportException.class,
@@ -166,7 +166,7 @@ class OpenRouterTransportFailureRetryTests {
 	}
 
 	@ParameterizedTest
-	@EnumSource(value = OpenRouterRequestMode.class, names = { "OPENAI_CHAT_COMPLETIONS", "OPENAI_RESPONSES" })
+	@EnumSource(value = OpenRouterRequestMode.class, names = { "CHAT_COMPLETIONS", "RESPONSES" })
 	void streamConnectFailureIsNotRetried(OpenRouterRequestMode mode) {
 		AtomicInteger exchanges = new AtomicInteger();
 		OpenRouterApi api = OpenRouterApi.builder()

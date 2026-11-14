@@ -41,7 +41,7 @@ public final class OpenRouterToolCallingAutoConfiguration {
 			ObjectProvider<ObservationRegistry> observationRegistryProvider) {
 		return new OpenRouterToolExecutionExceptionProcessor(
 				observationRegistryProvider.getIfUnique(() -> ObservationRegistry.NOOP),
-				(exception) -> OpenRouterToolExecutionExceptionProcessor.DEFAULT_FAILURE_PAYLOAD, rethrownExceptions());
+				(exception) -> OpenRouterToolExecutionExceptionProcessor.DEFAULT_FAILURE_RESULT, rethrownExceptions());
 	}
 
 	private static List<Class<? extends RuntimeException>> rethrownExceptions() {

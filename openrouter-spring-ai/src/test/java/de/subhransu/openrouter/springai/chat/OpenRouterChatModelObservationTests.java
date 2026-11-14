@@ -16,7 +16,7 @@ import de.subhransu.openrouter.springai.api.dto.Choice;
 import de.subhransu.openrouter.springai.api.dto.Delta;
 import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
 import de.subhransu.openrouter.springai.api.dto.Usage;
-import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
+import de.subhransu.openrouter.springai.api.errors.OpenRouterInBandErrorException;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationHandler;
 import io.micrometer.observation.tck.TestObservationRegistry;
@@ -112,19 +112,19 @@ class OpenRouterChatModelObservationTests {
 	@Test
 	void streamErrorIsRecordedOnTheObservation() {
 		OpenRouterApi api = mock(OpenRouterApi.class);
-		when(api.chatCompletionStream(any())).thenReturn(Flux
-			.error(new OpenRouterApiException("stream failed", HttpStatus.INTERNAL_SERVER_ERROR, "{\"error\":true}")));
+		when(api.chatCompletionStream(any())).thenReturn(Flux.error(new OpenRouterInBandErrorException("stream failed",
+				HttpStatus.INTERNAL_SERVER_ERROR, "{\"error\":true}")));
 
 		OpenRouterChatModel model = model(api);
 		assertThatThrownBy(() -> model.stream(prompt()).collectList().block(Duration.ofSeconds(5)))
-			.isInstanceOf(OpenRouterApiException.class);
+			.isInstanceOf(OpenRouterInBandErrorException.class);
 
 		assertThat(this.observationRegistry).hasObservationWithNameEqualTo(OBSERVATION_NAME)
 			.that()
 			.hasBeenStarted()
 			.hasBeenStopped()
 			.thenError()
-			.isInstanceOf(OpenRouterApiException.class);
+			.isInstanceOf(OpenRouterInBandErrorException.class);
 	}
 
 	@ParameterizedTest

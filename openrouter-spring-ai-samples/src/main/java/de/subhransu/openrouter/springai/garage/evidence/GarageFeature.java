@@ -77,17 +77,17 @@ public enum GarageFeature {
 
   public boolean supports(OpenRouterRequestMode mode) {
     if (this == RESPONSES_MODE) {
-      return mode == OpenRouterRequestMode.OPENAI_RESPONSES;
+      return mode == OpenRouterRequestMode.RESPONSES;
     }
-    return mode == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS
+    return mode == OpenRouterRequestMode.CHAT_COMPLETIONS
         || (this != CHAT_COMPLETIONS_MODE && this != STRUCTURED_OUTPUT
             && this != STREAMING_TOOL_AGGREGATION && !this.sceneId.equals("recovery-road-test"));
   }
 
   public List<OpenRouterRequestMode> coverageModes(List<OpenRouterRequestMode> selected) {
     if (this == EMBEDDINGS || this == IMAGE_GENERATION) {
-      return selected.contains(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS)
-          ? List.of(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS) : selected;
+      return selected.contains(OpenRouterRequestMode.CHAT_COMPLETIONS)
+          ? List.of(OpenRouterRequestMode.CHAT_COMPLETIONS) : selected;
     }
     if (this == CHAT_COMPLETIONS_MODE || this == RESPONSES_MODE) {
       return selected.stream().filter(this::supports).toList();

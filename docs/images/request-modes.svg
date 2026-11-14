@@ -41,11 +41,11 @@ text{font-family:"Libron",Georgia,serif;fill:var(--ink)}
 <rect class="lib" x="255" y="20" width="355" height="76" rx="8"/>
 <text x="271" y="46"><tspan class="h">Chat Completions</tspan><tspan class="s tl" dx="10" font-weight="650">default</tspan></text>
 <text class="m" x="271" y="66">POST /chat/completions</text>
-<text class="m tm" x="271" y="84">request-mode: openai-chat-completions</text>
+<text class="m tm" x="271" y="84">request-mode: chat-completions</text>
 <rect class="warn" x="625" y="20" width="355" height="76" rx="8"/>
 <text x="641" y="46"><tspan class="h">Responses</tspan><tspan class="s tw" dx="10" font-weight="650">experimental, opt in</tspan></text>
 <text class="m" x="641" y="66">POST /responses</text>
-<text class="m tm" x="641" y="84">request-mode: openai-responses</text>
+<text class="m tm" x="641" y="84">request-mode: responses</text>
 <text class="t" x="20" y="139">Structured output</text>
 <text class="m" x="271" y="139">response_format</text>
 <text class="m" x="641" y="139">text.format</text>

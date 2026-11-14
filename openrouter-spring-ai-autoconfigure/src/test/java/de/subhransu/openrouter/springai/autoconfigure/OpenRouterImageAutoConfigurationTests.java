@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import de.subhransu.openrouter.springai.image.OpenRouterImageModel;
 import de.subhransu.openrouter.springai.image.OpenRouterImageOptions;
 import io.micrometer.observation.ObservationRegistry;
+import java.util.Map;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.image.ImageModel;
@@ -45,7 +46,7 @@ class OpenRouterImageAutoConfigurationTests {
 					"spring.ai.openrouter.image.output-compression=80", "spring.ai.openrouter.image.seed=42",
 					"spring.ai.openrouter.image.width=1024", "spring.ai.openrouter.image.height=576",
 					"spring.ai.openrouter.image.input-references[0]=https://example.com/input.png",
-					"spring.ai.openrouter.image.provider-options.style=natural")
+					"spring.ai.openrouter.image.provider.options.openai.moderation=low")
 			.run(context -> {
 				OpenRouterImageModel imageModel = context.getBean(OpenRouterImageModel.class);
 				OpenRouterImageOptions options = (OpenRouterImageOptions) ReflectionTestUtils.getField(imageModel,
@@ -62,7 +63,36 @@ class OpenRouterImageAutoConfigurationTests {
 				assertThat(options.getWidth()).isEqualTo(1024);
 				assertThat(options.getHeight()).isEqualTo(576);
 				assertThat(options.getInputReferences()).containsExactly("https://example.com/input.png");
-				assertThat(options.getProviderOptions()).containsEntry("style", "natural");
+				assertThat(options.getProvider()).containsEntry("options",
+						Map.of("openai", Map.of("moderation", "low")));
+			});
+	}
+
+	@Tag("configuration.properties")
+	@Test
+	void bindsTheOldProviderOptionsKeyForOneRelease() {
+		this.contextRunner
+			.withPropertyValues(API_KEY_PROPERTY,
+					"spring.ai.openrouter.image.provider-options.options.openai.moderation=low")
+			.run(context -> {
+				OpenRouterImageOptions options = (OpenRouterImageOptions) ReflectionTestUtils
+					.getField(context.getBean(OpenRouterImageModel.class), "defaultOptions");
+				assertThat(options.getProvider()).containsEntry("options",
+						Map.of("openai", Map.of("moderation", "low")));
+			});
+	}
+
+	@Tag("configuration.properties")
+	@Test
+	void failsWhenTheOldAndNewProviderKeysAreBothSet() {
+		this.contextRunner
+			.withPropertyValues(API_KEY_PROPERTY, "spring.ai.openrouter.image.provider.options.openai.moderation=low",
+					"spring.ai.openrouter.image.provider-options.options.openai.moderation=auto")
+			.run(context -> {
+				assertThat(context).hasFailed();
+				assertThat(context.getStartupFailure()).rootCause()
+					.isInstanceOf(IllegalStateException.class)
+					.hasMessageContaining("provider-options is its old name");
 			});
 	}
 

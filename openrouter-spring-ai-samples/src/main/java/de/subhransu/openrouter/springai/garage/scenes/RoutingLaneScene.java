@@ -99,7 +99,7 @@ public final class RoutingLaneScene extends GarageSceneSupport {
     if (!fallbackActivated) {
       failures.add("served model did not prove fallback from the unavailable primary");
     }
-    if (context.requestMode() == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS
+    if (context.requestMode() == OpenRouterRequestMode.CHAT_COMPLETIONS
         && servedProvider == null) {
       failures.add("served provider was missing");
     }

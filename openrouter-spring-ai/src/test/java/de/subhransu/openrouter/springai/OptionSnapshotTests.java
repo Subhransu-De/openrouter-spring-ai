@@ -114,10 +114,7 @@ class OptionSnapshotTests {
 		var routes = new ArrayList<>(List.of("synthetic-route"));
 		var provider = new OpenRouterProviderPreferences(true, false, null, routes, routes, routes, null);
 		var options = OpenRouterChatOptions.builder().provider(provider).build();
-		var model = OpenRouterChatModel.builder()
-			.openRouterApi(mock(OpenRouterApi.class))
-			.defaultOptions(options)
-			.build();
+		var model = OpenRouterChatModel.builder().openRouterApi(mock(OpenRouterApi.class)).options(options).build();
 		routes.clear();
 		for (var snapshot : List.of(options, options.mutate().build(), options.merge(null),
 				(OpenRouterChatOptions) model.getOptions())) {
@@ -142,19 +139,19 @@ class OptionSnapshotTests {
 		var chatDefaults = OpenRouterChatOptions.builder().model("synthetic/chat").build();
 		OpenRouterChatOptions chat = OpenRouterChatModel.builder()
 			.openRouterApi(api)
-			.defaultOptions(chatDefaults)
+			.options(chatDefaults)
 			.build()
 			.getOptions();
 		var embeddingDefaults = OpenRouterEmbeddingOptions.builder().model("synthetic/embedding").build();
 		OpenRouterEmbeddingOptions embedding = OpenRouterEmbeddingModel.builder()
 			.openRouterApi(api)
-			.defaultOptions(embeddingDefaults)
+			.options(embeddingDefaults)
 			.build()
 			.getOptions();
 		var imageDefaults = OpenRouterImageOptions.builder().model("synthetic/image").build();
 		OpenRouterImageOptions image = OpenRouterImageModel.builder()
 			.openRouterApi(api)
-			.defaultOptions(imageDefaults)
+			.options(imageDefaults)
 			.build()
 			.getOptions();
 		assertThat(chat.getModel()).isEqualTo("synthetic/chat");
@@ -221,17 +218,17 @@ class OptionSnapshotTests {
 		values.add(null);
 		var input = new LinkedHashMap<String, Object>();
 		input.put("nested", new LinkedHashMap<>(Map.of("values", values)));
-		var builder = OpenRouterImageOptions.builder().inputReferences(references).providerOptions(input);
+		var builder = OpenRouterImageOptions.builder().inputReferences(references).provider(input);
 		var options = builder.build();
 		references.clear();
 		values.clear();
 		input.clear();
-		builder.inputReferences(List.of()).providerOptions(Map.of());
+		builder.inputReferences(List.of()).provider(Map.of());
 		for (var snapshot : List.of(options, options.mutate().build(), options.merge(null))) {
 			assertThat(snapshot.getInputReferences()).containsExactly("https://example.com/synthetic.png");
 			assertThatThrownBy(() -> snapshot.getInputReferences().clear())
 				.isInstanceOf(UnsupportedOperationException.class);
-			assertNestedSnapshot(snapshot.getProviderOptions());
+			assertNestedSnapshot(snapshot.getProvider());
 		}
 	}
 

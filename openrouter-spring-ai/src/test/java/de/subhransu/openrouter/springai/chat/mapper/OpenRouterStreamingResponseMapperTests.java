@@ -9,10 +9,10 @@ import de.subhransu.openrouter.springai.api.dto.Choice;
 import de.subhransu.openrouter.springai.api.dto.ChoiceError;
 import de.subhransu.openrouter.springai.api.dto.Delta;
 import de.subhransu.openrouter.springai.api.dto.FunctionCall;
-import de.subhransu.openrouter.springai.api.dto.StreamError;
+import de.subhransu.openrouter.springai.api.dto.ResponseError;
 import de.subhransu.openrouter.springai.api.dto.ToolCall;
 import de.subhransu.openrouter.springai.api.dto.Usage;
-import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
+import de.subhransu.openrouter.springai.api.errors.OpenRouterInBandErrorException;
 import de.subhransu.openrouter.springai.chat.errors.OpenRouterNonTransientChoiceException;
 import de.subhransu.openrouter.springai.chat.errors.OpenRouterTransientChoiceException;
 import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
@@ -113,14 +113,14 @@ class OpenRouterStreamingResponseMapperTests {
 	void throwsOnMidStreamErrorChunk() {
 		ChatCompletionChunk chunk = new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, MODEL, "openai",
 				List.of(new Choice(0, null, new Delta("assistant", "", null, null), "error", "error")), null,
-				new StreamError("server_error",
+				new ResponseError("server_error",
 						"Provider disconnected unexpectedly\r\nforged\u001B[31m Bearer stream-secret"));
 
 		assertThatThrownBy(() -> new OpenRouterStreamingResponseMapper().map(chunk))
-			.isInstanceOf(OpenRouterApiException.class)
+			.isInstanceOf(OpenRouterInBandErrorException.class)
 			.hasMessage(MID_STREAM_FAILURE)
 			.satisfies(thrown -> {
-				OpenRouterApiException ex = (OpenRouterApiException) thrown;
+				OpenRouterInBandErrorException ex = (OpenRouterInBandErrorException) thrown;
 				// HTTP 200 carried the failure; the mapper synthesizes a 500 so callers
 				// see a server-side fault rather than a clean completion.
 				assertThat(ex.getStatusCode().value()).isEqualTo(500);
@@ -136,10 +136,10 @@ class OpenRouterStreamingResponseMapperTests {
 	@Test
 	void usesFallbackMessageWhenStreamErrorMessageIsNull() {
 		ChatCompletionChunk chunk = new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, MODEL, "openai", null, null,
-				new StreamError("server_error", null));
+				new ResponseError("server_error", null));
 
 		assertThatThrownBy(() -> new OpenRouterStreamingResponseMapper().map(chunk))
-			.isInstanceOf(OpenRouterApiException.class)
+			.isInstanceOf(OpenRouterInBandErrorException.class)
 			.hasMessage(MID_STREAM_FAILURE);
 	}
 
@@ -153,7 +153,7 @@ class OpenRouterStreamingResponseMapperTests {
 				""", ChatCompletionChunk.class);
 
 		assertThatThrownBy(() -> new OpenRouterStreamingResponseMapper().map(chunk))
-			.isInstanceOfSatisfying(OpenRouterApiException.class, exception -> {
+			.isInstanceOfSatisfying(OpenRouterInBandErrorException.class, exception -> {
 				assertThat(exception.getCategory()).isEqualTo(OpenRouterErrorCategory.AUTHENTICATION);
 				assertThat(exception.getErrorDetails().message()).isEqualTo("{\"detail\":\"invalid key\"}");
 			});
@@ -169,7 +169,7 @@ class OpenRouterStreamingResponseMapperTests {
 				""", ChatCompletionChunk.class);
 
 		assertThatThrownBy(() -> new OpenRouterStreamingResponseMapper().map(chunk))
-			.isInstanceOfSatisfying(OpenRouterApiException.class, exception -> {
+			.isInstanceOfSatisfying(OpenRouterInBandErrorException.class, exception -> {
 				assertThat(exception.getCategory()).isEqualTo(OpenRouterErrorCategory.UNKNOWN);
 				assertThat(exception.getErrorDetails().code()).isEqualTo("invalid_api_key");
 				assertThat(exception.getErrorDetails().errorType()).isEqualTo("{\"kind\":\"authentication\"}");

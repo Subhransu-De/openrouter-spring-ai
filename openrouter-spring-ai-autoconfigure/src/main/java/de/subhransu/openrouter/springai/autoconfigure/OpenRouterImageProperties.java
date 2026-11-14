@@ -4,12 +4,17 @@ import org.jspecify.annotations.Nullable;
 import de.subhransu.openrouter.springai.image.OpenRouterImageOptions;
 import java.util.List;
 import java.util.Map;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.DeprecatedConfigurationProperty;
 
 @ConfigurationProperties(OpenRouterImageProperties.CONFIG_PREFIX)
 public class OpenRouterImageProperties {
 
 	public static final String CONFIG_PREFIX = "spring.ai.openrouter.image";
+
+	private static final Log logger = LogFactory.getLog(OpenRouterImageProperties.class);
 
 	/**
 	 * Image model id in vendor/model form.
@@ -73,7 +78,13 @@ public class OpenRouterImageProperties {
 	private @Nullable List<String> inputReferences;
 
 	/**
-	 * Provider-specific options passed through unchanged.
+	 * OpenRouter {@code provider} object, sent unchanged. Settings for one upstream
+	 * provider go under {@code options.<provider-slug>}.
+	 */
+	private @Nullable Map<String, @Nullable Object> provider;
+
+	/**
+	 * Old name of {@code provider}, still bound for one release.
 	 */
 	private @Nullable Map<String, @Nullable Object> providerOptions;
 
@@ -91,7 +102,7 @@ public class OpenRouterImageProperties {
 			.outputCompression(this.outputCompression)
 			.seed(this.seed)
 			.inputReferences(this.inputReferences)
-			.providerOptions(this.providerOptions)
+			.provider(provider())
 			.build();
 	}
 
@@ -191,12 +202,45 @@ public class OpenRouterImageProperties {
 		this.inputReferences = inputReferences;
 	}
 
+	public @Nullable Map<String, @Nullable Object> getProvider() {
+		return this.provider;
+	}
+
+	public void setProvider(@Nullable Map<String, @Nullable Object> provider) {
+		this.provider = provider;
+	}
+
+	/**
+	 * Return the value of the old {@code provider-options} key.
+	 * @return the provider object, or {@code null}
+	 * @deprecated since 0.2.0 for removal in 0.3.0; use {@link #getProvider()}
+	 */
+	@Deprecated(since = "0.2.0", forRemoval = true)
+	@DeprecatedConfigurationProperty(replacement = CONFIG_PREFIX + ".provider", since = "0.2.0")
 	public @Nullable Map<String, @Nullable Object> getProviderOptions() {
 		return this.providerOptions;
 	}
 
+	/**
+	 * Set the value of the old {@code provider-options} key.
+	 * @param providerOptions the provider object
+	 * @deprecated since 0.2.0 for removal in 0.3.0; use {@link #setProvider(Map)}
+	 */
+	@Deprecated(since = "0.2.0", forRemoval = true)
 	public void setProviderOptions(@Nullable Map<String, @Nullable Object> providerOptions) {
 		this.providerOptions = providerOptions;
+	}
+
+	private @Nullable Map<String, @Nullable Object> provider() {
+		if (this.providerOptions == null) {
+			return this.provider;
+		}
+		if (this.provider != null) {
+			throw new IllegalStateException(
+					"Set only " + CONFIG_PREFIX + ".provider; " + CONFIG_PREFIX + ".provider-options is its old name");
+		}
+		logger.warn(CONFIG_PREFIX + ".provider-options is deprecated; rename it to " + CONFIG_PREFIX + ".provider");
+		return this.providerOptions;
 	}
 
 }

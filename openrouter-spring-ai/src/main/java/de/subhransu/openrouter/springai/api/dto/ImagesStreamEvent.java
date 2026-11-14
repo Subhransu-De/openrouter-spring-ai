@@ -11,10 +11,10 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 public record ImagesStreamEvent(@Nullable String type,
 		@JsonProperty("partial_image_index") @Nullable Integer partialImageIndex,
 		@JsonProperty("b64_json") @Nullable String b64Json, @JsonProperty("media_type") @Nullable String mediaType,
-		@Nullable Long created, @Nullable Usage usage, @Nullable StreamError error, @Nullable String url) {
+		@Nullable Long created, @Nullable Usage usage, @Nullable ResponseError error, @Nullable String url) {
 
 	public ImagesStreamEvent(@Nullable String type, @Nullable Integer partialImageIndex, @Nullable String b64Json,
-			@Nullable String mediaType, @Nullable Long created, @Nullable Usage usage, @Nullable StreamError error) {
+			@Nullable String mediaType, @Nullable Long created, @Nullable Usage usage, @Nullable ResponseError error) {
 		this(type, partialImageIndex, b64Json, mediaType, created, usage, error, null);
 	}
 
@@ -22,6 +22,6 @@ public record ImagesStreamEvent(@Nullable String type,
 
 	public static final String COMPLETED = "image_generation.completed";
 
-	public static final String ERROR_EVENT = "error";
+	public static final String ERROR = "error";
 
 }

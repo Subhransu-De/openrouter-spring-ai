@@ -139,7 +139,7 @@ class OpenRouterToolCallingManagersTests {
 
 	private static void assertSanitizedToolResult(List<ChatMessage> messages) {
 		assertThat(messages).filteredOn(message -> "tool".equals(message.role())).singleElement().satisfies(message -> {
-			assertThat(message.content()).isEqualTo(OpenRouterToolExecutionExceptionProcessor.DEFAULT_FAILURE_PAYLOAD);
+			assertThat(message.content()).isEqualTo(OpenRouterToolExecutionExceptionProcessor.DEFAULT_FAILURE_RESULT);
 			assertThat(String.valueOf(message.content())).doesNotContain(SECRET);
 		});
 	}

@@ -5,7 +5,7 @@ import de.subhransu.openrouter.springai.api.dto.ImagesResponse;
 import de.subhransu.openrouter.springai.api.OpenRouterImageResponseValidator;
 import de.subhransu.openrouter.springai.api.dto.ImagesStreamEvent;
 import de.subhransu.openrouter.springai.api.dto.Usage;
-import de.subhransu.openrouter.springai.api.errors.OpenRouterApiExceptionFactory;
+import de.subhransu.openrouter.springai.api.errors.OpenRouterInBandErrorExceptionFactory;
 import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import de.subhransu.openrouter.springai.chat.mapper.UsageMapper;
@@ -51,8 +51,8 @@ public final class OpenRouterImageResponseMapper {
 	 */
 	public @Nullable ImageResponse map(ImagesStreamEvent event) {
 		var error = event.error();
-		if (error != null || ImagesStreamEvent.ERROR_EVENT.equals(event.type())) {
-			throw OpenRouterApiExceptionFactory.create("OpenRouter image generation stream failed",
+		if (error != null || ImagesStreamEvent.ERROR.equals(event.type())) {
+			throw OpenRouterInBandErrorExceptionFactory.create("OpenRouter image generation stream failed",
 					error != null ? error.toString() : null, error, null, "/images", this.sanitizer);
 		}
 		if (!StringUtils.hasText(event.type())) {

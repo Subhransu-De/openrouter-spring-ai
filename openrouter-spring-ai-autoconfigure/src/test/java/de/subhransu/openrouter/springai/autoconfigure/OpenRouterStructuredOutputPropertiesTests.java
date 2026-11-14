@@ -118,7 +118,7 @@ class OpenRouterStructuredOutputPropertiesTests {
 				var request = new org.springframework.mock.http.client.reactive.MockClientHttpRequest(method, uri);
 				var response = new org.springframework.mock.http.client.reactive.MockClientHttpResponse(HttpStatus.OK);
 				response.getHeaders().setContentType(MediaType.TEXT_EVENT_STREAM);
-				response.setBody(mode == OpenRouterRequestMode.OPENAI_RESPONSES
+				response.setBody(mode == OpenRouterRequestMode.RESPONSES
 						? "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"output\":[]}}\n\n"
 						: "data: [DONE]\n\n");
 				return callback.apply(request)
@@ -163,7 +163,7 @@ class OpenRouterStructuredOutputPropertiesTests {
 		String type = explicit == null ? "json_schema" : explicit.type().name().toLowerCase(java.util.Locale.ROOT);
 		assertThat(format.path("type").asString()).isEqualTo(type);
 		if ("json_schema".equals(type)) {
-			JsonNode schema = mode == OpenRouterRequestMode.OPENAI_RESPONSES ? format : format.path("json_schema");
+			JsonNode schema = mode == OpenRouterRequestMode.RESPONSES ? format : format.path("json_schema");
 			assertThat(schema.path("schema")).isEqualTo(mapper.readTree(SCHEMA));
 			assertThat(schema.path("name").asString()).isEqualTo(explicit == null ? "response" : "answer");
 			if (explicit == null || explicit.strict() == null) {
@@ -176,7 +176,7 @@ class OpenRouterStructuredOutputPropertiesTests {
 	}
 
 	private String formatPath(OpenRouterRequestMode mode) {
-		return mode == OpenRouterRequestMode.OPENAI_RESPONSES ? "/text/format" : "/response_format";
+		return mode == OpenRouterRequestMode.RESPONSES ? "/text/format" : "/response_format";
 	}
 
 	@Tag("configuration.properties")

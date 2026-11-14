@@ -12,15 +12,15 @@ final class OpenRouterAttributionInterceptor implements ClientHttpRequestInterce
 
 	private final @Nullable String httpReferer;
 
-	private final @Nullable String applicationTitle;
+	private final @Nullable String appTitle;
 
-	private final @Nullable String applicationCategories;
+	private final @Nullable String appCategories;
 
-	OpenRouterAttributionInterceptor(@Nullable String httpReferer, @Nullable String applicationTitle,
-			@Nullable String applicationCategories) {
+	OpenRouterAttributionInterceptor(@Nullable String httpReferer, @Nullable String appTitle,
+			@Nullable String appCategories) {
 		this.httpReferer = httpReferer;
-		this.applicationTitle = applicationTitle;
-		this.applicationCategories = applicationCategories;
+		this.appTitle = appTitle;
+		this.appCategories = appCategories;
 	}
 
 	@Override
@@ -29,11 +29,11 @@ final class OpenRouterAttributionInterceptor implements ClientHttpRequestInterce
 		if (StringUtils.hasText(this.httpReferer)) {
 			request.getHeaders().set("HTTP-Referer", this.httpReferer);
 		}
-		if (StringUtils.hasText(this.applicationTitle)) {
-			request.getHeaders().set("X-OpenRouter-Title", this.applicationTitle);
+		if (StringUtils.hasText(this.appTitle)) {
+			request.getHeaders().set("X-OpenRouter-Title", this.appTitle);
 		}
-		if (StringUtils.hasText(this.applicationCategories)) {
-			request.getHeaders().set("X-OpenRouter-Categories", this.applicationCategories);
+		if (StringUtils.hasText(this.appCategories)) {
+			request.getHeaders().set("X-OpenRouter-Categories", this.appCategories);
 		}
 		return execution.execute(request, body);
 	}

@@ -9,7 +9,7 @@ import de.subhransu.openrouter.springai.api.dto.ResponsesOutputItem;
 import de.subhransu.openrouter.springai.api.dto.ResponsesRequest;
 import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
 import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
-import de.subhransu.openrouter.springai.api.dto.StreamError;
+import de.subhransu.openrouter.springai.api.dto.ResponseError;
 import de.subhransu.openrouter.springai.api.dto.Usage;
 import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
 import java.util.List;
@@ -44,7 +44,7 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 	private final OpenRouterResponsesRequestMapper requestMapper = new OpenRouterResponsesRequestMapper(
 			new ObjectMapper());
 
-	private ResponsesResult result(String status, List<ResponsesOutputItem> output, Usage usage, StreamError error) {
+	private ResponsesResult result(String status, List<ResponsesOutputItem> output, Usage usage, ResponseError error) {
 		return new ResponsesResult("resp-1", "response", 123L, "openai/gpt-5.4", status, output, usage, error);
 	}
 
@@ -120,7 +120,7 @@ class OpenRouterResponsesEdgeCaseMapperTests {
 	@Test
 	void failedStatusRaisesApiExceptionWithStructuredError() {
 		assertThatThrownBy(() -> this.responseMapper.map(result("failed", List.of(), null,
-				new StreamError("server_error", "model crashed\r\nforged\u001B[31m Bearer response-secret"))))
+				new ResponseError("server_error", "model crashed\r\nforged\u001B[31m Bearer response-secret"))))
 			.isInstanceOfSatisfying(OpenRouterTransientApiException.class, exception -> {
 				assertThat(exception.getMessage()).isEqualTo(
 						"OpenRouter responses request failed in /responses with status 500 INTERNAL_SERVER_ERROR, category PROVIDER_UNAVAILABLE");

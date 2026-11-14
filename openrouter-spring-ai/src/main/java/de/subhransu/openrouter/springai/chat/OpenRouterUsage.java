@@ -71,6 +71,12 @@ public class OpenRouterUsage extends DefaultUsage {
 			.from(response.getMetadata().get(OpenRouterMetadata.IMAGE_USAGE) instanceof Usage usage ? usage : null);
 	}
 
+	/**
+	 * Return OpenRouter's {@code cached_tokens} count. This is the same count as the
+	 * inherited {@link #getCacheReadInputTokens()}; use that one for code that also runs
+	 * on other Spring AI providers.
+	 * @return prompt tokens read from the cache, or {@code null}
+	 */
 	public @Nullable Integer getCachedTokens() {
 		return this.cachedTokens;
 	}

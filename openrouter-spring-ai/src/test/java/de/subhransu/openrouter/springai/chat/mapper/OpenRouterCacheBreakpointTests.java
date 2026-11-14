@@ -141,7 +141,7 @@ class OpenRouterCacheBreakpointTests {
 					.build())) {
 			assertThatThrownBy(() -> responses.map(List.of(message), this.options, stream, List.of()))
 				.isInstanceOf(IllegalArgumentException.class)
-				.hasMessageContaining("OPENAI_RESPONSES", "cache_control");
+				.hasMessageContaining("RESPONSES", "cache_control");
 		}
 	}
 

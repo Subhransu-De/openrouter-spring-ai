@@ -224,8 +224,8 @@ class OpenRouterStreamingObservationLifecycleTests {
 	private Prompt chatPrompt(Path path, boolean invalid) {
 		OpenRouterChatOptions.Builder options = OpenRouterChatOptions.builder()
 			.model("synthetic/model")
-			.requestMode(path == Path.RESPONSES ? OpenRouterRequestMode.OPENAI_RESPONSES
-					: OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS);
+			.requestMode(
+					path == Path.RESPONSES ? OpenRouterRequestMode.RESPONSES : OpenRouterRequestMode.CHAT_COMPLETIONS);
 		if (invalid) {
 			if (path == Path.RESPONSES) {
 				options.seed(1);

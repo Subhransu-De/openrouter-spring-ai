@@ -49,7 +49,7 @@ public final class RecoveryRoadTestScene extends GarageSceneSupport {
   @Override
   public SceneResult execute(SceneContext context) throws Exception {
     Instant started = Instant.now();
-    String mode = OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS.name();
+    String mode = OpenRouterRequestMode.CHAT_COMPLETIONS.name();
     String operationId = context.evidence().newOperation(id(), mode);
     context.evidence().recordAll(
         features(), operationId, mode, EvidenceLevel.CONFIGURED, "timeout", CLIENT_TIMEOUT.toString());
@@ -64,7 +64,7 @@ public final class RecoveryRoadTestScene extends GarageSceneSupport {
               .plain(
                   operationId,
                   id(),
-                  OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS,
+                  OpenRouterRequestMode.CHAT_COMPLETIONS,
                   "garage/offline-primary",
                   "offline road test");
       Prompt prompt = new Prompt(new UserMessage("run the road test"), options);
@@ -170,7 +170,7 @@ public final class RecoveryRoadTestScene extends GarageSceneSupport {
     return SceneResult.passed(
         id(),
         operationId,
-        OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS,
+        OpenRouterRequestMode.CHAT_COMPLETIONS,
         Duration.between(started, Instant.now()),
         context.outputDirectory(),
         details);
@@ -183,8 +183,8 @@ public final class RecoveryRoadTestScene extends GarageSceneSupport {
         .baseUrl(server.baseUrl())
         .apiKey("garage-offline-key")
         .httpReferer("https://garage.invalid")
-        .applicationTitle("Garage Road Test")
-        .applicationCategories("samples,offline")
+        .appTitle("Garage Road Test")
+        .appCategories("samples,offline")
         .restClientBuilder(RestClient.builder().requestFactory(requestFactory))
         .webClientBuilder(WebClient.builder())
         .objectMapper(new tools.jackson.databind.ObjectMapper())

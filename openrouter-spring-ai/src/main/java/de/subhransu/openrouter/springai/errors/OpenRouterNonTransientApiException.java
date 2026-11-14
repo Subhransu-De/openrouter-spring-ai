@@ -10,20 +10,19 @@ import org.springframework.http.HttpStatusCode;
  *
  * @author Subhransu De
  */
-public final class OpenRouterNonTransientApiException extends NonTransientAiException
-		implements OpenRouterHttpException {
+public final class OpenRouterNonTransientApiException extends NonTransientAiException implements OpenRouterHttpFailure {
 
-	private final OpenRouterHttpFailure failure;
+	private final OpenRouterHttpFailureDetails failure;
 
 	public OpenRouterNonTransientApiException(String message, @Nullable HttpStatusCode statusCode,
 			@Nullable String responseBody, @Nullable OpenRouterErrorDetails errorDetails,
 			@Nullable OpenRouterRetryAfter retryAfter, @Nullable String endpoint) {
 		super(message);
-		this.failure = new OpenRouterHttpFailure(statusCode, responseBody, errorDetails, retryAfter, endpoint);
+		this.failure = new OpenRouterHttpFailureDetails(statusCode, responseBody, errorDetails, retryAfter, endpoint);
 	}
 
 	@Override
-	public OpenRouterHttpFailure getFailure() {
+	public OpenRouterHttpFailureDetails getFailureDetails() {
 		return this.failure;
 	}
 

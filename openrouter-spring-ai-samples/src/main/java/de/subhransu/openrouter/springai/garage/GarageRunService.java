@@ -603,13 +603,13 @@ public class GarageRunService implements DisposableBean {
   // The recovery road test covers Chat Completions transport contracts only.
   private static boolean runsIn(GarageScene scene, OpenRouterRequestMode requestMode) {
     return !"recovery-road-test".equals(scene.id())
-        || requestMode == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS;
+        || requestMode == OpenRouterRequestMode.CHAT_COMPLETIONS;
   }
 
   private String modeSlug(OpenRouterRequestMode requestMode) {
     return switch (requestMode) {
-      case OPENAI_CHAT_COMPLETIONS -> "chat-completions";
-      case OPENAI_RESPONSES -> "responses";
+      case CHAT_COMPLETIONS -> "chat-completions";
+      case RESPONSES -> "responses";
     };
   }
 

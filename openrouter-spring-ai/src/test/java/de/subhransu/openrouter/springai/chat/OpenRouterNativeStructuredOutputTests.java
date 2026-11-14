@@ -46,7 +46,7 @@ class OpenRouterNativeStructuredOutputTests {
 	@MethodSource("modesWithAndWithoutDefaultFormat")
 	void chatClientSendsNativeSchemaToTheSelectedEndpoint(OpenRouterRequestMode mode,
 			OpenRouterResponseFormat defaultFormat) {
-		boolean responses = mode == OpenRouterRequestMode.OPENAI_RESPONSES;
+		boolean responses = mode == OpenRouterRequestMode.RESPONSES;
 		ObjectMapper mapper = new ObjectMapper();
 		RestClient.Builder rest = RestClient.builder();
 		MockRestServiceServer server = MockRestServiceServer.bindTo(rest).build();
@@ -57,7 +57,7 @@ class OpenRouterNativeStructuredOutputTests {
 			.build();
 		OpenRouterChatModel model = OpenRouterChatModel.builder()
 			.openRouterApi(api)
-			.defaultOptions(OpenRouterChatOptions.builder()
+			.options(OpenRouterChatOptions.builder()
 				.model("test/model")
 				.requestMode(mode)
 				.responseFormat(defaultFormat)
@@ -88,7 +88,7 @@ class OpenRouterNativeStructuredOutputTests {
 	@ParameterizedTest
 	@EnumSource(OpenRouterRequestMode.class)
 	void streamingSendsTheSamePortableSchema(OpenRouterRequestMode mode) {
-		boolean responses = mode == OpenRouterRequestMode.OPENAI_RESPONSES;
+		boolean responses = mode == OpenRouterRequestMode.RESPONSES;
 		ObjectMapper mapper = new ObjectMapper();
 		String schema = new BeanOutputConverter<>(Answer.class).getJsonSchema();
 		AtomicReference<String> body = new AtomicReference<>();
@@ -128,8 +128,7 @@ class OpenRouterNativeStructuredOutputTests {
 		OpenRouterApi api = Mockito.mock(OpenRouterApi.class);
 		var model = OpenRouterChatModel.builder()
 			.openRouterApi(api)
-			.defaultOptions(
-					OpenRouterChatOptions.builder().requestMode(OpenRouterRequestMode.OPENAI_RESPONSES).seed(0).build())
+			.options(OpenRouterChatOptions.builder().requestMode(OpenRouterRequestMode.RESPONSES).seed(0).build())
 			.build();
 		var prompt = new Prompt("hi");
 		Assertions.assertThatThrownBy(() -> {

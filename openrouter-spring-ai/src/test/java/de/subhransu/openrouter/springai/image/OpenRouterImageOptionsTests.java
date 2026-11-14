@@ -28,14 +28,14 @@ class OpenRouterImageOptionsTests {
 			.merge(OpenRouterImageOptions.fromOptions(OpenRouterImageOptions.builder()
 				.model("openai/gpt-image-1")
 				.aspectRatio("16:9")
-				.providerOptions(Map.of("options", Map.of("test", Map.of("watermark", false))))
+				.provider(Map.of("options", Map.of("test", Map.of("watermark", false))))
 				.build()));
 
 		assertThat(merged.getModel()).isEqualTo("openai/gpt-image-1");
 		assertThat(merged.getAspectRatio()).isEqualTo("16:9");
 		assertThat(merged.getQuality()).isEqualTo("high");
 		assertThat(merged.getOutputFormat()).isEqualTo("webp");
-		assertThat(merged.getProviderOptions()).containsEntry("options", Map.of("test", Map.of("watermark", false)));
+		assertThat(merged.getProvider()).containsEntry("options", Map.of("test", Map.of("watermark", false)));
 	}
 
 	@Test
@@ -43,14 +43,14 @@ class OpenRouterImageOptionsTests {
 		OpenRouterImageOptions source = OpenRouterImageOptions.builder()
 			.model(MODEL)
 			.inputReferences(List.of("https://example.test/ref.png"))
-			.providerOptions(Map.of("openai", Map.of("moderation", "low")))
+			.provider(Map.of("openai", Map.of("moderation", "low")))
 			.build();
 
 		OpenRouterImageOptions copy = source.mutate().build();
 
 		assertThat(copy.getInputReferences()).isNotSameAs(source.getInputReferences())
 			.containsExactly("https://example.test/ref.png");
-		assertThat(copy.getProviderOptions()).isNotSameAs(source.getProviderOptions())
+		assertThat(copy.getProvider()).isNotSameAs(source.getProvider())
 			.containsEntry("openai", Map.of("moderation", "low"));
 	}
 

@@ -10,7 +10,7 @@ import java.util.List;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonInclude(Include.NON_NULL)
 public record ImagesResponse(@Nullable Long created, @Nullable List<@Nullable ImageData> data, @Nullable Usage usage,
-		@Nullable StreamError error) {
+		@Nullable ResponseError error) {
 
 	public ImagesResponse(@Nullable Long created, @Nullable List<@Nullable ImageData> data, @Nullable Usage usage) {
 		this(created, data, usage, null);

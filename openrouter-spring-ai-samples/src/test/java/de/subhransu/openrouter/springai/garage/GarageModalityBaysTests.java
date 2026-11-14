@@ -75,7 +75,7 @@ class GarageModalityBaysTests {
     ImageModel imageModel = mock(ImageModel.class);
     ImageResponseMetadata metadata = new ImageResponseMetadata();
     metadata.put(
-        "openrouter.usage", new OpenRouterUsage(1, 1, 2, 0, 0, 0.03, Map.of()));
+        "openrouter.image.usage", new OpenRouterUsage(1, 1, 2, 0, 0, 0.03, Map.of()));
     when(imageModel.call(any(ImagePrompt.class)))
         .thenReturn(new ImageResponse(List.of(), metadata));
     GarageModalityBays bays =

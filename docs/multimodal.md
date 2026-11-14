@@ -71,11 +71,11 @@ String base64 = response.getResult().getOutput().getB64Json();
 
 ### Image options
 
-- `OpenRouterImageOptions` holds `resolution`, `aspectRatio`, `quality`, `outputFormat`, `background`, `outputCompression`, `seed`, `inputReferences` (image-to-image) and `providerOptions` (passthrough). `outputFormat` selects the image encoding, such as `webp`, not URL or base64 delivery.
+- `OpenRouterImageOptions` holds `resolution`, `aspectRatio`, `quality`, `outputFormat`, `background`, `outputCompression`, `seed`, `inputReferences` (image-to-image) and `provider` (the wire `provider` object, sent unchanged; settings for one upstream provider go under `options.<provider-slug>`). `outputFormat` selects the image encoding, such as `webp`, not URL or base64 delivery.
 - Spring AI `ImageOptions` map `model` and `n` directly. A paired `width` and `height` becomes a pixel `size`. A lone dimension is rejected after defaults merge.
 - `responseFormat` must be omitted or `b64_json`, because the Image API always returns base64. A non-null `style` is rejected because OpenRouter has no equivalent. Both throw `IllegalArgumentException` before HTTP, in `call` and `stream`.
 - `OpenRouterImageModel.getOptions()` returns a copy of the model's default options, typed as `OpenRouterImageOptions`; derive per-request options from it with `mutate()`.
-- `OpenRouterImageOptions.fromOptions(...)` converts generic defaults. Generic per-request options override the mapped fields and keep unset native defaults such as `quality` and `providerOptions`.
+- `OpenRouterImageOptions.fromOptions(...)` converts generic defaults. Generic per-request options override the mapped fields and keep unset native defaults such as `quality` and `provider`.
 
 ### Streaming
 
@@ -83,13 +83,13 @@ String base64 = response.getResult().getOutput().getB64Json();
 
 ```java
 imageModel.stream(prompt).doOnNext(response -> response.getResults().forEach(result -> {
-    OpenRouterImageGenerationMetadata meta = OpenRouterImageGenerationMetadata.of(result); // never null
+    OpenRouterImageGenerationMetadata meta = OpenRouterImageGenerationMetadata.from(result); // never null
     boolean preview = meta.isPartial();
     String mediaType = meta.mediaType(); // null when the provider sent none
 })).blockLast();
 ```
 
-`OpenRouterImageGenerationMetadata.of(...)` works for calls and streams. `mediaType()` is `null` when the provider does not report one; the library does not guess it, because `outputFormat` can select another encoding than PNG.
+`OpenRouterImageGenerationMetadata.from(...)` works for calls and streams. `mediaType()` is `null` when the provider does not report one; the library does not guess it, because `outputFormat` can select another encoding than PNG.
 
 - The stream ends at `[DONE]`, not at the first completed image.
 - It fails with `OpenRouterTruncatedResponseException` if no completed image arrives, or if the connection closes without `[DONE]`, even after a completed image.
@@ -102,7 +102,7 @@ imageModel.stream(prompt).doOnNext(response -> response.getResults().forEach(res
 
 - A JSON response must contain a `data` array. An empty array is a valid empty result for blocking calls. The JSON fallback needs at least one image and raises `OpenRouterTruncatedResponseException` for an empty array.
 - Each entry and each completed SSE event needs a nonblank `b64_json` or `url`. Otherwise `OpenRouterProtocolException` is raised.
-- An HTTP 200 error envelope takes precedence over image data. It raises `OpenRouterTransientApiException` when transient and `OpenRouterApiException` otherwise. Errors inside an accepted stream, including its JSON fallback, are not retried.
+- An HTTP 200 error envelope takes precedence over image data. It raises `OpenRouterTransientApiException` when transient and `OpenRouterInBandErrorException` otherwise. Errors inside an accepted stream, including its JSON fallback, are not retried.
 
 ### Chat models with image output
 

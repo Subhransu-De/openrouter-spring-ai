@@ -103,8 +103,8 @@ class GarageToolSceneContractTests {
     SceneResult result = new ExpressInvoiceScene().execute(test.context());
 
     assertThat(result.status()).isEqualTo(SceneResult.Status.PASSED);
-    verify(api, times(mode == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS ? 1 : 0)).chatCompletion(any());
-    verify(api, times(mode == OpenRouterRequestMode.OPENAI_RESPONSES ? 1 : 0)).responses(any());
+    verify(api, times(mode == OpenRouterRequestMode.CHAT_COMPLETIONS ? 1 : 0)).chatCompletion(any());
+    verify(api, times(mode == OpenRouterRequestMode.RESPONSES ? 1 : 0)).responses(any());
   }
 
   @Test
@@ -159,8 +159,8 @@ class GarageToolSceneContractTests {
     assertThat((Double) result.details().get("costUsd"))
         .isCloseTo(0.03, org.assertj.core.api.Assertions.within(0.000001));
     assertThat(test.context().evidence().featureSnapshot()).allMatch(item -> Boolean.TRUE.equals(item.get("complete")));
-    verify(api, times(mode == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS ? 3 : 0)).chatCompletion(any());
-    verify(api, times(mode == OpenRouterRequestMode.OPENAI_RESPONSES ? 3 : 0)).responses(any());
+    verify(api, times(mode == OpenRouterRequestMode.CHAT_COMPLETIONS ? 3 : 0)).chatCompletion(any());
+    verify(api, times(mode == OpenRouterRequestMode.RESPONSES ? 3 : 0)).responses(any());
   }
 
   @ParameterizedTest
@@ -264,7 +264,7 @@ class GarageToolSceneContractTests {
   }
 
   private TestContext context(OpenRouterApi api, String sceneId) {
-    return context(api, sceneId, OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS);
+    return context(api, sceneId, OpenRouterRequestMode.CHAT_COMPLETIONS);
   }
 
   private TestContext context(OpenRouterApi api, String sceneId, OpenRouterRequestMode mode) {
@@ -281,7 +281,7 @@ class GarageToolSceneContractTests {
     OpenRouterChatModel model =
         OpenRouterChatModel.builder()
             .openRouterApi(api)
-            .defaultOptions(applicationChatProperties().toOptions())
+            .options(applicationChatProperties().toOptions())
             .observationRegistry(registry)
             .objectMapper(new ObjectMapper())
             .build();

@@ -35,7 +35,7 @@ class OpenRouterChatModelSnapshotTests {
 	void concurrentCallsAndStreamsRetainTheirOwnRouting(OpenRouterRequestMode mode) {
 		var api = mock(OpenRouterApi.class);
 		var captured = new ConcurrentLinkedQueue<ProviderPreferences>();
-		if (mode == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS) {
+		if (mode == OpenRouterRequestMode.CHAT_COMPLETIONS) {
 			when(api.chatCompletion(any())).thenAnswer(invocation -> {
 				captured.add(invocation.<ChatCompletionRequest>getArgument(0).provider());
 				return new ChatCompletionResponse("synthetic", "chat.completion", 1L, "synthetic-model", null, List
@@ -60,7 +60,7 @@ class OpenRouterChatModelSnapshotTests {
 		}
 		var defaultRoutes = new ArrayList<>(List.of("default-route"));
 		var defaults = options(mode, defaultRoutes);
-		var model = OpenRouterChatModel.builder().openRouterApi(api).defaultOptions(defaults).build();
+		var model = OpenRouterChatModel.builder().openRouterApi(api).options(defaults).build();
 		var firstRoutes = new ArrayList<>(List.of("first-route"));
 		var secondRoutes = new ArrayList<>(List.of("second-route"));
 		var prompts = List.of(new Prompt("synthetic"), new Prompt("synthetic", options(mode, firstRoutes)),

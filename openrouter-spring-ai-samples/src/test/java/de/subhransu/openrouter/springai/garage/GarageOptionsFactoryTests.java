@@ -45,7 +45,7 @@ class GarageOptionsFactoryTests {
 
     for (OpenRouterChatOptions options : profiles) {
       for (boolean stream : List.of(false, true)) {
-        Object request = mode == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS
+        Object request = mode == OpenRouterRequestMode.CHAT_COMPLETIONS
             ? new de.subhransu.openrouter.springai.chat.mapper.OpenRouterChatRequestMapper(mapper)
                 .map(List.of(), options, stream, List.of(callback.getToolDefinition()))
             : new de.subhransu.openrouter.springai.chat.mapper.OpenRouterResponsesRequestMapper(mapper)
@@ -65,7 +65,7 @@ class GarageOptionsFactoryTests {
     OpenRouterChatOptions options =
         this.factory.dynoTuning(
             "op-1",
-            OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS,
+            OpenRouterRequestMode.CHAT_COMPLETIONS,
             "garage/model",
             "topic",
             List.of(tool()));
@@ -94,7 +94,7 @@ class GarageOptionsFactoryTests {
     OpenRouterChatOptions options =
         this.factory.routingLane(
             "op-2",
-            OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS,
+            OpenRouterRequestMode.CHAT_COMPLETIONS,
             "garage/primary",
             List.of("garage/fallback"),
             "topic");
@@ -113,7 +113,7 @@ class GarageOptionsFactoryTests {
     OpenRouterChatOptions options =
         this.factory.dynoTuning(
             "op-3",
-            OpenRouterRequestMode.OPENAI_RESPONSES,
+            OpenRouterRequestMode.RESPONSES,
             "garage/model",
             "topic",
             List.of(tool()));
@@ -132,7 +132,7 @@ class GarageOptionsFactoryTests {
         tokenBudgetFactory.plain(
             "op-4",
             "reasoning-budget",
-            OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS,
+            OpenRouterRequestMode.CHAT_COMPLETIONS,
             "garage/model",
             "topic");
 
@@ -148,7 +148,7 @@ class GarageOptionsFactoryTests {
     GarageOptionsFactory optionsFactory = new GarageOptionsFactory(properties);
     for (boolean outputSchema : List.of(false, true)) {
       OpenRouterChatOptions options = optionsFactory.digitalInspection(
-          "synthetic-schema", OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS,
+          "synthetic-schema", OpenRouterRequestMode.CHAT_COMPLETIONS,
           "garage/model", "synthetic report", "{\"type\":\"object\"}", outputSchema);
       assertThat(options.getOutputSchema()).isEqualTo(outputSchema ? "{\"type\":\"object\"}" : null);
       if (outputSchema) {
@@ -175,7 +175,7 @@ class GarageOptionsFactoryTests {
             chatModel,
             properties,
             Path.of("target"),
-            OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS,
+            OpenRouterRequestMode.CHAT_COMPLETIONS,
             "op-specialist",
             "service-story",
             "garage/specialist");

@@ -7,7 +7,7 @@ import de.subhransu.openrouter.springai.api.dto.FunctionCall;
 import de.subhransu.openrouter.springai.api.dto.ImagesRequest;
 import de.subhransu.openrouter.springai.api.dto.ResponsesRequest;
 import de.subhransu.openrouter.springai.api.dto.ChatMessage;
-import de.subhransu.openrouter.springai.errors.OpenRouterHttpException;
+import de.subhransu.openrouter.springai.errors.OpenRouterHttpFailure;
 import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import java.nio.charset.StandardCharsets;
@@ -316,7 +316,7 @@ class OpenRouterApiStreamingTests {
 
 		StepVerifier.create(api.chatCompletionStream(chatRequest())).expectErrorSatisfies(error -> {
 			assertThat(error).isInstanceOf(OpenRouterNonTransientApiException.class);
-			OpenRouterHttpException apiException = (OpenRouterHttpException) error;
+			OpenRouterHttpFailure apiException = (OpenRouterHttpFailure) error;
 			assertThat(apiException.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
 			assertThat(apiException.getResponseBody()).contains("bad key");
 		}).verify();

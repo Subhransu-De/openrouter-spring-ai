@@ -56,14 +56,14 @@ class OpenRouterProtocolKindTests {
 
 	@Test
 	void chatCompletionChoiceWithoutMessageIsAMissingField() {
-		assertModelCall(CHAT_COMPLETIONS, OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS,
+		assertModelCall(CHAT_COMPLETIONS, OpenRouterRequestMode.CHAT_COMPLETIONS,
 				"{\"id\":\"gen-1\",\"model\":\"m\",\"choices\":[{\"index\":0,\"finish_reason\":\"stop\"}]}",
 				Kind.MISSING_FIELD);
 	}
 
 	@Test
 	void responsesResultWithoutStatusIsAMissingField() {
-		assertModelCall("/responses", OpenRouterRequestMode.OPENAI_RESPONSES,
+		assertModelCall("/responses", OpenRouterRequestMode.RESPONSES,
 				"{\"id\":\"resp-1\",\"object\":\"response\",\"model\":\"m\",\"output\":[]}", Kind.MISSING_FIELD);
 	}
 

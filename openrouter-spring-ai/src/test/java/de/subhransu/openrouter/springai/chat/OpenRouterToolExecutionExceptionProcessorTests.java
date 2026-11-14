@@ -39,7 +39,7 @@ class OpenRouterToolExecutionExceptionProcessorTests {
 
 		String payload = new OpenRouterToolExecutionExceptionProcessor().process(exception);
 
-		assertThat(payload).isEqualTo(OpenRouterToolExecutionExceptionProcessor.DEFAULT_FAILURE_PAYLOAD)
+		assertThat(payload).isEqualTo(OpenRouterToolExecutionExceptionProcessor.DEFAULT_FAILURE_RESULT)
 			.doesNotContain(SECRET, "local path", NESTED_DETAIL, "\n", "IllegalStateException");
 	}
 
@@ -62,7 +62,7 @@ class OpenRouterToolExecutionExceptionProcessorTests {
 				new IllegalStateException("synthetic failure\r\nforged detail"));
 		try {
 			assertThat(new OpenRouterToolExecutionExceptionProcessor().process(exception))
-				.isEqualTo(OpenRouterToolExecutionExceptionProcessor.DEFAULT_FAILURE_PAYLOAD);
+				.isEqualTo(OpenRouterToolExecutionExceptionProcessor.DEFAULT_FAILURE_RESULT);
 			assertThat(appender.list).hasSize(2)
 				.allSatisfy(event -> assertThat(event.getFormattedMessage()).contains("lookup__forged_entry_end")
 					.doesNotContain("\r", "\n"));
@@ -129,14 +129,14 @@ class OpenRouterToolExecutionExceptionProcessorTests {
 	@Test
 	void configuredExceptionTypesPropagateAndOtherRuntimeFailuresStayResults() {
 		OpenRouterToolExecutionExceptionProcessor processor = new OpenRouterToolExecutionExceptionProcessor(
-				ObservationRegistry.NOOP, failure -> OpenRouterToolExecutionExceptionProcessor.DEFAULT_FAILURE_PAYLOAD,
+				ObservationRegistry.NOOP, failure -> OpenRouterToolExecutionExceptionProcessor.DEFAULT_FAILURE_RESULT,
 				List.of(UnsupportedOperationException.class));
 		UnsupportedOperationException reauthorize = new UnsupportedOperationException("synthetic re-authorization");
 
 		assertThatThrownBy(() -> processor.process(new ToolExecutionException(this.toolDefinition, reauthorize)))
 			.isSameAs(reauthorize);
 		assertThat(processor.process(nestedFailure()))
-			.isEqualTo(OpenRouterToolExecutionExceptionProcessor.DEFAULT_FAILURE_PAYLOAD);
+			.isEqualTo(OpenRouterToolExecutionExceptionProcessor.DEFAULT_FAILURE_RESULT);
 	}
 
 	private ToolExecutionException nestedFailure() {

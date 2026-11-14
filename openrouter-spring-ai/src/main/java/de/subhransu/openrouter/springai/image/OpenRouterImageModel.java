@@ -34,7 +34,7 @@ import reactor.core.publisher.Flux;
  * exposes OpenRouter's SSE image streaming: partial-image previews and completed images
  * arrive as separate {@link ImageResponse} elements, distinguishable via
  * {@link OpenRouterImageGenerationMetadata#partialImageIndex()} and the
- * {@code openrouter.event_type} metadata entry. Spring AI has no streaming image
+ * {@code openrouter.image.event_type} metadata entry. Spring AI has no streaming image
  * abstraction yet, so {@code stream} is an OpenRouter-specific extension.
  *
  * @author Subhransu De
@@ -177,9 +177,26 @@ public class OpenRouterImageModel implements ImageModel {
 			return this;
 		}
 
-		public Builder defaultOptions(@Nullable OpenRouterImageOptions defaultOptions) {
-			this.defaultOptions = defaultOptions;
+		/**
+		 * Set the default options of the model. Options in a request override them.
+		 * @param options the default options, or {@code null} for the built-in defaults
+		 * @return this builder
+		 */
+		public Builder options(@Nullable OpenRouterImageOptions options) {
+			this.defaultOptions = options;
 			return this;
+		}
+
+		/**
+		 * Set the default options of the model.
+		 * @param defaultOptions the default options
+		 * @return this builder
+		 * @deprecated since 0.2.0 for removal in 0.3.0; use
+		 * {@link #options(OpenRouterImageOptions)}, as in Spring AI's own model builders
+		 */
+		@Deprecated(since = "0.2.0", forRemoval = true)
+		public Builder defaultOptions(@Nullable OpenRouterImageOptions defaultOptions) {
+			return options(defaultOptions);
 		}
 
 		public Builder retryTemplate(@Nullable RetryTemplate retryTemplate) {

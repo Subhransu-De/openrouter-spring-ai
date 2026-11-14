@@ -47,7 +47,7 @@ public class OpenRouterImageOptions implements ImageOptions {
 
 	private @Nullable List<String> inputReferences;
 
-	private @Nullable Map<String, @Nullable Object> providerOptions;
+	private @Nullable Map<String, @Nullable Object> provider;
 
 	public static Builder builder() {
 		return new Builder();
@@ -70,7 +70,7 @@ public class OpenRouterImageOptions implements ImageOptions {
 		}
 		if (options.getStyle() != null) {
 			throw new IllegalArgumentException(
-					"OpenRouter does not support portable image style; leave style unset and use providerOptions for provider-specific settings");
+					"OpenRouter does not support portable image style; leave style unset and put provider-specific settings in provider.options");
 		}
 		return OpenRouterImageOptions.builder()
 			.model(options.getModel())
@@ -97,7 +97,7 @@ public class OpenRouterImageOptions implements ImageOptions {
 			.outputCompression(value(runtimeOptions.outputCompression, this.outputCompression))
 			.seed(value(runtimeOptions.seed, this.seed))
 			.inputReferences(value(runtimeOptions.inputReferences, this.inputReferences))
-			.providerOptions(value(runtimeOptions.providerOptions, this.providerOptions))
+			.provider(value(runtimeOptions.provider, this.provider))
 			.build();
 	}
 
@@ -174,8 +174,18 @@ public class OpenRouterImageOptions implements ImageOptions {
 		return this.inputReferences;
 	}
 
+	public @Nullable Map<String, @Nullable Object> getProvider() {
+		return this.provider;
+	}
+
+	/**
+	 * Return the OpenRouter {@code provider} object.
+	 * @return the provider object, or {@code null}
+	 * @deprecated since 0.2.0 for removal in 0.3.0; use {@link #getProvider()}
+	 */
+	@Deprecated(since = "0.2.0", forRemoval = true)
 	public @Nullable Map<String, @Nullable Object> getProviderOptions() {
-		return this.providerOptions;
+		return getProvider();
 	}
 
 	public static final class Builder {
@@ -200,7 +210,7 @@ public class OpenRouterImageOptions implements ImageOptions {
 			this.options.outputCompression = source.outputCompression;
 			this.options.seed = source.seed;
 			this.options.inputReferences = OptionSnapshots.list(source.inputReferences);
-			this.options.providerOptions = OptionSnapshots.map(source.providerOptions);
+			this.options.provider = OptionSnapshots.map(source.provider);
 		}
 
 		public Builder model(@Nullable String model) {
@@ -264,9 +274,26 @@ public class OpenRouterImageOptions implements ImageOptions {
 			return this;
 		}
 
-		public Builder providerOptions(@Nullable Map<String, @Nullable Object> providerOptions) {
-			this.options.providerOptions = OptionSnapshots.map(providerOptions);
+		/**
+		 * Set the OpenRouter {@code provider} object, sent unchanged. Put settings for
+		 * one upstream provider under {@code options.<provider-slug>}.
+		 * @param provider the {@code provider} object, or {@code null}
+		 * @return this builder
+		 */
+		public Builder provider(@Nullable Map<String, @Nullable Object> provider) {
+			this.options.provider = OptionSnapshots.map(provider);
 			return this;
+		}
+
+		/**
+		 * Set the OpenRouter {@code provider} object.
+		 * @param providerOptions the {@code provider} object, or {@code null}
+		 * @return this builder
+		 * @deprecated since 0.2.0 for removal in 0.3.0; use {@link #provider(Map)}
+		 */
+		@Deprecated(since = "0.2.0", forRemoval = true)
+		public Builder providerOptions(@Nullable Map<String, @Nullable Object> providerOptions) {
+			return provider(providerOptions);
 		}
 
 		public OpenRouterImageOptions build() {

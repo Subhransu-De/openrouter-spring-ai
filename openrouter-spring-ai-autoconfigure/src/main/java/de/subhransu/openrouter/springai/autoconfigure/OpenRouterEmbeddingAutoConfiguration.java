@@ -34,7 +34,7 @@ public final class OpenRouterEmbeddingAutoConfiguration {
 			ObjectProvider<EmbeddingModelObservationConvention> observationConventionProvider) {
 		OpenRouterEmbeddingModel embeddingModel = OpenRouterEmbeddingModel.builder()
 			.openRouterApi(openRouterApi)
-			.defaultOptions(embeddingProperties.toOptions())
+			.options(embeddingProperties.toOptions())
 			.metadataMode(embeddingProperties.getMetadataMode())
 			.retryTemplate(retryTemplateProvider.getIfUnique())
 			.observationRegistry(observationRegistryProvider.getIfUnique())

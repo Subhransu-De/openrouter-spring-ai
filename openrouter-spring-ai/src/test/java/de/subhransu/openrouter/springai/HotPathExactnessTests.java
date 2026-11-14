@@ -214,7 +214,7 @@ class HotPathExactnessTests {
 						+ "data: [DONE]\n\n");
 		var model = OpenRouterChatModel.builder()
 			.openRouterApi(api)
-			.defaultOptions(OpenRouterChatOptions.builder().model("synthetic").build())
+			.options(OpenRouterChatOptions.builder().model("synthetic").build())
 			.observationRegistry(registry)
 			.build();
 

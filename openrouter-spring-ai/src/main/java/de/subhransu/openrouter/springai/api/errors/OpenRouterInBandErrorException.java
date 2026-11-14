@@ -29,7 +29,7 @@ import org.springframework.http.HttpStatusCode;
  *
  * @author Subhransu De
  */
-public class OpenRouterApiException extends RuntimeException implements OpenRouterFailure {
+public class OpenRouterInBandErrorException extends RuntimeException implements OpenRouterFailure {
 
 	private final @Nullable HttpStatusCode statusCode;
 
@@ -37,13 +37,14 @@ public class OpenRouterApiException extends RuntimeException implements OpenRout
 
 	private final OpenRouterErrorDetails errorDetails;
 
-	public OpenRouterApiException(String message, @Nullable HttpStatusCode statusCode, @Nullable String responseBody) {
+	public OpenRouterInBandErrorException(String message, @Nullable HttpStatusCode statusCode,
+			@Nullable String responseBody) {
 		this(message, statusCode, responseBody, new OpenRouterErrorDetails(null, message, null, null, null,
 				OpenRouterErrorClassifier.category(statusCode != null ? statusCode.value() : -1, null, null, message)));
 	}
 
-	public OpenRouterApiException(String message, @Nullable HttpStatusCode statusCode, @Nullable String responseBody,
-			@Nullable OpenRouterErrorDetails errorDetails) {
+	public OpenRouterInBandErrorException(String message, @Nullable HttpStatusCode statusCode,
+			@Nullable String responseBody, @Nullable OpenRouterErrorDetails errorDetails) {
 		super(message);
 		this.statusCode = statusCode;
 		this.responseBody = OpenRouterExceptionMessage.sanitize(responseBody);

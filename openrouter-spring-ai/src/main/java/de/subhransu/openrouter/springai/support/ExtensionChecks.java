@@ -12,9 +12,9 @@ import org.jspecify.annotations.Nullable;
  */
 final class ExtensionChecks {
 
-	static final String CHAT_MODE = "OPENAI_CHAT_COMPLETIONS";
+	static final String CHAT_MODE = "CHAT_COMPLETIONS";
 
-	private static final String RESPONSES_MODE = "OPENAI_RESPONSES";
+	private static final String RESPONSES_MODE = "RESPONSES";
 
 	private ExtensionChecks() {
 	}

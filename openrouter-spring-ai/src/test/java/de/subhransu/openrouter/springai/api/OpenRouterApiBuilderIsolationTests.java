@@ -87,8 +87,8 @@ class OpenRouterApiBuilderIsolationTests {
 			.apiKey("test-key")
 			.restClientBuilder(supplied)
 			.httpReferer(value)
-			.applicationTitle(value)
-			.applicationCategories(value)
+			.appTitle(value)
+			.appCategories(value)
 			.build();
 		server.expect(once(), requestTo(OpenRouterApi.DEFAULT_BASE_URL + "/embeddings"))
 			.andExpect(request -> ATTRIBUTION_HEADERS
@@ -173,8 +173,8 @@ class OpenRouterApiBuilderIsolationTests {
 			.apiKey("test-key")
 			.baseUrl("https://openrouter.test/api/v1")
 			.httpReferer(APP_REFERER)
-			.applicationTitle("Test App")
-			.applicationCategories("test")
+			.appTitle("Test App")
+			.appCategories("test")
 			.restClientBuilder(restClientBuilder)
 			.webClientBuilder(webClientBuilder)
 			.build();

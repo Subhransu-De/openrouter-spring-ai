@@ -15,7 +15,7 @@ import org.jspecify.annotations.Nullable;
 @JsonInclude(Include.NON_NULL)
 public record ChatCompletionResponse(@Nullable String id, @Nullable String object, @Nullable Long created,
 		@Nullable String model, @Nullable String provider, @Nullable List<@Nullable Choice> choices,
-		@Nullable Usage usage, @Nullable StreamError error,
+		@Nullable Usage usage, @Nullable ResponseError error,
 		@JsonAnyGetter @JsonAnySetter @Nullable Map<String, @Nullable Object> extensions) {
 	public Map<String, @Nullable Object> extensions() {
 		return Objects.requireNonNull(this.extensions);
@@ -27,7 +27,7 @@ public record ChatCompletionResponse(@Nullable String id, @Nullable String objec
 
 	public ChatCompletionResponse(@Nullable String id, @Nullable String object, @Nullable Long created,
 			@Nullable String model, @Nullable String provider, @Nullable List<@Nullable Choice> choices,
-			@Nullable Usage usage, @Nullable StreamError error) {
+			@Nullable Usage usage, @Nullable ResponseError error) {
 		this(id, object, created, model, provider, choices, usage, error, null);
 	}
 

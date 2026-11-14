@@ -30,7 +30,7 @@ class GarageAttributionSceneTests {
     SceneContext context = mock(SceneContext.class, RETURNS_DEEP_STUBS);
     GarageEvidence evidence = new GarageEvidence();
     when(context.evidence()).thenReturn(evidence);
-    when(context.requestMode()).thenReturn(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS);
+    when(context.requestMode()).thenReturn(OpenRouterRequestMode.CHAT_COMPLETIONS);
     when(context.chatModel().call(any(org.springframework.ai.chat.prompt.Prompt.class)))
         .thenReturn(new ChatResponse(List.of()));
     when(context.chatModel().stream(any(org.springframework.ai.chat.prompt.Prompt.class)))

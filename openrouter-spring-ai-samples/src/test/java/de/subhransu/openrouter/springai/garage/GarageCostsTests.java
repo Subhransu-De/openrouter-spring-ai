@@ -39,7 +39,7 @@ class GarageCostsTests {
         SceneResult.failed(
             "paint-bay",
             "operation-1",
-            OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS,
+            OpenRouterRequestMode.CHAT_COMPLETIONS,
             Duration.ZERO,
             Path.of("output"),
             Map.of("costUsd", 0.01),

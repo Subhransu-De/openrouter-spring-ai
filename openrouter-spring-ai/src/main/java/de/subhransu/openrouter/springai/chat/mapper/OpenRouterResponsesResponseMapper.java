@@ -4,9 +4,9 @@ import de.subhransu.openrouter.springai.chat.OpenRouterMetadata;
 import de.subhransu.openrouter.springai.api.dto.ResponsesContent;
 import de.subhransu.openrouter.springai.api.dto.ResponsesOutputItem;
 import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
-import de.subhransu.openrouter.springai.api.dto.StreamError;
-import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
-import de.subhransu.openrouter.springai.api.errors.OpenRouterApiExceptionFactory;
+import de.subhransu.openrouter.springai.api.dto.ResponseError;
+import de.subhransu.openrouter.springai.api.errors.OpenRouterInBandErrorException;
+import de.subhransu.openrouter.springai.api.errors.OpenRouterInBandErrorExceptionFactory;
 import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
 import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
@@ -95,11 +95,11 @@ public final class OpenRouterResponsesResponseMapper {
 		ResponseValues.RESPONSES.required(response.output(), "Responses output");
 	}
 
-	static RuntimeException failure(String message, @Nullable String responseBody, @Nullable StreamError error,
+	static RuntimeException failure(String message, @Nullable String responseBody, @Nullable ResponseError error,
 			@Nullable String errorType, OpenRouterDiagnosticSanitizer sanitizer) {
-		RuntimeException failure = OpenRouterApiExceptionFactory.createRetryable(message, responseBody, error,
+		RuntimeException failure = OpenRouterInBandErrorExceptionFactory.createRetryable(message, responseBody, error,
 				errorType, "/responses", sanitizer);
-		if (failure instanceof OpenRouterApiException permanent) {
+		if (failure instanceof OpenRouterInBandErrorException permanent) {
 			return new OpenRouterNonTransientApiException(Objects.requireNonNull(permanent.getMessage()),
 					permanent.getStatusCode(), permanent.getResponseBody(), permanent.getErrorDetails(), null,
 					"/responses");

@@ -110,8 +110,8 @@ class UsageReaderTests {
 				{"type":"image_generation.partial_image","partial_image_index":0,"b64_json":"aW1n"}""",
 				ImagesStreamEvent.class));
 
-		assertThat(OpenRouterMetadata.IMAGE_USAGE).isEqualTo("openrouter.usage");
-		assertThat(OpenRouterUsage.from(call)).isSameAs(call.getMetadata().get("openrouter.usage"));
+		assertThat(OpenRouterMetadata.IMAGE_USAGE).isEqualTo("openrouter.image.usage");
+		assertThat(OpenRouterUsage.from(call)).isSameAs(call.getMetadata().get("openrouter.image.usage"));
 		assertThat(OpenRouterUsage.from(call).getCost()).isEqualTo(0.002);
 		assertThat(OpenRouterUsage.from(completed).getCostDetails().upstreamInferenceCost()).isEqualTo(0.003);
 		assertEmpty(OpenRouterUsage.from(partial));

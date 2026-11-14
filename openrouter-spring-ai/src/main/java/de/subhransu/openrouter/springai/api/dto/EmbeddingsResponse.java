@@ -17,7 +17,7 @@ import tools.jackson.databind.annotation.JsonDeserialize;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonInclude(Include.NON_NULL)
 public record EmbeddingsResponse(@Nullable String object, @Nullable List<@Nullable EmbeddingData> data,
-		@Nullable String model, @Nullable Usage usage, @Nullable StreamError error) {
+		@Nullable String model, @Nullable Usage usage, @Nullable ResponseError error) {
 
 	public EmbeddingsResponse(@Nullable String object, @Nullable List<@Nullable EmbeddingData> data,
 			@Nullable String model, @Nullable Usage usage) {

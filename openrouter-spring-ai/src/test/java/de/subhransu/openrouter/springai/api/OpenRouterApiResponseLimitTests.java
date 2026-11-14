@@ -332,7 +332,7 @@ class OpenRouterApiResponseLimitTests {
 							.isEqualTo(OpenRouterLimitExceededException.Limit.STREAMING_EVENT_BYTES);
 						assertThat(limit.getConfiguredLimit()).isEqualTo(32);
 						assertThat(limit.getEndpoint()).isEqualTo("/chat/completions");
-						assertThat(limit.isLocal()).isFalse();
+						assertThat(limit.isStreamStateLimit()).isFalse();
 					}).hasRootCauseInstanceOf(DataBufferLimitException.class))
 			.verify();
 	}

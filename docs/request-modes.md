@@ -1,6 +1,6 @@
 # Request modes
 
-Select the mode with `spring.ai.openrouter.chat.request-mode` (`openai-chat-completions` or `openai-responses`) or `OpenRouterChatOptions.builder().requestMode(...)`. To switch modes per request, read [Replacement and composition](chat-options.md#replacement-and-composition) first.
+Select the mode with `spring.ai.openrouter.chat.request-mode` (`chat-completions` or `responses`) or `OpenRouterChatOptions.builder().requestMode(...)`. To switch modes per request, read [Replacement and composition](chat-options.md#replacement-and-composition) first.
 
 ## Which mode?
 
@@ -69,10 +69,10 @@ Responses maps `max_output_tokens` to `LENGTH` and `content_filter` to `CONTENT_
 - `openrouter.responses.status`: the response status. Read it with `OpenRouterMetadata.responsesStatus(generation)`.
 - `openrouter.responses.incomplete_details`: the typed incomplete details.
 
-`getFinishReason()` returns `STOP`, `LENGTH`, `TOOL_CALLS` and `CONTENT_FILTER` in upper case, and any other reason as the provider wrote it, in both modes. `OpenRouterFinishReason.of(generation)` reads both spellings:
+`getFinishReason()` returns `STOP`, `LENGTH`, `TOOL_CALLS` and `CONTENT_FILTER` in upper case, and any other reason as the provider wrote it, in both modes. `OpenRouterFinishReason.from(generation)` reads both spellings:
 
 ```java
-OpenRouterFinishReason reason = OpenRouterFinishReason.of(generation);
+OpenRouterFinishReason reason = OpenRouterFinishReason.from(generation);
 boolean cutOff = reason == OpenRouterFinishReason.LENGTH;
 ```
 

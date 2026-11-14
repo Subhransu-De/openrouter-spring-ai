@@ -11,8 +11,8 @@ import de.subhransu.openrouter.springai.api.dto.ChatCompletionRequest;
 import de.subhransu.openrouter.springai.api.dto.ChatMessage;
 import de.subhransu.openrouter.springai.api.dto.ImagesRequest;
 import de.subhransu.openrouter.springai.api.dto.ResponsesRequest;
-import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
-import de.subhransu.openrouter.springai.errors.OpenRouterHttpException;
+import de.subhransu.openrouter.springai.api.errors.OpenRouterInBandErrorException;
+import de.subhransu.openrouter.springai.errors.OpenRouterHttpFailure;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
 import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
@@ -52,7 +52,7 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * Wire-contract tests for the streaming {@link OpenRouterApi} surface. They pin the
  * endpoint each stream method targets and assert mid-stream provider failures surface as
- * {@link OpenRouterHttpException} with status and body preserved. Model-level dispatch
+ * {@link OpenRouterHttpFailure} with status and body preserved. Model-level dispatch
  * (which mode picks which method, and {@code stream=true} on the request) is covered in
  * {@code OpenRouterChatModelStreamingTests}.
  */
@@ -196,8 +196,8 @@ class OpenRouterApiStreamingContractTests {
 			.apiKey("test-key")
 			.baseUrl("https://openrouter.test/api/v1")
 			.httpReferer("https://app.example")
-			.applicationTitle("My App")
-			.applicationCategories("translation,programming")
+			.appTitle("My App")
+			.appCategories("translation,programming")
 			.webClientBuilder(WebClient.builder().exchangeFunction(exchange))
 			.build();
 
@@ -265,7 +265,7 @@ class OpenRouterApiStreamingContractTests {
 
 		StepVerifier.create(capture.api().chatCompletionStream(chatRequest())).expectErrorSatisfies(error -> {
 			assertThat(error).isInstanceOf(OpenRouterNonTransientApiException.class);
-			OpenRouterHttpException ex = (OpenRouterHttpException) error;
+			OpenRouterHttpFailure ex = (OpenRouterHttpFailure) error;
 			assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.PAYMENT_REQUIRED);
 			assertThat(ex.getResponseBody()).contains("insufficient credits");
 			assertThat(ex.getCategory()).isEqualTo(OpenRouterErrorCategory.BILLING_CREDITS);
@@ -379,7 +379,7 @@ class OpenRouterApiStreamingContractTests {
 
 		StepVerifier.create(capture.api().responsesStream(responsesRequest())).expectErrorSatisfies(error -> {
 			assertThat(error).isInstanceOf(OpenRouterTransientApiException.class);
-			OpenRouterHttpException ex = (OpenRouterHttpException) error;
+			OpenRouterHttpFailure ex = (OpenRouterHttpFailure) error;
 			assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
 			assertThat(ex.getResponseBody()).contains("overloaded");
 		}).verify();
@@ -394,7 +394,7 @@ class OpenRouterApiStreamingContractTests {
 
 		StepVerifier.create(capture.api().imagesStream(imagesRequest())).expectErrorSatisfies(error -> {
 			assertThat(error).isInstanceOf(OpenRouterTransientApiException.class);
-			OpenRouterHttpException exception = (OpenRouterHttpException) error;
+			OpenRouterHttpFailure exception = (OpenRouterHttpFailure) error;
 			assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
 			assertThat(exception.getEndpoint()).isEqualTo("/images");
 		}).verify();
@@ -539,7 +539,7 @@ class OpenRouterApiStreamingContractTests {
 
 		StepVerifier.create(capture.api().chatCompletionStream(chatRequest()))
 			.expectErrorSatisfies(error -> assertThat(error).isInstanceOf(OpenRouterProtocolException.class)
-				.isNotInstanceOf(OpenRouterApiException.class))
+				.isNotInstanceOf(OpenRouterInBandErrorException.class))
 			.verify();
 	}
 
@@ -581,13 +581,11 @@ class OpenRouterApiStreamingContractTests {
 						default -> OpenRouterChatModel.builder()
 							.openRouterApi(api)
 							.build()
-							.stream(new Prompt("hello",
-									OpenRouterChatOptions.builder()
-										.model("synthetic-model")
-										.requestMode(endpoint.equals("chat-model")
-												? OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS
-												: OpenRouterRequestMode.OPENAI_RESPONSES)
-										.build()));
+							.stream(new Prompt("hello", OpenRouterChatOptions.builder()
+								.model("synthetic-model")
+								.requestMode(endpoint.equals("chat-model") ? OpenRouterRequestMode.CHAT_COMPLETIONS
+										: OpenRouterRequestMode.RESPONSES)
+								.build()));
 					};
 					// A coalesced payload starting with invalid JSON fails as a whole.
 					StepVerifier.create(stream).expectNextCount(position).expectErrorSatisfies(error -> {

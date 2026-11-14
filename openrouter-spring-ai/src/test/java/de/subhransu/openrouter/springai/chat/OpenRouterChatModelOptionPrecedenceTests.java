@@ -45,10 +45,10 @@ class OpenRouterChatModelOptionPrecedenceTests {
 		Map<String, Object> startupMetadata = new LinkedHashMap<>(Map.of("source", "startup"));
 		OpenRouterChatModel model = OpenRouterChatModel.builder()
 			.openRouterApi(api)
-			.defaultOptions(OpenRouterChatOptions.builder()
+			.options(OpenRouterChatOptions.builder()
 				.model(OPENAI_MODEL)
 				.models(startupModels)
-				.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
+				.requestMode(OpenRouterRequestMode.RESPONSES)
 				.metadata(startupMetadata)
 				.build())
 			.build();
@@ -165,9 +165,9 @@ class OpenRouterChatModelOptionPrecedenceTests {
 	private OpenRouterChatModel modelWithConflictingStartupDefaults(OpenRouterApi api) {
 		return OpenRouterChatModel.builder()
 			.openRouterApi(api)
-			.defaultOptions(OpenRouterChatOptions.builder()
+			.options(OpenRouterChatOptions.builder()
 				.model(OPENAI_MODEL)
-				.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
+				.requestMode(OpenRouterRequestMode.RESPONSES)
 				.provider(new OpenRouterProviderPreferences(true, null, null, List.of("openai"), null, null, null))
 				.metadata(Map.of("source", "startup"))
 				.build())

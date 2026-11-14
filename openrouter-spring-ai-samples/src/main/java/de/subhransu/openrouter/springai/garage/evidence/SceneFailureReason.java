@@ -1,8 +1,8 @@
 package de.subhransu.openrouter.springai.garage.evidence;
 
-import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
+import de.subhransu.openrouter.springai.api.errors.OpenRouterInBandErrorException;
 import de.subhransu.openrouter.springai.chat.errors.OpenRouterChoiceFailure;
-import de.subhransu.openrouter.springai.errors.OpenRouterHttpException;
+import de.subhransu.openrouter.springai.errors.OpenRouterHttpFailure;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTransportException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
@@ -92,11 +92,11 @@ public enum SceneFailureReason {
   }
 
   private static @Nullable SceneFailureReason classifyOne(Throwable cause) {
-    if (cause instanceof OpenRouterHttpException http) {
+    if (cause instanceof OpenRouterHttpFailure http) {
       return fromStatus(http.getStatusCode());
     }
     // Image streams report in-band errors with this older exception type.
-    if (cause instanceof OpenRouterApiException api) {
+    if (cause instanceof OpenRouterInBandErrorException api) {
       return fromStatus(api.getStatusCode());
     }
     // A Chat Completions choice carried an error or an error finish reason.

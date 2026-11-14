@@ -175,7 +175,7 @@ class GarageModalityTelemetryTests {
   }
 
   private String operation() {
-    return this.evidence.newOperation(SCENE, "OPENAI_CHAT_COMPLETIONS");
+    return this.evidence.newOperation(SCENE, "CHAT_COMPLETIONS");
   }
 
   private Usage usage() {

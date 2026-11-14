@@ -117,7 +117,7 @@ class GarageEvidenceTests {
   void nestedPayloadsAndUnknownObjectsFailClosed() {
     GarageEvidence evidence = new GarageEvidence();
     String secret = "SYNTHETIC_PRIVATE_SENTINEL";
-    String operation = evidence.newOperation(secret, "OPENAI_CHAT_COMPLETIONS");
+    String operation = evidence.newOperation(secret, "CHAT_COMPLETIONS");
     Object payload = Map.of("operationId", operation, "results", new Object[] {
         "{\"concern\":\"" + secret + "\"}",
         new PrivatePayload(secret), java.nio.file.Path.of(secret), Map.of("input", secret),
@@ -144,8 +144,8 @@ class GarageEvidenceTests {
     GarageEvidence evidence = new GarageEvidence();
     String secret = "SYNTHETIC_PRIVATE_SENTINEL";
     ToolCallback callback = GarageToolCallback.wrap(ToolCallbacks.from(new EchoTool())[0],
-        evidence, evidence.newOperation("service-story", "OPENAI_CHAT_COMPLETIONS"),
-        "service-story", "OPENAI_CHAT_COMPLETIONS", GarageFeature.TOOL_LOOP);
+        evidence, evidence.newOperation("service-story", "CHAT_COMPLETIONS"),
+        "service-story", "CHAT_COMPLETIONS", GarageFeature.TOOL_LOOP);
     String input = "{\"concern\":\"" + secret + "\"}";
 
     String output = withContext
@@ -170,7 +170,7 @@ class GarageEvidenceTests {
   @ValueSource(booleans = {false, true})
   void aSuccessfulOperationCannotHideAnotherIncompleteOrFailedOperation(boolean failed) {
     GarageEvidence evidence = new GarageEvidence();
-    var mode = OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS;
+    var mode = OpenRouterRequestMode.CHAT_COMPLETIONS;
     String complete = evidence.newOperation("service-story", mode.name());
     for (EvidenceLevel level : EvidenceLevel.values()) {
       evidence.record(GarageFeature.TOOL_LOOP, complete, mode.name(), level, "status", "passed");
@@ -185,8 +185,8 @@ class GarageEvidenceTests {
 
   @Test
   void modeIndependentBaysRequireOnlyThePassThatExecutesThem() {
-    var chat = OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS;
-    var responses = OpenRouterRequestMode.OPENAI_RESPONSES;
+    var chat = OpenRouterRequestMode.CHAT_COMPLETIONS;
+    var responses = OpenRouterRequestMode.RESPONSES;
     for (var feature : List.of(GarageFeature.EMBEDDINGS, GarageFeature.IMAGE_GENERATION)) {
       assertThat(feature.coverageModes(List.of(chat, responses))).containsExactly(chat);
       assertThat(feature.coverageModes(List.of(responses))).containsExactly(responses);

@@ -70,12 +70,12 @@ class UsageWireMappingTests {
 		assertUsage(new OpenRouterEmbeddingResponseMapper().map(embeddings).getMetadata().getUsage(),
 				embeddings.usage(), cached, reasoning, written);
 		ImagesResponse images = this.mapper.readValue("{\"data\":[],\"usage\":" + usage + "}", ImagesResponse.class);
-		assertUsage(new OpenRouterImageResponseMapper().map(images).getMetadata().get("openrouter.usage"),
+		assertUsage(new OpenRouterImageResponseMapper().map(images).getMetadata().get("openrouter.image.usage"),
 				images.usage(), cached, reasoning, written);
 		ImagesStreamEvent imageEvent = this.mapper.readValue(
 				"{\"type\":\"image_generation.completed\",\"b64_json\":\"aW1hZ2U=\",\"usage\":" + usage + "}",
 				ImagesStreamEvent.class);
-		assertUsage(new OpenRouterImageResponseMapper().map(imageEvent).getMetadata().get("openrouter.usage"),
+		assertUsage(new OpenRouterImageResponseMapper().map(imageEvent).getMetadata().get("openrouter.image.usage"),
 				imageEvent.usage(), cached, reasoning, written);
 	}
 

@@ -172,9 +172,9 @@ class OpenRouterResponsesTerminationTests {
 			.build();
 		return OpenRouterChatModel.builder()
 			.openRouterApi(api)
-			.defaultOptions(OpenRouterChatOptions.builder()
+			.options(OpenRouterChatOptions.builder()
 				.model("synthetic")
-				.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
+				.requestMode(OpenRouterRequestMode.RESPONSES)
 				.build())
 			.build();
 	}

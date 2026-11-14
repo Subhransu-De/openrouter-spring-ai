@@ -34,7 +34,7 @@ public final class OpenRouterImageAutoConfiguration {
 			ObjectProvider<ImageModelObservationConvention> observationConventionProvider) {
 		OpenRouterImageModel imageModel = OpenRouterImageModel.builder()
 			.openRouterApi(openRouterApi)
-			.defaultOptions(imageProperties.toOptions())
+			.options(imageProperties.toOptions())
 			.retryTemplate(retryTemplateProvider.getIfUnique())
 			.observationRegistry(observationRegistryProvider.getIfUnique())
 			.build();

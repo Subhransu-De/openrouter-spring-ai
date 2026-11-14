@@ -12,7 +12,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 
 import de.subhransu.openrouter.springai.api.dto.EmbeddingsRequest;
 import de.subhransu.openrouter.springai.api.dto.EmbeddingsResponse;
-import de.subhransu.openrouter.springai.errors.OpenRouterHttpException;
+import de.subhransu.openrouter.springai.errors.OpenRouterHttpFailure;
 import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
 import java.util.List;
 import org.junit.jupiter.api.Tag;
@@ -134,7 +134,7 @@ class OpenRouterApiEmbeddingsContractTests {
 
 		assertThatThrownBy(() -> api.embeddings(request)).isInstanceOf(OpenRouterNonTransientApiException.class)
 			.hasMessageContaining("embeddings request failed")
-			.satisfies(exception -> assertThat(((OpenRouterHttpException) exception).getResponseBody())
+			.satisfies(exception -> assertThat(((OpenRouterHttpFailure) exception).getResponseBody())
 				.contains("insufficient credits"));
 	}
 

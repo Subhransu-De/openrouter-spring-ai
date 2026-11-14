@@ -12,7 +12,7 @@ import de.subhransu.openrouter.springai.api.dto.ResponsesOutputItem;
 import de.subhransu.openrouter.springai.api.dto.ResponsesRequest;
 import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
 import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
-import de.subhransu.openrouter.springai.api.dto.StreamError;
+import de.subhransu.openrouter.springai.api.dto.ResponseError;
 import de.subhransu.openrouter.springai.api.dto.Usage;
 import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
 import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
@@ -416,7 +416,7 @@ class OpenRouterResponsesMapperTests {
 	@Test
 	void throwsOnFailedResponsesResult() {
 		ResponsesResult result = new ResponsesResult("resp-1", "response", 123L, "openai/gpt-5.4", "failed", List.of(),
-				null, new StreamError("server_error", "add credits"), null, "payment_required");
+				null, new ResponseError("server_error", "add credits"), null, "payment_required");
 
 		assertThatThrownBy(() -> new OpenRouterResponsesResponseMapper().map(result))
 			.isInstanceOfSatisfying(OpenRouterNonTransientApiException.class,

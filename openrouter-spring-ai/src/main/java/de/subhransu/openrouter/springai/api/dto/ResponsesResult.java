@@ -13,19 +13,19 @@ import java.util.List;
 @JsonInclude(Include.NON_NULL)
 public record ResponsesResult(@Nullable String id, @Nullable String object,
 		@JsonProperty("created_at") @Nullable Long createdAt, @Nullable String model, @Nullable String status,
-		@Nullable List<@Nullable ResponsesOutputItem> output, @Nullable Usage usage, @Nullable StreamError error,
+		@Nullable List<@Nullable ResponsesOutputItem> output, @Nullable Usage usage, @Nullable ResponseError error,
 		@JsonProperty("incomplete_details") @Nullable IncompleteDetails incompleteDetails, @JsonDeserialize(
 				using = TolerantJsonStringDeserializer.class) @JsonProperty("error_type") @Nullable String errorType) {
 
 	public ResponsesResult(@Nullable String id, @Nullable String object, @Nullable Long createdAt,
 			@Nullable String model, @Nullable String status, @Nullable List<@Nullable ResponsesOutputItem> output,
-			@Nullable Usage usage, @Nullable StreamError error, @Nullable IncompleteDetails incompleteDetails) {
+			@Nullable Usage usage, @Nullable ResponseError error, @Nullable IncompleteDetails incompleteDetails) {
 		this(id, object, createdAt, model, status, output, usage, error, incompleteDetails, null);
 	}
 
 	public ResponsesResult(@Nullable String id, @Nullable String object, @Nullable Long createdAt,
 			@Nullable String model, @Nullable String status, @Nullable List<@Nullable ResponsesOutputItem> output,
-			@Nullable Usage usage, @Nullable StreamError error) {
+			@Nullable Usage usage, @Nullable ResponseError error) {
 		this(id, object, createdAt, model, status, output, usage, error, null, null);
 	}
 

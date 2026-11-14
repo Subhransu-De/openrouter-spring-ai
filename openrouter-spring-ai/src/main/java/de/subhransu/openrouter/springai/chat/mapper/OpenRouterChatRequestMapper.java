@@ -6,7 +6,7 @@ import de.subhransu.openrouter.springai.api.dto.AudioConfig;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionRequest;
 import de.subhransu.openrouter.springai.api.dto.ChatMessage;
 import de.subhransu.openrouter.springai.api.dto.ContentPart;
-import de.subhransu.openrouter.springai.api.dto.Function;
+import de.subhransu.openrouter.springai.api.dto.FunctionDefinition;
 import de.subhransu.openrouter.springai.api.dto.FunctionCall;
 import de.subhransu.openrouter.springai.api.dto.ProviderPreferences;
 import de.subhransu.openrouter.springai.api.dto.ReasoningOptions;
@@ -163,7 +163,7 @@ public final class OpenRouterChatRequestMapper {
 		}
 		return toolDefinitions.stream()
 			.map(toolDefinition -> new Tool("function",
-					new Function(toolDefinition.name(), toolDefinition.description(),
+					new FunctionDefinition(toolDefinition.name(), toolDefinition.description(),
 							ToolSchemaValidator.read(this.objectMapper, toolDefinition, strict), strict)))
 			.toList();
 	}

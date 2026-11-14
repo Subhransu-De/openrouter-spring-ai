@@ -219,7 +219,7 @@ class OpenRouterOptionValidationTests {
 		var options = base().maxTokens(256).maxCompletionTokens(513).build();
 
 		assertThat(responses(options, List.of()).path("max_output_tokens").asInt()).isEqualTo(513);
-		assertThat(output.getAll()).contains("OPENAI_RESPONSES sends one output limit",
+		assertThat(output.getAll()).contains("RESPONSES sends one output limit",
 				"using maxCompletionTokens 513 and ignoring maxTokens 256");
 		JsonNode chat = chat(options, List.of());
 		assertThat(chat.path("max_tokens").asInt()).isEqualTo(256);
@@ -304,8 +304,8 @@ class OpenRouterOptionValidationTests {
 
 		assertThat(chat(options, List.of()).path("verbosity").stringValue()).isEqualTo("low");
 		assertThatIllegalArgumentException().isThrownBy(() -> responses(options, List.of()))
-			.withMessage("OPENAI_RESPONSES does not support extraBody key \"verbosity\"; remove it or use "
-					+ "OPENAI_CHAT_COMPLETIONS. Accepted keys in OPENAI_RESPONSES: prompt_cache_key, top_logprobs");
+			.withMessage("RESPONSES does not support extraBody key \"verbosity\"; remove it or use "
+					+ "CHAT_COMPLETIONS. Accepted keys in RESPONSES: prompt_cache_key, top_logprobs");
 	}
 
 	@Tag("api")
@@ -313,8 +313,8 @@ class OpenRouterOptionValidationTests {
 	@Test
 	void unknownExtraBodyKeyListsTheAcceptedKeys() {
 		assertThatIllegalArgumentException().isThrownBy(() -> base().extraBody(Map.of("model", "x")))
-			.withMessage("OPENAI_CHAT_COMPLETIONS does not support extraBody key \"model\". Accepted keys in "
-					+ "OPENAI_CHAT_COMPLETIONS: logit_bias, logprobs, prompt_cache_key, top_logprobs, transforms, verbosity");
+			.withMessage("CHAT_COMPLETIONS does not support extraBody key \"model\". Accepted keys in "
+					+ "CHAT_COMPLETIONS: logit_bias, logprobs, prompt_cache_key, top_logprobs, transforms, verbosity");
 		assertThatIllegalArgumentException().isThrownBy(() -> base().providerExtraBody(Map.of("speed", "x")))
 			.withMessageContaining("providerExtraBody does not support key \"speed\"")
 			.withMessageContaining("max_price, only, preferred_max_latency");

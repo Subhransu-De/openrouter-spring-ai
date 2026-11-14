@@ -10,7 +10,7 @@ import de.subhransu.openrouter.springai.api.dto.ChatMessage;
 import de.subhransu.openrouter.springai.api.dto.Choice;
 import de.subhransu.openrouter.springai.api.dto.ChoiceError;
 import de.subhransu.openrouter.springai.api.dto.Usage;
-import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
+import de.subhransu.openrouter.springai.api.errors.OpenRouterInBandErrorException;
 import de.subhransu.openrouter.springai.chat.OpenRouterUsage;
 import de.subhransu.openrouter.springai.chat.errors.OpenRouterNonTransientChoiceException;
 import de.subhransu.openrouter.springai.chat.errors.OpenRouterChoiceFailure;
@@ -458,13 +458,12 @@ class OpenRouterChatResponseFixtureMapperTests {
 	void streamingErrorChunkFixtureRaisesApiException() throws IOException {
 		ChatCompletionChunk chunk = parseFixture("chat-completion-chunk-error.json", ChatCompletionChunk.class);
 
-		assertThatThrownBy(() -> this.streamingMapper.map(chunk)).isInstanceOfSatisfying(OpenRouterApiException.class,
-				exception -> {
-					assertThat(exception.getMessage()).isEqualTo(
-							"OpenRouter chat completion stream failed in /chat/completions with status 500 INTERNAL_SERVER_ERROR, category PROVIDER_UNAVAILABLE");
-					assertThat(exception.getErrorDetails().message())
-						.isEqualTo("The upstream provider returned an error");
-				});
+		assertThatThrownBy(() -> this.streamingMapper.map(chunk))
+			.isInstanceOfSatisfying(OpenRouterInBandErrorException.class, exception -> {
+				assertThat(exception.getMessage()).isEqualTo(
+						"OpenRouter chat completion stream failed in /chat/completions with status 500 INTERNAL_SERVER_ERROR, category PROVIDER_UNAVAILABLE");
+				assertThat(exception.getErrorDetails().message()).isEqualTo("The upstream provider returned an error");
+			});
 	}
 
 	// ---------------------------------------------------------------------

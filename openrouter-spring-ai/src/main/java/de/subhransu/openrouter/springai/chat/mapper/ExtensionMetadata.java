@@ -23,7 +23,7 @@ final class ExtensionMetadata {
 
 	static final String TOOLS = OpenRouterMetadata.TOOL_CALL_EXTENSIONS;
 
-	static final String RESPONSE = OpenRouterMetadata.RESPONSE_EXTENSIONS;
+	static final String RESPONSE = OpenRouterMetadata.CHAT_COMPLETION_EXTENSIONS;
 
 	private ExtensionMetadata() {
 	}

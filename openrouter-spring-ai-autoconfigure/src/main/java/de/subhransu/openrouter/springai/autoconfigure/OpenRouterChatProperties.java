@@ -35,7 +35,7 @@ public class OpenRouterChatProperties {
 	 * Wire protocol used for chat requests. Chat Completions is the supported default;
 	 * Responses is an experimental, explicitly selected compatibility mode.
 	 */
-	private @Nullable OpenRouterRequestMode requestMode = OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS;
+	private @Nullable OpenRouterRequestMode requestMode = OpenRouterRequestMode.CHAT_COMPLETIONS;
 
 	/**
 	 * Sampling temperature.

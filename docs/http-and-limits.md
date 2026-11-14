@@ -93,7 +93,7 @@ Boot shares one `OpenRouterApi`. If chat, embeddings or images need different co
 
 ### Inspect response headers
 
-An interceptor or filter may read selected successful-response headers before it returns the response unchanged. Do not consume the body or log credentials. Successful response headers are not copied into model metadata, and reading them does not change retry behavior. HTTP errors expose the parsed `Retry-After` through `OpenRouterHttpException.getRetryAfter()`, and its delay through `getRetryDelay()`.
+An interceptor or filter may read selected successful-response headers before it returns the response unchanged. Do not consume the body or log credentials. Successful response headers are not copied into model metadata, and reading them does not change retry behavior. HTTP errors expose the parsed `Retry-After` through `OpenRouterHttpFailure.getRetryAfter()`, and its delay through `getRetryDelay()`.
 
 ### Not supported
 

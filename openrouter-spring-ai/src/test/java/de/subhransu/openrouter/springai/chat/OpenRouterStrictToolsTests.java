@@ -92,7 +92,7 @@ class OpenRouterStrictToolsTests {
 	}
 
 	private void assertRequest(OpenRouterRequestMode mode, Boolean strict, boolean stream, boolean reject) {
-		boolean responses = mode == OpenRouterRequestMode.OPENAI_RESPONSES;
+		boolean responses = mode == OpenRouterRequestMode.RESPONSES;
 		String endpoint = "https://openrouter.test" + (responses ? "/responses" : "/chat/completions");
 		AtomicReference<String> body = new AtomicReference<>();
 		HttpStatus status = reject ? HttpStatus.BAD_REQUEST : HttpStatus.OK;
@@ -129,7 +129,7 @@ class OpenRouterStrictToolsTests {
 				ToolDefinition.builder().name("synthetic").description("Synthetic tool").inputSchema(SCHEMA).build());
 		var model = OpenRouterChatModel.builder()
 			.openRouterApi(api)
-			.defaultOptions(OpenRouterChatOptions.builder().model("synthetic/model").requestMode(mode).build())
+			.options(OpenRouterChatOptions.builder().model("synthetic/model").requestMode(mode).build())
 			.build();
 		var prompt = new Prompt("Synthetic request",
 				OpenRouterChatOptions.builder()

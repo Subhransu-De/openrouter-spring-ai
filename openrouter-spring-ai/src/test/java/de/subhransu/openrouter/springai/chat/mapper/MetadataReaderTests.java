@@ -41,7 +41,7 @@ class MetadataReaderTests {
 		assertThat(OpenRouterMetadata.nativeFinishReason(generation)).contains("MAX_TOKENS");
 		assertThat(OpenRouterMetadata.responsesStatus(generation)).isEmpty();
 		assertThat(OpenRouterMetadata.choiceIndex(generation)).isZero();
-		assertThat(OpenRouterFinishReason.of(generation)).isEqualTo(OpenRouterFinishReason.LENGTH);
+		assertThat(OpenRouterFinishReason.from(generation)).isEqualTo(OpenRouterFinishReason.LENGTH);
 		assertThat(generation.getMetadata().getFinishReason()).isEqualTo("LENGTH");
 		assertThat(generation.getMetadata().<String>get(OpenRouterMetadata.MODEL)).isEqualTo("synthetic/model");
 	}
@@ -57,7 +57,7 @@ class MetadataReaderTests {
 		assertThat(OpenRouterMetadata.reasoning(generation.getOutput())).isEmpty();
 		assertThat(OpenRouterMetadata.refusal(generation)).isEmpty();
 		assertThat(OpenRouterMetadata.nativeFinishReason(generation)).isEmpty();
-		assertThat(OpenRouterFinishReason.of(generation)).isEqualTo(OpenRouterFinishReason.STOP);
+		assertThat(OpenRouterFinishReason.from(generation)).isEqualTo(OpenRouterFinishReason.STOP);
 	}
 
 	@Test
@@ -87,8 +87,8 @@ class MetadataReaderTests {
 		assertThat(OpenRouterMetadata.choiceIndex(last)).isEqualTo(2);
 		assertThat(OpenRouterMetadata.reasoning(last)).contains("two");
 		assertThat(OpenRouterMetadata.reasoning(last.getOutput())).contains("one two");
-		assertThat(OpenRouterFinishReason.of(responses.get(0).getResult())).isEqualTo(OpenRouterFinishReason.NONE);
-		assertThat(OpenRouterFinishReason.of(last)).isEqualTo(OpenRouterFinishReason.OTHER);
+		assertThat(OpenRouterFinishReason.from(responses.get(0).getResult())).isEqualTo(OpenRouterFinishReason.NONE);
+		assertThat(OpenRouterFinishReason.from(last)).isEqualTo(OpenRouterFinishReason.OTHER);
 		assertThat(last.getMetadata().getFinishReason()).isEqualTo("end_turn");
 	}
 
@@ -105,7 +105,7 @@ class MetadataReaderTests {
 		assertThat(OpenRouterMetadata.refusal(generation)).contains("no");
 		assertThat(OpenRouterMetadata.responsesStatus(generation)).contains("incomplete");
 		assertThat(OpenRouterMetadata.nativeFinishReason(generation)).contains("max_output_tokens");
-		assertThat(OpenRouterFinishReason.of(generation)).isEqualTo(OpenRouterFinishReason.LENGTH);
+		assertThat(OpenRouterFinishReason.from(generation)).isEqualTo(OpenRouterFinishReason.LENGTH);
 		assertThat(OpenRouterMetadata.choiceIndex(generation)).isZero();
 	}
 
@@ -118,7 +118,7 @@ class MetadataReaderTests {
 
 		assertThat(OpenRouterMetadata.reasoning(generation)).contains("thinking");
 		assertThat(OpenRouterMetadata.reasoning(generation.getOutput())).contains("thinking");
-		assertThat(OpenRouterFinishReason.of(generation)).isEqualTo(OpenRouterFinishReason.NONE);
+		assertThat(OpenRouterFinishReason.from(generation)).isEqualTo(OpenRouterFinishReason.NONE);
 	}
 
 	@ParameterizedTest
@@ -127,13 +127,13 @@ class MetadataReaderTests {
 			"function_call, TOOL_CALLS", "CONTENT_FILTER, CONTENT_FILTER", "content_filter, CONTENT_FILTER",
 			"error, ERROR", "ERROR, ERROR", "incomplete, OTHER", "end_turn, OTHER", "' ', NONE", "'', NONE" })
 	void classifiesBothSpellings(String raw, OpenRouterFinishReason expected) {
-		assertThat(OpenRouterFinishReason.of(raw)).isEqualTo(expected);
+		assertThat(OpenRouterFinishReason.from(raw)).isEqualTo(expected);
 	}
 
 	@Test
 	void classifiesAMissingFinishReasonAsNone() {
-		assertThat(OpenRouterFinishReason.of((String) null)).isEqualTo(OpenRouterFinishReason.NONE);
-		assertThat(OpenRouterFinishReason.of(new Generation(new AssistantMessage("hi"))))
+		assertThat(OpenRouterFinishReason.from((String) null)).isEqualTo(OpenRouterFinishReason.NONE);
+		assertThat(OpenRouterFinishReason.from(new Generation(new AssistantMessage("hi"))))
 			.isEqualTo(OpenRouterFinishReason.NONE);
 	}
 

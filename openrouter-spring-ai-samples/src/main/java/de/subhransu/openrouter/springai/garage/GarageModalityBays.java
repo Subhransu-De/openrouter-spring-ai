@@ -167,7 +167,7 @@ public final class GarageModalityBays {
             .requestMode(requestMode)
             .temperature(0.1)
             .maxCompletionTokens(2048)
-            .includeUsage(requestMode == OpenRouterRequestMode.OPENAI_RESPONSES ? null : true)
+            .includeUsage(requestMode == OpenRouterRequestMode.RESPONSES ? null : true)
             .provider(this.provider)
             .build();
     try {
@@ -235,7 +235,7 @@ public final class GarageModalityBays {
       ImageResponse completed = null;
       for (ImageResponse event : events) {
         ImageGeneration generation = event.getResult();
-        if (generation != null && OpenRouterImageGenerationMetadata.of(generation).isPartial()) {
+        if (generation != null && OpenRouterImageGenerationMetadata.from(generation).isPartial()) {
           partialEvents++;
         } else {
           completed = event;
@@ -340,7 +340,7 @@ public final class GarageModalityBays {
       Map<String, @Nullable Object> providerOptions =
           GarageOptionsFactory.imageProviderOptions(this.provider, providerTag);
       if (providerOptions != null) {
-        options.providerOptions(providerOptions);
+        options.provider(providerOptions);
       }
       ImagePrompt prompt =
           new ImagePrompt(
@@ -358,7 +358,7 @@ public final class GarageModalityBays {
 
   private void recordGeneratedImage(Map<String, Object> probe, ImageResponse response, String stem)
       throws IOException {
-    Object usage = response.getMetadata().get("openrouter.usage");
+    Object usage = response.getMetadata().get("openrouter.image.usage");
     if (usage instanceof OpenRouterUsage openRouterUsage) {
       probe.put(USAGE, GarageResponses.usage(openRouterUsage));
     }
@@ -370,7 +370,7 @@ public final class GarageModalityBays {
       probe.put(ERROR, "image response carried no base64 image data");
       return;
     }
-    String reportedType = OpenRouterImageGenerationMetadata.of(generation).mediaType();
+    String reportedType = OpenRouterImageGenerationMetadata.from(generation).mediaType();
     String mediaType = StringUtils.hasText(reportedType) ? reportedType : "image/png";
     byte[] bytes = Base64.getDecoder().decode(b64Json);
     Path file = this.outputDirectory.resolve(stem + "." + extension(mediaType));
@@ -401,7 +401,7 @@ public final class GarageModalityBays {
     Map<String, @Nullable Object> providerOptions =
         GarageOptionsFactory.imageProviderOptions(this.provider, null);
     if (providerOptions != null) {
-      options.providerOptions(providerOptions);
+      options.provider(providerOptions);
     }
     return options.build();
   }

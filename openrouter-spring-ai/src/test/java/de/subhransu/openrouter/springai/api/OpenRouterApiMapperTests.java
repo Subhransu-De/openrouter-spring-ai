@@ -7,7 +7,7 @@ import de.subhransu.openrouter.springai.api.dto.ChatCompletionRequest;
 import de.subhransu.openrouter.springai.api.dto.ChatMessage;
 import de.subhransu.openrouter.springai.api.dto.ContentPart;
 import de.subhransu.openrouter.springai.api.dto.EmbeddingsRequest;
-import de.subhransu.openrouter.springai.api.dto.Function;
+import de.subhransu.openrouter.springai.api.dto.FunctionDefinition;
 import de.subhransu.openrouter.springai.api.dto.ImagesRequest;
 import de.subhransu.openrouter.springai.api.dto.ResponsesRequest;
 import de.subhransu.openrouter.springai.api.dto.ResponsesTool;
@@ -201,19 +201,17 @@ class OpenRouterApiMapperTests {
 				new ContentPart("video_url", null, null, null, null, null,
 						new ContentPart.VideoUrl("https://media.invalid/video.mp4")));
 		return switch (path) {
-			case CHAT,
-					CHAT_STREAM ->
-				ChatCompletionRequest.builder()
-					.model("synthetic")
-					.messages(List.of(new ChatMessage("user", parts, null, null, null)))
-					.stream(path.streaming())
-					.tools(List.of(new Tool("function", new Function("lookup", "synthetic", schema, true))))
-					.toolChoice(choice)
-					.responseFormat(Map.of("type", "json_schema", "json_schema",
-							Map.of("name", "answer", "strict", true, "schema", schema)))
-					.metadata(metadata)
-					.extraBody(Map.of("logprobs", true, "top_logprobs", 0))
-					.build();
+			case CHAT, CHAT_STREAM -> ChatCompletionRequest.builder()
+				.model("synthetic")
+				.messages(List.of(new ChatMessage("user", parts, null, null, null)))
+				.stream(path.streaming())
+				.tools(List.of(new Tool("function", new FunctionDefinition("lookup", "synthetic", schema, true))))
+				.toolChoice(choice)
+				.responseFormat(Map.of("type", "json_schema", "json_schema",
+						Map.of("name", "answer", "strict", true, "schema", schema)))
+				.metadata(metadata)
+				.extraBody(Map.of("logprobs", true, "top_logprobs", 0))
+				.build();
 			case RESPONSES,
 					RESPONSES_STREAM ->
 				ResponsesRequest.builder()
@@ -314,8 +312,8 @@ class OpenRouterApiMapperTests {
 				.restClientBuilder(this.rest)
 				.webClientBuilder(this.web)
 				.httpReferer("https://app.invalid")
-				.applicationTitle("synthetic-app")
-				.applicationCategories("synthetic");
+				.appTitle("synthetic-app")
+				.appCategories("synthetic");
 			return (mapper == null ? builder : builder.objectMapper(mapper)).build();
 		}
 

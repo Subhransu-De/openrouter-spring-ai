@@ -37,8 +37,8 @@ public record GarageRunPlan(
 
   private static final List<OpenRouterRequestMode> ALL_REQUEST_MODES =
       List.of(
-          OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS,
-          OpenRouterRequestMode.OPENAI_RESPONSES);
+          OpenRouterRequestMode.CHAT_COMPLETIONS,
+          OpenRouterRequestMode.RESPONSES);
 
   private static final List<String> FULL_SCENES =
       List.of(
@@ -283,8 +283,8 @@ public record GarageRunPlan(
       switch (normalized) {
         case "all", "both" -> modes.addAll(ALL_REQUEST_MODES);
         case "chat", "chat_completions", "openai_chat_completions" ->
-            modes.add(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS);
-        case "responses", "openai_responses" -> modes.add(OpenRouterRequestMode.OPENAI_RESPONSES);
+            modes.add(OpenRouterRequestMode.CHAT_COMPLETIONS);
+        case "responses", "openai_responses" -> modes.add(OpenRouterRequestMode.RESPONSES);
         default -> throw new IllegalArgumentException("Unknown request mode: " + value);
       }
     }
@@ -294,7 +294,7 @@ public record GarageRunPlan(
   private static List<OpenRouterRequestMode> sanitizeModes(
       @Nullable List<OpenRouterRequestMode> modes) {
     if (modes == null || modes.isEmpty()) {
-      return List.of(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS);
+      return List.of(OpenRouterRequestMode.CHAT_COMPLETIONS);
     }
     return new ArrayList<>(new LinkedHashSet<>(modes));
   }
@@ -426,7 +426,7 @@ public record GarageRunPlan(
         this.requestModes = ALL_REQUEST_MODES;
       }
       if ((this.imageSurface == ImageSurface.CHAT || this.imageSurface == ImageSurface.ALL)
-          && !this.requestModes.contains(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS)) {
+          && !this.requestModes.contains(OpenRouterRequestMode.CHAT_COMPLETIONS)) {
         throw new IllegalArgumentException(
             "Chat image generation requires the chat request mode");
       }

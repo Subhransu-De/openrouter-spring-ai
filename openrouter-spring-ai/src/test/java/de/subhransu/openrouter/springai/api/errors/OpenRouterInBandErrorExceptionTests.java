@@ -8,11 +8,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @Tag("http")
 @Tag("http.errors")
-class OpenRouterApiExceptionTests {
+class OpenRouterInBandErrorExceptionTests {
 
 	@Test
 	void compatibilityConstructorAcceptsNullStatus() {
-		OpenRouterApiException exception = new OpenRouterApiException("failure", null, "{}");
+		OpenRouterInBandErrorException exception = new OpenRouterInBandErrorException("failure", null, "{}");
 
 		assertThat(exception.getStatusCode()).isNull();
 		assertThat(exception.getCategory()).isEqualTo(OpenRouterErrorCategory.UNKNOWN);

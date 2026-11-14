@@ -116,7 +116,7 @@ class OpenRouterChatModelToolCallingFailureTests {
 		return new Prompt(List.of(new UserMessage("go")),
 				OpenRouterChatOptions.builder()
 					.model(MODEL)
-					.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
+					.requestMode(OpenRouterRequestMode.RESPONSES)
 					.toolCallbacks(List.of(tools))
 					.build());
 	}
@@ -153,7 +153,7 @@ class OpenRouterChatModelToolCallingFailureTests {
 		List<ChatMessage> followUp = captor.getAllValues().get(1).messages();
 		assertThat(followUp).anySatisfy(message -> {
 			assertThat(message.role()).isEqualTo("tool");
-			assertThat(message.content()).isEqualTo(OpenRouterToolExecutionExceptionProcessor.DEFAULT_FAILURE_PAYLOAD);
+			assertThat(message.content()).isEqualTo(OpenRouterToolExecutionExceptionProcessor.DEFAULT_FAILURE_RESULT);
 			assertThat(String.valueOf(message.content())).doesNotContain("tool exploded", "sk-sensitive",
 					"nested secret", "\n", "IllegalStateException");
 		});
@@ -182,7 +182,7 @@ class OpenRouterChatModelToolCallingFailureTests {
 		assertThat(followUp).filteredOn(ResponsesFunctionCallOutput.class::isInstance)
 			.singleElement()
 			.isInstanceOfSatisfying(ResponsesFunctionCallOutput.class, output -> assertThat(output.output())
-				.isEqualTo(OpenRouterToolExecutionExceptionProcessor.DEFAULT_FAILURE_PAYLOAD));
+				.isEqualTo(OpenRouterToolExecutionExceptionProcessor.DEFAULT_FAILURE_RESULT));
 	}
 
 	@Tag("tools.execution")

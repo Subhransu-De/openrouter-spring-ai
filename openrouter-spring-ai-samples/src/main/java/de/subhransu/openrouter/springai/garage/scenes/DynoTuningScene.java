@@ -67,7 +67,7 @@ public final class DynoTuningScene extends GarageSceneSupport {
         features(), operationId, mode, EvidenceLevel.CONFIGURED, "effectiveOptions", snapshot);
 
     Object wireRequest;
-    if (context.requestMode() == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS) {
+    if (context.requestMode() == OpenRouterRequestMode.CHAT_COMPLETIONS) {
       wireRequest =
           new OpenRouterChatRequestMapper(context.objectMapper())
               .map(

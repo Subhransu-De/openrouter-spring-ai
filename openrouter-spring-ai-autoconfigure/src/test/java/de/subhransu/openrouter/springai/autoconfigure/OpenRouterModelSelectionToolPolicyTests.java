@@ -64,7 +64,7 @@ class OpenRouterModelSelectionToolPolicyTests {
 			.withBean(OpenRouterApi.class, () -> api);
 		boolean defaultPolicy = "default".equals(policy);
 		boolean mixed = "mixed".equals(policy);
-		String expected = defaultPolicy ? OpenRouterToolExecutionExceptionProcessor.DEFAULT_FAILURE_PAYLOAD
+		String expected = defaultPolicy ? OpenRouterToolExecutionExceptionProcessor.DEFAULT_FAILURE_RESULT
 				: "application failure";
 		ToolExecutionExceptionProcessor processor = exception -> expected;
 		ToolCallingManager manager = "custom".equals(policy) ? new PolicyManager(processor)
