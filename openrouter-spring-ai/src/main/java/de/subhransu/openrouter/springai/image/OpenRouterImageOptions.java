@@ -135,7 +135,8 @@ public class OpenRouterImageOptions implements ImageOptions {
 
 	/**
 	 * Always {@code null}: OpenRouter's Image API has no portable style parameter; use
-	 * {@link #getQuality() quality} or provider passthrough options instead.
+	 * {@link #getQuality() quality} or the {@code options.<provider-slug>} settings of
+	 * {@link #getProvider() provider} instead.
 	 */
 	@Override
 	public @Nullable String getStyle() {

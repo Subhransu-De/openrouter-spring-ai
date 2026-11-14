@@ -1,5 +1,5 @@
 /**
- * Inspectable legacy in-band API errors.
+ * Inspectable in-band API errors.
  */
 @NullMarked
 package de.subhransu.openrouter.springai.api.errors;

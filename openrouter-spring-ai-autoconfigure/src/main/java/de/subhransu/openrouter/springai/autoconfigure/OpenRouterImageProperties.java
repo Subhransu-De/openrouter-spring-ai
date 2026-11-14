@@ -78,15 +78,15 @@ public class OpenRouterImageProperties {
 	private @Nullable List<String> inputReferences;
 
 	/**
-	 * OpenRouter {@code provider} object as a raw map with wire field names, sent
-	 * unchanged. Settings for one upstream provider go under
-	 * {@code options.<provider-slug>}. Only string values bind faithfully; set lists and
-	 * booleans in Java with {@code OpenRouterImageOptions.Builder.provider(Map)}.
+	 * OpenRouter provider object as a raw map with wire field names, sent unchanged.
+	 * Settings for one upstream provider go under options, keyed by the provider slug. A
+	 * list binds as a map keyed by index, and properties files and environment variables
+	 * give booleans and numbers as strings, so set such values in Java.
 	 */
 	private @Nullable Map<String, @Nullable Object> provider;
 
 	/**
-	 * Old name of {@code provider}, still bound for one release.
+	 * Old name of provider, still bound for one release.
 	 */
 	private @Nullable Map<String, @Nullable Object> providerOptions;
 

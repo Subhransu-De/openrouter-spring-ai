@@ -13,7 +13,7 @@ import org.springframework.http.HttpStatusCode;
 import org.springframework.util.StringUtils;
 
 /**
- * Creates structured legacy-compatible exceptions for errors carried over HTTP 200.
+ * Creates the exceptions for errors carried over HTTP 200.
  *
  * <p>
  * Like the HTTP path, it classifies the original provider values, then redacts every
