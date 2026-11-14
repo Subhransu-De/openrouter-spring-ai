@@ -191,7 +191,7 @@ public class OpenRouterImageModel implements ImageModel {
 		 * Set the default options of the model.
 		 * @param defaultOptions the default options
 		 * @return this builder
-		 * @deprecated since 0.2.0 for removal in 0.3.0; use
+		 * @deprecated since 0.2.0 for removal in 1.0.0; use
 		 * {@link #options(OpenRouterImageOptions)}, as in Spring AI's own model builders
 		 */
 		@Deprecated(since = "0.2.0", forRemoval = true)

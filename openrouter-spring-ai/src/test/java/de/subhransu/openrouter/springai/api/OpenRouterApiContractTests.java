@@ -165,7 +165,7 @@ class OpenRouterApiContractTests {
 		fixture.server().verify();
 	}
 
-	@SuppressWarnings("removal") // The v0.1.0 names must keep working until 0.3.0.
+	@SuppressWarnings("removal") // The v0.1.0 names must keep working until 1.0.0.
 	@Tag("http")
 	@Tag("http.client")
 	@Test

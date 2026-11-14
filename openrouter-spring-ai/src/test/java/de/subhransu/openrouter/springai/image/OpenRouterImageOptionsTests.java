@@ -28,14 +28,26 @@ class OpenRouterImageOptionsTests {
 			.merge(OpenRouterImageOptions.fromOptions(OpenRouterImageOptions.builder()
 				.model("openai/gpt-image-1")
 				.aspectRatio("16:9")
-				.provider(Map.of("options", Map.of("test", Map.of("watermark", false))))
+				.providerExtraBody(Map.of("options", Map.of("test", Map.of("watermark", false))))
 				.build()));
 
 		assertThat(merged.getModel()).isEqualTo("openai/gpt-image-1");
 		assertThat(merged.getAspectRatio()).isEqualTo("16:9");
 		assertThat(merged.getQuality()).isEqualTo("high");
 		assertThat(merged.getOutputFormat()).isEqualTo("webp");
-		assertThat(merged.getProvider()).containsEntry("options", Map.of("test", Map.of("watermark", false)));
+		assertThat(merged.getProviderExtraBody()).containsEntry("options", Map.of("test", Map.of("watermark", false)));
+	}
+
+	@Test
+	void perRequestProviderExtraBodyReplacesTheDefaultMap() {
+		OpenRouterImageOptions defaults = OpenRouterImageOptions.builder()
+			.providerExtraBody(Map.of("sort", "price", "options", Map.of("test", Map.of("watermark", false))))
+			.build();
+
+		OpenRouterImageOptions merged = defaults
+			.merge(OpenRouterImageOptions.builder().providerExtraBody(Map.of("order", List.of("synthetic"))).build());
+
+		assertThat(merged.getProviderExtraBody()).containsOnlyKeys("order");
 	}
 
 	@Test
@@ -43,14 +55,14 @@ class OpenRouterImageOptionsTests {
 		OpenRouterImageOptions source = OpenRouterImageOptions.builder()
 			.model(MODEL)
 			.inputReferences(List.of("https://example.test/ref.png"))
-			.provider(Map.of("openai", Map.of("moderation", "low")))
+			.providerExtraBody(Map.of("openai", Map.of("moderation", "low")))
 			.build();
 
 		OpenRouterImageOptions copy = source.mutate().build();
 
 		assertThat(copy.getInputReferences()).isNotSameAs(source.getInputReferences())
 			.containsExactly("https://example.test/ref.png");
-		assertThat(copy.getProvider()).isNotSameAs(source.getProvider())
+		assertThat(copy.getProviderExtraBody()).isNotSameAs(source.getProviderExtraBody())
 			.containsEntry("openai", Map.of("moderation", "low"));
 	}
 

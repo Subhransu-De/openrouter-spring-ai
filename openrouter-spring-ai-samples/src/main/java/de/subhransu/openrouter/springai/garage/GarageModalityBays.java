@@ -341,7 +341,7 @@ public final class GarageModalityBays {
       Map<String, @Nullable Object> providerOptions =
           GarageOptionsFactory.imageProviderOptions(this.provider, providerTag);
       if (providerOptions != null) {
-        options.provider(providerOptions);
+        options.providerExtraBody(providerOptions);
       }
       ImagePrompt prompt =
           new ImagePrompt(
@@ -402,7 +402,7 @@ public final class GarageModalityBays {
     Map<String, @Nullable Object> providerOptions =
         GarageOptionsFactory.imageProviderOptions(this.provider, null);
     if (providerOptions != null) {
-      options.provider(providerOptions);
+      options.providerExtraBody(providerOptions);
     }
     return options.build();
   }

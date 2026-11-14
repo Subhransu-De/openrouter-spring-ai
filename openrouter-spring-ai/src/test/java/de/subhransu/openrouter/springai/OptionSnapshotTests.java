@@ -162,7 +162,7 @@ class OptionSnapshotTests {
 		assertThat(image).isNotSameAs(imageDefaults);
 	}
 
-	@SuppressWarnings("removal") // The v0.1.0 names must keep working until 0.3.0.
+	@SuppressWarnings("removal") // The v0.1.0 names must keep working until 1.0.0.
 	@Tag("api")
 	@Tag("api.options")
 	@Test
@@ -190,7 +190,7 @@ class OptionSnapshotTests {
 		assertThat(chat.getModel()).isEqualTo("synthetic/old-chat");
 		assertThat(embedding.getModel()).isEqualTo("synthetic/old-embedding");
 		assertThat(image.getModel()).isEqualTo("synthetic/old-image");
-		assertThat(imageOptions.getProviderOptions()).isEqualTo(imageOptions.getProvider())
+		assertThat(imageOptions.getProviderOptions()).isEqualTo(imageOptions.getProviderExtraBody())
 			.isEqualTo(Map.of("options", Map.of("synthetic", Map.of("quality", "low"))));
 	}
 
@@ -250,17 +250,17 @@ class OptionSnapshotTests {
 		values.add(null);
 		var input = new LinkedHashMap<String, Object>();
 		input.put("nested", new LinkedHashMap<>(Map.of("values", values)));
-		var builder = OpenRouterImageOptions.builder().inputReferences(references).provider(input);
+		var builder = OpenRouterImageOptions.builder().inputReferences(references).providerExtraBody(input);
 		var options = builder.build();
 		references.clear();
 		values.clear();
 		input.clear();
-		builder.inputReferences(List.of()).provider(Map.of());
+		builder.inputReferences(List.of()).providerExtraBody(Map.of());
 		for (var snapshot : List.of(options, options.mutate().build(), options.merge(null))) {
 			assertThat(snapshot.getInputReferences()).containsExactly("https://example.com/synthetic.png");
 			assertThatThrownBy(() -> snapshot.getInputReferences().clear())
 				.isInstanceOf(UnsupportedOperationException.class);
-			assertNestedSnapshot(snapshot.getProvider());
+			assertNestedSnapshot(snapshot.getProviderExtraBody());
 		}
 	}
 

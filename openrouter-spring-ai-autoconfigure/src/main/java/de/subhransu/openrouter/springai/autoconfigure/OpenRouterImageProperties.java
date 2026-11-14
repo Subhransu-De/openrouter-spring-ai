@@ -83,10 +83,10 @@ public class OpenRouterImageProperties {
 	 * list binds as a map keyed by index, and properties files and environment variables
 	 * give booleans and numbers as strings, so set such values in Java.
 	 */
-	private @Nullable Map<String, @Nullable Object> provider;
+	private @Nullable Map<String, @Nullable Object> providerExtraBody;
 
 	/**
-	 * Old name of provider, still bound for one release.
+	 * Old name of provider-extra-body, still bound until 1.0.0.
 	 */
 	private @Nullable Map<String, @Nullable Object> providerOptions;
 
@@ -104,7 +104,7 @@ public class OpenRouterImageProperties {
 			.outputCompression(this.outputCompression)
 			.seed(this.seed)
 			.inputReferences(this.inputReferences)
-			.provider(provider())
+			.providerExtraBody(providerExtraBody())
 			.build();
 	}
 
@@ -204,21 +204,21 @@ public class OpenRouterImageProperties {
 		this.inputReferences = inputReferences;
 	}
 
-	public @Nullable Map<String, @Nullable Object> getProvider() {
-		return this.provider;
+	public @Nullable Map<String, @Nullable Object> getProviderExtraBody() {
+		return this.providerExtraBody;
 	}
 
-	public void setProvider(@Nullable Map<String, @Nullable Object> provider) {
-		this.provider = provider;
+	public void setProviderExtraBody(@Nullable Map<String, @Nullable Object> providerExtraBody) {
+		this.providerExtraBody = providerExtraBody;
 	}
 
 	/**
 	 * Return the value of the old {@code provider-options} key.
 	 * @return the provider object, or {@code null}
-	 * @deprecated since 0.2.0 for removal in 0.3.0; use {@link #getProvider()}
+	 * @deprecated since 0.2.0 for removal in 1.0.0; use {@link #getProviderExtraBody()}
 	 */
 	@Deprecated(since = "0.2.0", forRemoval = true)
-	@DeprecatedConfigurationProperty(replacement = CONFIG_PREFIX + ".provider", since = "0.2.0")
+	@DeprecatedConfigurationProperty(replacement = CONFIG_PREFIX + ".provider-extra-body", since = "0.2.0")
 	public @Nullable Map<String, @Nullable Object> getProviderOptions() {
 		return this.providerOptions;
 	}
@@ -226,22 +226,24 @@ public class OpenRouterImageProperties {
 	/**
 	 * Set the value of the old {@code provider-options} key.
 	 * @param providerOptions the provider object
-	 * @deprecated since 0.2.0 for removal in 0.3.0; use {@link #setProvider(Map)}
+	 * @deprecated since 0.2.0 for removal in 1.0.0; use
+	 * {@link #setProviderExtraBody(Map)}
 	 */
 	@Deprecated(since = "0.2.0", forRemoval = true)
 	public void setProviderOptions(@Nullable Map<String, @Nullable Object> providerOptions) {
 		this.providerOptions = providerOptions;
 	}
 
-	private @Nullable Map<String, @Nullable Object> provider() {
+	private @Nullable Map<String, @Nullable Object> providerExtraBody() {
 		if (this.providerOptions == null) {
-			return this.provider;
+			return this.providerExtraBody;
 		}
-		if (this.provider != null) {
-			throw new IllegalStateException(
-					"Set only " + CONFIG_PREFIX + ".provider; " + CONFIG_PREFIX + ".provider-options is its old name");
+		if (this.providerExtraBody != null) {
+			throw new IllegalStateException("Set only " + CONFIG_PREFIX + ".provider-extra-body; " + CONFIG_PREFIX
+					+ ".provider-options is its old name");
 		}
-		logger.warn(CONFIG_PREFIX + ".provider-options is deprecated; rename it to " + CONFIG_PREFIX + ".provider");
+		logger.warn(CONFIG_PREFIX + ".provider-options is deprecated; rename it to " + CONFIG_PREFIX
+				+ ".provider-extra-body");
 		return this.providerOptions;
 	}
 

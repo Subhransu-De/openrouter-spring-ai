@@ -50,7 +50,7 @@ class OpenRouterImageAutoConfigurationTests {
 					"spring.ai.openrouter.image.output-compression=80", "spring.ai.openrouter.image.seed=42",
 					"spring.ai.openrouter.image.width=1024", "spring.ai.openrouter.image.height=576",
 					"spring.ai.openrouter.image.input-references[0]=https://example.com/input.png",
-					"spring.ai.openrouter.image.provider.options.openai.moderation=low")
+					"spring.ai.openrouter.image.provider-extra-body.options.openai.moderation=low")
 			.run(context -> {
 				OpenRouterImageModel imageModel = context.getBean(OpenRouterImageModel.class);
 				OpenRouterImageOptions options = (OpenRouterImageOptions) ReflectionTestUtils.getField(imageModel,
@@ -67,23 +67,24 @@ class OpenRouterImageAutoConfigurationTests {
 				assertThat(options.getWidth()).isEqualTo(1024);
 				assertThat(options.getHeight()).isEqualTo(576);
 				assertThat(options.getInputReferences()).containsExactly("https://example.com/input.png");
-				assertThat(options.getProvider()).containsEntry("options",
+				assertThat(options.getProviderExtraBody()).containsEntry("options",
 						Map.of("openai", Map.of("moderation", "low")));
 			});
 	}
 
 	@Tag("configuration.properties")
 	@Test
-	void bindsTheOldProviderOptionsKeyForOneRelease(CapturedOutput output) {
+	void stillBindsTheOldProviderOptionsKey(CapturedOutput output) {
 		this.contextRunner
 			.withPropertyValues(API_KEY_PROPERTY,
 					"spring.ai.openrouter.image.provider-options.options.openai.moderation=low")
 			.run(context -> {
 				OpenRouterImageOptions options = (OpenRouterImageOptions) ReflectionTestUtils
 					.getField(context.getBean(OpenRouterImageModel.class), "defaultOptions");
-				assertThat(options.getProvider()).containsEntry("options",
+				assertThat(options.getProviderExtraBody()).containsEntry("options",
 						Map.of("openai", Map.of("moderation", "low")));
-				assertThat(output).contains("spring.ai.openrouter.image.provider-options is deprecated");
+				assertThat(output).contains(
+						"spring.ai.openrouter.image.provider-options is deprecated; rename it to spring.ai.openrouter.image.provider-extra-body");
 			});
 	}
 
@@ -91,7 +92,8 @@ class OpenRouterImageAutoConfigurationTests {
 	@Test
 	void failsWhenTheOldAndNewProviderKeysAreBothSet() {
 		this.contextRunner
-			.withPropertyValues(API_KEY_PROPERTY, "spring.ai.openrouter.image.provider.options.openai.moderation=low",
+			.withPropertyValues(API_KEY_PROPERTY,
+					"spring.ai.openrouter.image.provider-extra-body.options.openai.moderation=low",
 					"spring.ai.openrouter.image.provider-options.options.openai.moderation=auto")
 			.run(context -> {
 				assertThat(context).hasFailed();

@@ -12,7 +12,8 @@ import org.springframework.ai.image.ImageOptions;
  * normalized OpenRouter fields: {@code n}, {@code size} (via width/height),
  * {@code resolution}, {@code aspect_ratio}, {@code quality}, {@code output_format},
  * {@code background}, {@code output_compression}, {@code seed}, {@code input_references}
- * (reference images for image-to-image work) and the {@code provider} object.
+ * (reference images for image-to-image work) and the {@code provider} object, set as
+ * {@link Builder#providerExtraBody(Map) providerExtraBody}.
  *
  * <p>
  * Images always come back base64-encoded, so the portable {@code responseFormat} is fixed
@@ -47,7 +48,7 @@ public class OpenRouterImageOptions implements ImageOptions {
 
 	private @Nullable List<String> inputReferences;
 
-	private @Nullable Map<String, @Nullable Object> provider;
+	private @Nullable Map<String, @Nullable Object> providerExtraBody;
 
 	public static Builder builder() {
 		return new Builder();
@@ -70,7 +71,7 @@ public class OpenRouterImageOptions implements ImageOptions {
 		}
 		if (options.getStyle() != null) {
 			throw new IllegalArgumentException(
-					"OpenRouter does not support portable image style; leave style unset and put provider-specific settings in provider.options");
+					"OpenRouter does not support portable image style; leave style unset and put provider-specific settings in providerExtraBody under options.<provider-slug>");
 		}
 		return OpenRouterImageOptions.builder()
 			.model(options.getModel())
@@ -97,7 +98,7 @@ public class OpenRouterImageOptions implements ImageOptions {
 			.outputCompression(value(runtimeOptions.outputCompression, this.outputCompression))
 			.seed(value(runtimeOptions.seed, this.seed))
 			.inputReferences(value(runtimeOptions.inputReferences, this.inputReferences))
-			.provider(value(runtimeOptions.provider, this.provider))
+			.providerExtraBody(value(runtimeOptions.providerExtraBody, this.providerExtraBody))
 			.build();
 	}
 
@@ -136,7 +137,7 @@ public class OpenRouterImageOptions implements ImageOptions {
 	/**
 	 * Always {@code null}: OpenRouter's Image API has no portable style parameter; use
 	 * {@link #getQuality() quality} or the {@code options.<provider-slug>} settings of
-	 * {@link #getProvider() provider} instead.
+	 * {@link #getProviderExtraBody() providerExtraBody} instead.
 	 */
 	@Override
 	public @Nullable String getStyle() {
@@ -175,18 +176,18 @@ public class OpenRouterImageOptions implements ImageOptions {
 		return this.inputReferences;
 	}
 
-	public @Nullable Map<String, @Nullable Object> getProvider() {
-		return this.provider;
+	public @Nullable Map<String, @Nullable Object> getProviderExtraBody() {
+		return this.providerExtraBody;
 	}
 
 	/**
 	 * Return the OpenRouter {@code provider} object.
 	 * @return the provider object, or {@code null}
-	 * @deprecated since 0.2.0 for removal in 0.3.0; use {@link #getProvider()}
+	 * @deprecated since 0.2.0 for removal in 1.0.0; use {@link #getProviderExtraBody()}
 	 */
 	@Deprecated(since = "0.2.0", forRemoval = true)
 	public @Nullable Map<String, @Nullable Object> getProviderOptions() {
-		return getProvider();
+		return getProviderExtraBody();
 	}
 
 	public static final class Builder {
@@ -211,7 +212,7 @@ public class OpenRouterImageOptions implements ImageOptions {
 			this.options.outputCompression = source.outputCompression;
 			this.options.seed = source.seed;
 			this.options.inputReferences = OptionSnapshots.list(source.inputReferences);
-			this.options.provider = OptionSnapshots.map(source.provider);
+			this.options.providerExtraBody = OptionSnapshots.map(source.providerExtraBody);
 		}
 
 		public Builder model(@Nullable String model) {
@@ -276,15 +277,16 @@ public class OpenRouterImageOptions implements ImageOptions {
 		}
 
 		/**
-		 * Set the OpenRouter {@code provider} object, sent unchanged. Unlike the typed
-		 * {@code provider} of chat and embedding options, this is a raw map with wire
-		 * field names. Put settings for one upstream provider under
-		 * {@code options.<provider-slug>}.
-		 * @param provider the {@code provider} object, or {@code null}
+		 * Set the OpenRouter {@code provider} object as a raw map with wire field names,
+		 * sent unchanged. Put settings for one upstream provider under
+		 * {@code options.<provider-slug>}. As with {@code providerExtraBody} on chat
+		 * options, these are raw fields of the wire {@code provider} object; unlike chat,
+		 * a per-request map replaces the default map instead of merging with it by key.
+		 * @param providerExtraBody the {@code provider} object, or {@code null}
 		 * @return this builder
 		 */
-		public Builder provider(@Nullable Map<String, @Nullable Object> provider) {
-			this.options.provider = OptionSnapshots.map(provider);
+		public Builder providerExtraBody(@Nullable Map<String, @Nullable Object> providerExtraBody) {
+			this.options.providerExtraBody = OptionSnapshots.map(providerExtraBody);
 			return this;
 		}
 
@@ -292,11 +294,12 @@ public class OpenRouterImageOptions implements ImageOptions {
 		 * Set the OpenRouter {@code provider} object.
 		 * @param providerOptions the {@code provider} object, or {@code null}
 		 * @return this builder
-		 * @deprecated since 0.2.0 for removal in 0.3.0; use {@link #provider(Map)}
+		 * @deprecated since 0.2.0 for removal in 1.0.0; use
+		 * {@link #providerExtraBody(Map)}
 		 */
 		@Deprecated(since = "0.2.0", forRemoval = true)
 		public Builder providerOptions(@Nullable Map<String, @Nullable Object> providerOptions) {
-			return provider(providerOptions);
+			return providerExtraBody(providerOptions);
 		}
 
 		public OpenRouterImageOptions build() {

@@ -240,7 +240,7 @@ class OpenRouterImageModelTests {
 			.height(512)
 			.quality("high")
 			.outputFormat("webp")
-			.provider(Map.of("options", Map.of("test", Map.of("watermark", false))))
+			.providerExtraBody(Map.of("options", Map.of("test", Map.of("watermark", false))))
 			.build();
 		if (asDefaults) {
 			defaults = defaults.merge(OpenRouterImageOptions.fromOptions(portable));

@@ -575,7 +575,7 @@ public class OpenRouterApi {
 		 * Set the {@code X-OpenRouter-Title} attribution header.
 		 * @param applicationTitle the app title, or {@code null}
 		 * @return this builder
-		 * @deprecated since 0.2.0 for removal in 0.3.0; use {@link #appTitle(String)}, as
+		 * @deprecated since 0.2.0 for removal in 1.0.0; use {@link #appTitle(String)}, as
 		 * in {@code spring.ai.openrouter.app.title}
 		 */
 		@Deprecated(since = "0.2.0", forRemoval = true)
@@ -587,7 +587,7 @@ public class OpenRouterApi {
 		 * Set the {@code X-OpenRouter-Categories} attribution header.
 		 * @param applicationCategories comma-separated categories, or {@code null}
 		 * @return this builder
-		 * @deprecated since 0.2.0 for removal in 0.3.0; use
+		 * @deprecated since 0.2.0 for removal in 1.0.0; use
 		 * {@link #appCategories(String)}, as in
 		 * {@code spring.ai.openrouter.app.categories}
 		 */
