@@ -2,7 +2,7 @@ package de.subhransu.openrouter.springai.api.errors;
 
 import java.util.Objects;
 import org.jspecify.annotations.Nullable;
-import de.subhransu.openrouter.springai.api.dto.StreamError;
+import de.subhransu.openrouter.springai.api.dto.ResponseError;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
 import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorClassifier;
@@ -13,7 +13,7 @@ import org.springframework.http.HttpStatusCode;
 import org.springframework.util.StringUtils;
 
 /**
- * Creates structured legacy-compatible exceptions for errors carried over HTTP 200.
+ * Creates the exceptions for errors carried over HTTP 200.
  *
  * <p>
  * Like the HTTP path, it classifies the original provider values, then redacts every
@@ -21,15 +21,15 @@ import org.springframework.util.StringUtils;
  *
  * @author Subhransu De
  */
-public final class OpenRouterApiExceptionFactory {
+public final class OpenRouterInBandErrorExceptionFactory {
 
-	private OpenRouterApiExceptionFactory() {
+	private OpenRouterInBandErrorExceptionFactory() {
 	}
 
 	public static RuntimeException createRetryable(String message, @Nullable String responseBody,
-			@Nullable StreamError error, @Nullable String errorType, String endpoint,
+			@Nullable ResponseError error, @Nullable String errorType, String endpoint,
 			OpenRouterDiagnosticSanitizer sanitizer) {
-		OpenRouterApiException failure = create(message, responseBody, error, errorType, endpoint, sanitizer);
+		OpenRouterInBandErrorException failure = create(message, responseBody, error, errorType, endpoint, sanitizer);
 		if (OpenRouterErrorClassifier.isTransient(failure.getCategory())) {
 			return new OpenRouterTransientApiException(Objects.requireNonNull(failure.getMessage()),
 					failure.getStatusCode(), failure.getResponseBody(), failure.getErrorDetails(), null, endpoint);
@@ -43,8 +43,8 @@ public final class OpenRouterApiExceptionFactory {
 	 * details. The fallback message stands in for a missing provider message in the
 	 * details.
 	 */
-	public static OpenRouterApiException create(String fallbackMessage, @Nullable String responseBody,
-			@Nullable StreamError error, @Nullable String rootErrorType, String endpoint,
+	public static OpenRouterInBandErrorException create(String fallbackMessage, @Nullable String responseBody,
+			@Nullable ResponseError error, @Nullable String rootErrorType, String endpoint,
 			OpenRouterDiagnosticSanitizer sanitizer) {
 		String parsedMessage = error != null ? error.message() : null;
 		String diagnosticMessage = StringUtils.hasText(parsedMessage) ? parsedMessage : fallbackMessage;
@@ -63,7 +63,7 @@ public final class OpenRouterApiExceptionFactory {
 		HttpStatusCode status = HttpStatusCode.valueOf(statusCode);
 		String message = fallbackMessage + " in " + endpoint + " with status " + status + ", category "
 				+ details.category();
-		return new OpenRouterApiException(message, status, sanitizer.sanitize(responseBody), details);
+		return new OpenRouterInBandErrorException(message, status, sanitizer.sanitize(responseBody), details);
 	}
 
 	private static int numericCode(@Nullable String code) {

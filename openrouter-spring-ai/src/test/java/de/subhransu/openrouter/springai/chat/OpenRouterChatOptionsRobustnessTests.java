@@ -163,7 +163,7 @@ class OpenRouterChatOptionsRobustnessTests {
 		return OpenRouterChatOptions.builder()
 			.model(MODEL)
 			.models(List.of("openai/gpt-5.4"))
-			.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
+			.requestMode(OpenRouterRequestMode.RESPONSES)
 			.frequencyPenalty(0.1)
 			.maxTokens(256)
 			.maxCompletionTokens(512)
@@ -413,7 +413,7 @@ class OpenRouterChatOptionsRobustnessTests {
 	void fromOptionsWithOpenRouterOptionsReturnsAnIndependentCopy() {
 		OpenRouterChatOptions original = OpenRouterChatOptions.builder()
 			.model(MODEL)
-			.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
+			.requestMode(OpenRouterRequestMode.RESPONSES)
 			.stopSequences(List.of("END"))
 			.build();
 
@@ -423,7 +423,7 @@ class OpenRouterChatOptionsRobustnessTests {
 		// Passing OpenRouter options through fromOptions preserves everything (no loss)
 		// and
 		// returns a copy, not the same instance.
-		assertThat(converted.getRequestMode()).isEqualTo(OpenRouterRequestMode.OPENAI_RESPONSES);
+		assertThat(converted.getRequestMode()).isEqualTo(OpenRouterRequestMode.RESPONSES);
 		assertThat(converted).isNotSameAs(original);
 		assertThat(original.getStopSequences()).containsExactly("END");
 		assertThat(converted.getStopSequences()).containsExactly("END", "STOP");

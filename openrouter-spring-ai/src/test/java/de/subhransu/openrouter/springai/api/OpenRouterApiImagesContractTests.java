@@ -13,7 +13,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import de.subhransu.openrouter.springai.api.dto.ContentPart;
 import de.subhransu.openrouter.springai.api.dto.ImagesRequest;
 import de.subhransu.openrouter.springai.api.dto.ImagesResponse;
-import de.subhransu.openrouter.springai.errors.OpenRouterHttpException;
+import de.subhransu.openrouter.springai.errors.OpenRouterHttpFailure;
 import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
 import java.util.List;
 import java.util.Map;
@@ -134,7 +134,7 @@ class OpenRouterApiImagesContractTests {
 
 		assertThatThrownBy(() -> api.images(request)).isInstanceOf(OpenRouterNonTransientApiException.class)
 			.hasMessageContaining("images request failed")
-			.satisfies(exception -> assertThat(((OpenRouterHttpException) exception).getResponseBody())
+			.satisfies(exception -> assertThat(((OpenRouterHttpFailure) exception).getResponseBody())
 				.contains("unsupported aspect_ratio"));
 	}
 

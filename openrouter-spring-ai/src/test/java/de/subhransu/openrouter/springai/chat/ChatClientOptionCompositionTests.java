@@ -128,11 +128,11 @@ class ChatClientOptionCompositionTests {
 	}
 
 	private OpenRouterChatModel model(OpenRouterChatOptions defaults) {
-		return OpenRouterChatModel.builder().openRouterApi(this.api).defaultOptions(defaults).build();
+		return OpenRouterChatModel.builder().openRouterApi(this.api).options(defaults).build();
 	}
 
 	private static OpenRouterChatOptions.Builder responses() {
-		return OpenRouterChatOptions.builder().requestMode(OpenRouterRequestMode.OPENAI_RESPONSES);
+		return OpenRouterChatOptions.builder().requestMode(OpenRouterRequestMode.RESPONSES);
 	}
 
 	private static void invoke(ChatClient client, OpenRouterChatOptions options, boolean streaming) {

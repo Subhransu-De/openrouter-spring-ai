@@ -7,5 +7,5 @@ import com.fasterxml.jackson.annotation.JsonInclude.Include;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonInclude(Include.NON_NULL)
-public record Tool(@Nullable String type, @Nullable Function function) {
+public record Tool(@Nullable String type, @Nullable FunctionDefinition function) {
 }

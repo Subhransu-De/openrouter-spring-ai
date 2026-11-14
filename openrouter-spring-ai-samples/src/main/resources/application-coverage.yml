@@ -16,7 +16,7 @@ spring:
       chat:
         model: garage/coverage-primary
         models: [garage/coverage-fallback]
-        request-mode: OPENAI_CHAT_COMPLETIONS
+        request-mode: CHAT_COMPLETIONS
         temperature: 0.2
         top-p: 0.85
         top-k: 40

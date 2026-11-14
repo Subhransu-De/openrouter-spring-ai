@@ -38,7 +38,7 @@ public final class OpenRouterChatAutoConfiguration {
 			ObjectProvider<ChatModelObservationConvention> observationConventionProvider) {
 		OpenRouterChatModel chatModel = OpenRouterChatModel.builder()
 			.openRouterApi(openRouterApi)
-			.defaultOptions(chatProperties.toOptions())
+			.options(chatProperties.toOptions())
 			.toolCallingManager(toolCallingManagerProvider.getIfAvailable())
 			.retryTemplate(retryTemplateProvider.getIfUnique())
 			.objectMapper(jsonMapperProvider.getIfUnique(JsonMapper::new))

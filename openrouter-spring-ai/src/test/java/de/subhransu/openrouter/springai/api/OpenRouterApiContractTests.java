@@ -17,7 +17,7 @@ import de.subhransu.openrouter.springai.api.dto.ProviderPreferences;
 import de.subhransu.openrouter.springai.api.dto.ReasoningOptions;
 import de.subhransu.openrouter.springai.api.dto.ResponsesRequest;
 import de.subhransu.openrouter.springai.api.dto.UsageConfig;
-import de.subhransu.openrouter.springai.errors.OpenRouterHttpException;
+import de.subhransu.openrouter.springai.errors.OpenRouterHttpFailure;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
 import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
@@ -47,6 +47,8 @@ class OpenRouterApiContractTests {
 	private static final String CHAT_COMPLETIONS = BASE_URL + "/chat/completions";
 
 	private static final String RESPONSES = BASE_URL + "/responses";
+
+	private static final String TITLE_HEADER = "X-OpenRouter-Title";
 
 	private static final String CATEGORIES_HEADER = "X-OpenRouter-Categories";
 
@@ -150,13 +152,29 @@ class OpenRouterApiContractTests {
 	@Test
 	void sendsConfiguredAttributionHeaders() {
 		Fixture fixture = fixture(baseBuilder().httpReferer("https://app.example")
-			.applicationTitle("My App")
-			.applicationCategories("translation,programming"));
+			.appTitle("My App")
+			.appCategories("translation,programming"));
 		fixture.server()
 			.expect(once(), requestTo(CHAT_COMPLETIONS))
 			.andExpect(header("HTTP-Referer", "https://app.example"))
-			.andExpect(header("X-OpenRouter-Title", "My App"))
+			.andExpect(header(TITLE_HEADER, "My App"))
 			.andExpect(header(CATEGORIES_HEADER, "translation,programming"))
+			.andRespond(withSuccess(CHAT_SUCCESS_BODY, MediaType.APPLICATION_JSON));
+
+		fixture.api().chatCompletion(minimalChatRequest());
+		fixture.server().verify();
+	}
+
+	@SuppressWarnings("removal") // The v0.1.0 names must keep working until 1.0.0.
+	@Tag("http")
+	@Tag("http.client")
+	@Test
+	void deprecatedAttributionMethodsStillSendTheHeaders() {
+		Fixture fixture = fixture(baseBuilder().applicationTitle("My App").applicationCategories("programming"));
+		fixture.server()
+			.expect(once(), requestTo(CHAT_COMPLETIONS))
+			.andExpect(header(TITLE_HEADER, "My App"))
+			.andExpect(header(CATEGORIES_HEADER, "programming"))
 			.andRespond(withSuccess(CHAT_SUCCESS_BODY, MediaType.APPLICATION_JSON));
 
 		fixture.api().chatCompletion(minimalChatRequest());
@@ -171,7 +189,7 @@ class OpenRouterApiContractTests {
 		fixture.server()
 			.expect(once(), requestTo(CHAT_COMPLETIONS))
 			.andExpect(headerDoesNotExist("HTTP-Referer"))
-			.andExpect(headerDoesNotExist("X-OpenRouter-Title"))
+			.andExpect(headerDoesNotExist(TITLE_HEADER))
 			.andExpect(headerDoesNotExist(CATEGORIES_HEADER))
 			.andRespond(withSuccess(CHAT_SUCCESS_BODY, MediaType.APPLICATION_JSON));
 
@@ -183,11 +201,11 @@ class OpenRouterApiContractTests {
 	@Tag("http.client")
 	@Test
 	void omitsAttributionHeadersWhenBlank() {
-		Fixture fixture = fixture(baseBuilder().httpReferer("   ").applicationTitle("").applicationCategories("  \t "));
+		Fixture fixture = fixture(baseBuilder().httpReferer("   ").appTitle("").appCategories("  \t "));
 		fixture.server()
 			.expect(once(), requestTo(CHAT_COMPLETIONS))
 			.andExpect(headerDoesNotExist("HTTP-Referer"))
-			.andExpect(headerDoesNotExist("X-OpenRouter-Title"))
+			.andExpect(headerDoesNotExist(TITLE_HEADER))
 			.andExpect(headerDoesNotExist(CATEGORIES_HEADER))
 			.andRespond(withSuccess(CHAT_SUCCESS_BODY, MediaType.APPLICATION_JSON));
 
@@ -200,7 +218,7 @@ class OpenRouterApiContractTests {
 	@ParameterizedTest(name = "categories \"{0}\" forwarded verbatim")
 	@ValueSource(strings = { "programming", "translation,programming", "a,b,c" })
 	void forwardsCategoriesVerbatim(String categories) {
-		Fixture fixture = fixture(baseBuilder().applicationCategories(categories));
+		Fixture fixture = fixture(baseBuilder().appCategories(categories));
 		fixture.server()
 			.expect(once(), requestTo(CHAT_COMPLETIONS))
 			.andExpect(header(CATEGORIES_HEADER, categories))
@@ -375,7 +393,7 @@ class OpenRouterApiContractTests {
 			.isInstanceOf(
 					status >= 429 ? OpenRouterTransientApiException.class : OpenRouterNonTransientApiException.class)
 			.satisfies(thrown -> {
-				OpenRouterHttpException ex = (OpenRouterHttpException) thrown;
+				OpenRouterHttpFailure ex = (OpenRouterHttpFailure) thrown;
 				assertThat(ex.getStatusCode().value()).isEqualTo(status);
 				assertThat(ex.getResponseBody()).isEqualTo(body);
 				assertThat(ex.getEndpoint()).isEqualTo("/chat/completions");
@@ -399,7 +417,7 @@ class OpenRouterApiContractTests {
 		assertThatThrownBy(() -> fixture.api().responses(minimalResponsesRequest()))
 			.isInstanceOf(OpenRouterNonTransientApiException.class)
 			.satisfies(thrown -> {
-				OpenRouterHttpException ex = (OpenRouterHttpException) thrown;
+				OpenRouterHttpFailure ex = (OpenRouterHttpFailure) thrown;
 				assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
 				assertThat(ex.getResponseBody()).contains("bad request");
 				assertThat(ex.getCategory()).isEqualTo(OpenRouterErrorCategory.INVALID_REQUEST);
@@ -419,7 +437,7 @@ class OpenRouterApiContractTests {
 		assertThatThrownBy(() -> fixture.api().responses(minimalResponsesRequest()))
 			.isInstanceOf(OpenRouterTransientApiException.class)
 			.satisfies(thrown -> {
-				OpenRouterHttpException ex = (OpenRouterHttpException) thrown;
+				OpenRouterHttpFailure ex = (OpenRouterHttpFailure) thrown;
 				assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
 				assertThat(ex.getResponseBody()).contains("provider unavailable");
 			});
@@ -438,7 +456,7 @@ class OpenRouterApiContractTests {
 		assertThatThrownBy(() -> fixture.api().chatCompletion(minimalChatRequest()))
 			.isInstanceOf(OpenRouterTransientApiException.class)
 			.satisfies(thrown -> {
-				OpenRouterHttpException ex = (OpenRouterHttpException) thrown;
+				OpenRouterHttpFailure ex = (OpenRouterHttpFailure) thrown;
 				assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
 				assertThat(ex.getMessage()).contains("500");
 			});
@@ -458,7 +476,7 @@ class OpenRouterApiContractTests {
 		assertThatThrownBy(() -> fixture.api().chatCompletion(minimalChatRequest()))
 			.isInstanceOf(OpenRouterTransientApiException.class)
 			.satisfies(thrown -> {
-				OpenRouterHttpException ex = (OpenRouterHttpException) thrown;
+				OpenRouterHttpFailure ex = (OpenRouterHttpFailure) thrown;
 				assertThat(ex.getMessage()).isEqualTo(
 						"OpenRouter /chat/completions request failed with status 429 TOO_MANY_REQUESTS, category RATE_LIMIT");
 				assertThat(ex.getResponseBody()).hasSize(1003).endsWith("...");

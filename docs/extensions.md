@@ -4,7 +4,7 @@ Send optional OpenRouter request fields that have no typed option, and read unkn
 
 `OpenRouterChatOptions.builder().extraBody(Map.of("logprobs", true, "top_logprobs", 0))` adds supported optional fields at the request root. This is a bounded extension API: unknown keys and standard fields such as `model`, `messages`, `input`, `stream`, `provider`, and `tools` are rejected, even when their typed option is unset.
 
-Root keys go in `extraBody`; provider keys go in `providerExtraBody`.
+Root keys go in `extraBody`; provider keys go in chat `providerExtraBody`. The image option of the same name is a raw map that replaces its default and validates no key; see [Image options](multimodal.md#image-options).
 
 | Extension keys                                                       | Chat Completions | Responses | Java / wire representation                                                   |
 | -------------------------------------------------------------------- | ---------------- | --------- | ---------------------------------------------------------------------------- |
@@ -34,7 +34,7 @@ Merge rules:
 
 - Root extension maps merge by key. A runtime entry replaces the default entry, including an explicit null.
 - Nested values replace whole objects. They do not merge recursively.
-- Typed provider options replace the default typed provider object. `providerExtraBody` merges by key on its own, so default routing restrictions stay unless you override them.
+- Typed provider options replace the default typed provider object. Chat `providerExtraBody` merges by key on its own, so default routing restrictions stay unless you override them.
 - Maps and lists are snapshotted recursively.
 - `false`, `0` and explicit nulls stay on the wire. A null map inherits the defaults.
 - Extensions do not enable `n`, `store`, cache breakpoints, web-search requests or server-tool configuration.

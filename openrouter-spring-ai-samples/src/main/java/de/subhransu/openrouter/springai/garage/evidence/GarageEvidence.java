@@ -48,7 +48,7 @@ public final class GarageEvidence {
     Set<String> labels = new HashSet<>(Set.of(
         REDACTED, "garage", "passed", "failed", "PASSED", "FAILED", "success", "error", "ok",
         "covered", "not-executed", "incomplete", "unsupported-in-mode", "partial",
-        "OPENAI_CHAT_COMPLETIONS", "OPENAI_RESPONSES", "embedding-models", "image-models",
+        "CHAT_COMPLETIONS", "RESPONSES", "embedding-models", "image-models",
         "operation.started", "feature.error", "transport.request", "observation.stopped",
         "tool.schema", "tool.attempted", "tool.succeeded", "tool.failed",
         "java.lang.IllegalStateException", "java.lang.IllegalArgumentException",

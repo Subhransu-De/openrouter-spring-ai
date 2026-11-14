@@ -24,7 +24,7 @@ class OpenRouterImageGenerationMetadataTests {
 		ImageGeneration generation = this.mapper.map(this.json.readValue("""
 				{"data":[{"b64_json":"aW1n","media_type":"image/webp"}]}""", ImagesResponse.class)).getResult();
 
-		OpenRouterImageGenerationMetadata metadata = OpenRouterImageGenerationMetadata.of(generation);
+		OpenRouterImageGenerationMetadata metadata = OpenRouterImageGenerationMetadata.from(generation);
 
 		assertThat(metadata.mediaType()).isEqualTo("image/webp");
 		assertThat(metadata.isPartial()).isFalse();
@@ -41,15 +41,15 @@ class OpenRouterImageGenerationMetadataTests {
 				ImagesStreamEvent.class))
 			.getResult();
 
-		assertThat(OpenRouterImageGenerationMetadata.of(preview).isPartial()).isTrue();
-		assertThat(OpenRouterImageGenerationMetadata.of(preview).partialImageIndex()).isZero();
-		assertThat(OpenRouterImageGenerationMetadata.of(completed).isPartial()).isFalse();
+		assertThat(OpenRouterImageGenerationMetadata.from(preview).isPartial()).isTrue();
+		assertThat(OpenRouterImageGenerationMetadata.from(preview).partialImageIndex()).isZero();
+		assertThat(OpenRouterImageGenerationMetadata.from(completed).isPartial()).isFalse();
 	}
 
 	@Test
 	void foreignOrMissingMetadataReadsAsEmpty() {
 		OpenRouterImageGenerationMetadata metadata = OpenRouterImageGenerationMetadata
-			.of(new ImageGeneration(new Image(null, "aW1n")));
+			.from(new ImageGeneration(new Image(null, "aW1n")));
 
 		assertThat(metadata.mediaType()).isNull();
 		assertThat(metadata.isPartial()).isFalse();

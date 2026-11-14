@@ -5,18 +5,23 @@ import static org.assertj.core.api.Assertions.assertThat;
 import de.subhransu.openrouter.springai.image.OpenRouterImageModel;
 import de.subhransu.openrouter.springai.image.OpenRouterImageOptions;
 import io.micrometer.observation.ObservationRegistry;
+import java.util.Map;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.ai.image.ImageModel;
 import org.springframework.ai.image.ImagePrompt;
 import org.springframework.ai.image.ImageResponse;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @Tag("configuration")
+@ExtendWith(OutputCaptureExtension.class)
 class OpenRouterImageAutoConfigurationTests {
 
 	private static final String API_KEY_PROPERTY = "spring.ai.openrouter.api-key=test-key";
@@ -45,7 +50,7 @@ class OpenRouterImageAutoConfigurationTests {
 					"spring.ai.openrouter.image.output-compression=80", "spring.ai.openrouter.image.seed=42",
 					"spring.ai.openrouter.image.width=1024", "spring.ai.openrouter.image.height=576",
 					"spring.ai.openrouter.image.input-references[0]=https://example.com/input.png",
-					"spring.ai.openrouter.image.provider-options.style=natural")
+					"spring.ai.openrouter.image.provider-extra-body.options.openai.moderation=low")
 			.run(context -> {
 				OpenRouterImageModel imageModel = context.getBean(OpenRouterImageModel.class);
 				OpenRouterImageOptions options = (OpenRouterImageOptions) ReflectionTestUtils.getField(imageModel,
@@ -62,7 +67,40 @@ class OpenRouterImageAutoConfigurationTests {
 				assertThat(options.getWidth()).isEqualTo(1024);
 				assertThat(options.getHeight()).isEqualTo(576);
 				assertThat(options.getInputReferences()).containsExactly("https://example.com/input.png");
-				assertThat(options.getProviderOptions()).containsEntry("style", "natural");
+				assertThat(options.getProviderExtraBody()).containsEntry("options",
+						Map.of("openai", Map.of("moderation", "low")));
+			});
+	}
+
+	@Tag("configuration.properties")
+	@Test
+	void stillBindsTheOldProviderOptionsKey(CapturedOutput output) {
+		this.contextRunner
+			.withPropertyValues(API_KEY_PROPERTY,
+					"spring.ai.openrouter.image.provider-options.options.openai.moderation=low")
+			.run(context -> {
+				OpenRouterImageOptions options = (OpenRouterImageOptions) ReflectionTestUtils
+					.getField(context.getBean(OpenRouterImageModel.class), "defaultOptions");
+				assertThat(options.getProviderExtraBody()).containsEntry("options",
+						Map.of("openai", Map.of("moderation", "low")));
+				assertThat(output).contains(
+						"spring.ai.openrouter.image.provider-options is deprecated; rename it to spring.ai.openrouter.image.provider-extra-body");
+			});
+	}
+
+	@Tag("configuration.properties")
+	@Test
+	void failsWhenTheOldAndNewProviderKeysAreBothSet() {
+		this.contextRunner
+			.withPropertyValues(API_KEY_PROPERTY,
+					"spring.ai.openrouter.image.provider-extra-body.options.openai.moderation=low",
+					"spring.ai.openrouter.image.provider-options.options.openai.moderation=auto")
+			.run(context -> {
+				assertThat(context).hasFailed();
+				assertThat(context.getStartupFailure()).rootCause()
+					.isInstanceOf(IllegalStateException.class)
+					.hasMessageContaining("Set only spring.ai.openrouter.image.provider-extra-body;")
+					.hasMessageContaining("provider-options is its old name");
 			});
 	}
 

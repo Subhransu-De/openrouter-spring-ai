@@ -2,7 +2,7 @@ package de.subhransu.openrouter.springai.errors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
+import de.subhransu.openrouter.springai.api.errors.OpenRouterInBandErrorException;
 import de.subhransu.openrouter.springai.chat.errors.OpenRouterChoiceErrorDetails;
 import de.subhransu.openrouter.springai.chat.errors.OpenRouterChoiceFailure;
 import de.subhransu.openrouter.springai.chat.errors.OpenRouterNonTransientChoiceException;
@@ -46,7 +46,8 @@ class OpenRouterFailureContractTests {
 
 	@Test
 	void apiExceptionStoresEmptyDetailsForNull() {
-		OpenRouterApiException exception = new OpenRouterApiException("failed", HttpStatus.BAD_GATEWAY, null, null);
+		OpenRouterInBandErrorException exception = new OpenRouterInBandErrorException("failed", HttpStatus.BAD_GATEWAY,
+				null, null);
 
 		assertThat(exception.getErrorDetails()).isEqualTo(OpenRouterErrorDetails.empty());
 		assertThat(exception.getCategory()).isEqualTo(OpenRouterErrorCategory.UNKNOWN);
@@ -59,12 +60,12 @@ class OpenRouterFailureContractTests {
 		var limit = new OpenRouterLimitExceededException(OpenRouterLimitExceededException.Limit.CHAT_STATE_BYTES, 10,
 				11, CHAT_COMPLETIONS, null, null, null);
 
-		for (OpenRouterHttpException exception : List.<OpenRouterHttpException>of(nonTransient, limit)) {
+		for (OpenRouterHttpFailure exception : List.<OpenRouterHttpFailure>of(nonTransient, limit)) {
 			assertThat(exception.getErrorDetails()).isEqualTo(OpenRouterErrorDetails.empty());
-			assertThat(exception.getFailure().errorDetails()).isSameAs(exception.getErrorDetails());
+			assertThat(exception.getFailureDetails().errorDetails()).isSameAs(exception.getErrorDetails());
 			assertThat(exception.getCategory()).isEqualTo(OpenRouterErrorCategory.UNKNOWN);
 		}
-		assertThat(new OpenRouterHttpFailure(null, null, null, null, null).errorDetails())
+		assertThat(new OpenRouterHttpFailureDetails(null, null, null, null, null).errorDetails())
 			.isEqualTo(OpenRouterErrorDetails.empty());
 	}
 
@@ -90,10 +91,10 @@ class OpenRouterFailureContractTests {
 	void retryDelayFlattensTheRetryAfterHeader() {
 		HttpHeaders headers = new HttpHeaders();
 		headers.set(HttpHeaders.RETRY_AFTER, "7");
-		var withHeader = (OpenRouterHttpException) this.factory.create(CHAT_COMPLETIONS, HttpStatus.TOO_MANY_REQUESTS,
+		var withHeader = (OpenRouterHttpFailure) this.factory.create(CHAT_COMPLETIONS, HttpStatus.TOO_MANY_REQUESTS,
 				headers, null);
-		var withoutHeader = (OpenRouterHttpException) this.factory.create(CHAT_COMPLETIONS,
-				HttpStatus.TOO_MANY_REQUESTS, HttpHeaders.EMPTY, null);
+		var withoutHeader = (OpenRouterHttpFailure) this.factory.create(CHAT_COMPLETIONS, HttpStatus.TOO_MANY_REQUESTS,
+				HttpHeaders.EMPTY, null);
 
 		assertThat(withHeader.getRetryDelay()).isEqualTo(Duration.ofSeconds(7));
 		assertThat(withoutHeader.getRetryDelay()).isNull();
@@ -108,7 +109,7 @@ class OpenRouterFailureContractTests {
 						CHAT_COMPLETIONS, null, null, null),
 				new OpenRouterTransientChoiceException("failed", null),
 				new OpenRouterNonTransientChoiceException("failed", null),
-				new OpenRouterApiException("failed", HttpStatus.TOO_MANY_REQUESTS, null),
+				new OpenRouterInBandErrorException("failed", HttpStatus.TOO_MANY_REQUESTS, null),
 				new OpenRouterProtocolException("broken"), new OpenRouterTruncatedResponseException("cut"),
 				new OpenRouterTransportException(OpenRouterTransportException.Kind.IO, "/responses",
 						new java.io.IOException("synthetic")));
@@ -120,7 +121,8 @@ class OpenRouterFailureContractTests {
 
 	@Test
 	void inBandStreamErrorReportsTransientWithoutBeingASpringAiTransientException() {
-		OpenRouterApiException exception = new OpenRouterApiException("failed", HttpStatus.TOO_MANY_REQUESTS, null);
+		OpenRouterInBandErrorException exception = new OpenRouterInBandErrorException("failed",
+				HttpStatus.TOO_MANY_REQUESTS, null);
 
 		assertThat(exception.getCategory()).isEqualTo(OpenRouterErrorCategory.RATE_LIMIT);
 		assertThat(exception.isTransient()).isTrue();
@@ -134,15 +136,15 @@ class OpenRouterFailureContractTests {
 
 		assertThat(limit.getCategory()).isEqualTo(OpenRouterErrorCategory.PROVIDER_UNAVAILABLE);
 		assertThat(limit.isTransient()).isFalse();
-		assertThat(limit.isLocal()).isFalse();
+		assertThat(limit.isStreamStateLimit()).isFalse();
 	}
 
 	@Test
 	void localLimitsAreTheStreamStateLimits() {
 		assertThat(OpenRouterLimitExceededException.Limit.values())
-			.filteredOn(OpenRouterLimitExceededException.Limit::isLocal)
+			.filteredOn(OpenRouterLimitExceededException.Limit::isStreamStateLimit)
 			.allSatisfy(limit -> assertThat(limit.name()).doesNotContain("BODY", "EVENT"));
-		assertThat(OpenRouterLimitExceededException.Limit.values()).filteredOn(limit -> !limit.isLocal())
+		assertThat(OpenRouterLimitExceededException.Limit.values()).filteredOn(limit -> !limit.isStreamStateLimit())
 			.containsExactlyInAnyOrder(OpenRouterLimitExceededException.Limit.BLOCKING_RESPONSE_BODY_BYTES,
 					OpenRouterLimitExceededException.Limit.BLOCKING_ERROR_BODY_BYTES,
 					OpenRouterLimitExceededException.Limit.STREAMING_ERROR_BODY_BYTES,

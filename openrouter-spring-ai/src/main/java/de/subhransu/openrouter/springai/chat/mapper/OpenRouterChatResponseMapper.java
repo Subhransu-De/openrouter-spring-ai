@@ -5,7 +5,7 @@ import de.subhransu.openrouter.springai.api.dto.ChatCompletionResponse;
 import de.subhransu.openrouter.springai.api.dto.Choice;
 import de.subhransu.openrouter.springai.api.dto.ToolCall;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
-import de.subhransu.openrouter.springai.api.errors.OpenRouterApiExceptionFactory;
+import de.subhransu.openrouter.springai.api.errors.OpenRouterInBandErrorExceptionFactory;
 import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import java.util.ArrayList;
@@ -45,8 +45,8 @@ public final class OpenRouterChatResponseMapper {
 		}
 		var error = response.error();
 		if (error != null) {
-			throw OpenRouterApiExceptionFactory.createRetryable("OpenRouter chat completion failed", error.toString(),
-					error, null, ENDPOINT, this.sanitizer);
+			throw OpenRouterInBandErrorExceptionFactory.createRetryable("OpenRouter chat completion failed",
+					error.toString(), error, null, ENDPOINT, this.sanitizer);
 		}
 		var choices = response.choices();
 		if (CollectionUtils.isEmpty(choices) || choices.stream().anyMatch(Objects::isNull)) {

@@ -9,7 +9,7 @@ import org.springframework.util.StringUtils;
  * Why a generation ended. {@link Generation#getMetadata()} keeps returning the finish
  * reason as a {@code String}: the mapped spellings {@code STOP}, {@code LENGTH},
  * {@code TOOL_CALLS} and {@code CONTENT_FILTER}, and any other reason as the provider
- * wrote it, such as {@code error}. {@link #of(Generation)} reads either spelling.
+ * wrote it, such as {@code error}. {@link #from(Generation)} reads either spelling.
  *
  * @author Subhransu De
  */
@@ -70,8 +70,8 @@ public enum OpenRouterFinishReason {
 	 * @param generation the generation to read
 	 * @return the finish reason; {@link #NONE} when the generation has none
 	 */
-	public static OpenRouterFinishReason of(Generation generation) {
-		return of(generation.getMetadata().getFinishReason());
+	public static OpenRouterFinishReason from(Generation generation) {
+		return from(generation.getMetadata().getFinishReason());
 	}
 
 	/**
@@ -80,7 +80,7 @@ public enum OpenRouterFinishReason {
 	 * @param finishReason the mapped or provider finish reason
 	 * @return the finish reason; {@link #NONE} for {@code null} or blank input
 	 */
-	public static OpenRouterFinishReason of(@Nullable String finishReason) {
+	public static OpenRouterFinishReason from(@Nullable String finishReason) {
 		if (!StringUtils.hasText(finishReason)) {
 			return NONE;
 		}

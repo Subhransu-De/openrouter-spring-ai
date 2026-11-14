@@ -63,7 +63,7 @@ class OpenRouterChatModelRequestModeTests {
 		OpenRouterApi responsesApi = mock(OpenRouterApi.class);
 		OpenRouterChatModel responsesModel = OpenRouterChatModel.builder()
 			.openRouterApi(responsesApi)
-			.defaultOptions(OpenRouterChatOptions.builder().requestMode(OpenRouterRequestMode.OPENAI_RESPONSES).build())
+			.options(OpenRouterChatOptions.builder().requestMode(OpenRouterRequestMode.RESPONSES).build())
 			.build();
 		assertThatThrownBy(() -> responsesModel.call(prompt)).isInstanceOf(IllegalArgumentException.class)
 			.hasMessageContaining("cache_control");
@@ -109,7 +109,7 @@ class OpenRouterChatModelRequestModeTests {
 		ChatResponse response = model.call(new Prompt(List.of(new UserMessage("hello")),
 				OpenRouterChatOptions.builder()
 					.model("openai/gpt-5.4")
-					.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
+					.requestMode(OpenRouterRequestMode.RESPONSES)
 					.build()));
 
 		assertThat(response.getResult().getOutput().getText()).isEqualTo("responses response");
@@ -131,9 +131,9 @@ class OpenRouterChatModelRequestModeTests {
 				null));
 		OpenRouterChatModel model = OpenRouterChatModel.builder()
 			.openRouterApi(api)
-			.defaultOptions(OpenRouterChatOptions.builder()
+			.options(OpenRouterChatOptions.builder()
 				.model("openai/gpt-5.4")
-				.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
+				.requestMode(OpenRouterRequestMode.RESPONSES)
 				.build())
 			.build();
 

@@ -123,7 +123,7 @@ class GarageModalitySceneTelemetryTests {
     GarageProperties properties = new GarageProperties();
     GarageRunPlan command = GarageRunRequests.plan(
         "{\"capabilities\":[\"image\"],\"image\":{\"surface\":\"streaming\"}}", properties);
-    return new SceneContext(command, OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS, this.output,
+    return new SceneContext(command, OpenRouterRequestMode.CHAT_COMPLETIONS, this.output,
         null, null, properties, null, null, this.evidence, this.telemetry, null, registry);
   }
 }

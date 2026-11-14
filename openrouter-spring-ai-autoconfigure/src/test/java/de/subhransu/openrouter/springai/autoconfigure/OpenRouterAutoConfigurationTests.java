@@ -119,7 +119,7 @@ class OpenRouterAutoConfigurationTests {
 			.run(context -> {
 				var options = OpenRouterChatOptions.builder()
 					.model("synthetic")
-					.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
+					.requestMode(OpenRouterRequestMode.RESPONSES)
 					.build();
 				StepVerifier
 					.withVirtualTime(

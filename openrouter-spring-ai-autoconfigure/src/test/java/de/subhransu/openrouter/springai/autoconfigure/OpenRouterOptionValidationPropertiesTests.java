@@ -81,12 +81,12 @@ class OpenRouterOptionValidationPropertiesTests {
 	void responsesModeNamesItselfWhenAChatExtensionIsConfigured() {
 		OpenRouterApi api = mock(OpenRouterApi.class);
 		this.runner.withBean(OpenRouterApi.class, () -> api)
-			.withPropertyValues(PREFIX + "request-mode=openai-responses", PREFIX + "extra-body.[verbosity]=low")
+			.withPropertyValues(PREFIX + "request-mode=responses", PREFIX + "extra-body.[verbosity]=low")
 			.run(context -> {
 				assertThat(context).hasNotFailed();
 				var model = context.getBean(OpenRouterChatModel.class);
 				assertThatIllegalArgumentException().isThrownBy(() -> model.call(new Prompt("Synthetic input")))
-					.withMessageStartingWith("OPENAI_RESPONSES does not support extraBody key \"verbosity\"")
+					.withMessageStartingWith("RESPONSES does not support extraBody key \"verbosity\"")
 					.withMessageContaining("prompt_cache_key, top_logprobs");
 				verifyNoInteractions(api);
 			});

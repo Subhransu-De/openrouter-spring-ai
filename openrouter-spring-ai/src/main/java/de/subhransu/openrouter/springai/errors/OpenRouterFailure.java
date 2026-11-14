@@ -3,7 +3,7 @@ package de.subhransu.openrouter.springai.errors;
 /**
  * Common inspection contract for every failure this library raises for an OpenRouter
  * request: HTTP and in-band errors, choice errors, transport failures, protocol
- * violations, truncated responses and local limits.
+ * violations, truncated responses and client-side limits.
  *
  * <p>
  * Java cannot catch an interface, so catch {@link RuntimeException} and test with

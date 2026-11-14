@@ -125,12 +125,12 @@ class OpenRouterAutoConfigurationPropertyMatrixTests {
 	@Test
 	void bindsRequestModeServiceTierRouteAndIncludeUsage() {
 		contextRunner
-			.withPropertyValues(API_KEY, "spring.ai.openrouter.chat.request-mode=OPENAI_RESPONSES",
+			.withPropertyValues(API_KEY, "spring.ai.openrouter.chat.request-mode=RESPONSES",
 					"spring.ai.openrouter.chat.service-tier=FLEX", "spring.ai.openrouter.chat.route=fallback",
 					"spring.ai.openrouter.chat.include-usage=true")
 			.run(context -> {
 				OpenRouterChatOptions options = resolvedOptions(context);
-				assertThat(options.getRequestMode()).isEqualTo(OpenRouterRequestMode.OPENAI_RESPONSES);
+				assertThat(options.getRequestMode()).isEqualTo(OpenRouterRequestMode.RESPONSES);
 				assertThat(options.getServiceTier()).isEqualTo(OpenRouterServiceTier.FLEX);
 				assertThat(options.getRoute()).isEqualTo("fallback");
 				assertThat(options.getIncludeUsage()).isTrue();
@@ -141,7 +141,18 @@ class OpenRouterAutoConfigurationPropertyMatrixTests {
 	void defaultsToChatCompletionsRequestMode() {
 		contextRunner.withPropertyValues(API_KEY)
 			.run(context -> assertThat(resolvedOptions(context).getRequestMode())
-				.isEqualTo(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS));
+				.isEqualTo(OpenRouterRequestMode.CHAT_COMPLETIONS));
+	}
+
+	@Test
+	void failsStartupWithTheKeyForARequestModeValueFromBeforeTheRename() {
+		contextRunner.withPropertyValues(API_KEY, "spring.ai.openrouter.chat.request-mode=openai-responses")
+			.run(context -> {
+				assertThat(context).hasFailed();
+				assertThat(context.getStartupFailure())
+					.hasStackTraceContaining("spring.ai.openrouter.chat.request-mode")
+					.hasStackTraceContaining("openai-responses");
+			});
 	}
 
 	@Test

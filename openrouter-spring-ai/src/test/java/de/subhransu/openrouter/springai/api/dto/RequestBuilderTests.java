@@ -26,7 +26,7 @@ class RequestBuilderTests {
 	// ones a positional call can swap silently.
 	@Test
 	void chatBuilderSetsEveryComponent() {
-		List<Tool> tools = List.of(new Tool("function", new Function("lookup", null, null)));
+		List<Tool> tools = List.of(new Tool("function", new FunctionDefinition("lookup", null, null)));
 		ChatCompletionRequest expected = new ChatCompletionRequest("model", List.of("fallback"), MESSAGES, 0.1, 0.2, 3,
 				0.4, 0.5, 0.6, 0.7, 0.8, 9, 10, List.of("stop"), 11, "user", true, Map.of("type", "json_object"), tools,
 				"auto", false, PROVIDER, REASONING, "flex", Map.of("trace", "t"), "fallback", new UsageConfig(true),

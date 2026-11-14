@@ -5,12 +5,12 @@ import org.springframework.ai.retry.NonTransientAiException;
 import org.springframework.http.HttpStatusCode;
 
 /**
- * A local resource limit stopped an OpenRouter response before it could consume unbounded
- * memory or time.
+ * A client-side resource limit stopped an OpenRouter response before it could consume
+ * unbounded memory or time.
  *
  * @author Subhransu De
  */
-public final class OpenRouterLimitExceededException extends NonTransientAiException implements OpenRouterHttpException {
+public final class OpenRouterLimitExceededException extends NonTransientAiException implements OpenRouterHttpFailure {
 
 	public enum Limit {
 
@@ -69,13 +69,13 @@ public final class OpenRouterLimitExceededException extends NonTransientAiExcept
 
 		private final @Nullable String property;
 
-		private final boolean local;
+		private final boolean streamState;
 
-		Limit(String description, String unit, @Nullable String property, boolean local) {
+		Limit(String description, String unit, @Nullable String property, boolean streamState) {
 			this.description = description;
 			this.unit = unit;
 			this.property = property;
-			this.local = local;
+			this.streamState = streamState;
 		}
 
 		/**
@@ -91,8 +91,8 @@ public final class OpenRouterLimitExceededException extends NonTransientAiExcept
 		 * events, rather than the size of one HTTP body or event.
 		 * @return {@code true} for a stream-state limit
 		 */
-		public boolean isLocal() {
-			return this.local;
+		public boolean isStreamStateLimit() {
+			return this.streamState;
 		}
 
 	}
@@ -103,7 +103,7 @@ public final class OpenRouterLimitExceededException extends NonTransientAiExcept
 
 	private final long observedValue;
 
-	private final OpenRouterHttpFailure failure;
+	private final OpenRouterHttpFailureDetails failure;
 
 	public OpenRouterLimitExceededException(Limit limit, long configuredLimit, long observedValue,
 			@Nullable String endpoint, @Nullable HttpStatusCode statusCode, @Nullable String responseBody,
@@ -112,7 +112,7 @@ public final class OpenRouterLimitExceededException extends NonTransientAiExcept
 		this.limit = limit;
 		this.configuredLimit = configuredLimit;
 		this.observedValue = observedValue;
-		this.failure = new OpenRouterHttpFailure(statusCode, responseBody, errorDetails, null, endpoint);
+		this.failure = new OpenRouterHttpFailureDetails(statusCode, responseBody, errorDetails, null, endpoint);
 	}
 
 	private static String message(Limit limit, long configuredLimit, long observedValue, @Nullable String endpoint) {
@@ -140,12 +140,13 @@ public final class OpenRouterLimitExceededException extends NonTransientAiExcept
 
 	/**
 	 * Return whether the library raised this limit on state it assembles across stream
-	 * events. A local limit has no HTTP status, no response body and empty error details.
+	 * events. A stream-state limit has no HTTP status, no response body and empty error
+	 * details.
 	 * @return {@code true} for a stream-state limit
-	 * @see Limit#isLocal()
+	 * @see Limit#isStreamStateLimit()
 	 */
-	public boolean isLocal() {
-		return this.limit.isLocal();
+	public boolean isStreamStateLimit() {
+		return this.limit.isStreamStateLimit();
 	}
 
 	/**
@@ -159,7 +160,7 @@ public final class OpenRouterLimitExceededException extends NonTransientAiExcept
 	}
 
 	@Override
-	public OpenRouterHttpFailure getFailure() {
+	public OpenRouterHttpFailureDetails getFailureDetails() {
 		return this.failure;
 	}
 

@@ -182,7 +182,7 @@ class ResponsesStreamLimitsTests {
 		var model = OpenRouterChatModel.builder().openRouterApi(api).toolCallAggregationMaxChunks(1).build();
 		var options = OpenRouterChatOptions.builder()
 			.model("synthetic")
-			.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
+			.requestMode(OpenRouterRequestMode.RESPONSES)
 			.build();
 		StepVerifier.create(model.stream(new Prompt("synthetic", options)))
 			.expectNextCount(1)

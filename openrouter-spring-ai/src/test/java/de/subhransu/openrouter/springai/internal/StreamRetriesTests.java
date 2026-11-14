@@ -6,7 +6,7 @@ import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
-import de.subhransu.openrouter.springai.errors.OpenRouterHttpException;
+import de.subhransu.openrouter.springai.errors.OpenRouterHttpFailure;
 import de.subhransu.openrouter.springai.errors.OpenRouterHttpExceptionFactory;
 import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
 import de.subhransu.openrouter.springai.image.OpenRouterImageModel;
@@ -67,8 +67,8 @@ class StreamRetriesTests {
 		for (int subscription = 1; subscription <= 2; subscription++) {
 			StepVerifier.withVirtualTime(() -> stream).thenAwait(Duration.ofMillis(1)).expectErrorSatisfies(error -> {
 				assertThat(error).isInstanceOf(OpenRouterTransientApiException.class);
-				assertThat(((OpenRouterHttpException) error).getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
-				assertThat(((OpenRouterHttpException) error).getRetryAfter().value()).isEqualTo("0");
+				assertThat(((OpenRouterHttpFailure) error).getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+				assertThat(((OpenRouterHttpFailure) error).getRetryAfter().value()).isEqualTo("0");
 			}).verify(Duration.ofSeconds(10));
 			assertThat(fixture.attempts).hasValue(subscription * 3);
 		}
@@ -82,8 +82,8 @@ class StreamRetriesTests {
 		for (int status : new int[] { 400, 401, 402, 403, 408, 500, 502, 503, 504 }) {
 			Fixture fixture = new Fixture(attempt -> Mono.just(rejection(status, "0")));
 			StepVerifier.create(fixture.stream(mode, policy(2, 0)))
-				.expectErrorSatisfies(error -> assertThat(((OpenRouterHttpException) error).getStatusCode().value())
-					.isEqualTo(status))
+				.expectErrorSatisfies(
+						error -> assertThat(((OpenRouterHttpFailure) error).getStatusCode().value()).isEqualTo(status))
 				.verify(Duration.ofSeconds(10));
 			assertThat(fixture.attempts).hasValue(1);
 			fixture.assertObservation(1);
@@ -307,7 +307,7 @@ class StreamRetriesTests {
 					.openRouterApi(this.api)
 					.retryTemplate(new RetryTemplate(policy))
 					.observationRegistry(this.registry)
-					.defaultOptions(OpenRouterImageOptions.builder().model("synthetic").build())
+					.options(OpenRouterImageOptions.builder().model("synthetic").build())
 					.build()
 					.stream(new ImagePrompt("synthetic"));
 			}
@@ -315,10 +315,10 @@ class StreamRetriesTests {
 				.openRouterApi(this.api)
 				.retryTemplate(new RetryTemplate(policy))
 				.observationRegistry(this.registry)
-				.defaultOptions(OpenRouterChatOptions.builder()
+				.options(OpenRouterChatOptions.builder()
 					.model("synthetic")
-					.requestMode(mode == Mode.CHAT ? OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS
-							: OpenRouterRequestMode.OPENAI_RESPONSES)
+					.requestMode(mode == Mode.CHAT ? OpenRouterRequestMode.CHAT_COMPLETIONS
+							: OpenRouterRequestMode.RESPONSES)
 					.build())
 				.build()
 				.stream(new Prompt("synthetic"));

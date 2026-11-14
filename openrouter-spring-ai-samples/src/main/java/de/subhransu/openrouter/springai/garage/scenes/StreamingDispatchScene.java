@@ -45,7 +45,7 @@ public final class StreamingDispatchScene extends GarageSceneSupport {
     String mode = context.requestMode().name();
     String operationId = context.evidence().newOperation(id(), mode);
     List<GarageFeature> applicable = new ArrayList<>(features());
-    if (context.requestMode() == OpenRouterRequestMode.OPENAI_RESPONSES) {
+    if (context.requestMode() == OpenRouterRequestMode.RESPONSES) {
       applicable.remove(GarageFeature.STREAMING_TOOL_AGGREGATION);
     }
     context.evidence().recordAll(
@@ -77,7 +77,7 @@ public final class StreamingDispatchScene extends GarageSceneSupport {
     List<Map<String, Object>> toolInvocations = List.of();
     int toolStreamEvents = 0;
     double toolStreamCost = 0.0;
-    if (context.requestMode() == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS) {
+    if (context.requestMode() == OpenRouterRequestMode.CHAT_COMPLETIONS) {
       GarageTools tools =
           new GarageTools(
               context.chatModel(),
@@ -151,7 +151,7 @@ public final class StreamingDispatchScene extends GarageSceneSupport {
     if (observations.stream().noneMatch(item -> Boolean.TRUE.equals(item.get("streaming")))) {
       failures.add("no correlated streaming observation was retained");
     }
-    if (context.requestMode() == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS
+    if (context.requestMode() == OpenRouterRequestMode.CHAT_COMPLETIONS
         && bulletinCalls != 1) {
       failures.add("streamed bulletin callback executed " + bulletinCalls + " times instead of once");
     }
@@ -164,7 +164,7 @@ public final class StreamingDispatchScene extends GarageSceneSupport {
     details.put("bulletinCalls", bulletinCalls);
     details.put(
         "toolAggregation",
-        context.requestMode() == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS
+        context.requestMode() == OpenRouterRequestMode.CHAT_COMPLETIONS
             ? "executed"
             : "unsupported-in-responses-mode");
     details.put("observations", observations);

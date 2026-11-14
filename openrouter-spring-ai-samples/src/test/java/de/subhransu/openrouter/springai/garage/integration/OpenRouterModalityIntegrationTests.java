@@ -11,9 +11,9 @@ import de.subhransu.openrouter.springai.autoconfigure.OpenRouterApiAutoConfigura
 import de.subhransu.openrouter.springai.autoconfigure.OpenRouterChatAutoConfiguration;
 import de.subhransu.openrouter.springai.chat.OpenRouterAudioOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
-import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
+import de.subhransu.openrouter.springai.api.errors.OpenRouterInBandErrorException;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorDetails;
-import de.subhransu.openrouter.springai.errors.OpenRouterHttpException;
+import de.subhransu.openrouter.springai.errors.OpenRouterHttpFailure;
 import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
 import java.io.IOException;
@@ -104,7 +104,7 @@ class OpenRouterModalityIntegrationTests {
     String reply = call(mode, media);
 
     assertThat(reply).isEqualTo("Received the attachment for the inspection.");
-    boolean responses = mode == OpenRouterRequestMode.OPENAI_RESPONSES;
+    boolean responses = mode == OpenRouterRequestMode.RESPONSES;
     String expected = switch (mime) {
       case "image/png" -> responses
           ? "{\"type\":\"input_image\",\"image_url\":\"" + dataUrl + "\"}"
@@ -124,7 +124,7 @@ class OpenRouterModalityIntegrationTests {
   @ParameterizedTest
   @EnumSource(OpenRouterRequestMode.class)
   void remoteDocumentsAndVideosStayUrls(OpenRouterRequestMode mode) {
-    boolean responses = mode == OpenRouterRequestMode.OPENAI_RESPONSES;
+    boolean responses = mode == OpenRouterRequestMode.RESPONSES;
     String pdf = "https://garage.example/job-card.pdf";
     String video = "https://garage.example/walkaround.webm";
 
@@ -155,7 +155,7 @@ class OpenRouterModalityIntegrationTests {
         Media.builder().mimeType(MimeTypeUtils.parseMimeType("audio/ogg")).data(new byte[] {1, 2}).build(),
         Media.builder().mimeType(MimeTypeUtils.parseMimeType("application/pdf")).name("job-card.pdf")
             .data(java.net.URI.create("ftp://garage.example/job-card.pdf")).build())) {
-      assertThatThrownBy(() -> call(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS, media))
+      assertThatThrownBy(() -> call(OpenRouterRequestMode.CHAT_COMPLETIONS, media))
           .as(media.getMimeType() + " " + media.getData())
           .satisfies(failure -> assertThat(causes(failure))
               .anyMatch(IllegalArgumentException.class::isInstance));
@@ -198,10 +198,10 @@ class OpenRouterModalityIntegrationTests {
   void clientErrorsAreNotRetried() {
     for (int status : new int[] {400, 401}) {
       int before = requestsFor("error-" + status);
-      assertThatThrownBy(() -> call(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS, null, "error-" + status))
+      assertThatThrownBy(() -> call(OpenRouterRequestMode.CHAT_COMPLETIONS, null, "error-" + status))
           .as("HTTP " + status)
           .isInstanceOf(OpenRouterNonTransientApiException.class)
-          .satisfies(failure -> assertThat(((OpenRouterHttpException) failure).getStatusCode().value())
+          .satisfies(failure -> assertThat(((OpenRouterHttpFailure) failure).getStatusCode().value())
               .isEqualTo(status));
       assertThat(requestsFor("error-" + status) - before).isEqualTo(1);
     }
@@ -209,16 +209,16 @@ class OpenRouterModalityIntegrationTests {
 
   @Test
   void aRateLimitIsRetriedAndThenSucceeds() {
-    assertThat(call(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS, null, "error-429"))
+    assertThat(call(OpenRouterRequestMode.CHAT_COMPLETIONS, null, "error-429"))
         .isEqualTo("Received the attachment for the inspection.");
     assertThat(requestsFor("error-429")).isEqualTo(2);
   }
 
   @Test
   void aPersistentServerErrorFailsAfterTheRetryBudget() {
-    assertThatThrownBy(() -> call(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS, null, "error-503"))
+    assertThatThrownBy(() -> call(OpenRouterRequestMode.CHAT_COMPLETIONS, null, "error-503"))
         .isInstanceOf(OpenRouterTransientApiException.class)
-        .satisfies(failure -> assertThat(((OpenRouterHttpException) failure).getStatusCode().value())
+        .satisfies(failure -> assertThat(((OpenRouterHttpFailure) failure).getStatusCode().value())
             .isEqualTo(503));
     assertThat(requestsFor("error-503")).isEqualTo(3);
   }
@@ -238,9 +238,9 @@ class OpenRouterModalityIntegrationTests {
           })
           .blockLast(Duration.ofSeconds(10));
       // Chat Completions and Responses raise different exception types; both keep the provider error.
-      OpenRouterErrorDetails details = failure.get() instanceof OpenRouterHttpException http
+      OpenRouterErrorDetails details = failure.get() instanceof OpenRouterHttpFailure http
           ? http.getErrorDetails()
-          : ((OpenRouterApiException) failure.get()).getErrorDetails();
+          : ((OpenRouterInBandErrorException) failure.get()).getErrorDetails();
       assertThat(details).isNotNull();
       assertThat(details.code()).isEqualTo("server_error");
       assertThat(details.message()).isEqualTo("The upstream provider returned an error");
@@ -256,7 +256,7 @@ class OpenRouterModalityIntegrationTests {
             "spring.ai.openrouter.base-url=" + OpenRouterMock.baseUrl(),
             "spring.ai.openrouter.connection.timeout=500ms")
         .run(context -> context.getBean(ChatModel.class).call(new Prompt("Is the pickup ready?",
-            options(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS, "slow-provider")))))
+            options(OpenRouterRequestMode.CHAT_COMPLETIONS, "slow-provider")))))
         .satisfies(failure -> assertThat(causes(failure))
             .anyMatch(cause -> cause instanceof TransientAiException
                 || cause instanceof org.springframework.web.client.ResourceAccessException));
@@ -275,7 +275,7 @@ class OpenRouterModalityIntegrationTests {
             "spring.ai.openrouter.base-url=" + OpenRouterMock.baseUrl(),
             "spring.ai.openrouter.connection.timeout=500ms")
         .run(context -> reply.add(context.getBean(ChatModel.class).call(new Prompt("Is the pickup ready?",
-            options(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS, "slow-keepalive"))).getResult().getOutput()
+            options(OpenRouterRequestMode.CHAT_COMPLETIONS, "slow-keepalive"))).getResult().getOutput()
             .getText()));
     assertThat(reply).containsExactly("Received the attachment for the inspection.");
     assertThat(Duration.ofNanos(System.nanoTime() - started)).isGreaterThan(Duration.ofMillis(1500));
@@ -320,7 +320,7 @@ class OpenRouterModalityIntegrationTests {
   }
 
   private JsonNode attachmentPart(OpenRouterRequestMode mode) {
-    boolean responses = mode == OpenRouterRequestMode.OPENAI_RESPONSES;
+    boolean responses = mode == OpenRouterRequestMode.RESPONSES;
     JsonNode request = lastRequest(responses ? "/api/v1/responses" : "/api/v1/chat/completions");
     JsonNode messages = request.path(responses ? "input" : "messages");
     JsonNode parts = messages.get(messages.size() - 1).path("content");

@@ -87,10 +87,7 @@ class PublicApiNullabilityTests {
 	@Test
 	void nullRuntimeOptionInheritsEvenWhenSwitchingRequestMode() {
 		var defaults = OpenRouterChatOptions.builder().seed(7).build();
-		var runtime = OpenRouterChatOptions.builder()
-			.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
-			.seed(null)
-			.build();
+		var runtime = OpenRouterChatOptions.builder().requestMode(OpenRouterRequestMode.RESPONSES).seed(null).build();
 		var merged = defaults.merge(runtime);
 		assertThat(merged.getSeed()).isEqualTo(7);
 		assertThatThrownBy(

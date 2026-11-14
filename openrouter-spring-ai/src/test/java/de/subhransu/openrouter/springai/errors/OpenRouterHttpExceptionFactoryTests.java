@@ -54,11 +54,11 @@ class OpenRouterHttpExceptionFactoryTests {
 			"{\"unrelated\":{\"error_type\":\"authentication\"},\"padding\":\"truncated",
 			"{\"unrelated\":[{\"error_type\":\"authentication\"}],\"padding\":\"truncated" })
 	void missingErrorDetailsPreserveStatusFallbackForWholeAndTruncatedBodies(String body) {
-		OpenRouterHttpException whole = (OpenRouterHttpException) this.factory.create("/responses",
+		OpenRouterHttpFailure whole = (OpenRouterHttpFailure) this.factory.create("/responses",
 				HttpStatus.TOO_MANY_REQUESTS, HttpHeaders.EMPTY, body);
-		OpenRouterHttpException truncated = this.factory.createErrorBodyLimit("/responses",
-				HttpStatus.TOO_MANY_REQUESTS, body, 10, 11);
-		for (OpenRouterHttpException exception : List.of(whole, truncated)) {
+		OpenRouterHttpFailure truncated = this.factory.createErrorBodyLimit("/responses", HttpStatus.TOO_MANY_REQUESTS,
+				body, 10, 11);
+		for (OpenRouterHttpFailure exception : List.of(whole, truncated)) {
 			assertThat(exception.getErrorDetails().category()).isEqualTo(OpenRouterErrorCategory.RATE_LIMIT);
 			assertThat(exception.getErrorDetails())
 				.extracting(OpenRouterErrorDetails::code, OpenRouterErrorDetails::message,
@@ -87,7 +87,7 @@ class OpenRouterHttpExceptionFactoryTests {
 	private OpenRouterRetryAfter retryAfter(String value) {
 		HttpHeaders headers = new HttpHeaders();
 		headers.set(HttpHeaders.RETRY_AFTER, value);
-		return ((OpenRouterHttpException) this.factory.create("/responses", HttpStatus.SERVICE_UNAVAILABLE, headers,
+		return ((OpenRouterHttpFailure) this.factory.create("/responses", HttpStatus.SERVICE_UNAVAILABLE, headers,
 				OVERLOADED_ERROR))
 			.getRetryAfter();
 	}
@@ -106,7 +106,7 @@ class OpenRouterHttpExceptionFactoryTests {
 				body);
 
 		assertThat(exception).isInstanceOf(OpenRouterTransientApiException.class);
-		OpenRouterHttpException httpException = (OpenRouterHttpException) exception;
+		OpenRouterHttpFailure httpException = (OpenRouterHttpFailure) exception;
 		assertThat(httpException.getErrorDetails().code()).isEqualTo("429");
 		assertThat(httpException.getErrorDetails().message()).isEqualTo("slow down");
 		assertThat(httpException.getErrorDetails().errorType()).isEqualTo("rate_limit_exceeded");
@@ -123,7 +123,7 @@ class OpenRouterHttpExceptionFactoryTests {
 				HttpHeaders.EMPTY, "{\"error_type\":\"authentication\"}");
 
 		assertThat(exception).isInstanceOf(OpenRouterNonTransientApiException.class);
-		OpenRouterHttpException httpException = (OpenRouterHttpException) exception;
+		OpenRouterHttpFailure httpException = (OpenRouterHttpFailure) exception;
 		assertThat(httpException.getCategory()).isEqualTo(OpenRouterErrorCategory.AUTHENTICATION);
 		assertThat(httpException.getErrorDetails().errorType()).isEqualTo("authentication");
 	}
@@ -146,7 +146,7 @@ class OpenRouterHttpExceptionFactoryTests {
 		String body = "{\"future_root\":true,\"error\":{" + errorTypeJson + "\"code\":\"" + code + "\",\"message\":\""
 				+ message + "\",\"future_field\":42}}";
 
-		OpenRouterHttpException exception = (OpenRouterHttpException) this.factory.create("/chat/completions",
+		OpenRouterHttpFailure exception = (OpenRouterHttpFailure) this.factory.create("/chat/completions",
 				HttpStatusCode.valueOf(status), HttpHeaders.EMPTY, body);
 
 		assertThat(exception.getCategory()).isEqualTo(expected);
@@ -160,7 +160,7 @@ class OpenRouterHttpExceptionFactoryTests {
 		HttpHeaders headers = new HttpHeaders();
 		headers.set(HttpHeaders.RETRY_AFTER, "Sun, 02 Aug 2026 07:00:30 GMT");
 
-		OpenRouterHttpException exception = (OpenRouterHttpException) this.factory.create("/responses",
+		OpenRouterHttpFailure exception = (OpenRouterHttpFailure) this.factory.create("/responses",
 				HttpStatus.SERVICE_UNAVAILABLE, headers, OVERLOADED_ERROR);
 
 		assertThat(exception.getRetryAfter().delay()).isEqualTo(Duration.ofSeconds(30));
@@ -172,7 +172,7 @@ class OpenRouterHttpExceptionFactoryTests {
 		HttpHeaders headers = new HttpHeaders();
 		headers.set(HttpHeaders.RETRY_AFTER, "Sunday, 02-Aug-26 07:00:30 GMT");
 
-		OpenRouterHttpException exception = (OpenRouterHttpException) this.factory.create("/responses",
+		OpenRouterHttpFailure exception = (OpenRouterHttpFailure) this.factory.create("/responses",
 				HttpStatus.SERVICE_UNAVAILABLE, headers, OVERLOADED_ERROR);
 
 		assertThat(exception.getRetryAfter().delay()).isEqualTo(Duration.ofSeconds(30));
@@ -184,7 +184,7 @@ class OpenRouterHttpExceptionFactoryTests {
 		HttpHeaders headers = new HttpHeaders();
 		headers.set(HttpHeaders.RETRY_AFTER, "Sun Aug  2 07:00:30 2026");
 
-		OpenRouterHttpException exception = (OpenRouterHttpException) this.factory.create("/responses",
+		OpenRouterHttpFailure exception = (OpenRouterHttpFailure) this.factory.create("/responses",
 				HttpStatus.SERVICE_UNAVAILABLE, headers, OVERLOADED_ERROR);
 
 		assertThat(exception.getRetryAfter().delay()).isEqualTo(Duration.ofSeconds(30));
@@ -196,7 +196,7 @@ class OpenRouterHttpExceptionFactoryTests {
 		HttpHeaders headers = new HttpHeaders();
 		headers.set(HttpHeaders.RETRY_AFTER, "Tuesday, 02-Aug-77 07:00:30 GMT");
 
-		OpenRouterHttpException exception = (OpenRouterHttpException) this.factory.create("/responses",
+		OpenRouterHttpFailure exception = (OpenRouterHttpFailure) this.factory.create("/responses",
 				HttpStatus.SERVICE_UNAVAILABLE, headers, OVERLOADED_ERROR);
 
 		assertThat(exception.getRetryAfter().delay()).isZero();
@@ -208,7 +208,7 @@ class OpenRouterHttpExceptionFactoryTests {
 		HttpHeaders headers = new HttpHeaders();
 		headers.set(HttpHeaders.RETRY_AFTER, "Sat, 01 Aug 2026 07:00:00 GMT");
 
-		OpenRouterHttpException exception = (OpenRouterHttpException) this.factory.create("/responses",
+		OpenRouterHttpFailure exception = (OpenRouterHttpFailure) this.factory.create("/responses",
 				HttpStatus.SERVICE_UNAVAILABLE, headers, OVERLOADED_ERROR);
 
 		assertThat(exception.getRetryAfter().delay()).isZero();
@@ -238,8 +238,7 @@ class OpenRouterHttpExceptionFactoryTests {
 				HttpHeaders.EMPTY, body);
 
 		assertThat(exception).isInstanceOf(OpenRouterNonTransientApiException.class);
-		assertThat(((OpenRouterHttpException) exception).getCategory())
-			.isEqualTo(OpenRouterErrorCategory.AUTHENTICATION);
+		assertThat(((OpenRouterHttpFailure) exception).getCategory()).isEqualTo(OpenRouterErrorCategory.AUTHENTICATION);
 	}
 
 	@Test
@@ -252,8 +251,7 @@ class OpenRouterHttpExceptionFactoryTests {
 				HttpHeaders.EMPTY, body);
 
 		assertThat(exception).isInstanceOf(OpenRouterNonTransientApiException.class);
-		assertThat(((OpenRouterHttpException) exception).getCategory())
-			.isEqualTo(OpenRouterErrorCategory.AUTHENTICATION);
+		assertThat(((OpenRouterHttpFailure) exception).getCategory()).isEqualTo(OpenRouterErrorCategory.AUTHENTICATION);
 	}
 
 	@Test
@@ -266,7 +264,7 @@ class OpenRouterHttpExceptionFactoryTests {
 				HttpHeaders.EMPTY, body);
 
 		assertThat(exception).isInstanceOf(OpenRouterTransientApiException.class);
-		assertThat(((OpenRouterHttpException) exception).getCategory())
+		assertThat(((OpenRouterHttpFailure) exception).getCategory())
 			.isEqualTo(OpenRouterErrorCategory.PROVIDER_UNAVAILABLE);
 	}
 
@@ -349,7 +347,7 @@ class OpenRouterHttpExceptionFactoryTests {
 				HttpHeaders.EMPTY, body);
 
 		assertThat(exception).isInstanceOf(OpenRouterNonTransientApiException.class);
-		OpenRouterHttpException httpException = (OpenRouterHttpException) exception;
+		OpenRouterHttpFailure httpException = (OpenRouterHttpFailure) exception;
 		assertThat(httpException.getCategory()).isEqualTo(OpenRouterErrorCategory.AUTHENTICATION);
 		assertThat(httpException.getErrorDetails().code()).isEqualTo("invalid_api_key");
 		assertThat(httpException.getErrorDetails().message()).isEqualTo("{\"detail\":\"invalid key\"}");
@@ -367,7 +365,7 @@ class OpenRouterHttpExceptionFactoryTests {
 				HttpHeaders.EMPTY, body);
 
 		assertThat(exception).isInstanceOf(OpenRouterNonTransientApiException.class);
-		OpenRouterHttpException httpException = (OpenRouterHttpException) exception;
+		OpenRouterHttpFailure httpException = (OpenRouterHttpFailure) exception;
 		assertThat(httpException.getCategory()).isEqualTo(OpenRouterErrorCategory.UNKNOWN);
 		assertThat(httpException.getErrorDetails().code()).isEqualTo("invalid_api_key");
 		assertThat(httpException.getErrorDetails().errorType()).isEqualTo("{\"kind\":\"authentication\"}");
@@ -407,7 +405,7 @@ class OpenRouterHttpExceptionFactoryTests {
 				          "metadata":{"api_key":"plain-secret","nested":{"token":"Bearer nested-secret"}}}}
 				""";
 
-		OpenRouterHttpException exception = (OpenRouterHttpException) this.factory.create("/embeddings",
+		OpenRouterHttpFailure exception = (OpenRouterHttpFailure) this.factory.create("/embeddings",
 				HttpStatus.UNAUTHORIZED, HttpHeaders.EMPTY, body);
 
 		assertThat(exception.getResponseBody()).contains("[REDACTED]")

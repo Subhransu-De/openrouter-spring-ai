@@ -103,7 +103,7 @@ In a web application, return the `Flux<String>` from the controller instead of b
 | `spring.ai.openrouter.api-key`                           | Required while an OpenRouter modality is enabled; no default credential.                                                |
 | `spring.ai.openrouter.base-url`                          | `https://openrouter.ai/api/v1`                                                                                          |
 | `spring.ai.openrouter.chat.model`                        | Unset; select a model explicitly.                                                                                       |
-| `spring.ai.openrouter.chat.request-mode`                 | `openai-chat-completions`; `openai-responses` is experimental.                                                          |
+| `spring.ai.openrouter.chat.request-mode`                 | `chat-completions`; `responses` is experimental.                                                                        |
 | `spring.ai.openrouter.chat.include-usage`                | Unset. `true` asks OpenRouter for usage and cost in Chat Completions requests, calls and streams. Responses rejects it. |
 | `spring.ai.openrouter.connection.timeout`                | `2m`                                                                                                                    |
 | `spring.ai.openrouter.connection.max-response-body-size` | `64MB` per response / SSE event, not per stream.                                                                        |

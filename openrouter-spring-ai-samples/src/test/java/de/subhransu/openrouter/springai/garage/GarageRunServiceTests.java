@@ -70,7 +70,7 @@ class GarageRunServiceTests {
     GarageScene scene = scene();
     GarageEvidence evidence = new GarageEvidence();
     when(scene.execute(any())).thenAnswer(invocation -> {
-      String mode = OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS.name();
+      String mode = OpenRouterRequestMode.CHAT_COMPLETIONS.name();
       evidence.record(GarageFeature.STANDARD_SAMPLING, evidence.newOperation(scene.id(), mode),
           mode, EvidenceLevel.CONFIGURED, "status", "passed");
       throw new IllegalStateException("synthetic failure");
@@ -89,9 +89,9 @@ class GarageRunServiceTests {
     assertThat(run.files()).containsKeys(GarageRun.EVIDENCE, GarageRun.REPORT);
     verify(writer).write(any(), any(), any(), any());
     assertThat(evidence.coverageStatus(GarageFeature.STANDARD_SAMPLING,
-        OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS)).isEqualTo("failed");
+        OpenRouterRequestMode.CHAT_COMPLETIONS)).isEqualTo("failed");
     assertThat(evidence.coverageStatus(GarageFeature.FULL_PROPERTY_BINDING,
-        OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS)).isEqualTo("not-executed");
+        OpenRouterRequestMode.CHAT_COMPLETIONS)).isEqualTo("not-executed");
   }
 
   @Test
@@ -101,7 +101,7 @@ class GarageRunServiceTests {
     when(scene.execute(any())).thenAnswer(invocation -> {
       evidence.recordCost("synthetic-operation", 0.01);
       return SceneResult.passed("dyno-tuning", "synthetic-operation",
-          OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS, Duration.ZERO, this.output, Map.of());
+          OpenRouterRequestMode.CHAT_COMPLETIONS, Duration.ZERO, this.output, Map.of());
     });
     GarageRunService service = service(scene, evidence, writer());
 
@@ -145,7 +145,7 @@ class GarageRunServiceTests {
     when(scene.id()).thenReturn("recovery-road-test");
     when(scene.features()).thenReturn(GarageFeature.forScene("recovery-road-test"));
     when(scene.execute(any())).thenReturn(SceneResult.passed("recovery-road-test",
-        "synthetic-operation", OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS, Duration.ZERO,
+        "synthetic-operation", OpenRouterRequestMode.CHAT_COMPLETIONS, Duration.ZERO,
         this.output, Map.of()));
     GarageRunService service = service(scene, new GarageEvidence(), writer());
     String selection = "{\"capabilities\":[\"text\"],"
@@ -204,7 +204,7 @@ class GarageRunServiceTests {
       var context = invocation.getArgument(0, SceneContext.class);
       String mode = context.requestMode().name();
       String operation = evidence.newOperation(scene.id(), mode);
-      String status = context.requestMode() == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS ? "covered" : responseStatus;
+      String status = context.requestMode() == OpenRouterRequestMode.CHAT_COMPLETIONS ? "covered" : responseStatus;
       if (!"not-executed".equals(status)) {
         for (var level : EvidenceLevel.values()) {
           if (!"incomplete".equals(status) || level != EvidenceLevel.ASSERTED) {
@@ -240,7 +240,7 @@ class GarageRunServiceTests {
       SceneContext context = invocation.getArgument(0, SceneContext.class);
       seen.add(context.properties());
       return SceneResult.passed("dyno-tuning", "synthetic-operation",
-          OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS, Duration.ZERO, this.output, Map.of());
+          OpenRouterRequestMode.CHAT_COMPLETIONS, Duration.ZERO, this.output, Map.of());
     });
     GarageRunService service = service(scene, new GarageEvidence(), writer());
 
@@ -259,7 +259,7 @@ class GarageRunServiceTests {
   void onlyOneRunIsActiveAtATime() throws Exception {
     GarageScene scene = scene();
     when(scene.execute(any())).thenReturn(SceneResult.passed("dyno-tuning", "synthetic-operation",
-        OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS, Duration.ZERO, this.output, Map.of()));
+        OpenRouterRequestMode.CHAT_COMPLETIONS, Duration.ZERO, this.output, Map.of()));
     List<Runnable> queued = new ArrayList<>();
     GarageRunService service = service(scene, new GarageEvidence(), writer(), environment(), queued::add);
 
@@ -279,7 +279,7 @@ class GarageRunServiceTests {
   void liveScenesNeedAnApiKeyButOfflineContractsDoNot() throws Exception {
     GarageScene scene = scene();
     when(scene.execute(any())).thenReturn(SceneResult.passed("dyno-tuning", "synthetic-operation",
-        OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS, Duration.ZERO, this.output, Map.of()));
+        OpenRouterRequestMode.CHAT_COMPLETIONS, Duration.ZERO, this.output, Map.of()));
     MockEnvironment withoutKey = new MockEnvironment()
         .withProperty("spring.ai.openrouter.api-key", "garage-missing-api-key")
         .withProperty("garage.output-dir", this.output.toString());
@@ -314,7 +314,7 @@ class GarageRunServiceTests {
     when(scene.execute(any())).thenAnswer(invocation -> {
       evidence.recordCost("synthetic-operation", 0.02);
       return SceneResult.passed("dyno-tuning", "synthetic-operation",
-          OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS, Duration.ZERO, this.output, Map.of());
+          OpenRouterRequestMode.CHAT_COMPLETIONS, Duration.ZERO, this.output, Map.of());
     });
     GarageReportWriter writer = mock(GarageReportWriter.class);
     when(writer.write(any(), any(), any(), any())).thenThrow(new IOException("disk full"));
@@ -369,7 +369,7 @@ class GarageRunServiceTests {
     when(scene.id()).thenReturn("digital-inspection");
     when(scene.features()).thenReturn(List.of(GarageFeature.STRUCTURED_OUTPUT));
     when(scene.execute(any())).thenReturn(SceneResult.passed("digital-inspection",
-        "synthetic-operation", OpenRouterRequestMode.OPENAI_RESPONSES, Duration.ZERO,
+        "synthetic-operation", OpenRouterRequestMode.RESPONSES, Duration.ZERO,
         this.output, Map.of("status", "unsupported-in-mode")));
     return scene;
   }

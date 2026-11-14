@@ -19,7 +19,7 @@ public final class OpenRouterImageRequestMapper {
 		return new ImagesRequest(model, promptText(prompt), options.getN(), size(options), options.getResolution(),
 				options.getAspectRatio(), options.getQuality(), options.getOutputFormat(), options.getBackground(),
 				options.getOutputCompression(), options.getSeed(), stream ? true : null, inputReferences(options),
-				options.getProviderOptions());
+				options.getProviderExtraBody());
 	}
 
 	// OpenRouter expects each reference as an image content object ({"type": "image_url",

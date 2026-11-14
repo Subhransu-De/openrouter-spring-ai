@@ -1,6 +1,6 @@
 package de.subhransu.openrouter.springai.internal;
 
-import de.subhransu.openrouter.springai.errors.OpenRouterHttpException;
+import de.subhransu.openrouter.springai.errors.OpenRouterHttpFailure;
 import de.subhransu.openrouter.springai.errors.OpenRouterTransportException;
 import java.lang.reflect.UndeclaredThrowableException;
 import java.time.Duration;
@@ -70,7 +70,7 @@ public final class Retries {
 	}
 
 	private static @Nullable Duration retryAfter(Throwable throwable) {
-		return throwable instanceof OpenRouterHttpException httpException ? httpException.getRetryDelay() : null;
+		return throwable instanceof OpenRouterHttpFailure httpException ? httpException.getRetryDelay() : null;
 	}
 
 	/**

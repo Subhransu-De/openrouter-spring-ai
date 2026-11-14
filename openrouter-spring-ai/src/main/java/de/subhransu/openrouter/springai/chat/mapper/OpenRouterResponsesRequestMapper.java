@@ -52,8 +52,8 @@ public final class OpenRouterResponsesRequestMapper {
 		AudioOutputMapper.validateRequest(messages, options, stream, true);
 		for (Message message : messages) {
 			if (message.getMetadata().containsKey(OpenRouterCacheBreakpoint.METADATA_KEY)) {
-				throw new IllegalArgumentException("OPENAI_RESPONSES does not support cache_control breakpoints; "
-						+ "use OPENAI_CHAT_COMPLETIONS");
+				throw new IllegalArgumentException(
+						"RESPONSES does not support cache_control breakpoints; use CHAT_COMPLETIONS");
 			}
 		}
 		rejectUnsupported("stopSequences", options.getStopSequences());
@@ -99,7 +99,7 @@ public final class OpenRouterResponsesRequestMapper {
 		Integer maxTokens = options.getMaxTokens();
 		if (maxCompletionTokens != null && maxTokens != null && !maxCompletionTokens.equals(maxTokens)) {
 			OptionChecks.warnOnce(logger, "responses-max-output-tokens-" + maxCompletionTokens + "-" + maxTokens,
-					() -> "OPENAI_RESPONSES sends one output limit as max_output_tokens: using maxCompletionTokens "
+					() -> "RESPONSES sends one output limit as max_output_tokens: using maxCompletionTokens "
 							+ maxCompletionTokens + " and ignoring maxTokens " + maxTokens
 							+ ". Set only one of them in this mode.");
 		}
@@ -109,7 +109,7 @@ public final class OpenRouterResponsesRequestMapper {
 	private static void rejectUnsupported(String name, @Nullable Object value) {
 		if (value != null) {
 			throw new IllegalArgumentException(
-					"OPENAI_RESPONSES does not support " + name + "; unset it or use OPENAI_CHAT_COMPLETIONS");
+					"RESPONSES does not support " + name + "; unset it or use CHAT_COMPLETIONS");
 		}
 	}
 
@@ -168,8 +168,8 @@ public final class OpenRouterResponsesRequestMapper {
 
 	private void mapMessage(Message message, List<Object> items) {
 		if (message instanceof AssistantMessage assistant && !CollectionUtils.isEmpty(assistant.getMedia())) {
-			throw new IllegalArgumentException("OPENAI_RESPONSES does not support assistant media history; "
-					+ "attach the media to a UserMessage or use OPENAI_CHAT_COMPLETIONS");
+			throw new IllegalArgumentException("RESPONSES does not support assistant media history; "
+					+ "attach the media to a UserMessage or use CHAT_COMPLETIONS");
 		}
 		if (message.getMessageType() == MessageType.ASSISTANT) {
 			assistant(message, items);
@@ -190,7 +190,7 @@ public final class OpenRouterResponsesRequestMapper {
 				items.addAll(outputItems);
 				return;
 			}
-			throw new IllegalArgumentException("OPENAI_RESPONSES cannot replay reasoning without an output snapshot; "
+			throw new IllegalArgumentException("RESPONSES cannot replay reasoning without an output snapshot; "
 					+ "retain the original assistant message or start a new conversation without its reasoning state");
 		}
 		List<@Nullable ResponsesContent> content = new ArrayList<>();
@@ -217,7 +217,7 @@ public final class OpenRouterResponsesRequestMapper {
 			.asList(this.objectMapper.convertValue(outputItems, ResponsesOutputItem[].class));
 		if (!GeneratedImageMapper.responsesMedia(snapshot).isEmpty()) {
 			throw new IllegalArgumentException(
-					"OPENAI_RESPONSES does not support assistant media history in output snapshots; "
+					"RESPONSES does not support assistant media history in output snapshots; "
 							+ "start a new conversation without its reasoning state");
 		}
 		List<AssistantMessage.ToolCall> calls = message instanceof AssistantMessage assistant ? assistant.getToolCalls()
@@ -228,7 +228,7 @@ public final class OpenRouterResponsesRequestMapper {
 						OpenRouterDiagnosticSanitizer.keyless()), calls)
 				|| !Objects.equals(RefusalMetadata.responses(snapshot),
 						message.getMetadata().get(RefusalMetadata.REFUSAL))) {
-			throw new IllegalArgumentException("OPENAI_RESPONSES cannot replay a stale assistant output snapshot: "
+			throw new IllegalArgumentException("RESPONSES cannot replay a stale assistant output snapshot: "
 					+ "text, tool calls, or refusal metadata changed; retain the original assistant message "
 					+ "or start a new conversation without its reasoning state");
 		}

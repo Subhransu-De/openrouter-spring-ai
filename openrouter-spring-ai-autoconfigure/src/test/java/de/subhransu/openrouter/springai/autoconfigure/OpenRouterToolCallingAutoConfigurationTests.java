@@ -159,7 +159,7 @@ class OpenRouterToolCallingAutoConfigurationTests {
 				.hasSingleBean(OpenRouterToolExecutionExceptionProcessor.class)
 				.hasSingleBean(ToolCallingManager.class);
 			assertThat(failingToolResult(context.getBean(ToolCallingManager.class)))
-				.isEqualTo(OpenRouterToolExecutionExceptionProcessor.DEFAULT_FAILURE_PAYLOAD);
+				.isEqualTo(OpenRouterToolExecutionExceptionProcessor.DEFAULT_FAILURE_RESULT);
 			assertThat(ReflectionTestUtils.getField(context.getBean(ToolExecutionExceptionProcessor.class),
 					"observationRegistry"))
 				.isSameAs(context.getBean(ObservationRegistry.class));
@@ -195,7 +195,7 @@ class OpenRouterToolCallingAutoConfigurationTests {
 				.hasSingleBean(ToolCallingManager.class)
 				.hasSingleBean(OpenRouterToolExecutionExceptionProcessor.class);
 			assertThat(failingToolResult(context.getBean(ToolCallingManager.class)))
-				.isEqualTo(OpenRouterToolExecutionExceptionProcessor.DEFAULT_FAILURE_PAYLOAD);
+				.isEqualTo(OpenRouterToolExecutionExceptionProcessor.DEFAULT_FAILURE_RESULT);
 		});
 	}
 

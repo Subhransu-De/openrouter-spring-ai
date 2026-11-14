@@ -85,7 +85,7 @@ class GarageRunPlanTests {
     assertThat(selected.sceneIds()).contains("service-story", "streaming-dispatch", "modality-bays");
     assertThat(selected.sceneIds()).doesNotHaveDuplicates().doesNotContain("routing-lane");
     assertThat(selected.requestModes()).containsExactly(
-        OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS, OpenRouterRequestMode.OPENAI_RESPONSES);
+        OpenRouterRequestMode.CHAT_COMPLETIONS, OpenRouterRequestMode.RESPONSES);
     assertThat(selected.runsImageInput()).isFalse();
     assertThat(selected.runsImageGeneration()).isFalse();
     assertThat(selected.foremanModel()).isEqualTo(this.properties.getForemanModel());
@@ -123,7 +123,7 @@ class GarageRunPlanTests {
     assertThat(selected.capabilities()).containsExactly("text", "embedding", "vision", "image");
     assertThat(selected.imageSurface()).isEqualTo(ImageSurface.ALL);
     assertThat(selected.requestModes()).containsExactly(
-        OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS, OpenRouterRequestMode.OPENAI_RESPONSES);
+        OpenRouterRequestMode.CHAT_COMPLETIONS, OpenRouterRequestMode.RESPONSES);
   }
 
   @Test
@@ -135,7 +135,7 @@ class GarageRunPlanTests {
     assertThat(selected.imageSurface()).isEqualTo(ImageSurface.STREAMING);
     assertThat(selected.imageModel()).isEqualTo("synthetic/image");
     assertThat(selected.imageQuality()).isEqualTo("low");
-    assertThat(selected.requestModes()).containsExactly(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS);
+    assertThat(selected.requestModes()).containsExactly(OpenRouterRequestMode.CHAT_COMPLETIONS);
   }
 
   @Test

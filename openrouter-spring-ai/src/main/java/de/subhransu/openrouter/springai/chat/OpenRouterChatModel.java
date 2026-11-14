@@ -121,8 +121,8 @@ public class OpenRouterChatModel implements ChatModel {
 			.observe(() -> {
 				OpenRouterChatOptions options = requestOptions.require();
 				ChatResponse response = switch (resolveRequestMode(options)) {
-					case OPENAI_CHAT_COMPLETIONS -> callChatCompletions(prompt, options);
-					case OPENAI_RESPONSES -> callResponses(prompt, options);
+					case CHAT_COMPLETIONS -> callChatCompletions(prompt, options);
+					case RESPONSES -> callResponses(prompt, options);
 				};
 				observationContext.setResponse(response);
 				return response;
@@ -152,14 +152,14 @@ public class OpenRouterChatModel implements ChatModel {
 			Flux<ChatResponse> responses = Flux.defer(() -> {
 				OpenRouterChatOptions options = requestOptions.require();
 				return switch (resolveRequestMode(options)) {
-					case OPENAI_CHAT_COMPLETIONS -> {
+					case CHAT_COMPLETIONS -> {
 						ChatCompletionRequest request = buildChatCompletionsRequest(prompt, options, true);
 						yield this.streamingResponseMapper.map(
 								this.streamingToolCallAggregator.aggregate(StreamRetries
 									.stream(this.openRouterApi.chatCompletionStream(request), this.retryTemplate)),
 								options.getAudio());
 					}
-					case OPENAI_RESPONSES -> {
+					case RESPONSES -> {
 						ResponsesRequest request = this.responsesRequestMapper.map(prompt.getInstructions(), options,
 								true, resolveToolDefinitions(options));
 						yield this.responsesStreamingResponseMapper
@@ -190,8 +190,7 @@ public class OpenRouterChatModel implements ChatModel {
 	}
 
 	private OpenRouterRequestMode resolveRequestMode(OpenRouterChatOptions options) {
-		return options.getRequestMode() != null ? options.getRequestMode()
-				: OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS;
+		return options.getRequestMode() != null ? options.getRequestMode() : OpenRouterRequestMode.CHAT_COMPLETIONS;
 	}
 
 	private OpenRouterChatOptions buildRequestOptions(@Nullable ChatOptions runtimeOptions) {
@@ -268,9 +267,26 @@ public class OpenRouterChatModel implements ChatModel {
 			return this;
 		}
 
-		public Builder defaultOptions(@Nullable OpenRouterChatOptions defaultOptions) {
-			this.defaultOptions = defaultOptions;
+		/**
+		 * Set the default options of the model. Options in a request override them.
+		 * @param options the default options, or {@code null} for the built-in defaults
+		 * @return this builder
+		 */
+		public Builder options(@Nullable OpenRouterChatOptions options) {
+			this.defaultOptions = options;
 			return this;
+		}
+
+		/**
+		 * Set the default options of the model.
+		 * @param defaultOptions the default options
+		 * @return this builder
+		 * @deprecated since 0.2.0 for removal in 1.0.0; use
+		 * {@link #options(OpenRouterChatOptions)}, as in Spring AI's own model builders
+		 */
+		@Deprecated(since = "0.2.0", forRemoval = true)
+		public Builder defaultOptions(@Nullable OpenRouterChatOptions defaultOptions) {
+			return options(defaultOptions);
 		}
 
 		/**

@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
-import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
+import de.subhransu.openrouter.springai.api.errors.OpenRouterInBandErrorException;
 import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
@@ -96,7 +96,7 @@ class ImageResponseContractTests {
 		StepVerifier.create(model(sse(event), MediaType.TEXT_EVENT_STREAM).stream(PROMPT))
 			.expectErrorSatisfies(this::assertProviderError)
 			.verify();
-		assertStoppedWithError(OpenRouterApiException.class);
+		assertStoppedWithError(OpenRouterInBandErrorException.class);
 	}
 
 	@Test
@@ -120,11 +120,11 @@ class ImageResponseContractTests {
 		assertThat(response.getResults().get(1).getOutput().getUrl()).isEqualTo("https://example.test/image.png");
 		StepVerifier.create(model.stream(PROMPT)).assertNext(first -> {
 			assertThat(first.getResult().getOutput().getB64Json()).isEqualTo("aW1hZ2U=");
-			assertThat(first.getMetadata().containsKey("openrouter.usage")).isFalse();
+			assertThat(first.getMetadata().containsKey("openrouter.image.usage")).isFalse();
 		}).assertNext(last -> {
 			assertThat(last.getResult().getOutput().getUrl()).isEqualTo("https://example.test/image.png");
-			assertThat(last.getMetadata().<Object>get("openrouter.usage"))
-				.isEqualTo(response.getMetadata().get("openrouter.usage"));
+			assertThat(last.getMetadata().<Object>get("openrouter.image.usage"))
+				.isEqualTo(response.getMetadata().get("openrouter.image.usage"));
 		}).verifyComplete();
 	}
 
@@ -166,7 +166,7 @@ class ImageResponseContractTests {
 	}
 
 	private void assertProviderError(Throwable throwable) {
-		assertThat(throwable).isInstanceOfSatisfying(OpenRouterApiException.class, error -> {
+		assertThat(throwable).isInstanceOfSatisfying(OpenRouterInBandErrorException.class, error -> {
 			assertThat(error.getCategory()).isEqualTo(OpenRouterErrorCategory.RATE_LIMIT);
 			assertThat(error.getStatusCode().value()).isEqualTo(429);
 			assertProviderDetails(error.getErrorDetails());
@@ -224,7 +224,7 @@ class ImageResponseContractTests {
 		return OpenRouterImageModel.builder()
 			.openRouterApi(api)
 			.retryTemplate(new RetryTemplate(RetryPolicy.builder().maxRetries(0).build()))
-			.defaultOptions(OpenRouterImageOptions.builder().model("test-image-model").build())
+			.options(OpenRouterImageOptions.builder().model("test-image-model").build())
 			.observationRegistry(this.registry)
 			.build();
 	}

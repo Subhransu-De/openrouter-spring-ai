@@ -199,7 +199,7 @@ class ResponsesOutputReconciliationTests {
 		assertThat(message.getText()).isEqualTo("hello world again");
 		var options = OpenRouterChatOptions.builder()
 			.model("synthetic")
-			.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
+			.requestMode(OpenRouterRequestMode.RESPONSES)
 			.build();
 		var requests = new OpenRouterResponsesRequestMapper(this.json);
 		assertThat(this.json.valueToTree(requests.map(List.of(message), options, false, List.of())).get("input"))
@@ -243,7 +243,7 @@ class ResponsesOutputReconciliationTests {
 		var prompt = new Prompt("synthetic",
 				OpenRouterChatOptions.builder()
 					.model("synthetic")
-					.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
+					.requestMode(OpenRouterRequestMode.RESPONSES)
 					.build());
 		assertMedia(model.stream(prompt)
 			.flatMapIterable(response -> response.getResult().getOutput().getMedia())

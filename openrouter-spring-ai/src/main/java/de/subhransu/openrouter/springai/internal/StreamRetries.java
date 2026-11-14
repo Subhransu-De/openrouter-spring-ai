@@ -1,7 +1,7 @@
 package de.subhransu.openrouter.springai.internal;
 
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
-import de.subhransu.openrouter.springai.errors.OpenRouterHttpException;
+import de.subhransu.openrouter.springai.errors.OpenRouterHttpFailure;
 import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
@@ -72,7 +72,7 @@ public final class StreamRetries {
 			return Mono.error(failure);
 		}
 		Duration remaining = remainingTimeout(policy, started);
-		delay = Retries.effectiveBackOffMillis(delay, ((OpenRouterHttpException) failure).getRetryDelay(), remaining);
+		delay = Retries.effectiveBackOffMillis(delay, ((OpenRouterHttpFailure) failure).getRetryDelay(), remaining);
 		if (delay == BackOffExecution.STOP || remaining != null && remaining.compareTo(Duration.ofMillis(delay)) <= 0) {
 			return Mono.error(failure);
 		}

@@ -8,7 +8,7 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
-import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
+import de.subhransu.openrouter.springai.api.errors.OpenRouterInBandErrorException;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import io.micrometer.observation.tck.TestObservationRegistry;
@@ -67,10 +67,7 @@ class OpenRouterImageModelTests {
 			.baseUrl(BASE_URL)
 			.restClientBuilder(restClientBuilder)
 			.build();
-		OpenRouterImageModel model = OpenRouterImageModel.builder()
-			.openRouterApi(api)
-			.defaultOptions(defaultOptions)
-			.build();
+		OpenRouterImageModel model = OpenRouterImageModel.builder().openRouterApi(api).options(defaultOptions).build();
 		return new Fixture(model, server);
 	}
 
@@ -92,7 +89,7 @@ class OpenRouterImageModelTests {
 		assertThat(metadata.mediaType()).isEqualTo("image/png");
 		assertThat(metadata.partialImageIndex()).isNull();
 		assertThat(response.getMetadata().getCreated()).isEqualTo(1750000000L);
-		OpenRouterUsage usage = response.getMetadata().get("openrouter.usage");
+		OpenRouterUsage usage = response.getMetadata().get("openrouter.image.usage");
 		assertThat(usage.getCost()).isEqualTo(0.03);
 		fixture.server().verify();
 	}
@@ -165,7 +162,7 @@ class OpenRouterImageModelTests {
 			.build();
 		OpenRouterImageModel model = OpenRouterImageModel.builder()
 			.openRouterApi(api)
-			.defaultOptions(OpenRouterImageOptions.builder().model(MODEL).build())
+			.options(OpenRouterImageOptions.builder().model(MODEL).build())
 			.build();
 
 		StepVerifier.create(model.stream(new ImagePrompt("a red panda"))).assertNext(partial -> {
@@ -178,9 +175,9 @@ class OpenRouterImageModelTests {
 		}).assertNext(completed -> {
 			assertThat(completed.getResult().getOutput().getB64Json()).isEqualTo("ZmluYWw=");
 			assertThat(completed.getMetadata().getCreated()).isEqualTo(1750000000L);
-			assertThat(completed.getMetadata().<String>get("openrouter.event_type"))
+			assertThat(completed.getMetadata().<String>get("openrouter.image.event_type"))
 				.isEqualTo("image_generation.completed");
-			OpenRouterUsage usage = completed.getMetadata().get("openrouter.usage");
+			OpenRouterUsage usage = completed.getMetadata().get("openrouter.image.usage");
 			assertThat(usage.getTotalTokens()).isEqualTo(4160);
 			assertThat(usage.getCost()).isEqualTo(0.03);
 		}).verifyComplete();
@@ -202,7 +199,7 @@ class OpenRouterImageModelTests {
 			.build();
 		OpenRouterImageModel model = OpenRouterImageModel.builder()
 			.openRouterApi(api)
-			.defaultOptions(OpenRouterImageOptions.builder().model(MODEL).build())
+			.options(OpenRouterImageOptions.builder().model(MODEL).build())
 			.build();
 
 		StepVerifier.create(model.stream(new ImagePrompt("a red panda"))).assertNext(completed -> {
@@ -212,9 +209,9 @@ class OpenRouterImageModelTests {
 			assertThat(metadata.mediaType()).isEqualTo("image/png");
 			assertThat(metadata.partialImageIndex()).isNull();
 			assertThat(completed.getMetadata().getCreated()).isEqualTo(1750000000L);
-			assertThat(completed.getMetadata().<String>get("openrouter.event_type"))
+			assertThat(completed.getMetadata().<String>get("openrouter.image.event_type"))
 				.isEqualTo("image_generation.completed");
-			OpenRouterUsage usage = completed.getMetadata().get("openrouter.usage");
+			OpenRouterUsage usage = completed.getMetadata().get("openrouter.image.usage");
 			assertThat(usage.getCost()).isEqualTo(0.03);
 		}).verifyComplete();
 	}
@@ -243,7 +240,7 @@ class OpenRouterImageModelTests {
 			.height(512)
 			.quality("high")
 			.outputFormat("webp")
-			.providerOptions(Map.of("options", Map.of("test", Map.of("watermark", false))))
+			.providerExtraBody(Map.of("options", Map.of("test", Map.of("watermark", false))))
 			.build();
 		if (asDefaults) {
 			defaults = defaults.merge(OpenRouterImageOptions.fromOptions(portable));
@@ -275,7 +272,7 @@ class OpenRouterImageModelTests {
 				.restClientBuilder(rest)
 				.webClientBuilder(web)
 				.build())
-			.defaultOptions(defaults)
+			.options(defaults)
 			.build();
 		ImagePrompt prompt = asDefaults ? new ImagePrompt("a blue cube") : new ImagePrompt("a blue cube", portable);
 		if (stream) {
@@ -315,7 +312,7 @@ class OpenRouterImageModelTests {
 		OpenRouterApi api = org.mockito.Mockito.mock(OpenRouterApi.class);
 		OpenRouterImageModel model = OpenRouterImageModel.builder()
 			.openRouterApi(api)
-			.defaultOptions(OpenRouterImageOptions.builder().model(MODEL).quality("high").build())
+			.options(OpenRouterImageOptions.builder().model(MODEL).quality("high").build())
 			.build();
 		ImagePrompt prompt = new ImagePrompt("a blue cube", options);
 		assertThatThrownBy(() -> {
@@ -399,7 +396,8 @@ class OpenRouterImageModelTests {
 			.create(streamingModel(new AtomicReference<>(body), TestObservationRegistry.create())
 				.stream(new ImagePrompt("synthetic image")))
 			.expectNextCount(1)
-			.expectError(providerError ? OpenRouterApiException.class : OpenRouterTruncatedResponseException.class)
+			.expectError(
+					providerError ? OpenRouterInBandErrorException.class : OpenRouterTruncatedResponseException.class)
 			.verify();
 	}
 
@@ -415,7 +413,7 @@ class OpenRouterImageModelTests {
 		return OpenRouterImageModel.builder()
 			.openRouterApi(api)
 			.observationRegistry(registry)
-			.defaultOptions(OpenRouterImageOptions.builder().model(MODEL).n(3).build())
+			.options(OpenRouterImageOptions.builder().model(MODEL).n(3).build())
 			.build();
 	}
 

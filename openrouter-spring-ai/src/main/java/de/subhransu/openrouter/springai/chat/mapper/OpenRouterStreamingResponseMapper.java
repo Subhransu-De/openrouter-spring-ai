@@ -5,7 +5,7 @@ import java.util.Objects;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionChunk;
 import de.subhransu.openrouter.springai.api.dto.Choice;
 import de.subhransu.openrouter.springai.api.dto.ToolCall;
-import de.subhransu.openrouter.springai.api.errors.OpenRouterApiExceptionFactory;
+import de.subhransu.openrouter.springai.api.errors.OpenRouterInBandErrorExceptionFactory;
 import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import de.subhransu.openrouter.springai.chat.OpenRouterAudioOptions;
@@ -124,8 +124,8 @@ public final class OpenRouterStreamingResponseMapper {
 			// Mid-stream failures arrive as a normal chunk with a top-level error object
 			// over HTTP 200; without this the truncated stream would look like a clean
 			// completion.
-			throw OpenRouterApiExceptionFactory.create("OpenRouter chat completion stream failed", error.toString(),
-					error, null, "/chat/completions", this.sanitizer);
+			throw OpenRouterInBandErrorExceptionFactory.create("OpenRouter chat completion stream failed",
+					error.toString(), error, null, "/chat/completions", this.sanitizer);
 		}
 		throwIfChoiceFailed(chunk, partialOutputs);
 		List<Choice> choices = ResponseValues.CHAT_COMPLETIONS.items(chunk.choices(), "choice");

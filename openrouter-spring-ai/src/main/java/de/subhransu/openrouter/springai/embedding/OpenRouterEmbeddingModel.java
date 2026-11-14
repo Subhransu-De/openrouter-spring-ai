@@ -176,9 +176,27 @@ public class OpenRouterEmbeddingModel implements EmbeddingModel {
 			return this;
 		}
 
-		public Builder defaultOptions(@Nullable OpenRouterEmbeddingOptions defaultOptions) {
-			this.defaultOptions = defaultOptions;
+		/**
+		 * Set the default options of the model. Options in a request override them.
+		 * @param options the default options, or {@code null} for the built-in defaults
+		 * @return this builder
+		 */
+		public Builder options(@Nullable OpenRouterEmbeddingOptions options) {
+			this.defaultOptions = options;
 			return this;
+		}
+
+		/**
+		 * Set the default options of the model.
+		 * @param defaultOptions the default options
+		 * @return this builder
+		 * @deprecated since 0.2.0 for removal in 1.0.0; use
+		 * {@link #options(OpenRouterEmbeddingOptions)}, as in Spring AI's own model
+		 * builders
+		 */
+		@Deprecated(since = "0.2.0", forRemoval = true)
+		public Builder defaultOptions(@Nullable OpenRouterEmbeddingOptions defaultOptions) {
+			return options(defaultOptions);
 		}
 
 		/**

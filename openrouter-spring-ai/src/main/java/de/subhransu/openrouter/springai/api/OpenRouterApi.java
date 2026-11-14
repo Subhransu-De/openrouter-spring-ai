@@ -117,8 +117,8 @@ public class OpenRouterApi {
 		// supply their factory. This timeout field only guards streaming idle gaps.
 		RestClient.Builder restClientBuilder = builder.restClientBuilder != null ? builder.restClientBuilder.clone()
 				: RestClient.builder();
-		restClientBuilder.requestInterceptor(new OpenRouterAttributionInterceptor(builder.httpReferer,
-				builder.applicationTitle, builder.applicationCategories));
+		restClientBuilder.requestInterceptor(
+				new OpenRouterAttributionInterceptor(builder.httpReferer, builder.appTitle, builder.appCategories));
 		this.restClient = restClientBuilder.baseUrl(baseUrl)
 			.defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + builder.apiKey)
 			.defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
@@ -134,8 +134,8 @@ public class OpenRouterApi {
 			.defaultHeader(HttpHeaders.ACCEPT, MediaType.TEXT_EVENT_STREAM_VALUE)
 			.defaultHeaders(headers -> {
 				addIfPresent(headers, "HTTP-Referer", builder.httpReferer);
-				addIfPresent(headers, "X-OpenRouter-Title", builder.applicationTitle);
-				addIfPresent(headers, "X-OpenRouter-Categories", builder.applicationCategories);
+				addIfPresent(headers, "X-OpenRouter-Title", builder.appTitle);
+				addIfPresent(headers, "X-OpenRouter-Categories", builder.appCategories);
 			})
 			.build();
 	}
@@ -468,7 +468,7 @@ public class OpenRouterApi {
 		}
 		if (event instanceof ImagesStreamEvent image) {
 			// A completed image is not the end of the request; image SSE ends at [DONE].
-			return ImagesStreamEvent.ERROR_EVENT.equals(image.type());
+			return ImagesStreamEvent.ERROR.equals(image.type());
 		}
 		return false;
 	}
@@ -525,9 +525,9 @@ public class OpenRouterApi {
 
 		private @Nullable String httpReferer;
 
-		private @Nullable String applicationTitle;
+		private @Nullable String appTitle;
 
-		private @Nullable String applicationCategories;
+		private @Nullable String appCategories;
 
 		private RestClient.@Nullable Builder restClientBuilder;
 
@@ -561,14 +561,39 @@ public class OpenRouterApi {
 			return this;
 		}
 
-		public Builder applicationTitle(@Nullable String applicationTitle) {
-			this.applicationTitle = applicationTitle;
+		public Builder appTitle(@Nullable String appTitle) {
+			this.appTitle = appTitle;
 			return this;
 		}
 
-		public Builder applicationCategories(@Nullable String applicationCategories) {
-			this.applicationCategories = applicationCategories;
+		public Builder appCategories(@Nullable String appCategories) {
+			this.appCategories = appCategories;
 			return this;
+		}
+
+		/**
+		 * Set the {@code X-OpenRouter-Title} attribution header.
+		 * @param applicationTitle the app title, or {@code null}
+		 * @return this builder
+		 * @deprecated since 0.2.0 for removal in 1.0.0; use {@link #appTitle(String)}, as
+		 * in {@code spring.ai.openrouter.app.title}
+		 */
+		@Deprecated(since = "0.2.0", forRemoval = true)
+		public Builder applicationTitle(@Nullable String applicationTitle) {
+			return appTitle(applicationTitle);
+		}
+
+		/**
+		 * Set the {@code X-OpenRouter-Categories} attribution header.
+		 * @param applicationCategories comma-separated categories, or {@code null}
+		 * @return this builder
+		 * @deprecated since 0.2.0 for removal in 1.0.0; use
+		 * {@link #appCategories(String)}, as in
+		 * {@code spring.ai.openrouter.app.categories}
+		 */
+		@Deprecated(since = "0.2.0", forRemoval = true)
+		public Builder applicationCategories(@Nullable String applicationCategories) {
+			return appCategories(applicationCategories);
 		}
 
 		public Builder restClientBuilder(RestClient.@Nullable Builder restClientBuilder) {

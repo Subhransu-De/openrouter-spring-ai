@@ -9,7 +9,7 @@ import static org.mockito.Mockito.when;
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.dto.ImagesResponse;
 import de.subhransu.openrouter.springai.api.dto.ImagesStreamEvent;
-import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
+import de.subhransu.openrouter.springai.api.errors.OpenRouterInBandErrorException;
 import io.micrometer.observation.tck.TestObservationRegistry;
 import java.time.Duration;
 import java.util.List;
@@ -41,7 +41,7 @@ class OpenRouterImageModelObservationTests {
 	private OpenRouterImageModel model(OpenRouterApi api) {
 		return OpenRouterImageModel.builder()
 			.openRouterApi(api)
-			.defaultOptions(OpenRouterImageOptions.builder().model(MODEL).build())
+			.options(OpenRouterImageOptions.builder().model(MODEL).build())
 			.observationRegistry(this.observationRegistry)
 			.build();
 	}
@@ -81,20 +81,20 @@ class OpenRouterImageModelObservationTests {
 	@Test
 	void streamErrorIsRecordedOnTheObservation() {
 		OpenRouterApi api = mock(OpenRouterApi.class);
-		when(api.imagesStream(any())).thenReturn(Flux
-			.error(new OpenRouterApiException("stream failed", HttpStatus.INTERNAL_SERVER_ERROR, "{\"error\":true}")));
+		when(api.imagesStream(any())).thenReturn(Flux.error(new OpenRouterInBandErrorException("stream failed",
+				HttpStatus.INTERNAL_SERVER_ERROR, "{\"error\":true}")));
 
 		OpenRouterImageModel model = model(api);
 		assertThatThrownBy(
 				() -> model.stream(new ImagePrompt("a red panda")).collectList().block(Duration.ofSeconds(5)))
-			.isInstanceOf(OpenRouterApiException.class);
+			.isInstanceOf(OpenRouterInBandErrorException.class);
 
 		assertThat(this.observationRegistry).hasObservationWithNameEqualTo(OBSERVATION_NAME)
 			.that()
 			.hasBeenStarted()
 			.hasBeenStopped()
 			.thenError()
-			.isInstanceOf(OpenRouterApiException.class);
+			.isInstanceOf(OpenRouterInBandErrorException.class);
 	}
 
 }

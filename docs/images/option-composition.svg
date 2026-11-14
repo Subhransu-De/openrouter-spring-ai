@@ -44,7 +44,7 @@ text{font-family:"Libron",Georgia,serif;fill:var(--ink)}
 <g opacity="0.5">
 <rect class="card" x="180" y="94" width="170" height="28" rx="6"/><text class="m" x="192" y="113">your-model</text>
 <rect class="card" x="180" y="128" width="170" height="28" rx="6"/><text class="m" x="192" y="147">7</text>
-<rect class="card" x="180" y="162" width="170" height="28" rx="6"/><text class="m" x="192" y="181">OPENAI_RESPONSES</text>
+<rect class="card" x="180" y="162" width="170" height="28" rx="6"/><text class="m" x="192" y="181">RESPONSES</text>
 </g>
 <text class="s tb" x="450" y="138" text-anchor="middle">not used when</text>
 <text class="s tb" x="450" y="155" text-anchor="middle">options are given</text>
@@ -53,7 +53,7 @@ text{font-family:"Libron",Georgia,serif;fill:var(--ink)}
 <rect class="card" x="550" y="162" width="170" height="28" rx="6"/><text class="m tm" x="562" y="181">—</text>
 <rect class="lib" x="745" y="94" width="235" height="28" rx="6"/><text class="m" x="757" y="113">other-model</text>
 <rect class="card" x="745" y="128" width="235" height="28" rx="6"/><text class="m tm" x="757" y="147">—</text>
-<rect class="warn" x="745" y="162" width="235" height="28" rx="6"/><text class="m" x="757" y="181">OPENAI_CHAT_COMPLETIONS</text>
+<rect class="warn" x="745" y="162" width="235" height="28" rx="6"/><text class="m" x="757" y="181">CHAT_COMPLETIONS</text>
 <text class="s" x="20" y="212">No prompt options? The defaults apply.</text>
 <text class="s tw" x="980" y="212" text-anchor="end">portable ChatOptions carry no mode</text>
 
@@ -80,11 +80,11 @@ text{font-family:"Libron",Georgia,serif;fill:var(--ink)}
 <text class="s tb" x="450" y="352" text-anchor="middle">replaced when</text>
 <text class="s tb" x="450" y="369" text-anchor="middle">.options(…) is set</text>
 
-<rect class="card" x="550" y="310" width="170" height="30" rx="6"/><text class="m" x="562" y="330">OPENAI_RESPONSES</text>
+<rect class="card" x="550" y="310" width="170" height="30" rx="6"/><text class="m" x="562" y="330">RESPONSES</text>
 <rect class="card" x="550" y="346" width="170" height="30" rx="6"/><text class="m" x="562" y="366">null</text>
 <rect class="card" x="550" y="382" width="170" height="30" rx="6"/><text class="m" x="562" y="402">["STOP"]</text>
 
-<rect class="lib" x="745" y="310" width="235" height="30" rx="6"/><text class="m" x="757" y="330">OPENAI_RESPONSES</text><text class="s tl" x="970" y="330" text-anchor="end">override</text>
+<rect class="lib" x="745" y="310" width="235" height="30" rx="6"/><text class="m" x="757" y="330">RESPONSES</text><text class="s tl" x="970" y="330" text-anchor="end">override</text>
 <rect class="warn" x="745" y="346" width="235" height="30" rx="6"/><text class="m" x="757" y="366">7</text><text class="s tw" x="970" y="366" text-anchor="end">inherited</text>
 <rect class="warn" x="745" y="382" width="235" height="30" rx="6"/><text class="m" x="757" y="402">["END","STOP"]</text><text class="s tw" x="970" y="402" text-anchor="end">appended</text>
 

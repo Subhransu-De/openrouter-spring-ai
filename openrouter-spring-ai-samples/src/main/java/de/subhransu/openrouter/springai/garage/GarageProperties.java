@@ -23,7 +23,7 @@ public class GarageProperties {
   private boolean stream;
   private boolean full;
   private List<OpenRouterRequestMode> requestModes =
-      new ArrayList<>(List.of(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS));
+      new ArrayList<>(List.of(OpenRouterRequestMode.CHAT_COMPLETIONS));
   // Reasoning models spend completion tokens before answering, and Anthropic thinking needs
   // a budget of at least 1,024 tokens; smaller caps return empty or reasoning-free replies.
   private Integer maxCompletionTokens = 4096;

@@ -6,9 +6,9 @@ import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.JsonNodeFactory;
 import tools.jackson.databind.node.ObjectNode;
-import de.subhransu.openrouter.springai.api.dto.StreamError;
-import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
-import de.subhransu.openrouter.springai.api.errors.OpenRouterApiExceptionFactory;
+import de.subhransu.openrouter.springai.api.dto.ResponseError;
+import de.subhransu.openrouter.springai.api.errors.OpenRouterInBandErrorException;
+import de.subhransu.openrouter.springai.api.errors.OpenRouterInBandErrorExceptionFactory;
 import java.util.List;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -52,12 +52,12 @@ class OpenRouterErrorEnvelopeTests {
 
 		String json = body.toString();
 
-		OpenRouterHttpException http = (OpenRouterHttpException) this.httpFactory.create("/responses",
+		OpenRouterHttpFailure http = (OpenRouterHttpFailure) this.httpFactory.create("/responses",
 				HttpStatusCode.valueOf(503), HttpHeaders.EMPTY, json);
-		OpenRouterHttpException truncated = this.httpFactory.createErrorBodyLimit("/responses",
+		OpenRouterHttpFailure truncated = this.httpFactory.createErrorBodyLimit("/responses",
 				HttpStatusCode.valueOf(503), json.substring(0, json.length() - 1), 10, 11);
-		OpenRouterApiException inBand = OpenRouterApiExceptionFactory.create("fallback", json,
-				new StreamError("503", "failure", metadata, nested), root, "/responses",
+		OpenRouterInBandErrorException inBand = OpenRouterInBandErrorExceptionFactory.create("fallback", json,
+				new ResponseError("503", "failure", metadata, nested), root, "/responses",
 				OpenRouterDiagnosticSanitizer.keyless());
 
 		for (OpenRouterErrorDetails details : List.of(http.getErrorDetails(), truncated.getErrorDetails(),
@@ -75,10 +75,10 @@ class OpenRouterErrorEnvelopeTests {
 	@ParameterizedTest
 	@ValueSource(strings = { "", " " })
 	void blankRootTypeWithoutAnErrorObjectLeavesNoErrorType(String root) {
-		OpenRouterHttpException http = (OpenRouterHttpException) this.httpFactory.create("/responses",
+		OpenRouterHttpFailure http = (OpenRouterHttpFailure) this.httpFactory.create("/responses",
 				HttpStatusCode.valueOf(429), HttpHeaders.EMPTY, "{\"error_type\":\"" + root + "\"}");
-		OpenRouterApiException inBand = OpenRouterApiExceptionFactory.create("fallback", null, null, root, "/responses",
-				OpenRouterDiagnosticSanitizer.keyless());
+		OpenRouterInBandErrorException inBand = OpenRouterInBandErrorExceptionFactory.create("fallback", null, null,
+				root, "/responses", OpenRouterDiagnosticSanitizer.keyless());
 
 		assertThat(http.getErrorDetails().errorType()).isNull();
 		assertThat(http.getCategory()).isEqualTo(OpenRouterErrorCategory.RATE_LIMIT);

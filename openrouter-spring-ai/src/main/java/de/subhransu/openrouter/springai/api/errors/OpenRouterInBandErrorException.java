@@ -15,12 +15,12 @@ import org.springframework.http.HttpStatusCode;
  *
  * <p>
  * HTTP failures use {@link OpenRouterTransientApiException} or
- * {@link OpenRouterNonTransientApiException}; this legacy type remains for top-level
- * errors emitted inside successful Chat Completions and image response bodies and
- * streams. Responses mappers use the transient/non-transient API exception types.
- * Blocking or streamed errors carried in a {@code choices[n].error} object use the
- * choice-level exception taxonomy. Provider-controlled text is retained only as bounded,
- * credential-safe diagnostic fields and is never included in {@link #getMessage()}.
+ * {@link OpenRouterNonTransientApiException}; this type is for top-level errors emitted
+ * inside successful Chat Completions and image response bodies and streams. Responses
+ * mappers use the transient/non-transient API exception types. Blocking or streamed
+ * errors carried in a {@code choices[n].error} object use the choice-level exception
+ * taxonomy. Provider-controlled text is retained only as bounded, credential-safe
+ * diagnostic fields and is never included in {@link #getMessage()}.
  *
  * <p>
  * This type is not a Spring AI {@code TransientAiException}, even when
@@ -29,7 +29,7 @@ import org.springframework.http.HttpStatusCode;
  *
  * @author Subhransu De
  */
-public class OpenRouterApiException extends RuntimeException implements OpenRouterFailure {
+public class OpenRouterInBandErrorException extends RuntimeException implements OpenRouterFailure {
 
 	private final @Nullable HttpStatusCode statusCode;
 
@@ -37,13 +37,14 @@ public class OpenRouterApiException extends RuntimeException implements OpenRout
 
 	private final OpenRouterErrorDetails errorDetails;
 
-	public OpenRouterApiException(String message, @Nullable HttpStatusCode statusCode, @Nullable String responseBody) {
+	public OpenRouterInBandErrorException(String message, @Nullable HttpStatusCode statusCode,
+			@Nullable String responseBody) {
 		this(message, statusCode, responseBody, new OpenRouterErrorDetails(null, message, null, null, null,
 				OpenRouterErrorClassifier.category(statusCode != null ? statusCode.value() : -1, null, null, message)));
 	}
 
-	public OpenRouterApiException(String message, @Nullable HttpStatusCode statusCode, @Nullable String responseBody,
-			@Nullable OpenRouterErrorDetails errorDetails) {
+	public OpenRouterInBandErrorException(String message, @Nullable HttpStatusCode statusCode,
+			@Nullable String responseBody, @Nullable OpenRouterErrorDetails errorDetails) {
 		super(message);
 		this.statusCode = statusCode;
 		this.responseBody = OpenRouterExceptionMessage.sanitize(responseBody);

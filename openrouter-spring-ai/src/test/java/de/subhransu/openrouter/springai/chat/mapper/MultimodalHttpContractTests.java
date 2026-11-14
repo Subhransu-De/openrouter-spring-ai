@@ -70,8 +70,8 @@ class MultimodalHttpContractTests {
 					List.of(new UserMessage("Earlier question"), new AssistantMessage("Earlier answer"), message),
 					OpenRouterChatOptions.builder()
 						.model("synthetic/multimodal")
-						.requestMode(responses ? OpenRouterRequestMode.OPENAI_RESPONSES
-								: OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS)
+						.requestMode(
+								responses ? OpenRouterRequestMode.RESPONSES : OpenRouterRequestMode.CHAT_COMPLETIONS)
 						.build());
 			if (streaming) {
 				StepVerifier.create(model.stream(prompt))

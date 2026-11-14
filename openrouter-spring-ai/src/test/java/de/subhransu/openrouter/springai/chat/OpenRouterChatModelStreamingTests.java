@@ -16,8 +16,8 @@ import de.subhransu.openrouter.springai.api.dto.Delta;
 import de.subhransu.openrouter.springai.api.dto.ResponsesRequest;
 import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
 import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
-import de.subhransu.openrouter.springai.api.dto.StreamError;
-import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
+import de.subhransu.openrouter.springai.api.dto.ResponseError;
+import de.subhransu.openrouter.springai.api.errors.OpenRouterInBandErrorException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
 import java.time.Duration;
 import java.util.List;
@@ -89,7 +89,7 @@ class OpenRouterChatModelStreamingTests {
 			.create(model.stream(new Prompt(List.of(new UserMessage("hi")),
 					OpenRouterChatOptions.builder()
 						.model("openai/gpt-5.4")
-						.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
+						.requestMode(OpenRouterRequestMode.RESPONSES)
 						.build()))
 				.map(response -> response.getResult().getOutput().getText()))
 			.expectNext("Hel")
@@ -110,9 +110,9 @@ class OpenRouterChatModelStreamingTests {
 		when(api.chatCompletionStream(any())).thenReturn(Flux.just(chunk("ok", "stop")));
 		OpenRouterChatModel model = OpenRouterChatModel.builder()
 			.openRouterApi(api)
-			.defaultOptions(OpenRouterChatOptions.builder()
+			.options(OpenRouterChatOptions.builder()
 				.model("openai/gpt-5.4")
-				.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
+				.requestMode(OpenRouterRequestMode.RESPONSES)
 				.build())
 			.build();
 
@@ -135,15 +135,15 @@ class OpenRouterChatModelStreamingTests {
 		when(api.chatCompletionStream(any())).thenReturn(Flux.just(chunk("ok", "stop")));
 		OpenRouterChatModel model = OpenRouterChatModel.builder()
 			.openRouterApi(api)
-			.defaultOptions(OpenRouterChatOptions.builder()
+			.options(OpenRouterChatOptions.builder()
 				.model("openai/gpt-5.4")
-				.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
+				.requestMode(OpenRouterRequestMode.RESPONSES)
 				.build())
 			.build();
 
 		model
 			.stream(new Prompt(List.of(new UserMessage("hi")),
-					OpenRouterChatOptions.builder().requestMode(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS).build()))
+					OpenRouterChatOptions.builder().requestMode(OpenRouterRequestMode.CHAT_COMPLETIONS).build()))
 			.blockLast(Duration.ofSeconds(5));
 
 		verify(api).chatCompletionStream(any());
@@ -154,7 +154,8 @@ class OpenRouterChatModelStreamingTests {
 	@Tag("streaming.lifecycle")
 	@Test
 	void chatCompletionsStreamPropagatesApiErrorsToTheCaller() {
-		OpenRouterApiException failure = new OpenRouterApiException("stream failed", HttpStatus.BAD_GATEWAY, "{}");
+		OpenRouterInBandErrorException failure = new OpenRouterInBandErrorException("stream failed",
+				HttpStatus.BAD_GATEWAY, "{}");
 		OpenRouterApi api = mock(OpenRouterApi.class);
 		when(api.chatCompletionStream(any())).thenReturn(Flux.error(failure));
 		OpenRouterChatModel model = OpenRouterChatModel.builder().openRouterApi(api).build();
@@ -170,8 +171,8 @@ class OpenRouterChatModelStreamingTests {
 	@Tag("streaming.lifecycle")
 	@Test
 	void responsesStreamPropagatesApiErrorsToTheCaller() {
-		OpenRouterApiException failure = new OpenRouterApiException("stream failed", HttpStatus.SERVICE_UNAVAILABLE,
-				"{}");
+		OpenRouterInBandErrorException failure = new OpenRouterInBandErrorException("stream failed",
+				HttpStatus.SERVICE_UNAVAILABLE, "{}");
 		OpenRouterApi api = mock(OpenRouterApi.class);
 		when(api.responsesStream(any())).thenReturn(Flux.error(failure));
 		OpenRouterChatModel model = OpenRouterChatModel.builder().openRouterApi(api).build();
@@ -180,7 +181,7 @@ class OpenRouterChatModelStreamingTests {
 			.create(model.stream(new Prompt(List.of(new UserMessage("hi")),
 					OpenRouterChatOptions.builder()
 						.model("openai/gpt-5.4")
-						.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
+						.requestMode(OpenRouterRequestMode.RESPONSES)
 						.build())))
 			.expectErrorSatisfies(error -> assertThat(error).isSameAs(failure))
 			.verify(Duration.ofSeconds(5));
@@ -194,7 +195,7 @@ class OpenRouterChatModelStreamingTests {
 		OpenRouterApi api = mock(OpenRouterApi.class);
 		AtomicInteger subscriptions = new AtomicInteger();
 		ResponsesResult failed = new ResponsesResult("resp-1", "response", null, CHAT_MODEL, "failed", List.of(), null,
-				new StreamError("server_error", "synthetic failure"));
+				new ResponseError("server_error", "synthetic failure"));
 		ResponsesStreamEvent failure = new ResponsesStreamEvent("response.failed", null, null, failed, null);
 		when(api.responsesStream(any())).thenReturn(Flux.defer(() -> {
 			subscriptions.incrementAndGet();
@@ -204,7 +205,7 @@ class OpenRouterChatModelStreamingTests {
 		var verifier = StepVerifier.create(model.stream(new Prompt(List.of(new UserMessage("hi")),
 				OpenRouterChatOptions.builder()
 					.model(CHAT_MODEL)
-					.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
+					.requestMode(OpenRouterRequestMode.RESPONSES)
 					.build())));
 		if (partialOutput) {
 			verifier

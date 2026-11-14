@@ -571,7 +571,7 @@ class OpenRouterChatRequestSerializationTests {
 					() -> this.responsesMapper.map(List.of(new UserMessage("hi")), builder.build(), stream, List.of()))
 				.isInstanceOf(IllegalArgumentException.class)
 				.hasMessageContaining(name)
-				.hasMessageContaining("OPENAI_RESPONSES");
+				.hasMessageContaining("RESPONSES");
 		}
 	}
 
@@ -727,7 +727,7 @@ class OpenRouterChatRequestSerializationTests {
 	static Stream<Arguments> optionContracts() {
 		Object[][] rows = { { "model", "test/model", "/model", "/model" },
 				{ "models", List.of("test/fallback"), "/models", "/models" },
-				{ "requestMode", OpenRouterRequestMode.OPENAI_RESPONSES, null, null },
+				{ "requestMode", OpenRouterRequestMode.RESPONSES, null, null },
 				{ "frequencyPenalty", 0.0, "/frequency_penalty", "/frequency_penalty" },
 				{ "maxTokens", 12, "/max_tokens", "/max_output_tokens" },
 				{ "maxCompletionTokens", 24, "/max_completion_tokens", "/max_output_tokens" },

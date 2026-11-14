@@ -102,7 +102,7 @@ public final class OpenRouterMetadata {
 	/**
 	 * Unknown Chat Completions response fields ({@code Map}). Chat response metadata.
 	 */
-	public static final String RESPONSE_EXTENSIONS = "openrouter.response.extensions";
+	public static final String CHAT_COMPLETION_EXTENSIONS = "openrouter.response.extensions";
 
 	/**
 	 * The upstream provider that served the request ({@code String}). Chat Completions
@@ -124,13 +124,13 @@ public final class OpenRouterMetadata {
 	 * Image usage ({@link OpenRouterUsage}). Image response metadata; read it with
 	 * {@link OpenRouterUsage#from(org.springframework.ai.image.ImageResponse)}.
 	 */
-	public static final String IMAGE_USAGE = "openrouter.usage";
+	public static final String IMAGE_USAGE = "openrouter.image.usage";
 
 	/**
 	 * The image stream event type ({@code String}). Image response metadata of
 	 * {@code stream()} responses.
 	 */
-	public static final String IMAGE_EVENT_TYPE = "openrouter.event_type";
+	public static final String IMAGE_EVENT_TYPE = "openrouter.image.event_type";
 
 	private OpenRouterMetadata() {
 	}

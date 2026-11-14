@@ -35,8 +35,8 @@ import org.springframework.util.Assert;
  */
 public final class OpenRouterToolExecutionExceptionProcessor implements ToolExecutionExceptionProcessor {
 
-	/** Provider-visible payload used for failed tool callbacks by default. */
-	public static final String DEFAULT_FAILURE_PAYLOAD = "{\"error\":\"Tool execution failed\"}";
+	/** Tool result sent to the model for a failed tool callback by default. */
+	public static final String DEFAULT_FAILURE_RESULT = "{\"error\":\"Tool execution failed\"}";
 
 	private static final Log logger = LogFactory.getLog(OpenRouterToolExecutionExceptionProcessor.class);
 
@@ -58,7 +58,7 @@ public final class OpenRouterToolExecutionExceptionProcessor implements ToolExec
 	 * @param observationRegistry registry used to record the original failure
 	 */
 	public OpenRouterToolExecutionExceptionProcessor(ObservationRegistry observationRegistry) {
-		this(observationRegistry, exception -> DEFAULT_FAILURE_PAYLOAD);
+		this(observationRegistry, exception -> DEFAULT_FAILURE_RESULT);
 	}
 
 	/**

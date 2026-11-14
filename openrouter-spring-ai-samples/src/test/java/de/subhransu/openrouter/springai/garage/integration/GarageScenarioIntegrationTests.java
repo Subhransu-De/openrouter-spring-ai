@@ -25,8 +25,8 @@ import tools.jackson.databind.JsonNode;
 @Tag("samples.integration")
 class GarageScenarioIntegrationTests extends MockedGarageIntegrationTest {
 
-  private static final String CHAT_MODE = "OPENAI_CHAT_COMPLETIONS";
-  private static final String RESPONSES_MODE = "OPENAI_RESPONSES";
+  private static final String CHAT_MODE = "CHAT_COMPLETIONS";
+  private static final String RESPONSES_MODE = "RESPONSES";
   private static final String ANY_MODE = "*";
 
   private static final String SERVICE_CHAT = "{\"scenes\":[\"service-story\"],\"requestModes\":[\"chat\"]}";

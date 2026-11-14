@@ -34,10 +34,10 @@ class OpenRouterExceptionMessageTests {
 	void retainedHttpBodiesAndDetailsRedactEncodedKeys(String echo) {
 		var factory = new OpenRouterHttpExceptionFactory(new ObjectMapper(), SYNTHETIC_KEY);
 		String body = "{\"error\":{\"message\":\"echo " + echo + "\",\"metadata\":{\"echo\":\"" + echo + "\"}}}";
-		var whole = (OpenRouterHttpException) factory.create("/chat/completions", HttpStatus.UNAUTHORIZED,
+		var whole = (OpenRouterHttpFailure) factory.create("/chat/completions", HttpStatus.UNAUTHORIZED,
 				HttpHeaders.EMPTY, body);
 		var truncated = factory.createErrorBodyLimit("/images", HttpStatus.UNAUTHORIZED, body, 1024, 1025);
-		for (OpenRouterHttpException error : List.of(whole, truncated)) {
+		for (OpenRouterHttpFailure error : List.of(whole, truncated)) {
 			assertThat(error.getResponseBody()).isEqualTo(body.replace(echo, "[REDACTED]"));
 			assertThat(error.getErrorDetails().message()).isEqualTo("echo [REDACTED]");
 			assertThat(error.getErrorDetails().metadata().path("echo").stringValue()).isEqualTo("[REDACTED]");

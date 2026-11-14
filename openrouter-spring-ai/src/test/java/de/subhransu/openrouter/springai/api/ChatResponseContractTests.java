@@ -6,7 +6,7 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionRequest;
-import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
+import de.subhransu.openrouter.springai.api.errors.OpenRouterInBandErrorException;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import io.micrometer.observation.tck.TestObservationRegistry;
@@ -42,7 +42,7 @@ class ChatResponseContractTests {
 		TestObservationRegistry registry = TestObservationRegistry.create();
 		OpenRouterChatModel model = OpenRouterChatModel.builder()
 			.openRouterApi(blocking(body, HttpStatus.OK))
-			.defaultOptions(OpenRouterChatOptions.builder().model("test-model").build())
+			.options(OpenRouterChatOptions.builder().model("test-model").build())
 			.observationRegistry(registry)
 			.build();
 		assertThatThrownBy(() -> model.call(new Prompt("synthetic prompt")))
@@ -80,8 +80,8 @@ class ChatResponseContractTests {
 		assertThatThrownBy(() -> new OpenRouterChatResponseMapper()
 			.map(blocking(body, HttpStatus.OK).chatCompletion(this.request))).satisfies(failure -> {
 				if ("null".equals(code)) {
-					assertThat(failure).isInstanceOf(OpenRouterApiException.class);
-					assertThat(((OpenRouterApiException) failure).getErrorDetails().message())
+					assertThat(failure).isInstanceOf(OpenRouterInBandErrorException.class);
+					assertThat(((OpenRouterInBandErrorException) failure).getErrorDetails().message())
 						.isEqualTo("synthetic failure");
 					return;
 				}
@@ -93,7 +93,7 @@ class ChatResponseContractTests {
 			});
 		StepVerifier
 			.create(new OpenRouterStreamingResponseMapper().map(streaming(body).chatCompletionStream(this.request)))
-			.expectError(OpenRouterApiException.class)
+			.expectError(OpenRouterInBandErrorException.class)
 			.verify();
 	}
 
@@ -107,7 +107,7 @@ class ChatResponseContractTests {
 			.isInstanceOf(OpenRouterTransientApiException.class);
 		StepVerifier
 			.create(new OpenRouterStreamingResponseMapper().map(streaming(body).chatCompletionStream(this.request)))
-			.expectError(OpenRouterApiException.class)
+			.expectError(OpenRouterInBandErrorException.class)
 			.verify();
 	}
 

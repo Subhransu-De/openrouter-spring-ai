@@ -102,7 +102,7 @@ A sweep checks which models work. It runs the same embedding check or image prom
 
 The defaults live in `GarageProperties` and `openrouter-spring-ai-samples/src/main/resources/application.yml`. Each model has an environment variable, such as `GARAGE_FOREMAN_MODEL`.
 
-Default models: foreman `openai/gpt-oss-120b`; specialist and fallback `openai/gpt-oss-20b`; embedding `openai/text-embedding-3-small`; vision `google/gemini-2.5-flash`; image `google/gemini-2.5-flash-image`. An empty body runs `service-story` with the foreman and specialist. The other models apply when you select their capability. `garage.request-modes` takes the enum names `OPENAI_CHAT_COMPLETIONS` and `OPENAI_RESPONSES`. It defaults to Chat Completions only.
+Default models: foreman `openai/gpt-oss-120b`; specialist and fallback `openai/gpt-oss-20b`; embedding `openai/text-embedding-3-small`; vision `google/gemini-2.5-flash`; image `google/gemini-2.5-flash-image`. An empty body runs `service-story` with the foreman and specialist. The other models apply when you select their capability. `garage.request-modes` takes the enum names `CHAT_COMPLETIONS` and `RESPONSES`. It defaults to Chat Completions only.
 
 `garage.*` properties bind once at startup, and unknown `garage.*` properties fail binding. Request fields override them for one run without changing the next. With no explicit selection, `garage.stream=true` adds `streaming-dispatch` to the service-story demo. Explicit scene, capability, full, or offline selections take precedence.
 

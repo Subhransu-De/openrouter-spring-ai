@@ -6,7 +6,7 @@ import static org.springframework.test.web.client.ExpectedCount.manyTimes;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
-import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
+import de.subhransu.openrouter.springai.api.errors.OpenRouterInBandErrorException;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.chat.errors.OpenRouterChoiceErrorDetails;
@@ -15,7 +15,7 @@ import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingModel;
 import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingOptions;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorDetails;
-import de.subhransu.openrouter.springai.errors.OpenRouterHttpException;
+import de.subhransu.openrouter.springai.errors.OpenRouterHttpFailure;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import de.subhransu.openrouter.springai.image.OpenRouterImageModel;
 import de.subhransu.openrouter.springai.image.OpenRouterImageOptions;
@@ -73,7 +73,7 @@ class InBandErrorRedactionTests {
 		Throwable failure = catchThrowable(
 				() -> chatModel(blocking(CHAT_COMPLETIONS, json(Map.of("error", error(echo)))), false).call(PROMPT));
 
-		assertThat(failure).isExactlyInstanceOf(OpenRouterApiException.class);
+		assertThat(failure).isExactlyInstanceOf(OpenRouterInBandErrorException.class);
 		assertRedacted(failure, echo);
 	}
 
@@ -83,7 +83,7 @@ class InBandErrorRedactionTests {
 		Throwable failure = streamFailure(
 				chatModel(streaming(json(Map.of("error", error(echo)))), false).stream(PROMPT));
 
-		assertThat(failure).isExactlyInstanceOf(OpenRouterApiException.class);
+		assertThat(failure).isExactlyInstanceOf(OpenRouterInBandErrorException.class);
 		assertRedacted(failure, echo);
 	}
 
@@ -120,7 +120,7 @@ class InBandErrorRedactionTests {
 				() -> chatModel(blocking("/responses", json(Map.of("status", "failed", "error", error(echo)))), true)
 					.call(PROMPT));
 
-		assertThat(failure).isInstanceOf(OpenRouterHttpException.class);
+		assertThat(failure).isInstanceOf(OpenRouterHttpFailure.class);
 		assertRedacted(failure, echo);
 	}
 
@@ -130,7 +130,7 @@ class InBandErrorRedactionTests {
 		Throwable failure = streamFailure(
 				chatModel(streaming(json(Map.of("type", "error", "error", error(echo)))), true).stream(PROMPT));
 
-		assertThat(failure).isInstanceOf(OpenRouterHttpException.class);
+		assertThat(failure).isInstanceOf(OpenRouterHttpFailure.class);
 		assertRedacted(failure, echo);
 	}
 
@@ -139,13 +139,13 @@ class InBandErrorRedactionTests {
 	void embeddingsErrorInASuccessfulBody(String echo) {
 		OpenRouterEmbeddingModel model = OpenRouterEmbeddingModel.builder()
 			.openRouterApi(blocking("/embeddings", json(Map.of("error", error(echo)))))
-			.defaultOptions(OpenRouterEmbeddingOptions.builder().model("test-embedding-model").build())
+			.options(OpenRouterEmbeddingOptions.builder().model("test-embedding-model").build())
 			.retryTemplate(NO_RETRY)
 			.build();
 
 		Throwable failure = catchThrowable(() -> model.embed("synthetic input"));
 
-		assertThat(failure).isExactlyInstanceOf(OpenRouterApiException.class);
+		assertThat(failure).isExactlyInstanceOf(OpenRouterInBandErrorException.class);
 		assertRedacted(failure, echo);
 	}
 
@@ -155,7 +155,7 @@ class InBandErrorRedactionTests {
 		Throwable failure = catchThrowable(
 				() -> imageModel(blocking("/images", json(Map.of("error", error(echo))))).call(imagePrompt()));
 
-		assertThat(failure).isExactlyInstanceOf(OpenRouterApiException.class);
+		assertThat(failure).isExactlyInstanceOf(OpenRouterInBandErrorException.class);
 		assertRedacted(failure, echo);
 	}
 
@@ -165,7 +165,7 @@ class InBandErrorRedactionTests {
 		Throwable failure = streamFailure(
 				imageModel(streaming(json(Map.of("type", "error", "error", error(echo))))).stream(imagePrompt()));
 
-		assertThat(failure).isExactlyInstanceOf(OpenRouterApiException.class);
+		assertThat(failure).isExactlyInstanceOf(OpenRouterInBandErrorException.class);
 		assertRedacted(failure, echo);
 	}
 
@@ -176,7 +176,7 @@ class InBandErrorRedactionTests {
 		Throwable failure = streamFailure(
 				chatModel(streaming(json(Map.of("type", "response.failed", "response", failed))), true).stream(PROMPT));
 
-		assertThat(failure).isInstanceOf(OpenRouterHttpException.class);
+		assertThat(failure).isInstanceOf(OpenRouterHttpFailure.class);
 		assertRedacted(failure, echo);
 	}
 
@@ -237,7 +237,7 @@ class InBandErrorRedactionTests {
 				imageModel(streaming(json(Map.of("error", error(echo))), MediaType.APPLICATION_JSON))
 					.stream(imagePrompt()));
 
-		assertThat(failure).isExactlyInstanceOf(OpenRouterApiException.class);
+		assertThat(failure).isExactlyInstanceOf(OpenRouterInBandErrorException.class);
 		assertRedacted(failure, echo);
 	}
 
@@ -256,8 +256,8 @@ class InBandErrorRedactionTests {
 				() -> chatModel(blocking(CHAT_COMPLETIONS, json(Map.of("choices", List.of(choice))), key), false)
 					.call(PROMPT));
 
-		assertThat(inBand).isExactlyInstanceOf(OpenRouterApiException.class);
-		OpenRouterApiException api = (OpenRouterApiException) inBand;
+		assertThat(inBand).isExactlyInstanceOf(OpenRouterInBandErrorException.class);
+		OpenRouterInBandErrorException api = (OpenRouterInBandErrorException) inBand;
 		assertThat(api.getCategory()).isEqualTo(OpenRouterErrorCategory.CONTENT_FILTER_REFUSAL);
 		assertThat(api.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
 		assertThat(api.getErrorDetails()).extracting(OpenRouterErrorDetails::message).isEqualTo("[REDACTED]");
@@ -296,13 +296,13 @@ class InBandErrorRedactionTests {
 		assertThat(failure.toString()).doesNotContain(echo, KEY);
 		List<@Nullable Object> retained = new ArrayList<>();
 		@Nullable String message = null;
-		if (failure instanceof OpenRouterHttpException http) {
+		if (failure instanceof OpenRouterHttpFailure http) {
 			retained.add(http.getResponseBody());
 			retained.add(http.getErrorDetails());
 			OpenRouterErrorDetails details = http.getErrorDetails();
 			message = details != null ? details.message() : null;
 		}
-		if (failure instanceof OpenRouterApiException api) {
+		if (failure instanceof OpenRouterInBandErrorException api) {
 			retained.add(api.getResponseBody());
 			retained.add(api.getErrorDetails());
 			OpenRouterErrorDetails details = api.getErrorDetails();
@@ -337,11 +337,11 @@ class InBandErrorRedactionTests {
 	private static OpenRouterChatModel chatModel(OpenRouterApi api, boolean responses) {
 		OpenRouterChatOptions.Builder options = OpenRouterChatOptions.builder().model("test-model");
 		if (responses) {
-			options.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES);
+			options.requestMode(OpenRouterRequestMode.RESPONSES);
 		}
 		return OpenRouterChatModel.builder()
 			.openRouterApi(api)
-			.defaultOptions(options.build())
+			.options(options.build())
 			.retryTemplate(NO_RETRY)
 			.build();
 	}
@@ -349,7 +349,7 @@ class InBandErrorRedactionTests {
 	private static OpenRouterImageModel imageModel(OpenRouterApi api) {
 		return OpenRouterImageModel.builder()
 			.openRouterApi(api)
-			.defaultOptions(OpenRouterImageOptions.builder().model("test-image-model").build())
+			.options(OpenRouterImageOptions.builder().model("test-image-model").build())
 			.retryTemplate(NO_RETRY)
 			.build();
 	}

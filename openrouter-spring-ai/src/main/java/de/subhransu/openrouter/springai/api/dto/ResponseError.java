@@ -10,17 +10,17 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonInclude(Include.NON_NULL)
-public record StreamError(@Nullable String code, @Nullable String message, @Nullable JsonNode metadata,
+public record ResponseError(@Nullable String code, @Nullable String message, @Nullable JsonNode metadata,
 		@JsonProperty("error_type") @Nullable String errorType) {
 
 	@JsonCreator
-	public StreamError(@JsonProperty("code") @Nullable String code, @JsonProperty("message") @Nullable JsonNode message,
-			@JsonProperty("metadata") @Nullable JsonNode metadata,
+	public ResponseError(@JsonProperty("code") @Nullable String code,
+			@JsonProperty("message") @Nullable JsonNode message, @JsonProperty("metadata") @Nullable JsonNode metadata,
 			@JsonProperty("error_type") @Nullable JsonNode errorType) {
 		this(code, text(message), metadata, text(errorType));
 	}
 
-	public StreamError(@Nullable String code, @Nullable String message) {
+	public ResponseError(@Nullable String code, @Nullable String message) {
 		this(code, message, null, null);
 	}
 

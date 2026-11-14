@@ -76,7 +76,7 @@ public final class DigitalInspectionScene extends GarageSceneSupport {
                 SCHEMA,
                 true);
 
-    if (context.requestMode() == OpenRouterRequestMode.OPENAI_RESPONSES) {
+    if (context.requestMode() == OpenRouterRequestMode.RESPONSES) {
       Map<String, Object> details = new LinkedHashMap<>();
       details.put("status", "unsupported-in-mode");
       details.put(

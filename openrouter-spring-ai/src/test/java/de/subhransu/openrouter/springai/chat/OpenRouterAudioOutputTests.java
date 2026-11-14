@@ -172,7 +172,7 @@ class OpenRouterAudioOutputTests {
 			.expectErrorSatisfies(
 					error -> assertThat(error).isInstanceOfSatisfying(OpenRouterLimitExceededException.class, limit -> {
 						assertThat(limit.getLimit()).isEqualTo(OpenRouterLimitExceededException.Limit.CHAT_AUDIO_BYTES);
-						assertThat(limit.isLocal()).isTrue();
+						assertThat(limit.isStreamStateLimit()).isTrue();
 						assertThat(limit.getConfiguredLimit()).isEqualTo(16L * 1024 * 1024);
 					}))
 			.verify();
@@ -202,15 +202,12 @@ class OpenRouterAudioOutputTests {
 			.isInstanceOf(IllegalArgumentException.class);
 		assertThatThrownBy(() -> new OpenRouterAudioOptions(" ", "wav")).isInstanceOf(IllegalArgumentException.class);
 		OpenRouterApi api = mock(OpenRouterApi.class);
-		OpenRouterChatModel model = OpenRouterChatModel.builder()
-			.openRouterApi(api)
-			.defaultOptions(this.options)
-			.build();
+		OpenRouterChatModel model = OpenRouterChatModel.builder().openRouterApi(api).options(this.options).build();
 		assertThatThrownBy(() -> model.call(new Prompt("synthetic")))
 			.hasMessageContaining("streaming Chat Completions");
 		StepVerifier
 			.create(model.stream(new Prompt("synthetic",
-					this.options.mutate().requestMode(OpenRouterRequestMode.OPENAI_RESPONSES).build())))
+					this.options.mutate().requestMode(OpenRouterRequestMode.RESPONSES).build())))
 			.expectErrorMessage("Audio output requires streaming Chat Completions")
 			.verify();
 		StepVerifier.create(model.stream(new Prompt("synthetic", this.options.mutate().audio(null).build())))
@@ -255,10 +252,7 @@ class OpenRouterAudioOutputTests {
 	void modelStreamsAudioUsingDefaultsAndCompleteRuntimeOverrides() {
 		OpenRouterApi api = mock(OpenRouterApi.class);
 		when(api.chatCompletionStream(any())).thenReturn(Flux.just(chunk(0, "text", "AA==", "spoken", "stop")));
-		OpenRouterChatModel model = OpenRouterChatModel.builder()
-			.openRouterApi(api)
-			.defaultOptions(this.options)
-			.build();
+		OpenRouterChatModel model = OpenRouterChatModel.builder().openRouterApi(api).options(this.options).build();
 		assertThat(model.stream(new Prompt("synthetic")).blockLast().getResult().getOutput().getMedia()).hasSize(1);
 		model
 			.stream(new Prompt("synthetic",
@@ -303,10 +297,7 @@ class OpenRouterAudioOutputTests {
 					ChatCompletionChunk.class), chunk(0, null, "AA==", null, "stop")))) {
 			OpenRouterApi api = mock(OpenRouterApi.class);
 			when(api.chatCompletionStream(any())).thenReturn(Flux.fromIterable(sequence));
-			OpenRouterChatModel model = OpenRouterChatModel.builder()
-				.openRouterApi(api)
-				.defaultOptions(this.options)
-				.build();
+			OpenRouterChatModel model = OpenRouterChatModel.builder().openRouterApi(api).options(this.options).build();
 			StepVerifier.create(model.stream(new Prompt("synthetic")))
 				.thenConsumeWhile(response -> response.getResult().getOutput().getMedia().isEmpty())
 				.expectErrorMatches(error -> error instanceof OpenRouterProtocolException
@@ -328,10 +319,7 @@ class OpenRouterAudioOutputTests {
 					.body(body)
 					.build())))
 			.build();
-		OpenRouterChatModel model = OpenRouterChatModel.builder()
-			.openRouterApi(api)
-			.defaultOptions(this.options)
-			.build();
+		OpenRouterChatModel model = OpenRouterChatModel.builder().openRouterApi(api).options(this.options).build();
 		var verifier = StepVerifier.create(model.stream(new Prompt("synthetic")))
 			.assertNext(response -> assertThat(response.getResult().getOutput().getMedia().get(0).getDataAsByteArray())
 				.containsExactly(0));
@@ -357,10 +345,7 @@ class OpenRouterAudioOutputTests {
 					.body(body)
 					.build())))
 			.build();
-		OpenRouterChatModel model = OpenRouterChatModel.builder()
-			.openRouterApi(api)
-			.defaultOptions(this.options)
-			.build();
+		OpenRouterChatModel model = OpenRouterChatModel.builder().openRouterApi(api).options(this.options).build();
 		if (!done) {
 			StepVerifier.create(model.stream(new Prompt("synthetic")))
 				.thenConsumeWhile(response -> response.getResults()
@@ -484,7 +469,7 @@ class OpenRouterAudioOutputTests {
 						assertThat(limit.getEndpoint()).isEqualTo("/chat/completions");
 						assertThat(limit.getStatusCode()).isNull();
 						assertThat(limit.getLimit().getProperty()).isNull();
-						assertThat(limit.isLocal()).isTrue();
+						assertThat(limit.isStreamStateLimit()).isTrue();
 						assertThat(limit.getMessage()).contains("fixed").doesNotContain("Increase");
 					}))
 			.verify();

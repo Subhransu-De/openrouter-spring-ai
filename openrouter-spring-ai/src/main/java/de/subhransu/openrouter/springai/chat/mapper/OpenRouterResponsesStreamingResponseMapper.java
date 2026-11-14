@@ -8,7 +8,7 @@ import tools.jackson.databind.node.ObjectNode;
 import de.subhransu.openrouter.springai.api.dto.ResponsesOutputItem;
 import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
 import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
-import de.subhransu.openrouter.springai.api.dto.StreamError;
+import de.subhransu.openrouter.springai.api.dto.ResponseError;
 import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import java.time.Duration;
@@ -227,14 +227,14 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 		return images;
 	}
 
-	private @Nullable StreamError eventError(ResponsesStreamEvent event) {
-		StreamError nested = event.error();
+	private @Nullable ResponseError eventError(ResponsesStreamEvent event) {
+		ResponseError nested = event.error();
 		String code = nested != null && nested.code() != null ? nested.code() : event.code();
 		String message = nested != null && nested.message() != null ? nested.message() : event.message();
 		JsonNode metadata = mergeMetadata(event.metadata(), nested != null ? nested.metadata() : null);
 		String errorType = nested != null ? nested.errorType() : null;
 		return code != null || message != null || metadata != null || errorType != null
-				? new StreamError(code, message, metadata, errorType) : null;
+				? new ResponseError(code, message, metadata, errorType) : null;
 	}
 
 	private @Nullable JsonNode mergeMetadata(@Nullable JsonNode root, @Nullable JsonNode nested) {

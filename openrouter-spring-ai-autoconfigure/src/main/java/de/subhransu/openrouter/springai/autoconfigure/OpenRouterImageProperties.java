@@ -4,12 +4,17 @@ import org.jspecify.annotations.Nullable;
 import de.subhransu.openrouter.springai.image.OpenRouterImageOptions;
 import java.util.List;
 import java.util.Map;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.DeprecatedConfigurationProperty;
 
 @ConfigurationProperties(OpenRouterImageProperties.CONFIG_PREFIX)
 public class OpenRouterImageProperties {
 
 	public static final String CONFIG_PREFIX = "spring.ai.openrouter.image";
+
+	private static final Log logger = LogFactory.getLog(OpenRouterImageProperties.class);
 
 	/**
 	 * Image model id in vendor/model form.
@@ -73,7 +78,15 @@ public class OpenRouterImageProperties {
 	private @Nullable List<String> inputReferences;
 
 	/**
-	 * Provider-specific options passed through unchanged.
+	 * OpenRouter provider object as a raw map with wire field names, sent unchanged.
+	 * Settings for one upstream provider go under options, keyed by the provider slug. A
+	 * list binds as a map keyed by index, and properties files and environment variables
+	 * give booleans and numbers as strings, so set such values in Java.
+	 */
+	private @Nullable Map<String, @Nullable Object> providerExtraBody;
+
+	/**
+	 * Old name of provider-extra-body, still bound until 1.0.0.
 	 */
 	private @Nullable Map<String, @Nullable Object> providerOptions;
 
@@ -91,7 +104,7 @@ public class OpenRouterImageProperties {
 			.outputCompression(this.outputCompression)
 			.seed(this.seed)
 			.inputReferences(this.inputReferences)
-			.providerOptions(this.providerOptions)
+			.providerExtraBody(providerExtraBody())
 			.build();
 	}
 
@@ -191,12 +204,47 @@ public class OpenRouterImageProperties {
 		this.inputReferences = inputReferences;
 	}
 
+	public @Nullable Map<String, @Nullable Object> getProviderExtraBody() {
+		return this.providerExtraBody;
+	}
+
+	public void setProviderExtraBody(@Nullable Map<String, @Nullable Object> providerExtraBody) {
+		this.providerExtraBody = providerExtraBody;
+	}
+
+	/**
+	 * Return the value of the old {@code provider-options} key.
+	 * @return the provider object, or {@code null}
+	 * @deprecated since 0.2.0 for removal in 1.0.0; use {@link #getProviderExtraBody()}
+	 */
+	@Deprecated(since = "0.2.0", forRemoval = true)
+	@DeprecatedConfigurationProperty(replacement = CONFIG_PREFIX + ".provider-extra-body", since = "0.2.0")
 	public @Nullable Map<String, @Nullable Object> getProviderOptions() {
 		return this.providerOptions;
 	}
 
+	/**
+	 * Set the value of the old {@code provider-options} key.
+	 * @param providerOptions the provider object
+	 * @deprecated since 0.2.0 for removal in 1.0.0; use
+	 * {@link #setProviderExtraBody(Map)}
+	 */
+	@Deprecated(since = "0.2.0", forRemoval = true)
 	public void setProviderOptions(@Nullable Map<String, @Nullable Object> providerOptions) {
 		this.providerOptions = providerOptions;
+	}
+
+	private @Nullable Map<String, @Nullable Object> providerExtraBody() {
+		if (this.providerOptions == null) {
+			return this.providerExtraBody;
+		}
+		if (this.providerExtraBody != null) {
+			throw new IllegalStateException("Set only " + CONFIG_PREFIX + ".provider-extra-body; " + CONFIG_PREFIX
+					+ ".provider-options is its old name");
+		}
+		logger.warn(CONFIG_PREFIX + ".provider-options is deprecated; rename it to " + CONFIG_PREFIX
+				+ ".provider-extra-body");
+		return this.providerOptions;
 	}
 
 }

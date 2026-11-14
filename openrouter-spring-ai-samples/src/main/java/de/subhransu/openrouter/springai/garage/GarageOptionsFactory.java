@@ -99,7 +99,7 @@ public final class GarageOptionsFactory {
       String topic) {
     OpenRouterChatOptions.Builder builder =
         common(operationId, "routing-lane", requestMode, model, fallbackModels, topic);
-    if (requestMode == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS) {
+    if (requestMode == OpenRouterRequestMode.CHAT_COMPLETIONS) {
       // Without this, OpenRouter shortens the oversized prompt for the small-context primary
       // instead of falling back, and the lane can no longer prove the fallback.
       builder.extraBody(Map.of("transforms", List.of()));
@@ -120,7 +120,7 @@ public final class GarageOptionsFactory {
       String model,
       String topic,
       List<ToolCallback> callbacks) {
-    boolean responses = requestMode == OpenRouterRequestMode.OPENAI_RESPONSES;
+    boolean responses = requestMode == OpenRouterRequestMode.RESPONSES;
     return common(operationId, "dyno-tuning", requestMode, model, List.of(), topic)
         .topP(this.properties.getTopP())
         .topK(this.properties.getTopK())
@@ -182,7 +182,7 @@ public final class GarageOptionsFactory {
   }
 
   public List<String> unsupportedInMode(OpenRouterChatOptions options) {
-    if (options.getRequestMode() != OpenRouterRequestMode.OPENAI_RESPONSES) {
+    if (options.getRequestMode() != OpenRouterRequestMode.RESPONSES) {
       return List.of();
     }
     List<String> unsupported = new ArrayList<>();
@@ -215,7 +215,7 @@ public final class GarageOptionsFactory {
             .requestMode(requestMode)
             .temperature(this.properties.getTemperature())
             .maxCompletionTokens(this.properties.getMaxCompletionTokens())
-            .includeUsage(requestMode == OpenRouterRequestMode.OPENAI_RESPONSES ? null : true)
+            .includeUsage(requestMode == OpenRouterRequestMode.RESPONSES ? null : true)
             .reasoning(reasoningOptions())
             .provider(serviceProviderPreferences())
             .serviceTier(this.properties.getServiceTier())

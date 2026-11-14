@@ -157,7 +157,7 @@ public final class ServiceStoryScene extends GarageSceneSupport {
 
   private List<GarageFeature> applicable(OpenRouterRequestMode requestMode) {
     List<GarageFeature> applicable = new ArrayList<>(features());
-    if (requestMode == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS) {
+    if (requestMode == OpenRouterRequestMode.CHAT_COMPLETIONS) {
       applicable.remove(GarageFeature.RESPONSES_MODE);
     } else {
       applicable.remove(GarageFeature.CHAT_COMPLETIONS_MODE);

@@ -8,10 +8,10 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
-import de.subhransu.openrouter.springai.errors.OpenRouterHttpException;
+import de.subhransu.openrouter.springai.errors.OpenRouterHttpFailure;
 import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
-import de.subhransu.openrouter.springai.api.errors.OpenRouterApiException;
+import de.subhransu.openrouter.springai.api.errors.OpenRouterInBandErrorException;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingModel;
@@ -79,7 +79,7 @@ class OpenRouterModelHttpRetryTests {
 			.retryTemplate(retryTemplate(1))
 			.build();
 
-		var response = model.call(chatPrompt(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS));
+		var response = model.call(chatPrompt(OpenRouterRequestMode.CHAT_COMPLETIONS));
 
 		assertThat(response.getResult().getOutput().getText()).isEqualTo("recovered");
 		fixture.server().verify();
@@ -100,7 +100,7 @@ class OpenRouterModelHttpRetryTests {
 			.retryTemplate(retryTemplate(1))
 			.build();
 
-		var response = model.call(chatPrompt(OpenRouterRequestMode.OPENAI_RESPONSES));
+		var response = model.call(chatPrompt(OpenRouterRequestMode.RESPONSES));
 
 		assertThat(response.getResult().getOutput().getText()).isEqualTo("recovered");
 		fixture.server().verify();
@@ -118,7 +118,7 @@ class OpenRouterModelHttpRetryTests {
 			.andRespond(withSuccess(RESPONSES_SUCCESS, MediaType.APPLICATION_JSON));
 		OpenRouterChatModel model = OpenRouterChatModel.builder().openRouterApi(fixture.api()).build();
 
-		assertThat(model.call(chatPrompt(OpenRouterRequestMode.OPENAI_RESPONSES)).getResult().getOutput().getText())
+		assertThat(model.call(chatPrompt(OpenRouterRequestMode.RESPONSES)).getResult().getOutput().getText())
 			.isEqualTo("recovered");
 		fixture.server().verify();
 	}
@@ -133,7 +133,7 @@ class OpenRouterModelHttpRetryTests {
 			.andRespond(withSuccess(failedResponse(code), MediaType.APPLICATION_JSON));
 		OpenRouterChatModel model = OpenRouterChatModel.builder().openRouterApi(fixture.api()).build();
 
-		assertThatThrownBy(() -> model.call(chatPrompt(OpenRouterRequestMode.OPENAI_RESPONSES)))
+		assertThatThrownBy(() -> model.call(chatPrompt(OpenRouterRequestMode.RESPONSES)))
 			.isInstanceOf(OpenRouterNonTransientApiException.class);
 		fixture.server().verify();
 	}
@@ -157,8 +157,7 @@ class OpenRouterModelHttpRetryTests {
 			.andRespond(withSuccess(CHAT_SUCCESS, MediaType.APPLICATION_JSON));
 		OpenRouterChatModel model = OpenRouterChatModel.builder().openRouterApi(fixture.api()).build();
 
-		assertThat(
-				model.call(chatPrompt(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS)).getResult().getOutput().getText())
+		assertThat(model.call(chatPrompt(OpenRouterRequestMode.CHAT_COMPLETIONS)).getResult().getOutput().getText())
 			.isEqualTo("recovered");
 		fixture.server().verify();
 	}
@@ -173,8 +172,8 @@ class OpenRouterModelHttpRetryTests {
 					MediaType.APPLICATION_JSON));
 		OpenRouterChatModel model = OpenRouterChatModel.builder().openRouterApi(fixture.api()).build();
 
-		assertThatThrownBy(() -> model.call(chatPrompt(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS)))
-			.isInstanceOf(OpenRouterApiException.class);
+		assertThatThrownBy(() -> model.call(chatPrompt(OpenRouterRequestMode.CHAT_COMPLETIONS)))
+			.isInstanceOf(OpenRouterInBandErrorException.class);
 		fixture.server().verify();
 	}
 
@@ -191,7 +190,7 @@ class OpenRouterModelHttpRetryTests {
 			.andRespond(withSuccess(IMAGES_SUCCESS, MediaType.APPLICATION_JSON));
 		OpenRouterImageModel model = OpenRouterImageModel.builder()
 			.openRouterApi(fixture.api())
-			.defaultOptions(OpenRouterImageOptions.builder().model("test-image-model").build())
+			.options(OpenRouterImageOptions.builder().model("test-image-model").build())
 			.build();
 
 		assertThat(model.call(new ImagePrompt("draw a circle")).getResult().getOutput().getB64Json())
@@ -207,11 +206,11 @@ class OpenRouterModelHttpRetryTests {
 			.andRespond(withSuccess(error(401, "invalid_api_key"), MediaType.APPLICATION_JSON));
 		OpenRouterImageModel model = OpenRouterImageModel.builder()
 			.openRouterApi(fixture.api())
-			.defaultOptions(OpenRouterImageOptions.builder().model("test-image-model").build())
+			.options(OpenRouterImageOptions.builder().model("test-image-model").build())
 			.build();
 
 		assertThatThrownBy(() -> model.call(new ImagePrompt("draw a circle")))
-			.isInstanceOf(OpenRouterApiException.class);
+			.isInstanceOf(OpenRouterInBandErrorException.class);
 		fixture.server().verify();
 	}
 
@@ -227,7 +226,7 @@ class OpenRouterModelHttpRetryTests {
 			.andRespond(withSuccess(EMBEDDINGS_SUCCESS, MediaType.APPLICATION_JSON));
 		OpenRouterEmbeddingModel model = OpenRouterEmbeddingModel.builder()
 			.openRouterApi(fixture.api())
-			.defaultOptions(OpenRouterEmbeddingOptions.builder().model("openai/text-embedding-3-small").build())
+			.options(OpenRouterEmbeddingOptions.builder().model("openai/text-embedding-3-small").build())
 			.retryTemplate(retryTemplate(1))
 			.build();
 
@@ -253,7 +252,7 @@ class OpenRouterModelHttpRetryTests {
 			.andRespond(withSuccess(EMBEDDINGS_SUCCESS, MediaType.APPLICATION_JSON));
 		OpenRouterEmbeddingModel model = OpenRouterEmbeddingModel.builder()
 			.openRouterApi(fixture.api())
-			.defaultOptions(OpenRouterEmbeddingOptions.builder().model("test-embedding-model").build())
+			.options(OpenRouterEmbeddingOptions.builder().model("test-embedding-model").build())
 			.build();
 
 		assertThat(model.embed("hello")).containsExactly(0.25f, -0.5f);
@@ -272,7 +271,7 @@ class OpenRouterModelHttpRetryTests {
 			.andRespond(withSuccess(IMAGES_SUCCESS, MediaType.APPLICATION_JSON));
 		OpenRouterImageModel model = OpenRouterImageModel.builder()
 			.openRouterApi(fixture.api())
-			.defaultOptions(OpenRouterImageOptions.builder().model("openai/gpt-image-1").build())
+			.options(OpenRouterImageOptions.builder().model("openai/gpt-image-1").build())
 			.retryTemplate(retryTemplate(1))
 			.build();
 
@@ -295,7 +294,7 @@ class OpenRouterModelHttpRetryTests {
 			.retryTemplate(retryTemplate(5))
 			.build();
 
-		assertThatThrownBy(() -> model.call(chatPrompt(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS)))
+		assertThatThrownBy(() -> model.call(chatPrompt(OpenRouterRequestMode.CHAT_COMPLETIONS)))
 			.isInstanceOf(OpenRouterNonTransientApiException.class);
 		fixture.server().verify();
 	}
@@ -316,10 +315,10 @@ class OpenRouterModelHttpRetryTests {
 			.retryTemplate(retryTemplate(2))
 			.build();
 
-		assertThatThrownBy(() -> model.call(chatPrompt(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS)))
+		assertThatThrownBy(() -> model.call(chatPrompt(OpenRouterRequestMode.CHAT_COMPLETIONS)))
 			.isInstanceOf(OpenRouterTransientApiException.class)
 			.satisfies(thrown -> {
-				OpenRouterHttpException exception = (OpenRouterHttpException) thrown;
+				OpenRouterHttpFailure exception = (OpenRouterHttpFailure) thrown;
 				assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
 				assertThat(exception.getEndpoint()).isEqualTo("/chat/completions");
 				assertThat(exception.getErrorDetails().errorType()).isEqualTo("provider_overloaded");

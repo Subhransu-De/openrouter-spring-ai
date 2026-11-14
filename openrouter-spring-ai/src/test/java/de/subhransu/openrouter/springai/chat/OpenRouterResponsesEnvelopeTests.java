@@ -203,7 +203,7 @@ class OpenRouterResponsesEnvelopeTests {
 				.user("synthetic")
 				.options(OpenRouterChatOptions.builder()
 					.model("synthetic")
-					.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
+					.requestMode(OpenRouterRequestMode.RESPONSES)
 					.toolCallbacks(callback));
 			if (streaming) {
 				request.stream().content().collectList().block(Duration.ofSeconds(5));
@@ -329,9 +329,9 @@ class OpenRouterResponsesEnvelopeTests {
 			.openRouterApi(api)
 			.observationRegistry(this.observations)
 			.retryTemplate(new RetryTemplate(RetryPolicy.builder().maxRetries(0).build()))
-			.defaultOptions(OpenRouterChatOptions.builder()
+			.options(OpenRouterChatOptions.builder()
 				.model("synthetic")
-				.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
+				.requestMode(OpenRouterRequestMode.RESPONSES)
 				.build())
 			.build();
 	}

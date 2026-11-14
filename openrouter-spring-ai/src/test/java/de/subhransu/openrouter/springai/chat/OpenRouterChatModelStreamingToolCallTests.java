@@ -205,7 +205,7 @@ class OpenRouterChatModelStreamingToolCallTests {
 			.stream(new Prompt(List.of(new UserMessage("weather in Berlin?")),
 					OpenRouterChatOptions.builder()
 						.model("openai/gpt-5.4")
-						.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
+						.requestMode(OpenRouterRequestMode.RESPONSES)
 						.toolCallbacks(List.of(this.weatherTool))
 						.build()))
 			.collectList()

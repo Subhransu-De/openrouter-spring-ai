@@ -150,8 +150,8 @@ public final class ModalityBaysScene extends GarageSceneSupport {
       SceneContext context, GarageModalityBays bays) {
     GarageRunPlan command = context.plan();
     boolean modeIndependentBays =
-        context.requestMode() == OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS
-            || !command.requestModes().contains(OpenRouterRequestMode.OPENAI_CHAT_COMPLETIONS);
+        context.requestMode() == OpenRouterRequestMode.CHAT_COMPLETIONS
+            || !command.requestModes().contains(OpenRouterRequestMode.CHAT_COMPLETIONS);
 
     Map<GarageFeature, List<Map<String, Object>>> probesByFeature = new LinkedHashMap<>();
     if (modeIndependentBays && command.runsEmbeddings()) {

@@ -160,7 +160,7 @@ class OpenRouterChatModelToolCallingTests {
 			.prompt(new Prompt(List.of(new UserMessage(WEATHER_PROMPT)),
 					OpenRouterChatOptions.builder()
 						.model("openai/gpt-5.4")
-						.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
+						.requestMode(OpenRouterRequestMode.RESPONSES)
 						.toolStrict(strict)
 						.toolCallbacks(List.of(this.weatherTool))
 						.build()))
@@ -216,8 +216,7 @@ class OpenRouterChatModelToolCallingTests {
 				chatCompletionResponse(new ChatMessage("assistant", "No tools needed.", null, null, null), "stop"));
 		OpenRouterChatModel model = OpenRouterChatModel.builder()
 			.openRouterApi(api)
-			.defaultOptions(
-					OpenRouterChatOptions.builder().model(MINI_MODEL).toolCallbacks(List.of(this.weatherTool)).build())
+			.options(OpenRouterChatOptions.builder().model(MINI_MODEL).toolCallbacks(List.of(this.weatherTool)).build())
 			.build();
 
 		model.call(new Prompt(List.of(new UserMessage(WEATHER_PROMPT))));
@@ -242,8 +241,7 @@ class OpenRouterChatModelToolCallingTests {
 			.thenReturn(chatCompletionResponse(new ChatMessage("assistant", "Done.", null, null, null), "stop"));
 		OpenRouterChatModel model = OpenRouterChatModel.builder()
 			.openRouterApi(api)
-			.defaultOptions(
-					OpenRouterChatOptions.builder().model(MINI_MODEL).toolCallbacks(List.of(this.weatherTool)).build())
+			.options(OpenRouterChatOptions.builder().model(MINI_MODEL).toolCallbacks(List.of(this.weatherTool)).build())
 			.build();
 
 		model.call(new Prompt(List.of(new UserMessage(WEATHER_PROMPT)),

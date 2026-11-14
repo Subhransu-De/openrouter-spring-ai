@@ -12,7 +12,7 @@ import de.subhransu.openrouter.springai.api.dto.ChoiceError;
 import de.subhransu.openrouter.springai.api.dto.ContentPart;
 import de.subhransu.openrouter.springai.api.dto.Delta;
 import de.subhransu.openrouter.springai.api.dto.FunctionCall;
-import de.subhransu.openrouter.springai.api.dto.StreamError;
+import de.subhransu.openrouter.springai.api.dto.ResponseError;
 import de.subhransu.openrouter.springai.api.dto.ToolCall;
 import de.subhransu.openrouter.springai.api.dto.Usage;
 import de.subhransu.openrouter.springai.chat.errors.OpenRouterTransientChoiceException;
@@ -588,7 +588,7 @@ class OpenRouterStreamingToolCallAggregatorTests {
 	@Test
 	void inStreamErrorClearsEveryBufferedChoice() {
 		ChatCompletionChunk error = new ChatCompletionChunk("gen-1", CHUNK_OBJECT, 123L, MODEL, "openai", List.of(),
-				null, new StreamError("upstream_error", "failed"));
+				null, new ResponseError("upstream_error", "failed"));
 
 		List<ChatCompletionChunk> aggregated = this.aggregator
 			.aggregate(Flux.just(chunk(toolFragment(0, 0, "stale-0", "weather", "stale-0")),

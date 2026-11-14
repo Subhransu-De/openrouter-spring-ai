@@ -47,7 +47,7 @@ class ResponsesSnapshotHistoryTests {
 		AssistantMessage original = history(wire, streamed);
 		OpenRouterChatOptions options = OpenRouterChatOptions.builder()
 			.model("synthetic")
-			.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
+			.requestMode(OpenRouterRequestMode.RESPONSES)
 			.build();
 		var request = new OpenRouterResponsesRequestMapper(this.mapper).map(List.of(original), options, false,
 				List.of());
@@ -142,7 +142,7 @@ class ResponsesSnapshotHistoryTests {
 		Prompt prompt = new Prompt(List.of(redacted),
 				OpenRouterChatOptions.builder()
 					.model("synthetic")
-					.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
+					.requestMode(OpenRouterRequestMode.RESPONSES)
 					.build());
 		assertThatThrownBy(() -> model.call(prompt)).isInstanceOf(IllegalArgumentException.class)
 			.hasMessageContaining("assistant media history");
@@ -167,7 +167,7 @@ class ResponsesSnapshotHistoryTests {
 		Prompt prompt = new Prompt(List.of(history),
 				OpenRouterChatOptions.builder()
 					.model("synthetic")
-					.requestMode(OpenRouterRequestMode.OPENAI_RESPONSES)
+					.requestMode(OpenRouterRequestMode.RESPONSES)
 					.build());
 		assertThatThrownBy(() -> model.call(prompt)).hasMessageContaining("output item must be a JSON object");
 		assertThatThrownBy(() -> model.stream(prompt).blockLast())
