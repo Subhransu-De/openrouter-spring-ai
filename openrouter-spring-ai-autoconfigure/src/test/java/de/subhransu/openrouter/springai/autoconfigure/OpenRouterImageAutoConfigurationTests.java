@@ -99,6 +99,7 @@ class OpenRouterImageAutoConfigurationTests {
 				assertThat(context).hasFailed();
 				assertThat(context.getStartupFailure()).rootCause()
 					.isInstanceOf(IllegalStateException.class)
+					.hasMessageContaining("Set only spring.ai.openrouter.image.provider-extra-body;")
 					.hasMessageContaining("provider-options is its old name");
 			});
 	}

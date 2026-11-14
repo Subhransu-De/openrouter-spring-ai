@@ -281,7 +281,9 @@ public class OpenRouterImageOptions implements ImageOptions {
 		 * sent unchanged. Put settings for one upstream provider under
 		 * {@code options.<provider-slug>}. As with {@code providerExtraBody} on chat
 		 * options, these are raw fields of the wire {@code provider} object; unlike chat,
-		 * a per-request map replaces the default map instead of merging with it by key.
+		 * a per-request map replaces the default map instead of merging with it by key,
+		 * and any key is accepted without validation, where chat accepts only its listed
+		 * keys.
 		 * @param providerExtraBody the {@code provider} object, or {@code null}
 		 * @return this builder
 		 */
