@@ -3,6 +3,8 @@ package de.subhransu.openrouter.springai.chat.mapper;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionChunk;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionResponse;
@@ -40,6 +42,7 @@ import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.content.Media;
 import org.springframework.util.MimeTypeUtils;
 import org.springframework.test.util.ReflectionTestUtils;
+import reactor.core.publisher.BaseSubscriber;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 import reactor.test.publisher.TestPublisher;
@@ -147,6 +150,30 @@ class OpenRouterStreamingToolCallAggregatorTests {
 		TestPublisher<ChatCompletionChunk> source = TestPublisher.create();
 		StepVerifier.create(this.aggregator.aggregate(source.flux()), 0).thenCancel().verify();
 		source.assertCancelled();
+	}
+
+	@Tag("streaming")
+	@Tag("streaming.lifecycle")
+	@Test
+	void subscriptionWithoutDemandRequestsNothingUpstream() {
+		Subscription subscription = mock(Subscription.class);
+		Flux<ChatCompletionChunk> source = Flux.from(subscriber -> subscriber.onSubscribe(subscription));
+		BaseSubscriber<ChatCompletionChunk> downstream = new BaseSubscriber<>() {
+
+			@Override
+			protected void hookOnSubscribe(Subscription ignored) {
+				// No initial demand. StepVerifier runs its script before the aggregator
+				// subscribes upstream, so it cannot reach this zero-demand drain.
+			}
+
+		};
+		this.aggregator.aggregate(source).subscribe(downstream);
+		verifyNoInteractions(subscription);
+		downstream.request(2);
+		verify(subscription).request(2);
+		downstream.cancel();
+		verify(subscription).cancel();
+		verifyNoMoreInteractions(subscription);
 	}
 
 	@Tag("streaming")
