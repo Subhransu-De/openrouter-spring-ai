@@ -71,13 +71,11 @@ Spring Boot reads the key from configuration and builds `OpenRouterApi`, `ChatCl
 
 <table>
 <tr>
-<td width="160" valign="top">
-
-**Configuration**<br>
-The key comes from the environment.
-
-</td>
-<td>
+<td><b>Configuration</b> · The key comes from the environment.</td>
+<td align="right"><a href="docs/getting-started.md">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
 
 ```yaml
 spring:
@@ -97,16 +95,13 @@ spring:
 ```
 
 </td>
-<td valign="top"><a href="docs/getting-started.md">Docs</a></td>
 </tr>
 <tr>
-<td width="160" valign="top">
-
-**Chat model bean**<br>
-Replaces the auto-configured chat model.
-
-</td>
-<td>
+<td><b>Chat model bean</b> · Replaces the auto-configured chat model.</td>
+<td align="right"><a href="docs/chat-options.md">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
 
 ```java
 @Bean
@@ -119,16 +114,13 @@ OpenRouterChatModel chatModel(OpenRouterApi openRouterApi) {
 ```
 
 </td>
-<td valign="top"><a href="docs/chat-options.md">Docs</a></td>
 </tr>
 <tr>
-<td width="160" valign="top">
-
-**Embedding model bean**<br>
-Replaces the auto-configured embedding model.
-
-</td>
-<td>
+<td><b>Embedding model bean</b> · Replaces the auto-configured embedding model.</td>
+<td align="right"><a href="docs/embeddings.md">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
 
 ```java
 @Bean
@@ -142,16 +134,13 @@ OpenRouterEmbeddingModel embeddingModel(OpenRouterApi openRouterApi) {
 ```
 
 </td>
-<td valign="top"><a href="docs/embeddings.md">Docs</a></td>
 </tr>
 <tr>
-<td width="160" valign="top">
-
-**Image model bean**<br>
-Replaces the auto-configured image model.
-
-</td>
-<td>
+<td><b>Image model bean</b> · Replaces the auto-configured image model.</td>
+<td align="right"><a href="docs/multimodal.md#image-generation">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
 
 ```java
 @Bean
@@ -165,16 +154,13 @@ OpenRouterImageModel imageModel(OpenRouterApi openRouterApi) {
 ```
 
 </td>
-<td valign="top"><a href="docs/multimodal.md#image-generation">Docs</a></td>
 </tr>
 <tr>
-<td width="160" valign="top">
-
-**Without auto-configuration**<br>
-Bind the key into a field.
-
-</td>
-<td>
+<td><b>Without auto-configuration</b> · Bind the key into a field.</td>
+<td align="right"><a href="docs/api.md">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
 
 ```java
 @Configuration
@@ -191,7 +177,6 @@ class OpenRouterConfig {
 ```
 
 </td>
-<td valign="top"><a href="docs/api.md">Docs</a></td>
 </tr>
 </table>
 
@@ -204,45 +189,37 @@ class OpenRouterConfig {
 
 <table>
 <tr>
-<td width="160" valign="top">
-
-**Text generation**<br>
-One blocking call.
-
-</td>
-<td>
+<td><b>Text generation</b> · One blocking call.</td>
+<td align="right"><a href="docs/getting-started.md">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
 
 ```java
 String answer = chatClient.prompt().user("Say hello.").call().content();
 ```
 
 </td>
-<td valign="top"><a href="docs/getting-started.md">Docs</a></td>
 </tr>
 <tr>
-<td width="160" valign="top">
-
-**Streaming**<br>
-Text arrives as server-sent events.
-
-</td>
-<td>
+<td><b>Streaming</b> · Text arrives as server-sent events.</td>
+<td align="right"><a href="docs/request-modes.md#stream-contract">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
 
 ```java
 Flux<String> tokens = chatClient.prompt().user("Tell a short story.").stream().content();
 ```
 
 </td>
-<td valign="top"><a href="docs/request-modes.md#stream-contract">Docs</a></td>
 </tr>
 <tr>
-<td width="160" valign="top">
-
-**Per-request options**<br>
-Unset fields keep the defaults.
-
-</td>
-<td>
+<td><b>Per-request options</b> · Unset fields keep the defaults.</td>
+<td align="right"><a href="docs/chat-options.md#replacement-and-composition">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
 
 ```java
 String answer =
@@ -255,16 +232,13 @@ String answer =
 ```
 
 </td>
-<td valign="top"><a href="docs/chat-options.md#replacement-and-composition">Docs</a></td>
 </tr>
 <tr>
-<td width="160" valign="top">
-
-**Structured output**<br>
-Typed records from a JSON schema.
-
-</td>
-<td>
+<td><b>Structured output</b> · Typed records from a JSON schema.</td>
+<td align="right"><a href="docs/request-modes.md#structured-output">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
 
 ```java
 record Answer(String answer) {}
@@ -288,16 +262,13 @@ Answer answer =
 ```
 
 </td>
-<td valign="top"><a href="docs/request-modes.md#structured-output">Docs</a></td>
 </tr>
 <tr>
-<td width="160" valign="top">
-
-**Reasoning**<br>
-Read the model's thinking separately.
-
-</td>
-<td>
+<td><b>Reasoning</b> · Read the model's thinking separately.</td>
+<td align="right"><a href="docs/reasoning-and-caching.md">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
 
 ```java
 ChatResponse response =
@@ -316,16 +287,13 @@ String thinking = OpenRouterMetadata.reasoning(response.getResult()).orElse("");
 ```
 
 </td>
-<td valign="top"><a href="docs/reasoning-and-caching.md">Docs</a></td>
 </tr>
 <tr>
-<td width="160" valign="top">
-
-**Tool calling**<br>
-Spring AI runs the tool loop.
-
-</td>
-<td>
+<td><b>Tool calling</b> · Spring AI runs the tool loop.</td>
+<td align="right"><a href="docs/tool-calling.md">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
 
 ```java
 class Weather {
@@ -341,16 +309,13 @@ String answer =
 ```
 
 </td>
-<td valign="top"><a href="docs/tool-calling.md">Docs</a></td>
 </tr>
 <tr>
-<td width="160" valign="top">
-
-**Responses mode** <sup>experimental</sup><br>
-Sends to the /responses endpoint.
-
-</td>
-<td>
+<td><b>Responses mode</b> <sup>experimental</sup> · Sends to the /responses endpoint.</td>
+<td align="right"><a href="docs/request-modes.md">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
 
 ```java
 String answer =
@@ -363,7 +328,6 @@ String answer =
 ```
 
 </td>
-<td valign="top"><a href="docs/request-modes.md">Docs</a></td>
 </tr>
 </table>
 
@@ -376,13 +340,11 @@ String answer =
 
 <table>
 <tr>
-<td width="160" valign="top">
-
-**Model fallbacks**<br>
-Tried in order when one fails.
-
-</td>
-<td>
+<td><b>Model fallbacks</b> · Tried in order when one fails.</td>
+<td align="right"><a href="docs/chat-options.md#routing-fallbacks-and-attribution">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
 
 ```java
 String answer =
@@ -398,16 +360,13 @@ String answer =
 ```
 
 </td>
-<td valign="top"><a href="docs/chat-options.md#routing-fallbacks-and-attribution">Docs</a></td>
 </tr>
 <tr>
-<td width="160" valign="top">
-
-**Provider routing**<br>
-Pick, order and sort providers.
-
-</td>
-<td>
+<td><b>Provider routing</b> · Pick, order and sort providers.</td>
+<td align="right"><a href="docs/chat-options.md#routing-fallbacks-and-attribution">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
 
 ```java
 String answer =
@@ -425,16 +384,13 @@ String answer =
 ```
 
 </td>
-<td valign="top"><a href="docs/chat-options.md#routing-fallbacks-and-attribution">Docs</a></td>
 </tr>
 <tr>
-<td width="160" valign="top">
-
-**Service tier**<br>
-Trade speed for price.
-
-</td>
-<td>
+<td><b>Service tier</b> · Trade speed for price.</td>
+<td align="right"><a href="docs/chat-options.md#routing-fallbacks-and-attribution">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
 
 ```java
 String answer =
@@ -447,16 +403,13 @@ String answer =
 ```
 
 </td>
-<td valign="top"><a href="docs/chat-options.md#routing-fallbacks-and-attribution">Docs</a></td>
 </tr>
 <tr>
-<td width="160" valign="top">
-
-**Sessions and traces**<br>
-Keep a conversation on one provider.
-
-</td>
-<td>
+<td><b>Sessions and traces</b> · Keep a conversation on one provider.</td>
+<td align="right"><a href="docs/chat-options.md#sessions-and-traces">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
 
 ```java
 String answer =
@@ -472,16 +425,13 @@ String answer =
 ```
 
 </td>
-<td valign="top"><a href="docs/chat-options.md#sessions-and-traces">Docs</a></td>
 </tr>
 <tr>
-<td width="160" valign="top">
-
-**Attribution headers**<br>
-Your app on OpenRouter rankings.
-
-</td>
-<td>
+<td><b>Attribution headers</b> · Your app on OpenRouter rankings.</td>
+<td align="right"><a href="docs/chat-options.md#routing-fallbacks-and-attribution">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
 
 ```yaml
 spring:
@@ -493,7 +443,6 @@ spring:
 ```
 
 </td>
-<td valign="top"><a href="docs/chat-options.md#routing-fallbacks-and-attribution">Docs</a></td>
 </tr>
 </table>
 
@@ -506,13 +455,11 @@ spring:
 
 <table>
 <tr>
-<td width="160" valign="top">
-
-**Image input**<br>
-Needs a model that reads images.
-
-</td>
-<td>
+<td><b>Image input</b> · Needs a model that reads images.</td>
+<td align="right"><a href="docs/multimodal.md#image-inputs">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
 
 ```java
 UserMessage message =
@@ -534,16 +481,13 @@ String answer =
 ```
 
 </td>
-<td valign="top"><a href="docs/multimodal.md#image-inputs">Docs</a></td>
 </tr>
 <tr>
-<td width="160" valign="top">
-
-**PDF input**<br>
-A URL, bytes or a data URL.
-
-</td>
-<td>
+<td><b>PDF input</b> · A URL, bytes or a data URL.</td>
+<td align="right"><a href="docs/multimodal.md#pdf-audio-and-video-inputs">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
 
 ```java
 UserMessage message =
@@ -565,16 +509,13 @@ String summary =
 ```
 
 </td>
-<td valign="top"><a href="docs/multimodal.md#pdf-audio-and-video-inputs">Docs</a></td>
 </tr>
 <tr>
-<td width="160" valign="top">
-
-**Audio input**<br>
-Bytes only; URLs are rejected.
-
-</td>
-<td>
+<td><b>Audio input</b> · Bytes only; URLs are rejected.</td>
+<td align="right"><a href="docs/multimodal.md#pdf-audio-and-video-inputs">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
 
 ```java
 UserMessage message =
@@ -596,16 +537,13 @@ String transcript =
 ```
 
 </td>
-<td valign="top"><a href="docs/multimodal.md#pdf-audio-and-video-inputs">Docs</a></td>
 </tr>
 <tr>
-<td width="160" valign="top">
-
-**Video input**<br>
-URL support depends on the provider.
-
-</td>
-<td>
+<td><b>Video input</b> · URL support depends on the provider.</td>
+<td align="right"><a href="docs/multimodal.md#pdf-audio-and-video-inputs">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
 
 ```java
 UserMessage message =
@@ -627,7 +565,6 @@ String answer =
 ```
 
 </td>
-<td valign="top"><a href="docs/multimodal.md#pdf-audio-and-video-inputs">Docs</a></td>
 </tr>
 </table>
 
@@ -640,13 +577,11 @@ String answer =
 
 <table>
 <tr>
-<td width="160" valign="top">
-
-**Image generation**<br>
-Base64 images from the Image API.
-
-</td>
-<td>
+<td><b>Image generation</b> · Base64 images from the Image API.</td>
+<td align="right"><a href="docs/multimodal.md#image-generation">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
 
 ```java
 ImageResponse response = imageModel.call(new ImagePrompt("a red panda wearing sunglasses"));
@@ -654,16 +589,13 @@ String base64 = response.getResult().getOutput().getB64Json();
 ```
 
 </td>
-<td valign="top"><a href="docs/multimodal.md#image-generation">Docs</a></td>
 </tr>
 <tr>
-<td width="160" valign="top">
-
-**Image streaming**<br>
-Previews first, then the final image.
-
-</td>
-<td>
+<td><b>Image streaming</b> · Previews first, then the final image.</td>
+<td align="right"><a href="docs/multimodal.md#streaming">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
 
 ```java
 Flux<ImageResponse> events =
@@ -679,16 +611,13 @@ events.subscribe(
 ```
 
 </td>
-<td valign="top"><a href="docs/multimodal.md#streaming">Docs</a></td>
 </tr>
 <tr>
-<td width="160" valign="top">
-
-**Image to image**<br>
-Start from a reference image.
-
-</td>
-<td>
+<td><b>Image to image</b> · Start from a reference image.</td>
+<td align="right"><a href="docs/multimodal.md#image-options">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
 
 ```java
 ImageResponse response =
@@ -701,16 +630,13 @@ ImageResponse response =
 ```
 
 </td>
-<td valign="top"><a href="docs/multimodal.md#image-options">Docs</a></td>
 </tr>
 <tr>
-<td width="160" valign="top">
-
-**Images from a chat model**<br>
-Images next to text in a reply.
-
-</td>
-<td>
+<td><b>Images from a chat model</b> · Images next to text in a reply.</td>
+<td align="right"><a href="docs/multimodal.md#chat-models-with-image-output">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
 
 ```java
 ChatResponse response =
@@ -729,16 +655,13 @@ for (Media image : response.getResult().getOutput().getMedia()) {
 ```
 
 </td>
-<td valign="top"><a href="docs/multimodal.md#chat-models-with-image-output">Docs</a></td>
 </tr>
 <tr>
-<td width="160" valign="top">
-
-**Audio output**<br>
-Streaming only.
-
-</td>
-<td>
+<td><b>Audio output</b> · Streaming only.</td>
+<td align="right"><a href="docs/multimodal.md#chat-audio-output">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
 
 ```java
 Flux<ChatResponse> stream =
@@ -768,7 +691,6 @@ stream.subscribe(
 ```
 
 </td>
-<td valign="top"><a href="docs/multimodal.md#chat-audio-output">Docs</a></td>
 </tr>
 </table>
 
@@ -781,29 +703,24 @@ stream.subscribe(
 
 <table>
 <tr>
-<td width="160" valign="top">
-
-**Text embedding**<br>
-Works with Spring AI vector stores.
-
-</td>
-<td>
+<td><b>Text embedding</b> · Works with Spring AI vector stores.</td>
+<td align="right"><a href="docs/embeddings.md">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
 
 ```java
 float[] vector = embeddingModel.embed("The quick brown fox");
 ```
 
 </td>
-<td valign="top"><a href="docs/embeddings.md">Docs</a></td>
 </tr>
 <tr>
-<td width="160" valign="top">
-
-**Batch with options**<br>
-Options merge with the defaults.
-
-</td>
-<td>
+<td><b>Batch with options</b> · Options merge with the defaults.</td>
+<td align="right"><a href="docs/embeddings.md">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
 
 ```java
 EmbeddingResponse response =
@@ -814,7 +731,6 @@ EmbeddingResponse response =
 ```
 
 </td>
-<td valign="top"><a href="docs/embeddings.md">Docs</a></td>
 </tr>
 </table>
 
@@ -827,13 +743,11 @@ EmbeddingResponse response =
 
 <table>
 <tr>
-<td width="160" valign="top">
-
-**Prompt cache breakpoint**<br>
-Cache a stable prompt prefix.
-
-</td>
-<td>
+<td><b>Prompt cache breakpoint</b> · Cache a stable prompt prefix.</td>
+<td align="right"><a href="docs/reasoning-and-caching.md#explicit-prompt-cache-breakpoints">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
 
 ```java
 String reference = "Reference material to reuse.\n";
@@ -849,16 +763,13 @@ String answer = chatClient.prompt().messages(message).call().content();
 ```
 
 </td>
-<td valign="top"><a href="docs/reasoning-and-caching.md#explicit-prompt-cache-breakpoints">Docs</a></td>
 </tr>
 <tr>
-<td width="160" valign="top">
-
-**Usage and cost**<br>
-Credits charged, tokens used.
-
-</td>
-<td>
+<td><b>Usage and cost</b> · Credits charged, tokens used.</td>
+<td align="right"><a href="docs/observability.md">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
 
 ```java
 ChatResponse response = chatClient.prompt().user("Say hello.").call().chatResponse();
@@ -867,16 +778,13 @@ Double cost = usage.getCost(); // null when not reported
 ```
 
 </td>
-<td valign="top"><a href="docs/observability.md">Docs</a></td>
 </tr>
 <tr>
-<td width="160" valign="top">
-
-**Extra request fields**<br>
-Fields without a typed option.
-
-</td>
-<td>
+<td><b>Extra request fields</b> · Fields without a typed option.</td>
+<td align="right"><a href="docs/extensions.md">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
 
 ```java
 String answer =
@@ -889,16 +797,13 @@ String answer =
 ```
 
 </td>
-<td valign="top"><a href="docs/extensions.md">Docs</a></td>
 </tr>
 <tr>
-<td width="160" valign="top">
-
-**Low-level request**<br>
-Inject OpenRouterApi; no Spring AI types.
-
-</td>
-<td>
+<td><b>Low-level request</b> · Inject OpenRouterApi; no Spring AI types.</td>
+<td align="right"><a href="docs/api.md#build-low-level-requests">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
 
 ```java
 ChatCompletionRequest request =
@@ -910,7 +815,6 @@ ChatCompletionResponse response = openRouterApi.chatCompletion(request);
 ```
 
 </td>
-<td valign="top"><a href="docs/api.md#build-low-level-requests">Docs</a></td>
 </tr>
 </table>
 
