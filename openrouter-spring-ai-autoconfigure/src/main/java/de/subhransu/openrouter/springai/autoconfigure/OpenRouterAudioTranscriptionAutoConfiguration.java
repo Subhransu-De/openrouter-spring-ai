@@ -18,11 +18,14 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.retry.RetryTemplate;
 
+// Opt-in, unlike chat, embeddings and images: Spring AI's other audio providers also
+// match an unset selector and back off only for their own type, so an application that
+// already uses one would otherwise get two audio models of the same type.
 @AutoConfiguration(after = { OpenRouterApiAutoConfiguration.class, SpringAiRetryAutoConfiguration.class })
 @ConditionalOnClass({ OpenRouterAudioTranscriptionModel.class, TranscriptionModel.class })
 @ConditionalOnBean(OpenRouterApi.class)
 @ConditionalOnProperty(name = SpringAIModelProperties.AUDIO_TRANSCRIPTION_MODEL,
-		havingValue = OpenRouterIdentifiers.PROVIDER_ID, matchIfMissing = true)
+		havingValue = OpenRouterIdentifiers.PROVIDER_ID)
 @EnableConfigurationProperties(OpenRouterAudioTranscriptionProperties.class)
 public final class OpenRouterAudioTranscriptionAutoConfiguration {
 

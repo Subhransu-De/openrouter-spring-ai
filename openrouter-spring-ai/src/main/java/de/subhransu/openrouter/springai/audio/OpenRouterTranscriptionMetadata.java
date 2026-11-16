@@ -69,9 +69,21 @@ public record OpenRouterTranscriptionMetadata(@Nullable Usage usage, @Nullable S
 	 * @param speaker the speaker index, when diarized
 	 * @param speakerLabel the provider's speaker label, when it uses strings
 	 * @param channel the zero-based audio channel, when channels are transcribed apart
+	 * @param seek the seek offset of the segment
+	 * @param tokens the token IDs of the segment
+	 * @param temperature the sampling temperature used for the segment
+	 * @param avgLogprob the average log probability of the segment
+	 * @param compressionRatio the compression ratio of the segment
+	 * @param noSpeechProb the probability that the segment holds no speech
 	 */
 	public record Segment(@Nullable Integer id, @Nullable Double start, @Nullable Double end, @Nullable String text,
-			@Nullable Integer speaker, @Nullable String speakerLabel, @Nullable Integer channel) {
+			@Nullable Integer speaker, @Nullable String speakerLabel, @Nullable Integer channel, @Nullable Integer seek,
+			List<Integer> tokens, @Nullable Double temperature, @Nullable Double avgLogprob,
+			@Nullable Double compressionRatio, @Nullable Double noSpeechProb) {
+
+		public Segment {
+			tokens = List.copyOf(tokens);
+		}
 
 	}
 

@@ -64,6 +64,7 @@ class OpenRouterAudioIntegrationTests {
       .build()))
     .withPropertyValues("spring.ai.openrouter.api-key=garage-mock-key",
         "spring.ai.openrouter.base-url=" + OpenRouterMock.baseUrl(),
+        "spring.ai.model.audio.speech=openrouter", "spring.ai.model.audio.transcription=openrouter",
         "spring.ai.openrouter.audio.speech.model=synthetic/speech",
         "spring.ai.openrouter.audio.speech.voice=garage-voice",
         "spring.ai.openrouter.audio.transcription.model=synthetic/transcription");

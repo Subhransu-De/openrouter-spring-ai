@@ -2,6 +2,7 @@ package de.subhransu.openrouter.springai.audio.mapper;
 
 import de.subhransu.openrouter.springai.api.dto.TranscriptionRequest;
 import de.subhransu.openrouter.springai.api.dto.TranscriptionRequest.InputAudio;
+import de.subhransu.openrouter.springai.audio.OpenRouterAudioTranscriptionModel;
 import de.subhransu.openrouter.springai.audio.OpenRouterAudioTranscriptionOptions;
 import de.subhransu.openrouter.springai.audio.OpenRouterTimestampGranularity;
 import de.subhransu.openrouter.springai.audio.OpenRouterTranscriptionFormat;
@@ -32,14 +33,14 @@ public final class OpenRouterAudioTranscriptionRequestMapper {
 
 	private static final int MAX_URL_LENGTH = 8000;
 
-	private static final List<String> PROVIDER_FIELDS = List.of(AudioProviderMapper.DATA_COLLECTION);
-
 	private final int maxInlineAudioBytes;
 
 	public OpenRouterAudioTranscriptionRequestMapper(int maxInlineAudioBytes) {
 		Assert.isTrue(maxInlineAudioBytes > 0, "Maximum inline audio size must be greater than zero");
-		Assert.isTrue(maxInlineAudioBytes < Integer.MAX_VALUE,
-				"Maximum inline audio size must be less than Integer.MAX_VALUE");
+		Assert.isTrue(maxInlineAudioBytes <= OpenRouterAudioTranscriptionModel.MAX_INLINE_AUDIO_BYTES,
+				() -> "Maximum inline audio size must be at most "
+						+ OpenRouterAudioTranscriptionModel.MAX_INLINE_AUDIO_BYTES + " bytes, but was "
+						+ maxInlineAudioBytes);
 		this.maxInlineAudioBytes = maxInlineAudioBytes;
 	}
 
@@ -57,9 +58,8 @@ public final class OpenRouterAudioTranscriptionRequestMapper {
 				responseFormat != null ? responseFormat.value() : null,
 				granularities != null ? granularities.stream().map(OpenRouterTimestampGranularity::value).toList()
 						: null,
-				options.getDiarize(), options.getKeyterms(),
-				AudioProviderMapper.map(options.getProvider(), ENDPOINT, PROVIDER_FIELDS), options.getUser(),
-				options.getSessionId(), TraceMapper.map(options.getTrace()));
+				options.getDiarize(), options.getKeyterms(), AudioProviderMapper.map(options.getProvider(), ENDPOINT),
+				options.getUser(), options.getSessionId(), TraceMapper.map(options.getTrace()));
 	}
 
 	// The API reference rejects diarize with json (HTTP 400) and ignores timestamp
@@ -86,6 +86,8 @@ public final class OpenRouterAudioTranscriptionRequestMapper {
 			throw new IllegalArgumentException("Set audioFormat: the audio format cannot be derived from "
 					+ audio.getDescription() + " because its filename has no extension");
 		}
+		// Checked before the resource is read, so a bad extension costs no upload.
+		OptionChecks.audioFormat("The audio format", format);
 		return InputAudio.inline(Base64.getEncoder().encodeToString(read(audio)), format);
 	}
 
@@ -133,6 +135,7 @@ public final class OpenRouterAudioTranscriptionRequestMapper {
 			throw new IllegalArgumentException(
 					"Set audioFormat: the audio URL path has no extension, so OpenRouter cannot tell its format");
 		}
+		OptionChecks.audioFormat("The audio format", format);
 		return InputAudio.remote(url, format);
 	}
 

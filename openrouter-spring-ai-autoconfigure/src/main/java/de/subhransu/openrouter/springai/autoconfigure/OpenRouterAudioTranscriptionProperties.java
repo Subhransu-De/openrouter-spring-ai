@@ -4,7 +4,6 @@ import de.subhransu.openrouter.springai.audio.OpenRouterAudioTranscriptionModel;
 import de.subhransu.openrouter.springai.audio.OpenRouterAudioTranscriptionOptions;
 import de.subhransu.openrouter.springai.audio.OpenRouterTimestampGranularity;
 import de.subhransu.openrouter.springai.audio.OpenRouterTranscriptionFormat;
-import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
 import de.subhransu.openrouter.springai.chat.OpenRouterTrace;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
@@ -66,8 +65,8 @@ public class OpenRouterAudioTranscriptionProperties {
 	private @Nullable Boolean sendAudioUrl;
 
 	/**
-	 * Largest audio resource sent inline. Raise it for OpenAI and Groq models, which
-	 * accept larger base64 bodies.
+	 * Largest audio resource sent inline, at most 1GB. Raise it for OpenAI and Groq
+	 * models, which accept larger base64 bodies.
 	 */
 	private DataSize maxInlineAudioSize = DataSize
 		.ofBytes(OpenRouterAudioTranscriptionModel.DEFAULT_MAX_INLINE_AUDIO_BYTES);
@@ -90,9 +89,9 @@ public class OpenRouterAudioTranscriptionProperties {
 	private @Nullable OpenRouterTrace trace;
 
 	/**
-	 * Provider preferences that OpenRouter applies to transcription.
+	 * Provider preferences. OpenRouter applies only data-collection to audio requests.
 	 */
-	private final Provider provider = new Provider();
+	private final OpenRouterAudioProviderProperties provider = new OpenRouterAudioProviderProperties();
 
 	public OpenRouterAudioTranscriptionOptions toOptions() {
 		return OpenRouterAudioTranscriptionOptions.builder()
@@ -114,9 +113,9 @@ public class OpenRouterAudioTranscriptionProperties {
 
 	int maxInlineAudioBytes() {
 		long bytes = this.maxInlineAudioSize.toBytes();
-		if (bytes <= 0 || bytes >= Integer.MAX_VALUE) {
+		if (bytes <= 0 || bytes > OpenRouterAudioTranscriptionModel.MAX_INLINE_AUDIO_BYTES) {
 			throw new IllegalStateException(CONFIG_PREFIX + ".max-inline-audio-size must be greater than zero and "
-					+ "less than 2 GB, but was " + this.maxInlineAudioSize);
+					+ "at most 1GB, but was " + this.maxInlineAudioSize);
 		}
 		return (int) bytes;
 	}
@@ -225,31 +224,8 @@ public class OpenRouterAudioTranscriptionProperties {
 		this.trace = trace;
 	}
 
-	public Provider getProvider() {
+	public OpenRouterAudioProviderProperties getProvider() {
 		return this.provider;
-	}
-
-	public static class Provider {
-
-		/**
-		 * Data collection policy that upstream providers must meet: allow or deny. The
-		 * only routing preference OpenRouter applies to transcription.
-		 */
-		private @Nullable String dataCollection;
-
-		@Nullable OpenRouterProviderPreferences toPreferences() {
-			return this.dataCollection == null ? null
-					: OpenRouterProviderPreferences.builder().dataCollection(this.dataCollection).build();
-		}
-
-		public @Nullable String getDataCollection() {
-			return this.dataCollection;
-		}
-
-		public void setDataCollection(@Nullable String dataCollection) {
-			this.dataCollection = dataCollection;
-		}
-
 	}
 
 }

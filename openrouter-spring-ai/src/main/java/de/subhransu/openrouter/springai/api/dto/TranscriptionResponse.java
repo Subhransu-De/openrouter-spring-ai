@@ -25,7 +25,10 @@ public record TranscriptionResponse(@Nullable String text, @Nullable Transcripti
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record Segment(@Nullable Integer id, @Nullable Double start, @Nullable Double end, @Nullable String text,
 			@Nullable Integer speaker, @JsonProperty("speaker_label") @Nullable String speakerLabel,
-			@Nullable Integer channel) {
+			@Nullable Integer channel, @Nullable Integer seek, @Nullable List<Integer> tokens,
+			@Nullable Double temperature, @JsonProperty("avg_logprob") @Nullable Double avgLogprob,
+			@JsonProperty("compression_ratio") @Nullable Double compressionRatio,
+			@JsonProperty("no_speech_prob") @Nullable Double noSpeechProb) {
 
 	}
 

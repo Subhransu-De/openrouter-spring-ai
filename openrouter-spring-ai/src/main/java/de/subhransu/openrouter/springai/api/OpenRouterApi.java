@@ -71,6 +71,8 @@ public class OpenRouterApi {
 	private static final String SPEECH = "/audio/speech";
 
 	// Errors arrive as JSON, so the speech request accepts both.
+	private static final List<MediaType> SSE = List.of(MediaType.TEXT_EVENT_STREAM);
+
 	private static final List<MediaType> AUDIO_OR_ERROR = List.of(new MediaType("audio", "*"),
 			MediaType.APPLICATION_JSON);
 
@@ -98,6 +100,8 @@ public class OpenRouterApi {
 	private final int maxResponseBodyBytes;
 
 	private final int maxErrorBodyBytes;
+
+	private final SpeechExchange speechExchange = new SpeechExchange();
 
 	private OpenRouterApi(Builder builder) {
 		Assert.hasText(builder.apiKey, "OpenRouter API key must not be empty");
@@ -202,18 +206,7 @@ public class OpenRouterApi {
 	 * @return the audio bytes in the requested format
 	 */
 	public byte[] speech(SpeechRequest request) {
-		var outgoing = this.restClient.post().uri(SPEECH).accept(AUDIO_OR_ERROR.toArray(MediaType[]::new));
-		if (this.customObjectMapper) {
-			outgoing.body(output -> this.objectMapper.writeValue(output, request));
-		}
-		else {
-			outgoing.body(request);
-		}
-		return TransportFailures.blocking(SPEECH, () -> outgoing.exchange((httpRequest, response) -> {
-			BoundedBody body = checkedBody(SPEECH, response);
-			rejectJsonAudio(response.getHeaders().getContentType());
-			return body.bytes();
-		}));
+		return this.speechExchange.call(request);
 	}
 
 	/**
@@ -225,45 +218,7 @@ public class OpenRouterApi {
 	 * @return the audio chunks in arrival order
 	 */
 	public Flux<byte[]> speechStream(SpeechRequest request) {
-		// A server compressing the body may hold chunks back to fill its compression
-		// window, which defeats streaming; encoded audio gains little from gzip anyway.
-		return streamingPost(SPEECH, request, AUDIO_OR_ERROR).header(HttpHeaders.ACCEPT_ENCODING, "identity")
-			.exchangeToFlux(response -> {
-				if (response.statusCode().isError()) {
-					return streamingError(SPEECH, response).flatMapMany(Flux::error);
-				}
-				try {
-					rejectJsonAudio(response.headers().contentType().orElse(null));
-				}
-				catch (OpenRouterProtocolException ex) {
-					return response.releaseBody().then(Mono.<byte[]>error(ex)).flux();
-				}
-				return response.bodyToFlux(DataBuffer.class).map(buffer -> {
-					try {
-						byte[] bytes = new byte[buffer.readableByteCount()];
-						buffer.read(bytes);
-						return bytes;
-					}
-					finally {
-						DataBufferUtils.release(buffer);
-					}
-				});
-			})
-			.transform(this::applyTimeout)
-			.filter(bytes -> bytes.length > 0)
-			.switchIfEmpty(Flux.error(() -> new OpenRouterProtocolException(OpenRouterProtocolException.Kind.EMPTY_BODY,
-					SPEECH, "Empty OpenRouter " + SPEECH + " response")))
-			.onErrorMap(error -> TransportFailures.stream(SPEECH, this.maxResponseBodyBytes, error));
-	}
-
-	// A JSON body on a 2xx speech response is not audio; handing it to a player as mp3
-	// would hide the problem.
-	private static void rejectJsonAudio(@Nullable MediaType contentType) {
-		if (contentType != null && (MediaType.APPLICATION_JSON.isCompatibleWith(contentType)
-				|| contentType.getSubtype().endsWith("+json"))) {
-			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.CONTRACT, SPEECH,
-					"OpenRouter " + SPEECH + " returned " + contentType + " instead of audio");
-		}
+		return this.speechExchange.stream(request);
 	}
 
 	private <T> T blockingPost(String uri, Object request, Class<T> responseType) {
@@ -310,7 +265,7 @@ public class OpenRouterApi {
 	private BoundedBody checkedBody(String uri, ClientHttpResponse response) throws IOException {
 		HttpStatusCode statusCode = response.getStatusCode();
 		int limit = statusCode.isError() ? this.maxErrorBodyBytes : this.maxResponseBodyBytes;
-		BoundedBody body = readBounded(response.getBody(), limit);
+		BoundedBody body = BoundedBody.read(response.getBody(), limit);
 		if (body.exceeded()) {
 			if (statusCode.isError()) {
 				String excerpt = new String(body.bytes(), StandardCharsets.UTF_8);
@@ -331,23 +286,6 @@ public class OpenRouterApi {
 		return body;
 	}
 
-	private BoundedBody readBounded(InputStream input, int limit) throws IOException {
-		List<byte[]> chunks = new ArrayList<>();
-		int size = 0;
-		while (size <= limit) {
-			int requested = Math.min(chunks.isEmpty() ? 1024 : 8192, limit + 1 - size);
-			byte[] chunk = input.readNBytes(requested);
-			if (chunk.length > 0) {
-				chunks.add(chunk);
-				size += chunk.length;
-			}
-			if (chunk.length < requested) {
-				break;
-			}
-		}
-		return new BoundedBody(chunks, size, size > limit);
-	}
-
 	public Flux<ChatCompletionChunk> chatCompletionStream(ChatCompletionRequest request) {
 		return stream("/chat/completions", request, ChatCompletionChunk.class);
 	}
@@ -357,7 +295,7 @@ public class OpenRouterApi {
 	// (found live by the Garage paint bay). Branching on the response content type turns
 	// that answer into completed events, so callers see one uniform contract.
 	public Flux<ImagesStreamEvent> imagesStream(ImagesRequest request) {
-		return streamingPost(IMAGES, request).exchangeToFlux((response) -> {
+		return streamingPost(IMAGES, request, SSE).exchangeToFlux((response) -> {
 			if (response.statusCode().isError()) {
 				return streamingError(IMAGES, response).flatMapMany(Flux::error);
 			}
@@ -403,10 +341,6 @@ public class OpenRouterApi {
 			.bodyToMono(ImagesResponse.class);
 	}
 
-	private WebClient.RequestHeadersSpec<?> streamingPost(String uri, Object request) {
-		return streamingPost(uri, request, List.of(MediaType.TEXT_EVENT_STREAM));
-	}
-
 	private WebClient.RequestHeadersSpec<?> streamingPost(String uri, Object request, List<MediaType> accept) {
 		var outgoing = this.webClient.post().uri(uri).accept(accept.toArray(MediaType[]::new));
 		if (!this.customObjectMapper) {
@@ -437,7 +371,7 @@ public class OpenRouterApi {
 	}
 
 	private <T> Flux<T> stream(String uri, Object request, Class<T> eventType) {
-		return streamingPost(uri, request).retrieve()
+		return streamingPost(uri, request, SSE).retrieve()
 			.onStatus(HttpStatusCode::isError, response -> streamingError(uri, response))
 			.bodyToFlux(STRING_SSE_TYPE)
 			.transform(this::applyTimeout)
@@ -602,7 +536,95 @@ public class OpenRouterApi {
 	private record ImageStreamBody(@Nullable ServerSentEvent<String> event, @Nullable ImagesResponse images) {
 	}
 
+	/**
+	 * The speech endpoint answers with raw audio, not JSON or SSE, so it has its own
+	 * exchange on the shared clients, limits and error classification.
+	 */
+	private final class SpeechExchange {
+
+		byte[] call(SpeechRequest request) {
+			var outgoing = OpenRouterApi.this.restClient.post()
+				.uri(SPEECH)
+				.accept(AUDIO_OR_ERROR.toArray(MediaType[]::new));
+			if (OpenRouterApi.this.customObjectMapper) {
+				outgoing.body(output -> OpenRouterApi.this.objectMapper.writeValue(output, request));
+			}
+			else {
+				outgoing.body(request);
+			}
+			return TransportFailures.blocking(SPEECH, () -> outgoing.exchange((httpRequest, response) -> {
+				BoundedBody body = checkedBody(SPEECH, response);
+				rejectJsonAudio(response.getHeaders().getContentType());
+				return body.bytes();
+			}));
+		}
+
+		Flux<byte[]> stream(SpeechRequest request) {
+			// A server compressing the body may hold chunks back to fill its compression
+			// window, which defeats streaming; encoded audio gains little from gzip
+			// anyway.
+			return streamingPost(SPEECH, request, AUDIO_OR_ERROR).header(HttpHeaders.ACCEPT_ENCODING, "identity")
+				.exchangeToFlux(response -> {
+					if (response.statusCode().isError()) {
+						return streamingError(SPEECH, response).flatMapMany(Flux::error);
+					}
+					try {
+						rejectJsonAudio(response.headers().contentType().orElse(null));
+					}
+					catch (OpenRouterProtocolException ex) {
+						return response.releaseBody().then(Mono.<byte[]>error(ex)).flux();
+					}
+					return response.bodyToFlux(DataBuffer.class).map(SpeechExchange::bytes);
+				})
+				.transform(OpenRouterApi.this::applyTimeout)
+				.filter(bytes -> bytes.length > 0)
+				.switchIfEmpty(
+						Flux.error(() -> new OpenRouterProtocolException(OpenRouterProtocolException.Kind.EMPTY_BODY,
+								SPEECH, "Empty OpenRouter " + SPEECH + " response")))
+				.onErrorMap(error -> TransportFailures.stream(SPEECH, OpenRouterApi.this.maxResponseBodyBytes, error));
+		}
+
+		private static byte[] bytes(DataBuffer buffer) {
+			try {
+				byte[] bytes = new byte[buffer.readableByteCount()];
+				buffer.read(bytes);
+				return bytes;
+			}
+			finally {
+				DataBufferUtils.release(buffer);
+			}
+		}
+
+		// A JSON body on a 2xx speech response is not audio; handing it to a player as
+		// mp3 would hide the problem.
+		private static void rejectJsonAudio(@Nullable MediaType contentType) {
+			if (contentType != null && (MediaType.APPLICATION_JSON.isCompatibleWith(contentType)
+					|| contentType.getSubtype().endsWith("+json"))) {
+				throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.CONTRACT, SPEECH,
+						"OpenRouter " + SPEECH + " returned " + contentType + " instead of audio");
+			}
+		}
+
+	}
+
 	private record BoundedBody(List<byte[]> chunks, int size, boolean exceeded) {
+
+		private static BoundedBody read(InputStream input, int limit) throws IOException {
+			List<byte[]> chunks = new ArrayList<>();
+			int size = 0;
+			while (size <= limit) {
+				int requested = Math.min(chunks.isEmpty() ? 1024 : 8192, limit + 1 - size);
+				byte[] chunk = input.readNBytes(requested);
+				if (chunk.length > 0) {
+					chunks.add(chunk);
+					size += chunk.length;
+				}
+				if (chunk.length < requested) {
+					break;
+				}
+			}
+			return new BoundedBody(chunks, size, size > limit);
+		}
 
 		private <T> T decode(ObjectMapper objectMapper, Class<T> responseType) throws IOException {
 			return objectMapper.readValue(chunks.size() == 1 ? chunks.get(0) : bytes(), responseType);

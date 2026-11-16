@@ -7,8 +7,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 /**
  * Matches when OpenRouter is selected for at least one supported model type. Chat,
- * embeddings and images count when their selector is unset; the audio models count only
- * when their selector names OpenRouter.
+ * embeddings and images count when their selector is unset; the opt-in audio models count
+ * only when their selector names OpenRouter.
  *
  * @author Subhransu De
  */
@@ -36,9 +36,7 @@ final class OpenRouterModelSelectionCondition extends AnyNestedCondition {
 
 	}
 
-	// The audio models were added after the others. An unset audio selector does not
-	// create the client, so an application that moved chat, embeddings and images to
-	// other providers needs no OpenRouter key; the audio models then back off with it.
+	// The audio models are opt-in, so only a selector that names OpenRouter counts.
 	@ConditionalOnProperty(name = SpringAIModelProperties.AUDIO_SPEECH_MODEL,
 			havingValue = OpenRouterIdentifiers.PROVIDER_ID)
 	private static final class SpeechModelSelected {

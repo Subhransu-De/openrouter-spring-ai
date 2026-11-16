@@ -39,6 +39,12 @@ public class OpenRouterAudioTranscriptionModel implements TranscriptionModel {
 	 */
 	public static final int DEFAULT_MAX_INLINE_AUDIO_BYTES = 25 * 1024 * 1024;
 
+	/**
+	 * The largest inline audio limit, 1 GiB. The base64 text of a much larger body would
+	 * not fit in a Java string.
+	 */
+	public static final int MAX_INLINE_AUDIO_BYTES = 1024 * 1024 * 1024;
+
 	private static final TranscriptionModelObservationConvention DEFAULT_OBSERVATION_CONVENTION = new DefaultTranscriptionModelObservationConvention();
 
 	private static final String PROVIDER_NAME = "openrouter";
@@ -154,7 +160,8 @@ public class OpenRouterAudioTranscriptionModel implements TranscriptionModel {
 		/**
 		 * Set the largest audio resource sent inline. A larger resource is rejected
 		 * before the request.
-		 * @param maxInlineAudioBytes the limit in bytes, greater than zero
+		 * @param maxInlineAudioBytes the limit in bytes, from 1 to
+		 * {@link OpenRouterAudioTranscriptionModel#MAX_INLINE_AUDIO_BYTES}
 		 * @return this builder
 		 */
 		public Builder maxInlineAudioBytes(int maxInlineAudioBytes) {

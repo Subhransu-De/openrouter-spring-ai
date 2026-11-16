@@ -12,7 +12,6 @@ import de.subhransu.openrouter.springai.audio.OpenRouterTimestampGranularity;
 import de.subhransu.openrouter.springai.audio.OpenRouterTranscriptionFormat;
 import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
 import de.subhransu.openrouter.springai.chat.OpenRouterTrace;
-import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -33,13 +32,22 @@ class OpenRouterAudioAutoConfigurationTests {
 
 	private static final String TRANSCRIPTION = "spring.ai.openrouter.audio.transcription.";
 
+	private static final String SELECT_SPEECH = "spring.ai.model.audio.speech=openrouter";
+
+	private static final String SELECT_TRANSCRIPTION = "spring.ai.model.audio.transcription=openrouter";
+
 	private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
 		.withConfiguration(AutoConfigurations.of(OpenRouterApiAutoConfiguration.class,
 				OpenRouterAudioSpeechAutoConfiguration.class, OpenRouterAudioTranscriptionAutoConfiguration.class));
 
 	@Test
-	void createsBothAudioModelsByDefault() {
-		this.contextRunner.withPropertyValues(API_KEY).run(context -> {
+	void audioModelsAreOptIn() {
+		this.contextRunner.withPropertyValues(API_KEY)
+			.run(context -> assertThat(context).hasNotFailed()
+				.hasSingleBean(OpenRouterApi.class)
+				.doesNotHaveBean(TextToSpeechModel.class)
+				.doesNotHaveBean(TranscriptionModel.class));
+		this.contextRunner.withPropertyValues(API_KEY, SELECT_SPEECH, SELECT_TRANSCRIPTION).run(context -> {
 			assertThat(context).hasNotFailed()
 				.hasSingleBean(OpenRouterAudioSpeechModel.class)
 				.hasSingleBean(OpenRouterAudioTranscriptionModel.class);
@@ -49,12 +57,28 @@ class OpenRouterAudioAutoConfigurationTests {
 	}
 
 	@Test
+	void anotherProvidersAudioModelIsNotDuplicatedWhenTheSelectorIsUnset() {
+		// Spring AI's own audio providers match an unset selector too, and back off only
+		// for
+		// their own type. Opt-in keeps an application that already uses one at one bean.
+		TextToSpeechModel speech = mock(TextToSpeechModel.class);
+		TranscriptionModel transcription = mock(TranscriptionModel.class);
+		this.contextRunner.withPropertyValues(API_KEY)
+			.withBean(TextToSpeechModel.class, () -> speech)
+			.withBean(TranscriptionModel.class, () -> transcription)
+			.run(context -> {
+				assertThat(context).hasNotFailed()
+					.hasSingleBean(TextToSpeechModel.class)
+					.hasSingleBean(TranscriptionModel.class);
+				assertThat(context.getBean(TextToSpeechModel.class)).isSameAs(speech);
+			});
+	}
+
+	@Test
 	void applicationModelsWin() {
 		TextToSpeechModel speech = mock(TextToSpeechModel.class);
 		TranscriptionModel transcription = mock(TranscriptionModel.class);
-		this.contextRunner
-			.withPropertyValues(API_KEY, "spring.ai.model.audio.speech=openrouter",
-					"spring.ai.model.audio.transcription=openrouter")
+		this.contextRunner.withPropertyValues(API_KEY, SELECT_SPEECH, SELECT_TRANSCRIPTION)
 			.withBean(TextToSpeechModel.class, () -> speech)
 			.withBean(TranscriptionModel.class, () -> transcription)
 			.run(context -> {
@@ -111,12 +135,11 @@ class OpenRouterAudioAutoConfigurationTests {
 	@Test
 	void bindsSpeechPropertiesIntoModelDefaults() {
 		this.contextRunner
-			.withPropertyValues(API_KEY, SPEECH + "model=synthetic/speech", SPEECH + "voice=alloy",
+			.withPropertyValues(API_KEY, SELECT_SPEECH, SPEECH + "model=synthetic/speech", SPEECH + "voice=alloy",
 					SPEECH + "format=mp3", SPEECH + "speed=1.25", SPEECH + "instructions=Calm.",
 					SPEECH + "user=synthetic-user", SPEECH + "session-id=garage-session",
 					SPEECH + "trace.trace-name=garage", SPEECH + "trace.metadata.bay=3",
-					SPEECH + "provider.order=provider-a,provider-b", SPEECH + "provider.allow-fallbacks=false",
-					SPEECH + "provider.data-collection=deny", SPEECH + "provider.ignore=provider-c")
+					SPEECH + "provider.data-collection=deny")
 			.run(context -> {
 				assertThat(context).hasNotFailed();
 				OpenRouterAudioSpeechOptions options = context.getBean(OpenRouterAudioSpeechModel.class).getOptions();
@@ -129,12 +152,8 @@ class OpenRouterAudioAutoConfigurationTests {
 				assertThat(options.getSessionId()).isEqualTo("garage-session");
 				assertThat(options.getTrace())
 					.isEqualTo(OpenRouterTrace.builder().traceName("garage").metadata(Map.of("bay", "3")).build());
-				assertThat(options.getProvider()).isEqualTo(OpenRouterProviderPreferences.builder()
-					.order(List.of("provider-a", "provider-b"))
-					.allowFallbacks(false)
-					.dataCollection("deny")
-					.ignore(List.of("provider-c"))
-					.build());
+				assertThat(options.getProvider())
+					.isEqualTo(OpenRouterProviderPreferences.builder().dataCollection("deny").build());
 			});
 	}
 
@@ -142,8 +161,9 @@ class OpenRouterAudioAutoConfigurationTests {
 	@Test
 	void bindsTranscriptionPropertiesIntoModelDefaults() {
 		this.contextRunner
-			.withPropertyValues(API_KEY, TRANSCRIPTION + "model=synthetic/transcription", TRANSCRIPTION + "language=en",
-					TRANSCRIPTION + "temperature=0.2", TRANSCRIPTION + "response-format=verbose-json",
+			.withPropertyValues(API_KEY, SELECT_TRANSCRIPTION, TRANSCRIPTION + "model=synthetic/transcription",
+					TRANSCRIPTION + "language=en", TRANSCRIPTION + "temperature=0.2",
+					TRANSCRIPTION + "response-format=verbose-json",
 					TRANSCRIPTION + "timestamp-granularities=word,segment", TRANSCRIPTION + "diarize=true",
 					TRANSCRIPTION + "keyterms=rotor,brake pad", TRANSCRIPTION + "audio-format=wav",
 					TRANSCRIPTION + "send-audio-url=true", TRANSCRIPTION + "session-id=garage-session",
@@ -176,9 +196,10 @@ class OpenRouterAudioAutoConfigurationTests {
 	@ParameterizedTest
 	@ValueSource(strings = { SPEECH + "format=wav", SPEECH + "speed=0", TRANSCRIPTION + "temperature=2",
 			TRANSCRIPTION + "audio-format=wav;base64", TRANSCRIPTION + "max-inline-audio-size=0B",
-			TRANSCRIPTION + "response-format=text" })
+			TRANSCRIPTION + "max-inline-audio-size=2GB", TRANSCRIPTION + "response-format=text" })
 	void invalidDefaultsFailAtStartup(String property) {
-		this.contextRunner.withPropertyValues(API_KEY, property).run(context -> assertThat(context).hasFailed());
+		this.contextRunner.withPropertyValues(API_KEY, SELECT_SPEECH, SELECT_TRANSCRIPTION, property)
+			.run(context -> assertThat(context).hasFailed());
 	}
 
 }

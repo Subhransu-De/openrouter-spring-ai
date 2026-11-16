@@ -16,7 +16,9 @@ import de.subhransu.openrouter.springai.chat.OpenRouterTrace;
 import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import io.micrometer.observation.tck.TestObservationRegistry;
+import java.io.ByteArrayInputStream;
 import java.net.MalformedURLException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
@@ -25,9 +27,13 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.audio.transcription.AudioTranscriptionPrompt;
 import org.springframework.ai.audio.transcription.AudioTranscriptionResponse;
+import org.springframework.ai.retry.TransientAiException;
 import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
+import org.springframework.core.retry.RetryPolicy;
+import org.springframework.core.retry.RetryTemplate;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -54,7 +60,9 @@ class OpenRouterAudioTranscriptionModelTests {
 	private static final String VERBOSE_RESPONSE = """
 			{"text":"Pads worn. Rotor fine.","task":"transcribe","language":"english","duration":3.1,
 			 "confidence":0.94,"language_confidence":0.98,
-			 "segments":[{"id":0,"start":0.0,"end":1.4,"text":"Pads worn.","speaker":0},null,
+			 "segments":[{"id":0,"seek":0,"start":0.0,"end":1.4,"text":"Pads worn.","tokens":[50364,13407],
+			              "temperature":0.0,"avg_logprob":-0.21,"compression_ratio":1.1,"no_speech_prob":0.01,
+			              "speaker":0},null,
 			             {"id":1,"start":1.4,"end":3.1,"text":"Rotor fine.","speaker_label":"B","channel":1}],
 			 "words":[{"word":"Pads","start":0.0,"end":0.5,"confidence":0.9,"speaker":0},
 			          {"word":"(laughter)","start":0.5,"end":0.7,"type":"audio_event"}],
@@ -112,8 +120,10 @@ class OpenRouterAudioTranscriptionModelTests {
 		assertThat(metadata.languageConfidence()).isEqualTo(0.98);
 		// The null segment from the provider is dropped, not fatal.
 		assertThat(metadata.segments()).containsExactly(
-				new OpenRouterTranscriptionMetadata.Segment(0, 0.0, 1.4, "Pads worn.", 0, null, null),
-				new OpenRouterTranscriptionMetadata.Segment(1, 1.4, 3.1, "Rotor fine.", null, "B", 1));
+				new OpenRouterTranscriptionMetadata.Segment(0, 0.0, 1.4, "Pads worn.", 0, null, null, 0,
+						List.of(50364, 13407), 0.0, -0.21, 1.1, 0.01),
+				new OpenRouterTranscriptionMetadata.Segment(1, 1.4, 3.1, "Rotor fine.", null, "B", 1, null, List.of(),
+						null, null, null, null));
 		assertThat(metadata.words()).containsExactly(
 				new OpenRouterTranscriptionMetadata.Word("Pads", 0.0, 0.5, null, 0.9, 0, null, null),
 				new OpenRouterTranscriptionMetadata.Word("(laughter)", 0.5, 0.7, "audio_event", null, null, null,
@@ -179,7 +189,7 @@ class OpenRouterAudioTranscriptionModelTests {
 	}
 
 	@Test
-	void invalidInputFailsBeforeAnyRequestIsSent() {
+	void invalidInputFailsBeforeAnyRequestIsSent() throws MalformedURLException {
 		Fixture fixture = fixture(OpenRouterAudioTranscriptionOptions.builder().model(MODEL).build(), 4);
 		fixture.server().expect(never(), requestTo(URL));
 
@@ -212,16 +222,70 @@ class OpenRouterAudioTranscriptionModelTests {
 						.build())))
 			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessageContaining("does not apply provider order; it accepts only dataCollection");
+		assertThatThrownBy(
+				() -> fixture.model().call(new AudioTranscriptionPrompt(resource(new byte[] { 1 }, "bay.wav~"))))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("\"wav~\" is not a valid audio format");
+		assertThatThrownBy(() -> fixture.model()
+			.call(new AudioTranscriptionPrompt(new UrlResource("https://garage.example/bay.recording-from-bay-3"),
+					OpenRouterAudioTranscriptionOptions.builder().sendAudioUrl(true).build())))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("is not a valid audio format");
 		assertThatThrownBy(() -> fixture(OpenRouterAudioTranscriptionOptions.builder().build()).model()
 			.call(new AudioTranscriptionPrompt(wav("bay.wav")))).hasMessageContaining("Transcription model");
 		fixture.server().verify();
 	}
 
 	@Test
+	void audioExactlyAtTheInlineLimitIsSent() {
+		Fixture fixture = fixture(OpenRouterAudioTranscriptionOptions.builder().model(MODEL).build(), WAV.length);
+		fixture.expectSuccess(JSON_RESPONSE);
+
+		fixture.model().call(new AudioTranscriptionPrompt(wav("bay.wav")));
+
+		assertThat(Base64.getDecoder().decode(this.requests.get(0).path("input_audio").path("data").asString()))
+			.containsExactly(WAV);
+		assertThatThrownBy(() -> OpenRouterAudioTranscriptionModel.builder()
+			.openRouterApi(api(RestClient.builder()))
+			.maxInlineAudioBytes(OpenRouterAudioTranscriptionModel.MAX_INLINE_AUDIO_BYTES + 1)
+			.build()).isInstanceOf(IllegalArgumentException.class);
+	}
+
+	@Test
+	void aRetryResendsTheAudioReadOnceFromAOneShotResource() {
+		RestClient.Builder restClient = RestClient.builder();
+		MockRestServiceServer server = MockRestServiceServer.bindTo(restClient).build();
+		server.expect(once(), requestTo(URL))
+			.andExpect(request -> this.requests.add(JSON.readTree(((MockClientHttpRequest) request).getBodyAsString())))
+			.andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS).contentType(MediaType.APPLICATION_JSON)
+				.body("{\"error\":{\"code\":429,\"message\":\"Rate limited\"}}"));
+		server.expect(once(), requestTo(URL))
+			.andExpect(request -> this.requests.add(JSON.readTree(((MockClientHttpRequest) request).getBodyAsString())))
+			.andRespond(withSuccess(JSON_RESPONSE, MediaType.APPLICATION_JSON));
+		OpenRouterAudioTranscriptionModel model = OpenRouterAudioTranscriptionModel.builder()
+			.openRouterApi(api(restClient))
+			.options(OpenRouterAudioTranscriptionOptions.builder().model(MODEL).audioFormat("wav").build())
+			.retryTemplate(new RetryTemplate(RetryPolicy.builder()
+				.maxRetries(1)
+				.delay(Duration.ofMillis(1))
+				.includes(TransientAiException.class)
+				.build()))
+			.build();
+
+		// An InputStreamResource can be read only once: a retry that read it again would
+		// fail.
+		model.call(new AudioTranscriptionPrompt(new InputStreamResource(new ByteArrayInputStream(WAV))));
+
+		assertThat(this.requests).hasSize(2);
+		assertThat(this.requests.get(1)).isEqualTo(this.requests.get(0));
+		server.verify();
+	}
+
+	@Test
 	void optionValuesAreCheckedWhenBuilt() {
 		assertThatThrownBy(() -> OpenRouterAudioTranscriptionOptions.builder().audioFormat("wav;base64"))
 			.isInstanceOf(IllegalArgumentException.class)
-			.hasMessageContaining("audioFormat \"wav;base64\"");
+			.hasMessageContaining("audioFormat \"wav;base64\" is not a valid audio format");
 		assertThatThrownBy(() -> OpenRouterAudioTranscriptionOptions.builder().temperature(1.5))
 			.isInstanceOf(IllegalArgumentException.class);
 		assertThatThrownBy(() -> OpenRouterAudioTranscriptionOptions.builder().keyterms(List.of("")))

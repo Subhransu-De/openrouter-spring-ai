@@ -7,48 +7,39 @@ import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Maps provider preferences for the audio endpoints, which accept fewer routing fields
- * than chat. A preference that the endpoint does not apply is rejected instead of being
+ * Maps provider preferences for the audio endpoints. OpenRouter's speech and
+ * transcription guides say that only the data policy preferences apply there, and that
+ * {@code order}, {@code only} and {@code ignore} are not applied. Of the typed
+ * preferences only {@code dataCollection} is sent; any other is rejected instead of being
  * silently ignored.
  *
  * @author Subhransu De
  */
 final class AudioProviderMapper {
 
-	static final String ALLOW_FALLBACKS = "allowFallbacks";
-
-	static final String DATA_COLLECTION = "dataCollection";
-
-	static final String ORDER = "order";
-
-	static final String IGNORE = "ignore";
-
 	private AudioProviderMapper() {
 	}
 
-	static @Nullable ProviderPreferences map(@Nullable OpenRouterProviderPreferences provider, String endpoint,
-			List<String> supported) {
+	static @Nullable ProviderPreferences map(@Nullable OpenRouterProviderPreferences provider, String endpoint) {
 		if (provider == null) {
 			return null;
 		}
 		List<String> unsupported = new ArrayList<>();
-		check(unsupported, supported, ALLOW_FALLBACKS, provider.allowFallbacks());
-		check(unsupported, supported, "requireParameters", provider.requireParameters());
-		check(unsupported, supported, DATA_COLLECTION, provider.dataCollection());
-		check(unsupported, supported, ORDER, provider.order());
-		check(unsupported, supported, IGNORE, provider.ignore());
-		check(unsupported, supported, "quantizations", provider.quantizations());
-		check(unsupported, supported, "sort", provider.sort());
+		add(unsupported, "allowFallbacks", provider.allowFallbacks());
+		add(unsupported, "requireParameters", provider.requireParameters());
+		add(unsupported, "order", provider.order());
+		add(unsupported, "ignore", provider.ignore());
+		add(unsupported, "quantizations", provider.quantizations());
+		add(unsupported, "sort", provider.sort());
 		if (!unsupported.isEmpty()) {
 			throw new IllegalArgumentException("OpenRouter " + endpoint + " does not apply provider "
-					+ String.join(", ", unsupported) + "; it accepts only " + String.join(", ", supported));
+					+ String.join(", ", unsupported) + "; it accepts only dataCollection");
 		}
-		return new ProviderPreferences(provider.allowFallbacks(), null, provider.dataCollection(), provider.order(),
-				provider.ignore(), null, null);
+		return new ProviderPreferences(null, null, provider.dataCollection(), null, null, null, null);
 	}
 
-	private static void check(List<String> unsupported, List<String> supported, String name, @Nullable Object value) {
-		if (value != null && !supported.contains(name)) {
+	private static void add(List<String> unsupported, String name, @Nullable Object value) {
+		if (value != null) {
 			unsupported.add(name);
 		}
 	}

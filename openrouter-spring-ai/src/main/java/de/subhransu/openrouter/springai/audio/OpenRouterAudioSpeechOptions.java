@@ -16,10 +16,10 @@ import org.springframework.ai.audio.tts.TextToSpeechOptions;
  * {@code trace}.
  *
  * <p>
- * Of the provider preferences, the endpoint accepts {@code allowFallbacks},
- * {@code dataCollection}, {@code order} and {@code ignore}. The others are rejected
- * before the request. Voice cloning through {@code input_references} and multi-speaker
- * input are not supported yet.
+ * OpenRouter applies only the data policy provider preferences to speech, so of the typed
+ * preferences only {@code dataCollection} is accepted. The others, including
+ * {@code order} and {@code ignore}, are rejected before the request. Voice cloning
+ * through {@code input_references} and multi-speaker input are not supported yet.
  *
  * @author Subhransu De
  */
@@ -229,9 +229,8 @@ public class OpenRouterAudioSpeechOptions implements TextToSpeechOptions {
 		}
 
 		/**
-		 * Set the provider routing preferences. The endpoint accepts
-		 * {@code allowFallbacks}, {@code dataCollection}, {@code order} and
-		 * {@code ignore}. A request that sets another preference is rejected.
+		 * Set the provider preferences. OpenRouter applies only {@code dataCollection} to
+		 * speech. A request that sets another preference is rejected.
 		 * @param provider the preferences, or {@code null}
 		 * @return this builder
 		 */

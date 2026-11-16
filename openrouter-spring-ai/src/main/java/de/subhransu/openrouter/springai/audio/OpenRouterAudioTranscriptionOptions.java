@@ -5,7 +5,6 @@ import de.subhransu.openrouter.springai.chat.OpenRouterTrace;
 import de.subhransu.openrouter.springai.support.OptionChecks;
 import de.subhransu.openrouter.springai.support.OptionSnapshots;
 import java.util.List;
-import java.util.regex.Pattern;
 import org.jspecify.annotations.Nullable;
 import org.springframework.ai.audio.transcription.AudioTranscriptionOptions;
 
@@ -31,8 +30,6 @@ import org.springframework.ai.audio.transcription.AudioTranscriptionOptions;
  * @author Subhransu De
  */
 public class OpenRouterAudioTranscriptionOptions implements AudioTranscriptionOptions {
-
-	private static final Pattern AUDIO_FORMAT = Pattern.compile("^[a-zA-Z0-9][a-zA-Z0-9+._-]{0,15}$");
 
 	private static final int MAX_KEYTERMS = 1000;
 
@@ -294,10 +291,7 @@ public class OpenRouterAudioTranscriptionOptions implements AudioTranscriptionOp
 		 * @return this builder
 		 */
 		public Builder audioFormat(@Nullable String audioFormat) {
-			if (audioFormat != null && !AUDIO_FORMAT.matcher(audioFormat).matches()) {
-				throw new IllegalArgumentException("audioFormat " + OptionChecks.describe(audioFormat)
-						+ " must be 1 to 16 letters, digits or +._- and start with a letter or digit");
-			}
+			OptionChecks.audioFormat("audioFormat", audioFormat);
 			this.options.audioFormat = audioFormat;
 			return this;
 		}

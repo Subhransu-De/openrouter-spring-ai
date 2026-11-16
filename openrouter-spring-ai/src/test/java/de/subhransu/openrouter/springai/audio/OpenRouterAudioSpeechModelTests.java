@@ -58,6 +58,10 @@ class OpenRouterAudioSpeechModelTests {
 
 	private static final Duration TIMEOUT = Duration.ofSeconds(5);
 
+	private static final String STREAM_TEXT = "Stream the note.";
+
+	private static final String JSON_TYPE = "application/json";
+
 	private final ObjectMapper json = new ObjectMapper();
 
 	private final List<JsonNode> requests = new CopyOnWriteArrayList<>();
@@ -100,12 +104,7 @@ class OpenRouterAudioSpeechModelTests {
 			.user("synthetic-user")
 			.sessionId("default-session")
 			.trace(OpenRouterTrace.builder().traceName("garage").metadata(Map.of("bay", "3")).build())
-			.provider(OpenRouterProviderPreferences.builder()
-				.order(List.of("provider-a"))
-				.allowFallbacks(false)
-				.dataCollection("deny")
-				.ignore(List.of("provider-b"))
-				.build())
+			.provider(OpenRouterProviderPreferences.builder().dataCollection("deny").build())
 			.build();
 		OpenRouterAudioSpeechModel model = model(exchange -> respond(exchange, 200, "audio/mpeg", MP3), defaults);
 
@@ -126,9 +125,7 @@ class OpenRouterAudioSpeechModelTests {
 		assertThat(request.path("session_id").asString()).isEqualTo("request-session");
 		// A request trace replaces the default trace as a whole.
 		assertThat(request.path("trace")).isEqualTo(this.json.readTree("{\"trace_id\":\"run-7\"}"));
-		assertThat(request.path("provider"))
-			.isEqualTo(this.json.readTree("{\"allow_fallbacks\":false,\"data_collection\":\"deny\","
-					+ "\"order\":[\"provider-a\"],\"ignore\":[\"provider-b\"]}"));
+		assertThat(request.path("provider")).isEqualTo(this.json.readTree("{\"data_collection\":\"deny\"}"));
 		assertThat(request.has("input_references")).isFalse();
 	}
 
@@ -173,10 +170,15 @@ class OpenRouterAudioSpeechModelTests {
 		assertThatThrownBy(() -> model.call(new TextToSpeechPrompt("Hello.",
 				OpenRouterAudioSpeechOptions.builder()
 					.model(MODEL)
-					.provider(OpenRouterProviderPreferences.builder().sort("price").requireParameters(true).build())
+					.provider(OpenRouterProviderPreferences.builder()
+						.order(List.of("provider-a"))
+						.allowFallbacks(false)
+						.sort("price")
+						.build())
 					.build())))
 			.isInstanceOf(IllegalArgumentException.class)
-			.hasMessageContaining("does not apply provider requireParameters, sort");
+			.hasMessageContaining(
+					"does not apply provider allowFallbacks, order, sort; it accepts only dataCollection");
 		assertThat(this.requests).isEmpty();
 	}
 
@@ -195,14 +197,14 @@ class OpenRouterAudioSpeechModelTests {
 			exchange.close();
 		});
 
-		StepVerifier.create(model.stream(new TextToSpeechPrompt("Stream the note.")))
+		StepVerifier.create(model.stream(new TextToSpeechPrompt(STREAM_TEXT)))
 			.assertNext(response -> assertThat(response.getResult().getOutput()).containsExactly(1, 2, 3))
 			.then(firstChunkSeen::countDown)
 			.assertNext(response -> assertThat(response.getResult().getOutput()).containsExactly(4, 5))
 			.expectComplete()
 			.verify(TIMEOUT);
 		assertThat(this.requests).singleElement()
-			.satisfies(request -> assertThat(request.path("input").asString()).isEqualTo("Stream the note."));
+			.satisfies(request -> assertThat(request.path("input").asString()).isEqualTo(STREAM_TEXT));
 		// A compressing server could hold chunks back, so the stream asks for none.
 		assertThat(this.acceptEncodings).containsExactly("identity");
 	}
@@ -218,7 +220,7 @@ class OpenRouterAudioSpeechModelTests {
 			exchange.close();
 		});
 
-		StepVerifier.create(model.stream(new TextToSpeechPrompt("Stream the note.")))
+		StepVerifier.create(model.stream(new TextToSpeechPrompt(STREAM_TEXT)))
 			.assertNext(response -> assertThat(response.getResult().getOutput()).containsExactly(1, 2, 3))
 			.expectError(OpenRouterTransportException.class)
 			.verify(TIMEOUT);
@@ -243,7 +245,7 @@ class OpenRouterAudioSpeechModelTests {
 			.options(OpenRouterAudioSpeechOptions.builder().model(MODEL).build())
 			.build();
 
-		StepVerifier.create(model.stream(new TextToSpeechPrompt("Stream the note.")))
+		StepVerifier.create(model.stream(new TextToSpeechPrompt(STREAM_TEXT)))
 			.assertNext(response -> assertThat(response.getResult().getOutput()).containsExactly(9))
 			.thenCancel()
 			.verify(TIMEOUT);
@@ -254,7 +256,7 @@ class OpenRouterAudioSpeechModelTests {
 	void providerErrorsAreClassifiedInCallsAndStreams() {
 		String error = "{\"error\":{\"code\":400,\"message\":\"Voice not found\"}}";
 		OpenRouterAudioSpeechModel model = model(
-				exchange -> respond(exchange, 400, "application/json", error.getBytes(StandardCharsets.UTF_8)));
+				exchange -> respond(exchange, 400, JSON_TYPE, error.getBytes(StandardCharsets.UTF_8)));
 
 		assertThatThrownBy(() -> model.call(new TextToSpeechPrompt("Hello.")))
 			.isInstanceOfSatisfying(OpenRouterNonTransientApiException.class, failure -> {
@@ -272,7 +274,7 @@ class OpenRouterAudioSpeechModelTests {
 		int[] attempts = { 0 };
 		OpenRouterAudioSpeechModel model = model(exchange -> {
 			if (attempts[0]++ == 0) {
-				respond(exchange, 429, "application/json",
+				respond(exchange, 429, JSON_TYPE,
 						"{\"error\":{\"code\":429,\"message\":\"Rate limited\"}}".getBytes(StandardCharsets.UTF_8));
 			}
 			else {
@@ -285,9 +287,29 @@ class OpenRouterAudioSpeechModelTests {
 	}
 
 	@Test
+	void aRateLimitIsRetriedBeforeTheFirstStreamedChunk() {
+		int[] attempts = { 0 };
+		OpenRouterAudioSpeechModel model = model(exchange -> {
+			if (attempts[0]++ == 0) {
+				respond(exchange, 429, JSON_TYPE,
+						"{\"error\":{\"code\":429,\"message\":\"Rate limited\"}}".getBytes(StandardCharsets.UTF_8));
+			}
+			else {
+				respond(exchange, 200, "audio/mpeg", MP3);
+			}
+		});
+
+		StepVerifier.create(model.stream(new TextToSpeechPrompt(STREAM_TEXT)))
+			.assertNext(response -> assertThat(response.getResult().getOutput()).containsExactly(MP3))
+			.expectComplete()
+			.verify(TIMEOUT);
+		assertThat(this.requests).hasSize(2);
+	}
+
+	@Test
 	void aJsonOrEmptySuccessBodyIsNotReturnedAsAudio() {
 		OpenRouterAudioSpeechModel json = model(
-				exchange -> respond(exchange, 200, "application/json", "{}".getBytes(StandardCharsets.UTF_8)));
+				exchange -> respond(exchange, 200, JSON_TYPE, "{}".getBytes(StandardCharsets.UTF_8)));
 
 		assertThatThrownBy(() -> json.call(new TextToSpeechPrompt("Hello."))).isInstanceOfSatisfying(
 				OpenRouterProtocolException.class,
@@ -312,24 +334,33 @@ class OpenRouterAudioSpeechModelTests {
 	@Tag("observability.observations")
 	@Test
 	void callsAndStreamsAreObservedAsTextToSpeechOperations() {
-		TestObservationRegistry registry = TestObservationRegistry.create();
-		OpenRouterAudioSpeechModel model = OpenRouterAudioSpeechModel.builder()
-			.openRouterApi(api(exchange -> respond(exchange, 200, "audio/mpeg", MP3)))
-			.options(OpenRouterAudioSpeechOptions.builder().model(MODEL).voice("alloy").format("mp3").build())
-			.observationRegistry(registry)
-			.build();
+		TestObservationRegistry calls = TestObservationRegistry.create();
+		TestObservationRegistry streams = TestObservationRegistry.create();
+		OpenRouterApi api = api(exchange -> respond(exchange, 200, "audio/mpeg", MP3));
 
-		model.call(new TextToSpeechPrompt("Hello."));
-		model.stream(new TextToSpeechPrompt("Hello.")).blockLast(TIMEOUT);
+		observed(api, calls).call(new TextToSpeechPrompt("Hello."));
+		observed(api, streams).stream(new TextToSpeechPrompt("Hello.")).blockLast(TIMEOUT);
 
-		assertThat(registry).hasNumberOfObservationsWithNameEqualTo("gen_ai.client.operation", 2)
-			.hasObservationWithNameEqualTo("gen_ai.client.operation")
-			.that()
+		assertThat(calls).hasSingleObservationThat()
+			.hasNameEqualTo("gen_ai.client.operation")
 			.hasLowCardinalityKeyValue("gen_ai.operation.name", "text_to_speech")
 			.hasLowCardinalityKeyValue("gen_ai.system", "openrouter")
 			.hasLowCardinalityKeyValue("gen_ai.request.model", MODEL)
 			.hasHighCardinalityKeyValue("gen_ai.request.audio.voice", "alloy")
+			.doesNotHaveHighCardinalityKeyValueWithKey("gen_ai.request.stream")
 			.hasBeenStopped();
+		assertThat(streams).hasSingleObservationThat()
+			.hasLowCardinalityKeyValue("gen_ai.operation.name", "text_to_speech")
+			.hasHighCardinalityKeyValue("gen_ai.request.stream", "true")
+			.hasBeenStopped();
+	}
+
+	private static OpenRouterAudioSpeechModel observed(OpenRouterApi api, TestObservationRegistry registry) {
+		return OpenRouterAudioSpeechModel.builder()
+			.openRouterApi(api)
+			.options(OpenRouterAudioSpeechOptions.builder().model(MODEL).voice("alloy").format("mp3").build())
+			.observationRegistry(registry)
+			.build();
 	}
 
 	private OpenRouterAudioSpeechModel model(Handler handler) {

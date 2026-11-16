@@ -1,9 +1,7 @@
 package de.subhransu.openrouter.springai.autoconfigure;
 
 import de.subhransu.openrouter.springai.audio.OpenRouterAudioSpeechOptions;
-import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
 import de.subhransu.openrouter.springai.chat.OpenRouterTrace;
-import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.NestedConfigurationProperty;
@@ -57,9 +55,9 @@ public class OpenRouterAudioSpeechProperties {
 	private @Nullable OpenRouterTrace trace;
 
 	/**
-	 * Provider routing preferences that the speech endpoint accepts.
+	 * Provider preferences. OpenRouter applies only data-collection to audio requests.
 	 */
-	private final Provider provider = new Provider();
+	private final OpenRouterAudioProviderProperties provider = new OpenRouterAudioProviderProperties();
 
 	public OpenRouterAudioSpeechOptions toOptions() {
 		return OpenRouterAudioSpeechOptions.builder()
@@ -139,78 +137,8 @@ public class OpenRouterAudioSpeechProperties {
 		this.trace = trace;
 	}
 
-	public Provider getProvider() {
+	public OpenRouterAudioProviderProperties getProvider() {
 		return this.provider;
-	}
-
-	public static class Provider {
-
-		/**
-		 * Whether OpenRouter may route to other upstream providers when the preferred
-		 * ones are unavailable.
-		 */
-		private @Nullable Boolean allowFallbacks;
-
-		/**
-		 * Data collection policy that upstream providers must meet: allow or deny.
-		 */
-		private @Nullable String dataCollection;
-
-		/**
-		 * Comma-separated list of upstream provider slugs to try in order.
-		 */
-		private @Nullable List<String> order;
-
-		/**
-		 * Comma-separated list of upstream provider slugs never to route to.
-		 */
-		private @Nullable List<String> ignore;
-
-		@Nullable OpenRouterProviderPreferences toPreferences() {
-			if (this.allowFallbacks == null && this.dataCollection == null && this.order == null
-					&& this.ignore == null) {
-				return null;
-			}
-			return OpenRouterProviderPreferences.builder()
-				.allowFallbacks(this.allowFallbacks)
-				.dataCollection(this.dataCollection)
-				.order(this.order)
-				.ignore(this.ignore)
-				.build();
-		}
-
-		public @Nullable Boolean getAllowFallbacks() {
-			return this.allowFallbacks;
-		}
-
-		public void setAllowFallbacks(@Nullable Boolean allowFallbacks) {
-			this.allowFallbacks = allowFallbacks;
-		}
-
-		public @Nullable String getDataCollection() {
-			return this.dataCollection;
-		}
-
-		public void setDataCollection(@Nullable String dataCollection) {
-			this.dataCollection = dataCollection;
-		}
-
-		public @Nullable List<String> getOrder() {
-			return this.order;
-		}
-
-		public void setOrder(@Nullable List<String> order) {
-			this.order = order;
-		}
-
-		public @Nullable List<String> getIgnore() {
-			return this.ignore;
-		}
-
-		public void setIgnore(@Nullable List<String> ignore) {
-			this.ignore = ignore;
-		}
-
 	}
 
 }

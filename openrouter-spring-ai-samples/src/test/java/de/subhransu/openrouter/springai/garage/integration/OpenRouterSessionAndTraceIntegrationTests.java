@@ -14,6 +14,7 @@ import de.subhransu.openrouter.springai.autoconfigure.OpenRouterImageAutoConfigu
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterTrace;
 import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingOptions;
+import de.subhransu.openrouter.springai.image.OpenRouterImageModel;
 import de.subhransu.openrouter.springai.image.OpenRouterImageOptions;
 import java.time.Duration;
 import java.util.List;
@@ -65,6 +66,7 @@ class OpenRouterSessionAndTraceIntegrationTests {
           OpenRouterAudioTranscriptionAutoConfiguration.class))
       .withPropertyValues("spring.ai.openrouter.api-key=garage-mock-key",
           "spring.ai.openrouter.base-url=" + OpenRouterMock.baseUrl(),
+          "spring.ai.model.audio.speech=openrouter", "spring.ai.model.audio.transcription=openrouter",
           "spring.ai.openrouter.chat.model=synthetic/chat",
           "spring.ai.openrouter.embedding.model=synthetic/embedding",
           "spring.ai.openrouter.image.model=synthetic/image",
@@ -86,23 +88,31 @@ class OpenRouterSessionAndTraceIntegrationTests {
     run(context -> {
       // ChatClient merges request options onto the model defaults; a raw ChatModel call
       // would replace them.
-      ChatClient.create(context.getBean(ChatModel.class)).prompt("Is the car ready?")
-          .options(OpenRouterChatOptions.builder().metadata(ATTRIBUTION)).call().content();
+      ChatClient chat = ChatClient.create(context.getBean(ChatModel.class));
+      for (OpenRouterRequestMode mode : OpenRouterRequestMode.values()) {
+        chat.prompt("Is the car ready?")
+            .options(OpenRouterChatOptions.builder().requestMode(mode).metadata(ATTRIBUTION)).call().content();
+      }
       context.getBean(EmbeddingModel.class)
           .embed(List.of("brakes", "tyres", "oil", "battery", "wipers"));
-      context.getBean(ImageModel.class).call(new ImagePrompt("A clean service bay."));
+      OpenRouterImageModel images = context.getBean(OpenRouterImageModel.class);
+      images.call(new ImagePrompt("A clean service bay."));
+      images.stream(new ImagePrompt("A clean service bay.")).blockLast(Duration.ofSeconds(10));
       context.getBean(TextToSpeechModel.class).call(new TextToSpeechPrompt("Ready for pickup."));
       context.getBean(TranscriptionModel.class).call(new AudioTranscriptionPrompt(
           new ClassPathResource("openrouter-mock/media/inspection-note.wav")));
     });
 
-    for (String path : List.of("/chat/completions", "/embeddings", "/images", "/audio/speech",
+    // The image path is called and streamed, so it has two requests.
+    for (String path : List.of("/chat/completions", "/responses", "/embeddings", "/images", "/audio/speech",
         "/audio/transcriptions")) {
-      assertThat(OpenRouterMock.requests(path)).as(path).singleElement().satisfies(request -> {
+      List<JsonNode> requests = OpenRouterMock.requests(path);
+      assertThat(requests).as(path).hasSize("/images".equals(path) ? 2 : 1).allSatisfy(request -> {
         assertThat(request.path("session_id").asString()).isEqualTo("garage-default");
         assertThat(request.path("trace")).isEqualTo(JSON.readTree(DEFAULT_TRACE));
       });
     }
+    assertThat(OpenRouterMock.requests("/images").get(1).path("stream").asBoolean()).isTrue();
   }
 
   @ParameterizedTest
