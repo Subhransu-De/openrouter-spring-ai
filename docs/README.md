@@ -21,7 +21,7 @@ Pick a route:
 | [Reasoning and prompt caching](reasoning-and-caching.md)  | How do reasoning replay and cache breakpoints work?                            |
 | [Errors and retries](errors-and-retries.md)               | Which exceptions occur, and what is retried?                                   |
 | [HTTP, timeouts and limits](http-and-limits.md)           | How do I tune the transport, timeouts and limits?                              |
-| [Images, documents and audio](multimodal.md)              | How do I send or generate images, documents and audio?                         |
+| [Images, documents and audio](multimodal.md)              | How do I send or generate images, documents and audio, or transcribe speech?   |
 | [Embeddings](embeddings.md)                               | How do I configure embeddings?                                                 |
 | [Observability](observability.md)                         | Where do usage, cost and observations appear?                                  |
 | [The Garage demo](garage.md)                              | How do I run the sample application?                                           |

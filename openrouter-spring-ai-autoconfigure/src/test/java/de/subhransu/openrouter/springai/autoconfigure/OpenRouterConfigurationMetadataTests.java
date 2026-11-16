@@ -34,7 +34,7 @@ class OpenRouterConfigurationMetadataTests {
 		assertThat(properties)
 			.filteredOn((property) -> property.path("sourceType").asString("").startsWith(NESTED_SOURCE_PREFIX))
 			.as("nested core-type keys")
-			.hasSize(42);
+			.hasSize(54);
 		assertThat(properties).allSatisfy(
 				(property) -> assertThat(property.path("description").asString("")).as(property.path("name").asString())
 					.isNotBlank());

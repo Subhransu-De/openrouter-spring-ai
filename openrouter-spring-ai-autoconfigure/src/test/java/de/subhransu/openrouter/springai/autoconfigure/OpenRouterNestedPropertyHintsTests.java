@@ -36,7 +36,9 @@ class OpenRouterNestedPropertyHintsTests {
 				Arguments.of(OpenRouterEmbeddingProperties.class, OpenRouterProviderPreferences.class),
 				Arguments.of(OpenRouterChatProperties.class, OpenRouterTrace.class),
 				Arguments.of(OpenRouterEmbeddingProperties.class, OpenRouterTrace.class),
-				Arguments.of(OpenRouterImageProperties.class, OpenRouterTrace.class));
+				Arguments.of(OpenRouterImageProperties.class, OpenRouterTrace.class),
+				Arguments.of(OpenRouterAudioSpeechProperties.class, OpenRouterTrace.class),
+				Arguments.of(OpenRouterAudioTranscriptionProperties.class, OpenRouterTrace.class));
 	}
 
 	@Tag("build-release")

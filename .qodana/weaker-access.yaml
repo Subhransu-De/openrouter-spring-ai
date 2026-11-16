@@ -11,6 +11,7 @@ inspections:
       - "scope#src:de.subhransu.openrouter.springai.chat.*"
       - "scope#src:de.subhransu.openrouter.springai.embedding.*"
       - "scope#src:de.subhransu.openrouter.springai.image.*"
+      - "scope#src:de.subhransu.openrouter.springai.audio.*"
       - "scope#src:de.subhransu.openrouter.springai.api.OpenRouterApi"
       - "scope#src:de.subhransu.openrouter.springai.api.OpenRouterRequestMode"
       - "scope#src:de.subhransu.openrouter.springai.api.dto..*"

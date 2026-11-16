@@ -11,6 +11,9 @@ import de.subhransu.openrouter.springai.api.dto.ImagesStreamEvent;
 import de.subhransu.openrouter.springai.api.dto.ResponsesRequest;
 import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
 import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
+import de.subhransu.openrouter.springai.api.dto.SpeechRequest;
+import de.subhransu.openrouter.springai.api.dto.TranscriptionRequest;
+import de.subhransu.openrouter.springai.api.dto.TranscriptionResponse;
 import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
 import de.subhransu.openrouter.springai.errors.OpenRouterHttpExceptionFactory;
 import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException;
@@ -64,6 +67,12 @@ public class OpenRouterApi {
 	public static final int DEFAULT_MAX_ERROR_BODY_BYTES = 64 * 1024;
 
 	private static final String IMAGES = "/images";
+
+	private static final String SPEECH = "/audio/speech";
+
+	// Errors arrive as JSON, so the speech request accepts both.
+	private static final List<MediaType> AUDIO_OR_ERROR = List.of(new MediaType("audio", "*"),
+			MediaType.APPLICATION_JSON);
 
 	private static final ParameterizedTypeReference<ServerSentEvent<String>> STRING_SSE_TYPE = new ParameterizedTypeReference<>() {
 	};
@@ -181,6 +190,82 @@ public class OpenRouterApi {
 		return blockingPost("/images", request, ImagesResponse.class);
 	}
 
+	public TranscriptionResponse transcription(TranscriptionRequest request) {
+		return blockingPost("/audio/transcriptions", request, TranscriptionResponse.class);
+	}
+
+	/**
+	 * Synthesize speech and return the complete audio. The body is buffered up to the
+	 * maximum response body size; use {@link #speechStream(SpeechRequest)} for long
+	 * audio.
+	 * @param request the speech request
+	 * @return the audio bytes in the requested format
+	 */
+	public byte[] speech(SpeechRequest request) {
+		var outgoing = this.restClient.post().uri(SPEECH).accept(AUDIO_OR_ERROR.toArray(MediaType[]::new));
+		if (this.customObjectMapper) {
+			outgoing.body(output -> this.objectMapper.writeValue(output, request));
+		}
+		else {
+			outgoing.body(request);
+		}
+		return TransportFailures.blocking(SPEECH, () -> outgoing.exchange((httpRequest, response) -> {
+			BoundedBody body = checkedBody(SPEECH, response);
+			rejectJsonAudio(response.getHeaders().getContentType());
+			return body.bytes();
+		}));
+	}
+
+	/**
+	 * Synthesize speech and emit the audio bytes as they arrive, without buffering the
+	 * whole body. The connection timeout bounds the wait for each chunk. A connection
+	 * that closes early fails the stream; cancelling the subscription closes the
+	 * connection.
+	 * @param request the speech request
+	 * @return the audio chunks in arrival order
+	 */
+	public Flux<byte[]> speechStream(SpeechRequest request) {
+		// A server compressing the body may hold chunks back to fill its compression
+		// window, which defeats streaming; encoded audio gains little from gzip anyway.
+		return streamingPost(SPEECH, request, AUDIO_OR_ERROR).header(HttpHeaders.ACCEPT_ENCODING, "identity")
+			.exchangeToFlux(response -> {
+				if (response.statusCode().isError()) {
+					return streamingError(SPEECH, response).flatMapMany(Flux::error);
+				}
+				try {
+					rejectJsonAudio(response.headers().contentType().orElse(null));
+				}
+				catch (OpenRouterProtocolException ex) {
+					return response.releaseBody().then(Mono.<byte[]>error(ex)).flux();
+				}
+				return response.bodyToFlux(DataBuffer.class).map(buffer -> {
+					try {
+						byte[] bytes = new byte[buffer.readableByteCount()];
+						buffer.read(bytes);
+						return bytes;
+					}
+					finally {
+						DataBufferUtils.release(buffer);
+					}
+				});
+			})
+			.transform(this::applyTimeout)
+			.filter(bytes -> bytes.length > 0)
+			.switchIfEmpty(Flux.error(() -> new OpenRouterProtocolException(OpenRouterProtocolException.Kind.EMPTY_BODY,
+					SPEECH, "Empty OpenRouter " + SPEECH + " response")))
+			.onErrorMap(error -> TransportFailures.stream(SPEECH, this.maxResponseBodyBytes, error));
+	}
+
+	// A JSON body on a 2xx speech response is not audio; handing it to a player as mp3
+	// would hide the problem.
+	private static void rejectJsonAudio(@Nullable MediaType contentType) {
+		if (contentType != null && (MediaType.APPLICATION_JSON.isCompatibleWith(contentType)
+				|| contentType.getSubtype().endsWith("+json"))) {
+			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.CONTRACT, SPEECH,
+					"OpenRouter " + SPEECH + " returned " + contentType + " instead of audio");
+		}
+	}
+
 	private <T> T blockingPost(String uri, Object request, Class<T> responseType) {
 		var outgoing = this.restClient.post().uri(uri);
 		if (this.customObjectMapper) {
@@ -203,6 +288,26 @@ public class OpenRouterApi {
 
 	private <T> T readBlockingResponse(String uri, ClientHttpResponse response, Class<T> responseType)
 			throws IOException {
+		BoundedBody body = checkedBody(uri, response);
+		try {
+			T decoded = body.decode(this.objectMapper, responseType);
+			if (decoded == null) {
+				throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.EMPTY_BODY, uri,
+						"Null OpenRouter " + uri + " response");
+			}
+			return decoded;
+		}
+		catch (JacksonException ex) {
+			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.DECODE, uri,
+					"Failed to decode OpenRouter " + uri + " response", ex);
+		}
+	}
+
+	/**
+	 * Read a non-empty success body within the response limit, or throw the classified
+	 * error for an error status.
+	 */
+	private BoundedBody checkedBody(String uri, ClientHttpResponse response) throws IOException {
 		HttpStatusCode statusCode = response.getStatusCode();
 		int limit = statusCode.isError() ? this.maxErrorBodyBytes : this.maxResponseBodyBytes;
 		BoundedBody body = readBounded(response.getBody(), limit);
@@ -223,18 +328,7 @@ public class OpenRouterApi {
 			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.EMPTY_BODY, uri,
 					"Empty OpenRouter " + uri + " response");
 		}
-		try {
-			T decoded = body.decode(this.objectMapper, responseType);
-			if (decoded == null) {
-				throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.EMPTY_BODY, uri,
-						"Null OpenRouter " + uri + " response");
-			}
-			return decoded;
-		}
-		catch (JacksonException ex) {
-			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.DECODE, uri,
-					"Failed to decode OpenRouter " + uri + " response", ex);
-		}
+		return body;
 	}
 
 	private BoundedBody readBounded(InputStream input, int limit) throws IOException {
@@ -310,7 +404,11 @@ public class OpenRouterApi {
 	}
 
 	private WebClient.RequestHeadersSpec<?> streamingPost(String uri, Object request) {
-		var outgoing = this.webClient.post().uri(uri).accept(MediaType.TEXT_EVENT_STREAM);
+		return streamingPost(uri, request, List.of(MediaType.TEXT_EVENT_STREAM));
+	}
+
+	private WebClient.RequestHeadersSpec<?> streamingPost(String uri, Object request, List<MediaType> accept) {
+		var outgoing = this.webClient.post().uri(uri).accept(accept.toArray(MediaType[]::new));
 		if (!this.customObjectMapper) {
 			return outgoing.bodyValue(request);
 		}

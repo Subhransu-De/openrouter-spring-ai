@@ -1,0 +1,24 @@
+{
+  "name": "audio-speech-mp3",
+  "priority": 20,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/audio/speech",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.response_format == 'mp3')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "audio/mpeg"
+    },
+    "bodyFileName": "audio/speech.mp3",
+    "chunkedDribbleDelay": {
+      "numberOfChunks": 4,
+      "totalDuration": 200
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "text": "Front brake pads are at three millimetres. Recommend replacement before pickup.",
+  "usage": {
+    "cost": 0.000312,
+    "input_tokens": 64,
+    "output_tokens": 18,
+    "seconds": 4.6,
+    "total_tokens": 82
+  }
+}

@@ -86,7 +86,7 @@ String answer = client.prompt().user(question)
     .call().content();
 ```
 
-Both options work in Chat Completions and Responses mode, in calls and streams. `OpenRouterEmbeddingOptions` and `OpenRouterImageOptions` have the same two options. For embeddings and images OpenRouter uses the session ID only for observability and does not send it to the upstream provider.
+Both options work in Chat Completions and Responses mode, in calls and streams. `OpenRouterEmbeddingOptions`, `OpenRouterImageOptions`, `OpenRouterAudioSpeechOptions` and `OpenRouterAudioTranscriptionOptions` have the same two options. For embeddings, images and audio OpenRouter uses the session ID only for observability and does not send it to the upstream provider.
 
 A request `sessionId` overrides the default. A request `trace` replaces the default trace as a whole; it does not merge with it field by field. The builders reject a `sessionId` longer than 256 characters, OpenRouter's limit, and a `metadata` key that repeats a named trace field, such as `trace_id`. Boot defaults are checked at startup:
 
