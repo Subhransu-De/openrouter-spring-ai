@@ -1,30 +1,12 @@
 # OpenRouter Spring AI documentation
 
-Start with [Getting started](getting-started.md).
+These pages hold what the source cannot tell you: upstream provider behavior, design decisions, compatibility promises and operational advice. For options, defaults, exceptions and limits, read the Javadoc and the `spring.ai.openrouter.*` property metadata.
 
 ![A call goes from your app through Spring AI's ChatClient into this library's model and API client, then to OpenRouter, which routes it to an upstream provider.](images/architecture.svg)
 
-Pick a route:
-
-- **First app:** [Getting started](getting-started.md), then [Chat options](chat-options.md).
-- **Tools and conversations:** [Tool calling](tool-calling.md), [Reasoning and prompt caching](reasoning-and-caching.md), [Images, documents and audio](multimodal.md).
-- **Production:** [Errors and retries](errors-and-retries.md), [HTTP, timeouts and limits](http-and-limits.md), [Observability](observability.md).
-
-| Page                                                                  | Answers                                                                        |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| [Getting started](getting-started.md)                                 | How do I install it and make a first call?                                     |
-| [Switching from Spring AI's OpenAI starter](switching-from-openai.md) | What changes when I move from the OpenAI starter?                              |
-| [Chat options](chat-options.md)                                       | How do request options combine with defaults? Where are fallbacks and routing? |
-| [Request modes](request-modes.md)                                     | Chat Completions or Responses? How do structured output and tool choice work?  |
-| [Supported API and nullability](api.md)                               | Which types are supported? What can be null?                                   |
-| [Optional request and response extensions](extensions.md)             | How do I send fields that have no typed option?                                |
-| [Tool calling](tool-calling.md)                                       | How do tools and tool failures work?                                           |
-| [Reasoning and prompt caching](reasoning-and-caching.md)              | How do reasoning replay and cache breakpoints work?                            |
-| [Errors and retries](errors-and-retries.md)                           | Which exceptions occur, and what is retried?                                   |
-| [HTTP, timeouts and limits](http-and-limits.md)                       | How do I tune the transport, timeouts and limits?                              |
-| [Images, documents and audio](multimodal.md)                          | How do I send or generate images, documents and audio, or transcribe speech?   |
-| [Embeddings](embeddings.md)                                           | How do I configure embeddings?                                                 |
-| [Observability](observability.md)                                     | Where do usage, cost and observations appear?                                  |
-| [The Garage demo](garage.md)                                          | How do I run the sample application?                                           |
-
-Release history is in [CHANGELOG.md](../CHANGELOG.md).
+- [Getting started](getting-started.md): tested versions, and pitfalls next to another provider starter.
+- [Chat](chat.md): request modes, sessions, structured output, tools, reasoning, prompt caching and extra fields.
+- [Media and embeddings](media-and-embeddings.md): attachments, image generation, chat audio, speech, transcription and embedding migration.
+- [Production](production.md): retries and billing, timeouts, HTTP customization, stream limits and cost.
+- [Supported API](api.md): the types you can depend on.
+- [The Garage demo](garage.md): the sample application and what its evidence proves.

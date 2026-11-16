@@ -1,114 +1,6 @@
 # Getting started
 
-This page creates a new Spring Boot application that calls OpenRouter through Spring AI, lists the main properties, and explains how the starter picks models.
-
-## Install and make a first call
-
-Use the published `de.subhransu:openrouter-spring-ai-starter:0.1.0` from Maven Central. For a new application, create this `pom.xml`:
-
-```xml
-<project xmlns="http://maven.apache.org/POM/4.0.0">
-    <modelVersion>4.0.0</modelVersion>
-    <parent>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.1.2</version>
-        <relativePath/>
-    </parent>
-    <groupId>example</groupId>
-    <artifactId>hello-openrouter</artifactId>
-    <version>1.0.0</version>
-    <properties><java.version>17</java.version></properties>
-    <dependencies>
-        <dependency>
-            <groupId>de.subhransu</groupId>
-            <artifactId>openrouter-spring-ai-starter</artifactId>
-            <version>0.1.0</version>
-        </dependency>
-    </dependencies>
-    <build><plugins><plugin>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-maven-plugin</artifactId>
-    </plugin></plugins></build>
-</project>
-```
-
-Or create `build.gradle.kts`:
-
-```kotlin
-plugins {
-    java
-    id("org.springframework.boot") version "4.1.2"
-}
-repositories { mavenCentral() }
-java { sourceCompatibility = JavaVersion.VERSION_17 }
-dependencies {
-    implementation(platform("org.springframework.boot:spring-boot-dependencies:4.1.2"))
-    implementation("de.subhransu:openrouter-spring-ai-starter:0.1.0")
-}
-```
-
-Set these properties in `src/main/resources/application.properties`. Put your key in the environment variable `OPENROUTER_API_KEY`, and an [OpenRouter model id](https://openrouter.ai/models) in `OPENROUTER_MODEL`, in `vendor/model` form, such as `openai/gpt-oss-120b`:
-
-```properties
-spring.ai.model.chat=openrouter
-spring.ai.model.embedding=none
-spring.ai.model.image=none
-spring.ai.openrouter.api-key=${OPENROUTER_API_KEY}
-spring.ai.openrouter.chat.model=${OPENROUTER_MODEL}
-```
-
-Then inject the `ChatClient.Builder`:
-
-```java
-package example;
-
-import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.boot.CommandLineRunner;
-import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.context.annotation.Bean;
-
-@SpringBootApplication
-public class Application {
-    public static void main(String[] args) {
-        SpringApplication.run(Application.class, args);
-    }
-
-    @Bean
-    CommandLineRunner hello(ChatClient.Builder builder) {
-        ChatClient client = builder.build();
-        return args -> System.out.println(client.prompt().user("Say hello.").call().content());
-    }
-}
-```
-
-Save the class as `src/main/java/example/Application.java`. Run `mvn spring-boot:run` or `gradle bootRun` with JDK 17 or later. The call is a billable OpenRouter request.
-
-`spring.ai.model.chat=openrouter` is the default. Setting it keeps OpenRouter selected if you add another provider starter. Without it, every provider starter on the classpath matches. Spring AI's provider auto-configurations, such as OpenAI's or Anthropic's, step aside only for a model of their own type, so the context ends up with two `ChatModel` beans. Injecting `ChatClient.Builder` then fails, because it takes a single `ChatModel` and neither is `@Primary`. If you mark the other provider's model `@Primary` instead, OpenRouter's [tool failure policy](tool-calling.md#tool-failure-policy) still applies to every tool call, including that provider's, and startup logs a warning about it. Set `spring.ai.model.chat` whenever more than one provider starter is present. The same applies to `spring.ai.model.embedding` and `spring.ai.model.image`: with them unset, the context holds two embedding or image models, and a consumer that injects a single one, such as a vector store's `EmbeddingModel`, fails. Set each to a provider or to `none`. Some providers select on narrower keys: Google GenAI and Vertex AI text embeddings use `spring.ai.model.embedding.text`, and Vertex AI multimodal embeddings use `spring.ai.model.embedding.multimodal`, so set those as well when such a starter is present. Without the two `none` lines, startup still succeeds, but the starter creates embedding and image models that have no default model.
-
-For incremental text, stream the content. This prints each chunk and waits for the end:
-
-```java
-client.prompt().user("Say hello.").stream().content().doOnNext(System.out::print).blockLast();
-```
-
-In a web application, return the `Flux<String>` from the controller instead of blocking.
-
-## Main properties
-
-| Property                                                 | Default / meaning                                                                                                       |
-| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `spring.ai.model.chat`, `.embedding`, `.image`           | Each defaults to `openrouter`; the example disables unused modalities.                                                  |
-| `spring.ai.openrouter.api-key`                           | Required while an OpenRouter modality is enabled; no default credential.                                                |
-| `spring.ai.openrouter.base-url`                          | `https://openrouter.ai/api/v1`                                                                                          |
-| `spring.ai.openrouter.chat.model`                        | Unset; select a model explicitly.                                                                                       |
-| `spring.ai.openrouter.chat.request-mode`                 | `chat-completions`; `responses` is experimental.                                                                        |
-| `spring.ai.openrouter.chat.include-usage`                | Unset. `true` asks OpenRouter for usage and cost in Chat Completions requests, calls and streams. Responses rejects it. |
-| `spring.ai.openrouter.connection.timeout`                | `2m`                                                                                                                    |
-| `spring.ai.openrouter.connection.max-response-body-size` | `64MB` per response / SSE event, not per stream.                                                                        |
-
-Fallback models, provider routing, service tier and attribution headers are in [Routing, fallbacks and attribution](chat-options.md#routing-fallbacks-and-attribution).
+The [README](../README.md#install) shows the install and a first call. This page holds what the code does not tell you: which versions are tested, and what goes wrong next to another provider starter.
 
 ## Release compatibility
 
@@ -117,34 +9,18 @@ Fallback models, provider routing, service tier and attribution headers are in [
 | [0.1.0: `41786f9`](https://github.com/Subhransu-De/openrouter-spring-ai/tree/v0.1.0) | 17                  | 4.1.2       | 2.0.2     |
 | Unreleased main (`0.2.0-SNAPSHOT`)                                                   | 17                  | 4.1.2       | 2.0.2     |
 
-The snippets on this page use Boot 4.1.2, the version 0.1.0 was tested with, and the 0.1.0 starter brings in Spring AI 2.0.2. The versions come from the tagged and root POMs and the [published 0.1.0 parent POM](https://repo.maven.apache.org/maven2/de/subhransu/openrouter-spring-ai-parent/0.1.0/openrouter-spring-ai-parent-0.1.0.pom). CI targets JDK 17, 21 and 25. Other Boot and Spring AI versions are not covered. Release candidates are listed in the [changelog](../CHANGELOG.md).
+0.1.0 was tested with Boot 4.1.2, and its starter brings in Spring AI 2.0.2, as the [published 0.1.0 parent POM](https://repo.maven.apache.org/maven2/de/subhransu/openrouter-spring-ai-parent/0.1.0/openrouter-spring-ai-parent-0.1.0.pom) shows. Other Boot and Spring AI versions are not covered. Release candidates are listed in the [changelog](../CHANGELOG.md).
 
-## Spring AI model interfaces
+## Next to another provider starter
 
-This library implements each model interface of Spring AI 2.0.2 that OpenRouter has an endpoint for:
+Set `spring.ai.model.chat`, `spring.ai.model.embedding` and `spring.ai.model.image` whenever more than one provider starter is present. Each one defaults to `openrouter`, so the README example sets the unused ones to `none`.
 
-| Spring AI interface                 | Class                               | Selector                               | Created by default |
-| ----------------------------------- | ----------------------------------- | -------------------------------------- | ------------------ |
-| `ChatModel`, with streaming         | `OpenRouterChatModel`               | `spring.ai.model.chat`                 | Yes                |
-| `EmbeddingModel`                    | `OpenRouterEmbeddingModel`          | `spring.ai.model.embedding`            | Yes                |
-| `DocumentEmbeddingModel`            | `OpenRouterDocumentEmbeddingModel`  | `spring.ai.model.embedding.multimodal` | No                 |
-| `ImageModel`                        | `OpenRouterImageModel`              | `spring.ai.model.image`                | Yes                |
-| `TextToSpeechModel`, with streaming | `OpenRouterAudioSpeechModel`        | `spring.ai.model.audio.speech`         | No                 |
-| `TranscriptionModel`                | `OpenRouterAudioTranscriptionModel` | `spring.ai.model.audio.transcription`  | No                 |
+The audio models and the text-and-image `DocumentEmbeddingModel` are the exception: they are opt-in through `spring.ai.model.audio.speech=openrouter`, `spring.ai.model.audio.transcription=openrouter` and `spring.ai.model.embedding.multimodal=openrouter`. Spring AI's other providers of these model types also create their models when the selector is unset, so a default of `openrouter` would give an application that already uses one of them two beans of the same type.
 
-A model that is not created by default needs its selector set to `openrouter`.
+Spring AI's provider auto-configurations, such as OpenAI's or Anthropic's, step aside only for a model of their own type. With a selector unset, every provider starter on the classpath creates a model of that type. Injecting `ChatClient.Builder` then fails, because it takes a single `ChatModel` and neither is `@Primary`. A consumer that injects a single `EmbeddingModel`, such as a vector store, fails the same way.
 
-Two parts of Spring AI have no OpenRouter counterpart:
+Some providers select on narrower keys. Google GenAI and Vertex AI text embeddings use `spring.ai.model.embedding.text`, and Vertex AI multimodal embeddings use `spring.ai.model.embedding.multimodal`. Set those as well when such a starter is present.
 
-- `ModerationModel` is not implemented, because OpenRouter has no moderation endpoint.
-- `TranscriptionModel.stream(...)` fails with `UnsupportedOperationException`, because OpenRouter has no streaming transcription.
+If you mark the other provider's model `@Primary` instead, OpenRouter's [tool failure policy](chat.md#tool-failure-policy) still applies to that provider's tool calls.
 
-To move an application from Spring AI's OpenAI starter, see [Switching from Spring AI's OpenAI starter](switching-from-openai.md).
-
-## Model selection and replacement beans
-
-![Each spring.ai.model selector picks none, another provider, or openrouter. With openrouter, a model bean that the application declares wins; otherwise the starter creates openRouterChatModel, openRouterEmbeddingModel or openRouterImageModel. The shared OpenRouterApi is created while any selector is openrouter, unless the application declares its own.](images/model-selection.svg)
-
-To use several models of one modality, declare the model beans yourself and inject them with `@Qualifier`. The starter's default bean names are `openRouterChatModel`, `openRouterEmbeddingModel`, and `openRouterImageModel`. If you declare your own `ChatModel`, you also own the [tool failure policy](tool-calling.md#tool-failure-policy).
-
-The shared `OpenRouterApi` bean depends only on the selectors, so your own model beans can inject it. While a selector is `openrouter` or unset, it is created even if you declare every model yourself, and startup then requires `spring.ai.openrouter.api-key`. If your models do not use it, set the selectors to `none` or to the provider you use.
+The shared `OpenRouterApi` bean is created while any selector is `openrouter`, or a chat, embedding or image selector is unset, even when you declare every model yourself, and it then requires `spring.ai.openrouter.api-key`. If your own models do not use it, set the selectors to `none` or to the provider you use.

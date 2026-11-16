@@ -31,13 +31,13 @@ A native [Spring AI](https://spring.io/projects/spring-ai) integration for [Open
 ## What it does
 
 - Chat through OpenRouter's Chat Completions endpoint, with synchronous calls and SSE streaming. The Responses endpoint is an experimental opt-in.
-- Tool calling through Spring AI's `ToolCallingAdvisor`, including streamed argument fragments and [strict function tools](docs/tool-calling.md#strict-function-tools).
-- [Reasoning options](docs/reasoning-and-caching.md), with reasoning text and opaque reasoning state replayed across tool rounds.
-- [Model fallback lists, provider routing, service tiers and attribution headers](docs/chat-options.md#routing-fallbacks-and-attribution), plus [optional OpenRouter fields](docs/extensions.md).
+- Tool calling through Spring AI's `ToolCallingAdvisor`, including streamed argument fragments and [strict function tools](docs/chat.md#strict-function-tools).
+- [Reasoning options](docs/chat.md#reasoning), with reasoning text and opaque reasoning state replayed across tool rounds.
+- Model fallback lists, provider routing, service tiers and attribution headers, plus [optional OpenRouter fields](docs/chat.md#extra-request-fields).
 - Usage accounting with cost, cached and reasoning tokens, and Micrometer observations.
-- Embeddings behind Spring AI's `EmbeddingModel`, and text and image documents behind `DocumentEmbeddingModel`. See [Embeddings](docs/embeddings.md).
-- Image, PDF, audio and video inputs, image generation, and streamed chat audio output. See [Images, documents and audio](docs/multimodal.md).
-- Text-to-speech behind Spring AI's `TextToSpeechModel`, with streamed audio, and transcription behind `TranscriptionModel`. See [Text-to-speech](docs/multimodal.md#text-to-speech) and [Transcription](docs/multimodal.md#transcription).
+- Embeddings behind Spring AI's `EmbeddingModel`, and text and image documents behind `DocumentEmbeddingModel`. See [Embeddings](docs/media-and-embeddings.md).
+- Image, PDF, audio and video inputs, image generation, and streamed chat audio output. See [Images, documents and audio](docs/media-and-embeddings.md).
+- Text-to-speech behind Spring AI's `TextToSpeechModel`, with streamed audio, and transcription behind `TranscriptionModel`. See [Text-to-speech](docs/media-and-embeddings.md#text-to-speech) and [Transcription](docs/media-and-embeddings.md#transcription).
 - Spring Boot auto-configuration under `spring.ai.openrouter.*`.
 
 Not supported yet: the models catalogue endpoint, OpenRouter server-side tools such as the web search plugin, voice cloning and multi-speaker speech, and multipart transcription uploads.
@@ -102,7 +102,7 @@ spring:
 </tr>
 <tr>
 <td><b>Chat client</b> · Boot provides the builder; build the client once.</td>
-<td align="right"><a href="docs/getting-started.md#install-and-make-a-first-call">Docs</a></td>
+<td align="right"><a href="docs/getting-started.md">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -118,7 +118,7 @@ ChatClient chatClient(ChatClient.Builder builder) {
 </tr>
 <tr>
 <td><b>Opt-in models</b> · Speech, transcription and document embeddings are off until selected.</td>
-<td align="right"><a href="docs/multimodal.md#text-to-speech">Docs</a></td>
+<td align="right"><a href="docs/media-and-embeddings.md#text-to-speech">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -146,7 +146,7 @@ spring:
 </tr>
 <tr>
 <td><b>Chat model bean</b> · Replaces the auto-configured chat model.</td>
-<td align="right"><a href="docs/getting-started.md#model-selection-and-replacement-beans">Docs</a></td>
+<td align="right"><a href="docs/getting-started.md#next-to-another-provider-starter">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -165,7 +165,7 @@ OpenRouterChatModel chatModel(OpenRouterApi openRouterApi) {
 </tr>
 <tr>
 <td><b>Embedding model bean</b> · Replaces the auto-configured embedding model.</td>
-<td align="right"><a href="docs/getting-started.md#model-selection-and-replacement-beans">Docs</a></td>
+<td align="right"><a href="docs/getting-started.md#next-to-another-provider-starter">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -185,7 +185,7 @@ OpenRouterEmbeddingModel embeddingModel(OpenRouterApi openRouterApi) {
 </tr>
 <tr>
 <td><b>Document embedding model bean</b> · Replaces the auto-configured document embedding model.</td>
-<td align="right"><a href="docs/embeddings.md#text-and-image-documents">Docs</a></td>
+<td align="right"><a href="docs/media-and-embeddings.md#text-and-image-documents">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -205,7 +205,7 @@ OpenRouterDocumentEmbeddingModel documentEmbeddingModel(OpenRouterApi openRouter
 </tr>
 <tr>
 <td><b>Image model bean</b> · Replaces the auto-configured image model.</td>
-<td align="right"><a href="docs/getting-started.md#model-selection-and-replacement-beans">Docs</a></td>
+<td align="right"><a href="docs/getting-started.md#next-to-another-provider-starter">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -224,7 +224,7 @@ OpenRouterImageModel imageModel(OpenRouterApi openRouterApi) {
 </tr>
 <tr>
 <td><b>Speech model bean</b> · Replaces the auto-configured speech model.</td>
-<td align="right"><a href="docs/multimodal.md#text-to-speech">Docs</a></td>
+<td align="right"><a href="docs/media-and-embeddings.md#text-to-speech">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -247,7 +247,7 @@ OpenRouterAudioSpeechModel speechModel(OpenRouterApi openRouterApi) {
 </tr>
 <tr>
 <td><b>Transcription model bean</b> · Replaces the auto-configured transcription model.</td>
-<td align="right"><a href="docs/multimodal.md#transcription">Docs</a></td>
+<td align="right"><a href="docs/media-and-embeddings.md#transcription">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -312,7 +312,7 @@ String answer = chatClient.prompt().user("Say hello.").call().content();
 </tr>
 <tr>
 <td><b>Streaming</b> · Text arrives as server-sent events.</td>
-<td align="right"><a href="docs/getting-started.md#install-and-make-a-first-call">Docs</a></td>
+<td align="right"><a href="docs/getting-started.md">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -325,7 +325,7 @@ Flux<String> tokens = chatClient.prompt().user("Tell a short story.").stream().c
 </tr>
 <tr>
 <td><b>Per-request options</b> · Unset fields keep the defaults.</td>
-<td align="right"><a href="docs/chat-options.md#replacement-and-composition">Docs</a></td>
+<td align="right"><a href="docs/chat.md">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -344,7 +344,7 @@ String answer =
 </tr>
 <tr>
 <td><b>Structured output</b> · Typed records from a JSON schema.</td>
-<td align="right"><a href="docs/request-modes.md#structured-output">Docs</a></td>
+<td align="right"><a href="docs/chat.md#structured-output">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -374,7 +374,7 @@ Answer answer =
 </tr>
 <tr>
 <td><b>Reasoning</b> · Read the model's thinking separately.</td>
-<td align="right"><a href="docs/reasoning-and-caching.md">Docs</a></td>
+<td align="right"><a href="docs/chat.md">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -399,7 +399,7 @@ String thinking = OpenRouterMetadata.reasoning(response.getResult()).orElse("");
 </tr>
 <tr>
 <td><b>Tool calling</b> · Spring AI runs the tool loop.</td>
-<td align="right"><a href="docs/tool-calling.md">Docs</a></td>
+<td align="right"><a href="docs/chat.md">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -421,7 +421,7 @@ String answer =
 </tr>
 <tr>
 <td><b>Strict tools</b> · Checks each tool schema before the request.</td>
-<td align="right"><a href="docs/tool-calling.md#strict-function-tools">Docs</a></td>
+<td align="right"><a href="docs/chat.md#strict-function-tools">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -441,7 +441,7 @@ String answer =
 </tr>
 <tr>
 <td><b>Responses mode</b> <sup>experimental</sup> · Sends to the /responses endpoint.</td>
-<td align="right"><a href="docs/request-modes.md">Docs</a></td>
+<td align="right"><a href="docs/chat.md">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -460,7 +460,7 @@ String answer =
 </tr>
 <tr>
 <td><b>Log probabilities</b> · Each token's log probability and its alternatives.</td>
-<td align="right"><a href="docs/chat-options.md#log-probabilities-logit-bias-verbosity-and-predicted-output">Docs</a></td>
+<td align="right"><a href="docs/chat.md#log-probabilities-and-predicted-output">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -483,7 +483,7 @@ List<OpenRouterLogprobs.Token> tokens =
 </tr>
 <tr>
 <td><b>Predicted output</b> · Faster edits when most of the answer is known.</td>
-<td align="right"><a href="docs/chat-options.md#log-probabilities-logit-bias-verbosity-and-predicted-output">Docs</a></td>
+<td align="right"><a href="docs/chat.md#log-probabilities-and-predicted-output">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -513,7 +513,7 @@ String edited =
 <table>
 <tr>
 <td><b>Model fallbacks</b> · Tried in order when one fails.</td>
-<td align="right"><a href="docs/chat-options.md#routing-fallbacks-and-attribution">Docs</a></td>
+<td align="right"><a href="docs/chat.md">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -532,7 +532,7 @@ String answer =
 </tr>
 <tr>
 <td><b>Provider routing</b> · Pick, order and sort providers.</td>
-<td align="right"><a href="docs/chat-options.md#routing-fallbacks-and-attribution">Docs</a></td>
+<td align="right"><a href="docs/chat.md">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -556,7 +556,7 @@ String answer =
 </tr>
 <tr>
 <td><b>Service tier</b> · Trade speed for price.</td>
-<td align="right"><a href="docs/chat-options.md#routing-fallbacks-and-attribution">Docs</a></td>
+<td align="right"><a href="docs/chat.md">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -575,7 +575,7 @@ String answer =
 </tr>
 <tr>
 <td><b>Sessions and traces</b> · Keep a conversation on one provider.</td>
-<td align="right"><a href="docs/chat-options.md#sessions-and-traces">Docs</a></td>
+<td align="right"><a href="docs/chat.md#sessions">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -597,7 +597,7 @@ String answer =
 </tr>
 <tr>
 <td><b>Attribution headers</b> · Your app on OpenRouter rankings.</td>
-<td align="right"><a href="docs/chat-options.md#routing-fallbacks-and-attribution">Docs</a></td>
+<td align="right"><a href="docs/chat.md">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -625,7 +625,7 @@ spring:
 <table>
 <tr>
 <td><b>Image input</b> · Needs a model that reads images.</td>
-<td align="right"><a href="docs/multimodal.md#image-inputs">Docs</a></td>
+<td align="right"><a href="docs/media-and-embeddings.md#attachments">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -653,7 +653,7 @@ String answer =
 </tr>
 <tr>
 <td><b>PDF input</b> · A URL, bytes or a data URL.</td>
-<td align="right"><a href="docs/multimodal.md#pdf-audio-and-video-inputs">Docs</a></td>
+<td align="right"><a href="docs/media-and-embeddings.md#attachments">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -681,7 +681,7 @@ String summary =
 </tr>
 <tr>
 <td><b>Audio input</b> · Bytes or a data URL; remote URLs are rejected.</td>
-<td align="right"><a href="docs/multimodal.md#pdf-audio-and-video-inputs">Docs</a></td>
+<td align="right"><a href="docs/media-and-embeddings.md#attachments">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -709,7 +709,7 @@ String transcript =
 </tr>
 <tr>
 <td><b>Video input</b> · URL support depends on the provider.</td>
-<td align="right"><a href="docs/multimodal.md#pdf-audio-and-video-inputs">Docs</a></td>
+<td align="right"><a href="docs/media-and-embeddings.md#attachments">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -747,7 +747,7 @@ String answer =
 <table>
 <tr>
 <td><b>Image generation</b> · Base64 images from the Image API.</td>
-<td align="right"><a href="docs/multimodal.md#image-generation">Docs</a></td>
+<td align="right"><a href="docs/media-and-embeddings.md#image-generation">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -761,7 +761,7 @@ String base64 = response.getResult().getOutput().getB64Json();
 </tr>
 <tr>
 <td><b>Image streaming</b> · Previews first, then the final image.</td>
-<td align="right"><a href="docs/multimodal.md#streaming">Docs</a></td>
+<td align="right"><a href="docs/media-and-embeddings.md">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -783,7 +783,7 @@ events.subscribe(
 </tr>
 <tr>
 <td><b>Image to image</b> · Start from a reference image.</td>
-<td align="right"><a href="docs/multimodal.md#image-options">Docs</a></td>
+<td align="right"><a href="docs/media-and-embeddings.md#image-generation">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -802,7 +802,7 @@ ImageResponse response =
 </tr>
 <tr>
 <td><b>Images from a chat model</b> · Images next to text in a reply.</td>
-<td align="right"><a href="docs/multimodal.md#chat-models-with-image-output">Docs</a></td>
+<td align="right"><a href="docs/media-and-embeddings.md">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -827,7 +827,7 @@ for (Media image : response.getResult().getOutput().getMedia()) {
 </tr>
 <tr>
 <td><b>Audio output</b> · Streaming only.</td>
-<td align="right"><a href="docs/multimodal.md#chat-audio-output">Docs</a></td>
+<td align="right"><a href="docs/media-and-embeddings.md#chat-audio-output">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -873,7 +873,7 @@ stream.subscribe(
 <table>
 <tr>
 <td><b>Text-to-speech</b> · Raw PCM by default; set the format to mp3 for a playable file.</td>
-<td align="right"><a href="docs/multimodal.md#text-to-speech">Docs</a></td>
+<td align="right"><a href="docs/media-and-embeddings.md#text-to-speech">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -886,7 +886,7 @@ byte[] audio = speechModel.call("Your car is ready for pickup.");
 </tr>
 <tr>
 <td><b>Speech streaming</b> · Chunks arrive in order; keep the audio only when the stream completes.</td>
-<td align="right"><a href="docs/multimodal.md#text-to-speech">Docs</a></td>
+<td align="right"><a href="docs/media-and-embeddings.md#text-to-speech">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -899,7 +899,7 @@ Flux<byte[]> chunks = speechModel.stream("Your car is ready for pickup.");
 </tr>
 <tr>
 <td><b>Transcription</b> · The format comes from the file extension.</td>
-<td align="right"><a href="docs/multimodal.md#transcription">Docs</a></td>
+<td align="right"><a href="docs/media-and-embeddings.md#transcription">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -922,7 +922,7 @@ String text = transcriptionModel.transcribe(new FileSystemResource("inspection-n
 <table>
 <tr>
 <td><b>Text embedding</b> · Works with Spring AI vector stores.</td>
-<td align="right"><a href="docs/embeddings.md">Docs</a></td>
+<td align="right"><a href="docs/media-and-embeddings.md">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -935,7 +935,7 @@ float[] vector = embeddingModel.embed("The quick brown fox");
 </tr>
 <tr>
 <td><b>Batch with options</b> · Options merge with the defaults.</td>
-<td align="right"><a href="docs/embeddings.md">Docs</a></td>
+<td align="right"><a href="docs/media-and-embeddings.md">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -952,7 +952,7 @@ EmbeddingResponse response =
 </tr>
 <tr>
 <td><b>Text and image documents</b> · One vector space; needs a model that accepts images.</td>
-<td align="right"><a href="docs/embeddings.md#text-and-image-documents">Docs</a></td>
+<td align="right"><a href="docs/media-and-embeddings.md#text-and-image-documents">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -981,7 +981,7 @@ EmbeddingResponse response =
 <table>
 <tr>
 <td><b>Prompt cache breakpoint</b> · Cache a stable prompt prefix.</td>
-<td align="right"><a href="docs/reasoning-and-caching.md#explicit-prompt-cache-breakpoints">Docs</a></td>
+<td align="right"><a href="docs/chat.md#prompt-caching">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -1003,7 +1003,7 @@ String answer = chatClient.prompt().messages(message).call().content();
 </tr>
 <tr>
 <td><b>Prompt cache options</b> · Explicit caching and a 12-hour lifetime on OpenAI models.</td>
-<td align="right"><a href="docs/reasoning-and-caching.md#request-level-cache-controls">Docs</a></td>
+<td align="right"><a href="docs/chat.md#request-level-cache-controls">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -1026,7 +1026,7 @@ String answer =
 </tr>
 <tr>
 <td><b>Usage and cost</b> · Credits charged, tokens used.</td>
-<td align="right"><a href="docs/observability.md">Docs</a></td>
+<td align="right"><a href="docs/production.md">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -1041,7 +1041,7 @@ Double cost = usage.getCost(); // null when not reported
 </tr>
 <tr>
 <td><b>Extra request fields</b> · Fields without a typed option.</td>
-<td align="right"><a href="docs/extensions.md">Docs</a></td>
+<td align="right"><a href="docs/chat.md">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -1060,7 +1060,7 @@ String answer =
 </tr>
 <tr>
 <td><b>Low-level request</b> · Inject OpenRouterApi; no Spring AI types.</td>
-<td align="right"><a href="docs/api.md#build-low-level-requests">Docs</a></td>
+<td align="right"><a href="docs/api.md#compatibility-of-low-level-requests">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -1082,14 +1082,14 @@ ChatCompletionResponse response = openRouterApi.chatCompletion(request);
 
 ## Documentation
 
-| Page                                         | Covers                                                                                                                          |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| [Getting started](docs/getting-started.md)   | Install, first call, properties, compatibility, model selection.                                                                |
-| [Chat options](docs/chat-options.md)         | How runtime options combine with defaults; fallbacks, provider routing and attribution.                                         |
-| [Request modes](docs/request-modes.md)       | Chat Completions and experimental Responses.                                                                                    |
-| [Supported API and nullability](docs/api.md) | Types applications can depend on, null contracts.                                                                               |
-| [Tool calling](docs/tool-calling.md)         | Tools, strict schemas, failure policy.                                                                                          |
-| [More pages](docs/README.md)                 | Extensions, reasoning and caching, errors and retries, HTTP and limits, multimodal, embeddings, observability, the Garage demo. |
+| Page                                                 | Covers                                                                        |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------- |
+| [Getting started](docs/getting-started.md)           | Tested versions; pitfalls next to another provider starter.                   |
+| [Chat](docs/chat.md)                                 | Request modes, sessions, structured output, tools, reasoning, prompt caching. |
+| [Media and embeddings](docs/media-and-embeddings.md) | Attachments, images, chat audio, speech, transcription, embeddings.           |
+| [Production](docs/production.md)                     | Retries and billing, timeouts, HTTP customization, stream limits, cost.       |
+| [Supported API](docs/api.md)                         | Types applications can depend on.                                             |
+| [The Garage demo](docs/garage.md)                    | The sample application and what its evidence proves.                          |
 
 ## Modules
 
