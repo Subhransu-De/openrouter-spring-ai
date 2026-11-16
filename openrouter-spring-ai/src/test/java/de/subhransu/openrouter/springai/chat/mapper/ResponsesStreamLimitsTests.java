@@ -29,6 +29,10 @@ import tools.jackson.databind.ObjectMapper;
 @Tag("streaming")
 class ResponsesStreamLimitsTests {
 
+	// Wall-clock bound: these sources never complete, so a lost limit must fail instead
+	// of hanging.
+	private static final Duration VERIFY_TIMEOUT = Duration.ofSeconds(10);
+
 	private static final String REASONING_DELTA = "response.reasoning_text.delta";
 
 	private final ObjectMapper json = new ObjectMapper();
@@ -120,7 +124,7 @@ class ResponsesStreamLimitsTests {
 			.thenAwait(Duration.ofSeconds(5))
 			.thenConsumeWhile(response -> true)
 			.expectErrorSatisfies(error -> assertLimit(error, Limit.RESPONSES_STATE_DURATION, 5000))
-			.verify();
+			.verify(VERIFY_TIMEOUT);
 		assertThat(cancelled).isTrue();
 	}
 
@@ -154,7 +158,8 @@ class ResponsesStreamLimitsTests {
 			.expectNextCount(1)
 			.thenAwait(Duration.ofSeconds(1))
 			.expectNextCount(2)
-			.verifyComplete();
+			.expectComplete()
+			.verify(VERIFY_TIMEOUT);
 		assertThat(cancelled).isTrue();
 	}
 

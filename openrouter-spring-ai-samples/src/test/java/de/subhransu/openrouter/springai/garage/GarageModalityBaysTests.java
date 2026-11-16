@@ -8,13 +8,19 @@ import static org.mockito.Mockito.when;
 
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterUsage;
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import javax.xml.XMLConstants;
+import javax.xml.parsers.DocumentBuilderFactory;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.mockito.ArgumentCaptor;
 import org.springframework.ai.chat.metadata.ChatResponseMetadata;
 import org.springframework.ai.chat.model.ChatModel;
@@ -30,17 +36,35 @@ import org.springframework.ai.image.ImageResponseMetadata;
 class GarageModalityBaysTests {
 
   @Test
-  void validatesSvgDocumentsWithoutResolvingExternalEntities() throws Exception {
+  void acceptsOnlyWellFormedSvgRoots() throws Exception {
     GarageModalityBays bays = new GarageModalityBays(
         null, null, null, Path.of("target"), "embedding", "vision", "image", null, null);
     String valid = "<svg xmlns='http://www.w3.org/2000/svg' width='1' height='1'><rect width='1' height='1'/></svg>";
     assertThat(bays.recordDimensions(new LinkedHashMap<>(),
         valid.getBytes(java.nio.charset.StandardCharsets.UTF_8), "image/svg+xml")).isTrue();
-    for (String invalid : List.of("", "arbitrary text", "<svg", "<html/>", "<svg/>",
-        "<!DOCTYPE svg [<!ENTITY x SYSTEM 'file:///synthetic-do-not-read'>]><svg xmlns='http://www.w3.org/2000/svg'>&x;</svg>")) {
+    for (String invalid : List.of("", "arbitrary text", "<svg", "<html/>", "<svg/>")) {
       assertThat(bays.recordDimensions(new LinkedHashMap<>(),
           invalid.getBytes(java.nio.charset.StandardCharsets.UTF_8), "image/svg+xml")).isFalse();
     }
+  }
+
+  @Test
+  void rejectsSvgThatReferencesAReadableExternalEntity(@TempDir Path directory) throws Exception {
+    Path entity = Files.writeString(directory.resolve("entity.txt"), "synthetic-entity-text");
+    byte[] svg = ("<!DOCTYPE svg [<!ENTITY x SYSTEM '" + entity.toUri() + "'>]>"
+        + "<svg xmlns='http://www.w3.org/2000/svg'>&x;</svg>").getBytes(StandardCharsets.UTF_8);
+
+    // Control: a parser allowed to read external entities expands this fixture, so the
+    // rejection below comes from the hardening and not from an unreadable target.
+    DocumentBuilderFactory permissive = DocumentBuilderFactory.newInstance();
+    permissive.setNamespaceAware(true);
+    permissive.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "all");
+    assertThat(permissive.newDocumentBuilder().parse(new ByteArrayInputStream(svg))
+        .getDocumentElement().getTextContent()).isEqualTo("synthetic-entity-text");
+
+    GarageModalityBays bays = new GarageModalityBays(
+        null, null, null, Path.of("target"), "embedding", "vision", "image", null, null);
+    assertThat(bays.recordDimensions(new LinkedHashMap<>(), svg, "image/svg+xml")).isFalse();
   }
 
   @Test

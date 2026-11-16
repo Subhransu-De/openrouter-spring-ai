@@ -48,6 +48,10 @@ class OpenRouterStreamingToolCallLimitTests {
 
 	private static final Duration TEST_DURATION = Duration.ofSeconds(30);
 
+	// Wall-clock bound: these sources never complete, so a lost limit must fail instead
+	// of hanging.
+	private static final Duration VERIFY_TIMEOUT = Duration.ofSeconds(10);
+
 	@Tag("tools")
 	@Tag("tools.stream-assembly")
 	@ParameterizedTest
@@ -251,7 +255,7 @@ class OpenRouterStreamingToolCallLimitTests {
 		StepVerifier.create(aggregator.aggregate(source)).expectErrorSatisfies(thrown -> {
 			assertThat(thrown).isInstanceOf(OpenRouterLimitExceededException.class);
 			assertThat(((OpenRouterLimitExceededException) thrown).getLimit()).isEqualTo(expectedLimit);
-		}).verify();
+		}).verify(VERIFY_TIMEOUT);
 		assertThat(cancelled).isTrue();
 	}
 
@@ -283,7 +287,7 @@ class OpenRouterStreamingToolCallLimitTests {
 				assertThat(((OpenRouterLimitExceededException) thrown).getLimit())
 					.isEqualTo(OpenRouterLimitExceededException.Limit.STREAMING_TOOL_CALL_DURATION);
 			})
-			.verify();
+			.verify(VERIFY_TIMEOUT);
 		assertThat(cancelled).isTrue();
 	}
 
@@ -301,7 +305,7 @@ class OpenRouterStreamingToolCallLimitTests {
 			assertThat(thrown).isInstanceOf(OpenRouterLimitExceededException.class);
 			assertThat(((OpenRouterLimitExceededException) thrown).getLimit())
 				.isEqualTo(OpenRouterLimitExceededException.Limit.STREAMING_TOOL_CALL_CHUNKS);
-		}).verify();
+		}).verify(VERIFY_TIMEOUT);
 		assertThat(cancelled).isTrue();
 	}
 
@@ -320,7 +324,7 @@ class OpenRouterStreamingToolCallLimitTests {
 			assertThat(thrown).isInstanceOf(OpenRouterLimitExceededException.class);
 			assertThat(((OpenRouterLimitExceededException) thrown).getLimit())
 				.isEqualTo(OpenRouterLimitExceededException.Limit.STREAMING_TOOL_CALL_BYTES);
-		}).verify();
+		}).verify(VERIFY_TIMEOUT);
 		assertThat(cancelled).isTrue();
 	}
 
