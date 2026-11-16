@@ -3,6 +3,9 @@ package de.subhransu.openrouter.springai.audio;
 import static io.micrometer.observation.tck.TestObservationRegistryAssert.assertThat;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -336,7 +339,13 @@ class OpenRouterAudioSpeechModelTests {
 	void callsAndStreamsAreObservedAsTextToSpeechOperations() {
 		TestObservationRegistry calls = TestObservationRegistry.create();
 		TestObservationRegistry streams = TestObservationRegistry.create();
-		OpenRouterApi api = api(exchange -> respond(exchange, 200, "audio/mpeg", MP3));
+		// A synchronous stand-in, as in the other observation tests: over HTTP the stream
+		// completes on a client thread, and doFinally stops the observation only after
+		// the
+		// subscriber has seen completion, so blockLast could return before the stop.
+		OpenRouterApi api = mock(OpenRouterApi.class);
+		when(api.speech(any())).thenReturn(MP3);
+		when(api.speechStream(any())).thenReturn(Flux.just(MP3));
 
 		observed(api, calls).call(new TextToSpeechPrompt("Hello."));
 		observed(api, streams).stream(new TextToSpeechPrompt("Hello.")).blockLast(TIMEOUT);
