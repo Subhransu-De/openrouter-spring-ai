@@ -17,10 +17,19 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.ai.audio.transcription.AudioTranscriptionPrompt;
+import org.springframework.ai.audio.transcription.AudioTranscriptionResponse;
 import org.springframework.ai.audio.transcription.TranscriptionModel;
 import org.springframework.ai.audio.tts.TextToSpeechModel;
+import org.springframework.ai.audio.tts.TextToSpeechPrompt;
+import org.springframework.ai.audio.tts.TextToSpeechResponse;
+import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.annotation.Bean;
+import reactor.core.publisher.Flux;
 
 @Tag("configuration")
 @Tag("configuration.beans")
@@ -58,19 +67,17 @@ class OpenRouterAudioAutoConfigurationTests {
 
 	@Test
 	void anotherProvidersAudioModelIsNotDuplicatedWhenTheSelectorIsUnset() {
-		// Spring AI's own audio providers match an unset selector too, and back off only
-		// for
-		// their own type. Opt-in keeps an application that already uses one at one bean.
-		TextToSpeechModel speech = mock(TextToSpeechModel.class);
-		TranscriptionModel transcription = mock(TranscriptionModel.class);
-		this.contextRunner.withPropertyValues(API_KEY)
-			.withBean(TextToSpeechModel.class, () -> speech)
-			.withBean(TranscriptionModel.class, () -> transcription)
+		// The stand-ins behave like Spring AI's own audio providers: they match an unset
+		// selector, run after this library, and back off only for their own type. If the
+		// OpenRouter models matched an unset selector too, there would be two of each.
+		this.contextRunner.withConfiguration(AutoConfigurations.of(OtherProviderAudioAutoConfiguration.class))
+			.withPropertyValues(API_KEY)
 			.run(context -> {
 				assertThat(context).hasNotFailed()
 					.hasSingleBean(TextToSpeechModel.class)
 					.hasSingleBean(TranscriptionModel.class);
-				assertThat(context.getBean(TextToSpeechModel.class)).isSameAs(speech);
+				assertThat(context.getBean(TextToSpeechModel.class)).isInstanceOf(OtherSpeechModel.class);
+				assertThat(context.getBean(TranscriptionModel.class)).isInstanceOf(OtherTranscriptionModel.class);
 			});
 	}
 
@@ -200,6 +207,50 @@ class OpenRouterAudioAutoConfigurationTests {
 	void invalidDefaultsFailAtStartup(String property) {
 		this.contextRunner.withPropertyValues(API_KEY, SELECT_SPEECH, SELECT_TRANSCRIPTION, property)
 			.run(context -> assertThat(context).hasFailed());
+	}
+
+	@AutoConfiguration(after = { OpenRouterAudioSpeechAutoConfiguration.class,
+			OpenRouterAudioTranscriptionAutoConfiguration.class })
+	static class OtherProviderAudioAutoConfiguration {
+
+		@Bean
+		@ConditionalOnProperty(name = "spring.ai.model.audio.speech", havingValue = "other", matchIfMissing = true)
+		@ConditionalOnMissingBean(OtherSpeechModel.class)
+		OtherSpeechModel otherSpeechModel() {
+			return new OtherSpeechModel();
+		}
+
+		@Bean
+		@ConditionalOnProperty(name = "spring.ai.model.audio.transcription", havingValue = "other",
+				matchIfMissing = true)
+		@ConditionalOnMissingBean(OtherTranscriptionModel.class)
+		OtherTranscriptionModel otherTranscriptionModel() {
+			return new OtherTranscriptionModel();
+		}
+
+	}
+
+	static class OtherSpeechModel implements TextToSpeechModel {
+
+		@Override
+		public TextToSpeechResponse call(TextToSpeechPrompt prompt) {
+			throw new UnsupportedOperationException("stand-in");
+		}
+
+		@Override
+		public Flux<TextToSpeechResponse> stream(TextToSpeechPrompt prompt) {
+			return Flux.error(new UnsupportedOperationException("stand-in"));
+		}
+
+	}
+
+	static class OtherTranscriptionModel implements TranscriptionModel {
+
+		@Override
+		public AudioTranscriptionResponse call(AudioTranscriptionPrompt prompt) {
+			throw new UnsupportedOperationException("stand-in");
+		}
+
 	}
 
 }
