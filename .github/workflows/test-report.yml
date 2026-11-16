@@ -19,6 +19,7 @@ jobs:
       && (github.event.workflow_run.head_repository.full_name != github.repository
           || github.event.workflow_run.actor.login == 'dependabot[bot]')
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # One report job at a time per pull request branch, so an older commit cannot post over a newer one.
     concurrency:
       group: test-report-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
@@ -60,14 +61,14 @@ jobs:
         run: |
           gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern 'test-report-java*' --dir head
           base_run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$BASE_SHA&status=success&per_page=10" \
-            --jq '[.workflow_runs[] | select(.head_branch == "main") | select(.event == "push" or .event == "schedule")
+            --jq '[.workflow_runs[] | select(.head_branch == "main") | select(.event == "push")
                    | select(.head_repository.full_name == env.GITHUB_REPOSITORY)][0].id // empty')
           if [ -n "$base_run" ]; then
             gh run download "$base_run" --repo "$GITHUB_REPOSITORY" --pattern 'test-report-java*' --dir base/0 || true
           fi
           n=0
           for id in $(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=main&status=success&per_page=30" \
-            --jq '.workflow_runs[] | select(.event == "push" or .event == "schedule")
+            --jq '.workflow_runs[] | select(.event == "push")
                   | select(.head_repository.full_name == env.GITHUB_REPOSITORY) | .id'); do
             if [ "$id" = "$base_run" ]; then continue; fi
             if gh run download "$id" --repo "$GITHUB_REPOSITORY" --pattern 'test-report-java*' --dir "base/$((n + 1))"; then

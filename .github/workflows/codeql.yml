@@ -15,21 +15,10 @@ permissions:
   contents: read
 
 jobs:
-  availability:
-    name: CodeQL availability
-    runs-on: ubuntu-latest
-    if: ${{ github.event.repository.private && vars.CODEQL_ENABLED != 'true' }}
-
-    steps:
-      - name: Explain skipped CodeQL upload
-        run: |
-          echo "Native GitHub code scanning is not enabled for this private repository."
-          echo "Set the repository variable CODEQL_ENABLED=true after enabling GitHub Code Security/code scanning."
-
   analyze:
     name: Analyze Java
     runs-on: ubuntu-latest
-    if: ${{ !github.event.repository.private || vars.CODEQL_ENABLED == 'true' }}
+    timeout-minutes: 30
 
     permissions:
       actions: read
