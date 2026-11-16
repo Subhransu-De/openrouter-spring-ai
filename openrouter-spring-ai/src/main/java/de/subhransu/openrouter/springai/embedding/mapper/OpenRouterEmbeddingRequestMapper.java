@@ -3,6 +3,7 @@ package de.subhransu.openrouter.springai.embedding.mapper;
 import de.subhransu.openrouter.springai.api.dto.EmbeddingsRequest;
 import de.subhransu.openrouter.springai.api.dto.ProviderPreferences;
 import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
+import de.subhransu.openrouter.springai.chat.mapper.TraceMapper;
 import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingOptions;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
@@ -24,7 +25,8 @@ public final class OpenRouterEmbeddingRequestMapper {
 					+ "': only 'float' embeddings can be decoded");
 		}
 		return new EmbeddingsRequest(model, inputs, options.getEncodingFormat(), options.getDimensions(),
-				options.getUser(), mapProvider(options.getProvider()));
+				options.getUser(), mapProvider(options.getProvider()), options.getSessionId(),
+				TraceMapper.map(options.getTrace()));
 	}
 
 	private @Nullable ProviderPreferences mapProvider(@Nullable OpenRouterProviderPreferences provider) {

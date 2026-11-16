@@ -61,6 +61,8 @@ public final class OpenRouterChatRequestMapper {
 			.stop(options.getStopSequences())
 			.seed(options.getSeed())
 			.user(options.getUser())
+			.sessionId(options.getSessionId())
+			.trace(TraceMapper.map(options.getTrace()))
 			.stream(stream)
 			.responseFormat(new OutputFormatMapper(this.objectMapper).map(options))
 			.tools(tools)

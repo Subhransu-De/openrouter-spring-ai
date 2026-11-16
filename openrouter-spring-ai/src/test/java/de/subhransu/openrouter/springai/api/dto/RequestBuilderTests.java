@@ -30,7 +30,8 @@ class RequestBuilderTests {
 		ChatCompletionRequest expected = new ChatCompletionRequest("model", List.of("fallback"), MESSAGES, 0.1, 0.2, 3,
 				0.4, 0.5, 0.6, 0.7, 0.8, 9, 10, List.of("stop"), 11, "user", true, Map.of("type", "json_object"), tools,
 				"auto", false, PROVIDER, REASONING, "flex", Map.of("trace", "t"), "fallback", new UsageConfig(true),
-				List.of("text"), Map.of("aspect_ratio", "1:1"), new AudioConfig("alloy", "wav"), EXTRA_BODY);
+				List.of("text"), Map.of("aspect_ratio", "1:1"), new AudioConfig("alloy", "wav"), "session",
+				Map.of("trace_id", "id"), EXTRA_BODY);
 
 		ChatCompletionRequest built = ChatCompletionRequest.builder()
 			.model("model")
@@ -63,6 +64,8 @@ class RequestBuilderTests {
 			.modalities(List.of("text"))
 			.imageConfig(Map.of("aspect_ratio", "1:1"))
 			.audio(new AudioConfig("alloy", "wav"))
+			.sessionId("session")
+			.trace(Map.of("trace_id", "id"))
 			.extraBody(EXTRA_BODY)
 			.build();
 
@@ -74,7 +77,8 @@ class RequestBuilderTests {
 		List<ResponsesTool> tools = List.of(new ResponsesTool("function", "lookup", null, null, null));
 		ResponsesRequest expected = new ResponsesRequest("model", List.of("fallback"), "input", "instructions", 5, true,
 				0.1, 0.2, 3, 0.4, 0.5, Map.of("trace", "t"), PROVIDER, REASONING, "fallback", "flex", "user", false,
-				"auto", tools, List.of("text"), Map.of("aspect_ratio", "1:1"), Map.of("verbosity", "low"), EXTRA_BODY);
+				"auto", tools, List.of("text"), Map.of("aspect_ratio", "1:1"), Map.of("verbosity", "low"), "session",
+				Map.of("trace_id", "id"), EXTRA_BODY);
 
 		ResponsesRequest built = ResponsesRequest.builder()
 			.model("model")
@@ -100,6 +104,8 @@ class RequestBuilderTests {
 			.modalities(List.of("text"))
 			.imageConfig(Map.of("aspect_ratio", "1:1"))
 			.text(Map.of("verbosity", "low"))
+			.sessionId("session")
+			.trace(Map.of("trace_id", "id"))
 			.extraBody(EXTRA_BODY)
 			.build();
 

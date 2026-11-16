@@ -2,6 +2,7 @@ package de.subhransu.openrouter.springai.autoconfigure;
 
 import org.jspecify.annotations.Nullable;
 import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
+import de.subhransu.openrouter.springai.chat.OpenRouterTrace;
 import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingOptions;
 import org.springframework.ai.document.MetadataMode;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -38,6 +39,18 @@ public class OpenRouterEmbeddingProperties {
 	private @Nullable String user;
 
 	/**
+	 * Default session id for observability grouping, sent as session_id. At most 256
+	 * characters.
+	 */
+	private @Nullable String sessionId;
+
+	/**
+	 * Observability metadata sent as trace. A request trace replaces it as a whole.
+	 */
+	@NestedConfigurationProperty
+	private @Nullable OpenRouterTrace trace;
+
+	/**
 	 * Provider routing preferences.
 	 */
 	@NestedConfigurationProperty
@@ -49,6 +62,8 @@ public class OpenRouterEmbeddingProperties {
 			.dimensions(this.dimensions)
 			.encodingFormat(this.encodingFormat)
 			.user(this.user)
+			.sessionId(this.sessionId)
+			.trace(this.trace)
 			.provider(this.provider)
 			.build();
 	}
@@ -91,6 +106,22 @@ public class OpenRouterEmbeddingProperties {
 
 	public void setUser(@Nullable String user) {
 		this.user = user;
+	}
+
+	public @Nullable String getSessionId() {
+		return this.sessionId;
+	}
+
+	public void setSessionId(@Nullable String sessionId) {
+		this.sessionId = sessionId;
+	}
+
+	public @Nullable OpenRouterTrace getTrace() {
+		return this.trace;
+	}
+
+	public void setTrace(@Nullable OpenRouterTrace trace) {
+		this.trace = trace;
 	}
 
 	public @Nullable OpenRouterProviderPreferences getProvider() {

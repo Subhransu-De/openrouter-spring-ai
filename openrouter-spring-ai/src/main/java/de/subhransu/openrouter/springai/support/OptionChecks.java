@@ -19,6 +19,8 @@ public final class OptionChecks {
 
 	private static final int MAX_ECHO_LENGTH = 120;
 
+	private static final int MAX_SESSION_ID_LENGTH = 256;
+
 	// Bounds the remembered keys, so values that vary per request cannot grow memory.
 	private static final int MAX_WARNINGS = 256;
 
@@ -60,6 +62,33 @@ public final class OptionChecks {
 			index++;
 		}
 		return values;
+	}
+
+	/**
+	 * Checks a {@code session_id}, which OpenRouter limits to 256 characters.
+	 * @param sessionId the session identifier to check
+	 * @return the same session identifier
+	 */
+	@Contract("!null -> !null")
+	public static @Nullable String sessionId(@Nullable String sessionId) {
+		return maxLength("sessionId", sessionId, MAX_SESSION_ID_LENGTH);
+	}
+
+	/**
+	 * Rejects a string longer than a documented limit. Characters are counted as code
+	 * points, as JSON Schema {@code maxLength} counts them.
+	 * @param option the option name used in the message
+	 * @param value the string to check
+	 * @param maxLength the documented maximum length
+	 * @return the same string
+	 */
+	@Contract("_, !null, _ -> !null")
+	private static @Nullable String maxLength(String option, @Nullable String value, int maxLength) {
+		if (value != null && value.codePointCount(0, value.length()) > maxLength) {
+			throw new IllegalArgumentException(option + " must be at most " + maxLength + " characters, but was "
+					+ value.codePointCount(0, value.length()) + " characters: " + describe(value));
+		}
+		return value;
 	}
 
 	/**

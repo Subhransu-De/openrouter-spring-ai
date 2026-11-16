@@ -1,6 +1,7 @@
 package de.subhransu.openrouter.springai.autoconfigure;
 
 import org.jspecify.annotations.Nullable;
+import de.subhransu.openrouter.springai.chat.OpenRouterTrace;
 import de.subhransu.openrouter.springai.image.OpenRouterImageOptions;
 import java.util.List;
 import java.util.Map;
@@ -8,6 +9,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.DeprecatedConfigurationProperty;
+import org.springframework.boot.context.properties.NestedConfigurationProperty;
 
 @ConfigurationProperties(OpenRouterImageProperties.CONFIG_PREFIX)
 public class OpenRouterImageProperties {
@@ -78,6 +80,18 @@ public class OpenRouterImageProperties {
 	private @Nullable List<String> inputReferences;
 
 	/**
+	 * Default session id for observability grouping, sent as session_id. At most 256
+	 * characters.
+	 */
+	private @Nullable String sessionId;
+
+	/**
+	 * Observability metadata sent as trace. A request trace replaces it as a whole.
+	 */
+	@NestedConfigurationProperty
+	private @Nullable OpenRouterTrace trace;
+
+	/**
 	 * OpenRouter provider object as a raw map with wire field names, sent unchanged.
 	 * Settings for one upstream provider go under options, keyed by the provider slug. A
 	 * list binds as a map keyed by index, and properties files and environment variables
@@ -104,6 +118,8 @@ public class OpenRouterImageProperties {
 			.outputCompression(this.outputCompression)
 			.seed(this.seed)
 			.inputReferences(this.inputReferences)
+			.sessionId(this.sessionId)
+			.trace(this.trace)
 			.providerExtraBody(providerExtraBody())
 			.build();
 	}
@@ -202,6 +218,22 @@ public class OpenRouterImageProperties {
 
 	public void setInputReferences(@Nullable List<String> inputReferences) {
 		this.inputReferences = inputReferences;
+	}
+
+	public @Nullable String getSessionId() {
+		return this.sessionId;
+	}
+
+	public void setSessionId(@Nullable String sessionId) {
+		this.sessionId = sessionId;
+	}
+
+	public @Nullable OpenRouterTrace getTrace() {
+		return this.trace;
+	}
+
+	public void setTrace(@Nullable OpenRouterTrace trace) {
+		this.trace = trace;
 	}
 
 	public @Nullable Map<String, @Nullable Object> getProviderExtraBody() {

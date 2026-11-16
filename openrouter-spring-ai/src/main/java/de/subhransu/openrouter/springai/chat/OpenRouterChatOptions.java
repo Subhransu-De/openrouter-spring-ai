@@ -60,6 +60,10 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 
 	private @Nullable String user;
 
+	private @Nullable String sessionId;
+
+	private @Nullable OpenRouterTrace trace;
+
 	private @Nullable OpenRouterResponseFormat responseFormat;
 
 	private @Nullable Boolean parallelToolCalls;
@@ -154,6 +158,8 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 		builder.topA(value(runtimeOptions.topA, this.topA));
 		builder.seed(value(runtimeOptions.seed, this.seed));
 		builder.user(value(runtimeOptions.user, this.user));
+		builder.sessionId(value(runtimeOptions.sessionId, this.sessionId));
+		builder.trace(value(runtimeOptions.trace, this.trace));
 		// responseFormat and outputSchema both choose the output format. As in Spring
 		// AI's OpenAI options, where both write one field, a request that sets either
 		// replaces the default pair instead of combining with the other default.
@@ -257,6 +263,14 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 
 	public @Nullable String getUser() {
 		return this.user;
+	}
+
+	public @Nullable String getSessionId() {
+		return this.sessionId;
+	}
+
+	public @Nullable OpenRouterTrace getTrace() {
+		return this.trace;
 	}
 
 	public @Nullable OpenRouterResponseFormat getResponseFormat() {
@@ -410,6 +424,8 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 			this.options.topA = source.topA;
 			this.options.seed = source.seed;
 			this.options.user = source.user;
+			this.options.sessionId = source.sessionId;
+			this.options.trace = source.trace;
 			this.options.responseFormat = source.responseFormat;
 			this.options.parallelToolCalls = source.parallelToolCalls;
 			this.options.toolStrict = source.toolStrict;
@@ -539,6 +555,25 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 
 		public Builder user(@Nullable String user) {
 			this.options.user = user;
+			return this;
+		}
+
+		/**
+		 * Groups related requests, such as one conversation or agent run, sent as
+		 * {@code session_id}. OpenRouter routes the requests of a session to the same
+		 * provider. At most 256 characters.
+		 */
+		public Builder sessionId(@Nullable String sessionId) {
+			this.options.sessionId = OptionChecks.sessionId(sessionId);
+			return this;
+		}
+
+		/**
+		 * Observability metadata, sent as {@code trace}. A per-request trace replaces the
+		 * default trace as a whole.
+		 */
+		public Builder trace(@Nullable OpenRouterTrace trace) {
+			this.options.trace = trace;
 			return this;
 		}
 

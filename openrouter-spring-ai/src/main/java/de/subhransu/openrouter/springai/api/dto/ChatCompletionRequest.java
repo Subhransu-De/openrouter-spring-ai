@@ -30,6 +30,7 @@ public record ChatCompletionRequest(@Nullable String model, @Nullable List<Strin
 		@JsonProperty("service_tier") @Nullable String serviceTier, @Nullable Map<String, @Nullable Object> metadata,
 		@Nullable String route, @Nullable UsageConfig usage, @Nullable List<String> modalities,
 		@JsonProperty("image_config") @Nullable Map<String, @Nullable Object> imageConfig, @Nullable AudioConfig audio,
+		@JsonProperty("session_id") @Nullable String sessionId, @Nullable Map<String, @Nullable Object> trace,
 		@JsonAnyGetter @Nullable Map<String, @Nullable Object> extraBody) {
 
 	public ChatCompletionRequest {
@@ -105,6 +106,10 @@ public record ChatCompletionRequest(@Nullable String model, @Nullable List<Strin
 		private @Nullable Map<String, @Nullable Object> imageConfig;
 
 		private @Nullable AudioConfig audio;
+
+		private @Nullable String sessionId;
+
+		private @Nullable Map<String, @Nullable Object> trace;
 
 		private @Nullable Map<String, @Nullable Object> extraBody;
 
@@ -261,6 +266,16 @@ public record ChatCompletionRequest(@Nullable String model, @Nullable List<Strin
 			return this;
 		}
 
+		public Builder sessionId(@Nullable String sessionId) {
+			this.sessionId = sessionId;
+			return this;
+		}
+
+		public Builder trace(@Nullable Map<String, @Nullable Object> trace) {
+			this.trace = trace;
+			return this;
+		}
+
 		public Builder extraBody(@Nullable Map<String, @Nullable Object> extraBody) {
 			this.extraBody = extraBody;
 			return this;
@@ -277,7 +292,7 @@ public record ChatCompletionRequest(@Nullable String model, @Nullable List<Strin
 					this.topA, this.maxTokens, this.maxCompletionTokens, this.stop, this.seed, this.user, this.stream,
 					this.responseFormat, this.tools, this.toolChoice, this.parallelToolCalls, this.provider,
 					this.reasoning, this.serviceTier, this.metadata, this.route, this.usage, this.modalities,
-					this.imageConfig, this.audio, this.extraBody);
+					this.imageConfig, this.audio, this.sessionId, this.trace, this.extraBody);
 		}
 
 	}

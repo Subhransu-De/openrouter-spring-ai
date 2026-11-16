@@ -177,6 +177,8 @@ class OpenRouterChatOptionsRobustnessTests {
 			.topA(0.8)
 			.seed(42)
 			.user("user-7")
+			.sessionId("session-7")
+			.trace(OpenRouterTrace.builder().traceId("trace-7").metadata(Map.of("tenant", "t")).build())
 			.responseFormat(OpenRouterResponseFormat.jsonObject())
 			.parallelToolCalls(true)
 			.toolStrict(true)

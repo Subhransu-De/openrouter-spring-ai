@@ -81,6 +81,8 @@ public final class OpenRouterResponsesRequestMapper {
 			.route(options.getRoute())
 			.serviceTier(serviceTier != null ? serviceTier.value() : null)
 			.user(options.getUser())
+			.sessionId(options.getSessionId())
+			.trace(TraceMapper.map(options.getTrace()))
 			.parallelToolCalls(options.getParallelToolCalls())
 			.toolChoice(ToolChoiceMapper.map(options.getToolChoice(), true, this.objectMapper, toolDefinitions))
 			.tools(mapTools(toolDefinitions, options.getToolStrict()))

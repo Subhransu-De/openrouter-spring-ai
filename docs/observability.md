@@ -45,4 +45,19 @@ spring:
         log-prompt: true
 ```
 
-Applications may supply their own model observation handlers or `ChatModelObservationConvention`, `EmbeddingModelObservationConvention`, and `ImageModelObservationConvention` beans. Boot backs off a standard handler when the application supplies the same handler type, and the OpenRouter models use the custom conventions.
+## OpenRouter sessions and traces
+
+OpenRouter can also group requests in its own observability output and send them to its broadcast destinations. Set [`sessionId` and `trace`](chat-options.md#sessions-and-traces) on chat, embedding or image options to name the session, trace, span and generation of a request there.
+
+The library does not copy the current Micrometer trace into `trace`. To correlate OpenRouter's records with your application traces, pass the current span IDs per request:
+
+```java
+TraceContext context = tracer.currentSpan().context(); // Micrometer Tracing; null-check currentSpan() outside a span
+String answer = client.prompt().user(question)
+    .options(OpenRouterChatOptions.builder()
+        .trace(OpenRouterTrace.builder().traceId(context.traceId()).parentSpanId(context.spanId()).build()))
+    .call().content();
+```
+
+Applications may supply their own model observation handlers
+ or `ChatModelObservationConvention`, `EmbeddingModelObservationConvention`, and `ImageModelObservationConvention` beans. Boot backs off a standard handler when the application supplies the same handler type, and the OpenRouter models use the custom conventions.
