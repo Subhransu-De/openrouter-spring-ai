@@ -35,7 +35,7 @@ java -jar openrouter-spring-ai-samples/build/libs/openrouter-spring-ai-samples-0
 
 The filename follows the source POM revision, not the published starter version. The Garage listens on `127.0.0.1:8080`; set `GARAGE_ADDRESS` and `GARAGE_PORT` to change that. Anyone who can reach the port can start runs that make billable API calls, so keep it on the loopback address unless your own access control sits in front of it. Live scenes need `OPENROUTER_API_KEY` in the environment; offline contracts do not.
 
-The sample tests run the Garage against a mock OpenRouter without an API key; see [Test the Garage without an API key](../CONTRIBUTING.md#test-the-garage-without-an-api-key).
+The sample tests run the Garage against a mock OpenRouter without an API key: `mvn -B -pl openrouter-spring-ai-samples -am -Dtest='*IntegrationTests' -Dsurefire.failIfNoSpecifiedTests=false test`.
 
 ## Start a run and read its evidence
 

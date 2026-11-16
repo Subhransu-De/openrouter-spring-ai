@@ -6,7 +6,6 @@ on:
       - main
     paths:
       - "README.md"
-      - "CONTRIBUTING.md"
       - "CHANGELOG.md"
       - "docs/**"
       - ".prettierrc.json"
@@ -16,7 +15,6 @@ on:
       - "**"
     paths:
       - "README.md"
-      - "CONTRIBUTING.md"
       - "CHANGELOG.md"
       - "docs/**"
       - ".prettierrc.json"
@@ -38,4 +36,4 @@ jobs:
           node-version: "24"
 
       - name: Run Prettier check
-        run: npx --yes prettier@3.9.6 --check README.md CONTRIBUTING.md CHANGELOG.md "docs/**/*.md"
+        run: npx --yes prettier@3.9.6 --check README.md CHANGELOG.md "docs/**/*.md"

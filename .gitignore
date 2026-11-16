@@ -22,6 +22,5 @@ outputs/
 *.md
 !/README.md
 !/AGENTS.md
-!/CONTRIBUTING.md
 !/CHANGELOG.md
 !/docs/*.md

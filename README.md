@@ -24,7 +24,7 @@ A native [Spring AI](https://spring.io/projects/spring-ai) integration for [Open
 >
 > Install only one OpenRouter Spring AI starter in an application. Combining this starter with another OpenRouter starter can make provider selection and bean creation order-dependent.
 
-[Getting started](docs/getting-started.md) · [Documentation](docs/README.md) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md)
+[Getting started](docs/getting-started.md) · [Documentation](docs/README.md) · [Changelog](CHANGELOG.md)
 
 ![A call goes from your app through Spring AI's ChatClient into this library's model and API client, then to OpenRouter, which routes it to an upstream provider. The modules are the core library, its auto-configuration, and the starter that applications add.](docs/images/architecture.svg)
 
@@ -97,10 +97,6 @@ Each call is a billable OpenRouter request.
 ## Modules
 
 Applications add `openrouter-spring-ai-starter`, which brings in the core library `openrouter-spring-ai` and its auto-configuration. `openrouter-spring-ai-samples` is the [Garage demo](docs/garage.md).
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for builds, tests and quality checks.
 
 ## License
 
