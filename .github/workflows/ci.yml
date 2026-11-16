@@ -484,8 +484,9 @@ jobs:
         with:
           gradle-version: 9.7.1
 
+      # check does not depend on assemble, so name both to keep jar and bootJar packaging covered.
       - name: Gradle test
-        run: gradle --no-daemon check
+        run: gradle --no-daemon assemble check
 
       - name: Publish synthetic test and coverage reports
         if: failure()
