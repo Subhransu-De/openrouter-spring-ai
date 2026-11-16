@@ -84,7 +84,7 @@ If a mode does not support an option, preserve or add explicit validation rather
 
 ## Documentation and artifacts
 
-- Update the relevant README or `docs/` page when installation, public options, request modes, or observable behavior changes. Build and quality-check guidance belongs in `CONTRIBUTING.md`; notable user-facing changes belong in `CHANGELOG.md`.
+- Update the relevant README or `docs/` page when installation, public options, request modes, or observable behavior changes. Notable user-facing changes belong in `CHANGELOG.md`.
 - Explain how a consumer uses a capability and its limitations. Keep local implementation reasoning near the code; create a separate architecture document only for a durable decision spanning components.
 - Rewrite stale guidance instead of appending a competing explanation. Do not copy field catalogs from source into documentation.
 - Keep plans, review HTML, screenshots, raw logs, and agent scratch files outside the repository. Do not stage them with product changes.

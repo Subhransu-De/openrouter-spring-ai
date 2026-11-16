@@ -26,4 +26,4 @@ Pick a route:
 | [Observability](observability.md)                         | Where do usage, cost and observations appear?                                  |
 | [The Garage demo](garage.md)                              | How do I run the sample application?                                           |
 
-To build the project or change it, see [CONTRIBUTING.md](../CONTRIBUTING.md). Release history is in [CHANGELOG.md](../CHANGELOG.md).
+Release history is in [CHANGELOG.md](../CHANGELOG.md).

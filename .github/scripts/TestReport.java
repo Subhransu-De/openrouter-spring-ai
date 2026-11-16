@@ -424,7 +424,7 @@ public final class TestReport {
 	}
 
 	private static Rules rules(Map<String, String> o) {
-		// Measured on this repository's CI from main runs of the same commit; CONTRIBUTING.md has the numbers.
+		// Measured on this repository's CI from main runs of the same commit.
 		return new Rules(number(o, "min-ms", 3000), number(o, "min-factor", 2), number(o, "area-warn-ms", 5000),
 				number(o, "area-fail-ms", 10000), number(o, "area-fail-share", 0.35), 0.5, 1000);
 	}
