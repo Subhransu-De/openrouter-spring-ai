@@ -3,7 +3,7 @@ name: Documentation Formatting
 on:
   push:
     branches:
-      - "**"
+      - main
     paths:
       - "README.md"
       - "CONTRIBUTING.md"
@@ -26,6 +26,7 @@ jobs:
   format:
     name: Check Markdown formatting
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Check out repository

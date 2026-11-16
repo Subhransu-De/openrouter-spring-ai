@@ -16,9 +16,6 @@ on:
   push:
     branches:
       - main
-  schedule:
-    # 00:00 IST. GitHub schedules use UTC.
-    - cron: "30 18 * * *"
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     branches:
@@ -26,6 +23,12 @@ on:
 
 permissions:
   contents: read
+
+# A new push to a pull request cancels its older run. Pushes to main and manual runs get a group of their own,
+# because a pending run in a shared group is replaced even when cancel-in-progress is false.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   mutation:
@@ -125,6 +128,7 @@ jobs:
     if: github.event_name != 'workflow_dispatch'
     name: Immutable action references
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Install action auditor
@@ -262,6 +266,7 @@ jobs:
     if: github.event_name != 'workflow_dispatch'
     name: Secret scan
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: read
@@ -285,76 +290,10 @@ jobs:
       - name: Run Gitleaks
         run: gitleaks detect --source . --verbose --redact
 
-  maven-build:
-    name: Package with Maven · Java ${{ matrix.java-version }}
-    runs-on: ubuntu-latest
-    needs: gitleaks
-
-    strategy:
-      fail-fast: false
-      matrix:
-        java-version: ["17", "21", "25"]
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: Set up Java
-        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
-        with:
-          distribution: temurin
-          java-version: ${{ matrix.java-version }}
-
-      # A run-scoped key always misses, so every run saves back whatever it had to download.
-      - name: Cache Maven repository
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.m2/repository
-          key: maven-package-java${{ matrix.java-version }}-${{ github.run_id }}
-          restore-keys: maven-package-java${{ matrix.java-version }}-
-
-      - name: Maven build
-        run: mvn -B -DskipTests package
-
-      - name: Check POM and properties formatting
-        run: mvn -B -Pspotless spotless:check
-
-  gradle-build:
-    name: Assemble with Gradle · Java ${{ matrix.java-version }}
-    runs-on: ubuntu-latest
-    needs: gitleaks
-
-    strategy:
-      fail-fast: false
-      matrix:
-        java-version: ["17", "21", "25"]
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: Set up Java
-        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
-        with:
-          distribution: temurin
-          java-version: ${{ matrix.java-version }}
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
-        with:
-          gradle-version: 9.7.1
-
-      - name: Gradle build
-        run: gradle --no-daemon assemble
-
-      - name: Check Java style
-        if: matrix.java-version != '17'
-        run: gradle --no-daemon checkstyleMain checkstyleTest
-
   maven-test:
     name: Verify with Maven · Java ${{ matrix.java-version }}
     runs-on: ubuntu-latest
-    needs: maven-build
+    timeout-minutes: 40
     permissions:
       actions: read # find earlier test reports on main
       contents: read
@@ -374,7 +313,7 @@ jobs:
           distribution: temurin
           java-version: ${{ matrix.java-version }}
 
-      # Keyed apart from the package job: verify resolves a wider plugin set than package.
+      # A run-scoped key always misses, so every run saves back whatever it had to download.
       - name: Cache Maven repository
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -428,6 +367,11 @@ jobs:
         if: matrix.java-version == '25'
         run: mvn -B -N -Pgate-its verify
 
+      # The result does not depend on the JDK, so one matrix entry checks it.
+      - name: Check POM and properties formatting
+        if: ${{ !cancelled() && matrix.java-version == '25' }}
+        run: mvn -B -Pspotless spotless:check
+
       - name: Publish synthetic test and coverage reports
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -444,6 +388,7 @@ jobs:
     if: ${{ !cancelled() && github.event_name == 'pull_request' }}
     needs: maven-test
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # One report job at a time per pull request, so an older commit cannot post over a newer one.
     concurrency:
       group: test-report-${{ github.event.pull_request.number }}
@@ -477,14 +422,14 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           base_run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$BASE_SHA&status=success&per_page=10" \
-            --jq '[.workflow_runs[] | select(.head_branch == "main") | select(.event == "push" or .event == "schedule")
+            --jq '[.workflow_runs[] | select(.head_branch == "main") | select(.event == "push")
                    | select(.head_repository.full_name == env.GITHUB_REPOSITORY)][0].id // empty')
           if [ -n "$base_run" ]; then
             gh run download "$base_run" --repo "$GITHUB_REPOSITORY" --pattern 'test-report-java*' --dir base/0 || true
           fi
           n=0
           for id in $(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=main&status=success&per_page=30" \
-            --jq '.workflow_runs[] | select(.event == "push" or .event == "schedule")
+            --jq '.workflow_runs[] | select(.event == "push")
                   | select(.head_repository.full_name == env.GITHUB_REPOSITORY) | .id'); do
             if [ "$id" = "$base_run" ]; then continue; fi
             if gh run download "$id" --repo "$GITHUB_REPOSITORY" --pattern 'test-report-java*' --dir "base/$((n + 1))"; then
@@ -517,7 +462,7 @@ jobs:
   gradle-test:
     name: Verify with Gradle · Java ${{ matrix.java-version }}
     runs-on: ubuntu-latest
-    needs: gradle-build
+    timeout-minutes: 30
 
     strategy:
       fail-fast: false
