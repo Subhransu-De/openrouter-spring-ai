@@ -145,7 +145,7 @@ public class OpenRouterAudioSpeechOptions implements TextToSpeechOptions {
 		return this.trace;
 	}
 
-	public static final class Builder implements TextToSpeechOptions.Builder {
+	public static final class Builder {
 
 		private final OpenRouterAudioSpeechOptions options;
 
@@ -166,7 +166,6 @@ public class OpenRouterAudioSpeechOptions implements TextToSpeechOptions {
 			this.options.trace = source.trace;
 		}
 
-		@Override
 		public Builder model(@Nullable String model) {
 			this.options.model = model;
 			return this;
@@ -177,7 +176,6 @@ public class OpenRouterAudioSpeechOptions implements TextToSpeechOptions {
 		 * @param voice the voice, or {@code null}; not empty
 		 * @return this builder
 		 */
-		@Override
 		public Builder voice(@Nullable String voice) {
 			if (voice != null && voice.isEmpty()) {
 				throw new IllegalArgumentException("speech voice must not be empty; leave it unset instead");
@@ -192,7 +190,6 @@ public class OpenRouterAudioSpeechOptions implements TextToSpeechOptions {
 		 * default ({@code pcm})
 		 * @return this builder
 		 */
-		@Override
 		public Builder format(@Nullable String format) {
 			if (format != null && !FORMATS.contains(format)) {
 				throw new IllegalArgumentException("speech format " + OptionChecks.describe(format)
@@ -208,7 +205,6 @@ public class OpenRouterAudioSpeechOptions implements TextToSpeechOptions {
 		 * @param speed a positive, finite multiplier, or {@code null}
 		 * @return this builder
 		 */
-		@Override
 		public Builder speed(@Nullable Double speed) {
 			if (speed != null && (!Double.isFinite(speed) || speed <= 0)) {
 				throw new IllegalArgumentException("speech speed must be a positive finite number, but was " + speed);
@@ -266,7 +262,6 @@ public class OpenRouterAudioSpeechOptions implements TextToSpeechOptions {
 			return this;
 		}
 
-		@Override
 		public OpenRouterAudioSpeechOptions build() {
 			return new Builder(this.options).options;
 		}

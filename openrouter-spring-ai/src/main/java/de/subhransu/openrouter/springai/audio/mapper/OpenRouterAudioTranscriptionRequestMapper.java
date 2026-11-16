@@ -15,6 +15,7 @@ import java.net.URI;
 import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Pattern;
 import org.jspecify.annotations.Nullable;
 import org.springframework.core.io.Resource;
 import org.springframework.util.Assert;
@@ -32,6 +33,11 @@ public final class OpenRouterAudioTranscriptionRequestMapper {
 	private static final String ENDPOINT = "/audio/transcriptions";
 
 	private static final int MAX_URL_LENGTH = 8000;
+
+	// URI schemes are ASCII and case-insensitive; without UNICODE_CASE the flag folds
+	// ASCII
+	// only, so no locale-dependent case mapping is involved.
+	private static final Pattern HTTP_SCHEME = Pattern.compile("https?", Pattern.CASE_INSENSITIVE);
 
 	private final int maxInlineAudioBytes;
 
@@ -65,10 +71,11 @@ public final class OpenRouterAudioTranscriptionRequestMapper {
 	// The API reference rejects diarize with json (HTTP 400) and ignores timestamp
 	// granularities without verbose_json; reject both here so neither is lost silently.
 	private static void checkVerboseOnlyOptions(OpenRouterAudioTranscriptionOptions options) {
-		if (options.getResponseFormat() == OpenRouterTranscriptionFormat.VERBOSE_JSON) {
+		OpenRouterTranscriptionFormat responseFormat = options.getResponseFormat();
+		if (responseFormat == OpenRouterTranscriptionFormat.VERBOSE_JSON) {
 			return;
 		}
-		String format = options.getResponseFormat() != null ? options.getResponseFormat().value() : "json (default)";
+		String format = responseFormat != null ? responseFormat.value() : "json (default)";
 		if (Boolean.TRUE.equals(options.getDiarize())) {
 			throw new IllegalArgumentException(
 					"diarize requires responseFormat VERBOSE_JSON, but the response format is " + format);
@@ -120,8 +127,8 @@ public final class OpenRouterAudioTranscriptionRequestMapper {
 			throw new IllegalArgumentException(
 					"sendAudioUrl requires an HTTP(S) resource, but " + audio.getDescription() + " has no URL", ex);
 		}
-		String scheme = uri.getScheme() != null ? uri.getScheme().toLowerCase(Locale.ROOT) : null;
-		if (!"http".equals(scheme) && !"https".equals(scheme)) {
+		String scheme = uri.getScheme();
+		if (scheme == null || !HTTP_SCHEME.matcher(scheme).matches()) {
 			throw new IllegalArgumentException("sendAudioUrl requires an HTTP(S) resource, but the URL scheme was "
 					+ OptionChecks.describe(scheme));
 		}
