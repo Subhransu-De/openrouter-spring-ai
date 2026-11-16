@@ -1,0 +1,19 @@
+{
+  "name": "audio-speech-pcm",
+  "priority": 30,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/audio/speech"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "audio/pcm"
+    },
+    "bodyFileName": "audio/speech.pcm",
+    "chunkedDribbleDelay": {
+      "numberOfChunks": 4,
+      "totalDuration": 200
+    }
+  }
+}

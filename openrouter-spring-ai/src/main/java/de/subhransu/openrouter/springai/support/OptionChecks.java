@@ -4,6 +4,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 import java.util.function.Supplier;
 import org.apache.commons.logging.Log;
 import org.jspecify.annotations.Nullable;
@@ -20,6 +21,9 @@ public final class OptionChecks {
 	private static final int MAX_ECHO_LENGTH = 120;
 
 	private static final int MAX_SESSION_ID_LENGTH = 256;
+
+	// OpenRouter's documented input_audio.format pattern.
+	private static final Pattern AUDIO_FORMAT = Pattern.compile("[a-zA-Z0-9][a-zA-Z0-9+._-]{0,15}");
 
 	// Bounds the remembered keys, so values that vary per request cannot grow memory.
 	private static final int MAX_WARNINGS = 256;
@@ -72,6 +76,22 @@ public final class OptionChecks {
 	@Contract("!null -> !null")
 	public static @Nullable String sessionId(@Nullable String sessionId) {
 		return maxLength("sessionId", sessionId, MAX_SESSION_ID_LENGTH);
+	}
+
+	/**
+	 * Checks an audio format, such as {@code wav}, against the pattern OpenRouter
+	 * documents for {@code input_audio.format}.
+	 * @param source where the format came from, used in the message
+	 * @param format the format to check
+	 * @return the same format
+	 */
+	@Contract("_, !null -> !null")
+	public static @Nullable String audioFormat(String source, @Nullable String format) {
+		if (format != null && !AUDIO_FORMAT.matcher(format).matches()) {
+			throw new IllegalArgumentException(source + " " + describe(format)
+					+ " is not a valid audio format: use 1 to 16 letters, digits or +._-, starting with a letter or digit");
+		}
+		return format;
 	}
 
 	/**

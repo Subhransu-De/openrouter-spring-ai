@@ -1,0 +1,20 @@
+{
+  "name": "audio-transcriptions-too-large",
+  "priority": 10,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/audio/transcriptions",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.model == 'synthetic/too-large')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 413,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "errors/413-audio-too-large.json"
+  }
+}

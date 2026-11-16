@@ -15,6 +15,9 @@ import de.subhransu.openrouter.springai.api.dto.ImagesRequest;
 import de.subhransu.openrouter.springai.api.dto.ImagesResponse;
 import de.subhransu.openrouter.springai.api.dto.ImagesStreamEvent;
 import de.subhransu.openrouter.springai.api.dto.ContentPart;
+import de.subhransu.openrouter.springai.api.dto.SpeechRequest;
+import de.subhransu.openrouter.springai.api.dto.TranscriptionRequest;
+import de.subhransu.openrouter.springai.api.dto.TranscriptionResponse;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorResponse;
 import org.jspecify.annotations.Nullable;
 import org.springframework.aot.hint.BindingReflectionHintsRegistrar;
@@ -37,6 +40,7 @@ public final class OpenRouterSerializationRuntimeHints implements RuntimeHintsRe
 				ResponsesStreamEvent.class, ResponsesInputMessage.class, ResponsesFunctionCall.class,
 				ResponsesFunctionCallOutput.class, EmbeddingsRequest.class, EmbeddingsResponse.class,
 				ImagesRequest.class, ImagesResponse.class, ImagesStreamEvent.class, ContentPart.class,
+				SpeechRequest.class, TranscriptionRequest.class, TranscriptionResponse.class,
 				OpenRouterErrorResponse.class);
 	}
 

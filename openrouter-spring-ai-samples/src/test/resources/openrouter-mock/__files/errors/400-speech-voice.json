@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": 400,
+    "message": "Voice missing-voice is not available for synthetic/speech"
+  }
+}

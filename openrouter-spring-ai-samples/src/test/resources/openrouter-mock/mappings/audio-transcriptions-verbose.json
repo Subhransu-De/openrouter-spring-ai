@@ -1,0 +1,20 @@
+{
+  "name": "audio-transcriptions-verbose",
+  "priority": 20,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/audio/transcriptions",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.response_format == 'verbose_json')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "audio/transcription-verbose.json"
+  }
+}

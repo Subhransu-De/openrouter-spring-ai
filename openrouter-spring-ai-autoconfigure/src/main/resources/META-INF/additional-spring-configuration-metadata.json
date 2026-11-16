@@ -171,6 +171,54 @@
     {
       "name": "spring.ai.openrouter.image.trace.metadata",
       "description": "Custom trace keys sent next to the named fields. A key must not repeat a named field, such as trace_id."
+    },
+    {
+      "name": "spring.ai.openrouter.audio.speech.trace.trace-id",
+      "description": "Trace id that groups the generations of one trace, sent as trace.trace_id."
+    },
+    {
+      "name": "spring.ai.openrouter.audio.speech.trace.trace-name",
+      "description": "Name of the trace, sent as trace.trace_name."
+    },
+    {
+      "name": "spring.ai.openrouter.audio.speech.trace.span-name",
+      "description": "Name of the span that holds the generation, sent as trace.span_name."
+    },
+    {
+      "name": "spring.ai.openrouter.audio.speech.trace.generation-name",
+      "description": "Name of the generation, sent as trace.generation_name."
+    },
+    {
+      "name": "spring.ai.openrouter.audio.speech.trace.parent-span-id",
+      "description": "Id of the parent span, sent as trace.parent_span_id."
+    },
+    {
+      "name": "spring.ai.openrouter.audio.speech.trace.metadata",
+      "description": "Custom trace keys sent next to the named fields. A key must not repeat a named field, such as trace_id."
+    },
+    {
+      "name": "spring.ai.openrouter.audio.transcription.trace.trace-id",
+      "description": "Trace id that groups the generations of one trace, sent as trace.trace_id."
+    },
+    {
+      "name": "spring.ai.openrouter.audio.transcription.trace.trace-name",
+      "description": "Name of the trace, sent as trace.trace_name."
+    },
+    {
+      "name": "spring.ai.openrouter.audio.transcription.trace.span-name",
+      "description": "Name of the span that holds the generation, sent as trace.span_name."
+    },
+    {
+      "name": "spring.ai.openrouter.audio.transcription.trace.generation-name",
+      "description": "Name of the generation, sent as trace.generation_name."
+    },
+    {
+      "name": "spring.ai.openrouter.audio.transcription.trace.parent-span-id",
+      "description": "Id of the parent span, sent as trace.parent_span_id."
+    },
+    {
+      "name": "spring.ai.openrouter.audio.transcription.trace.metadata",
+      "description": "Custom trace keys sent next to the named fields. A key must not repeat a named field, such as trace_id."
     }
   ],
   "hints": [
@@ -198,6 +246,63 @@
         {
           "value": "openrouter",
           "description": "Use OpenRouter for Spring AI image model auto-configuration."
+        }
+      ]
+    },
+    {
+      "name": "spring.ai.model.audio.speech",
+      "values": [
+        {
+          "value": "openrouter",
+          "description": "Use OpenRouter for Spring AI text-to-speech model auto-configuration."
+        }
+      ]
+    },
+    {
+      "name": "spring.ai.model.audio.transcription",
+      "values": [
+        {
+          "value": "openrouter",
+          "description": "Use OpenRouter for Spring AI transcription model auto-configuration."
+        }
+      ]
+    },
+    {
+      "name": "spring.ai.openrouter.audio.speech.format",
+      "values": [
+        {
+          "value": "mp3",
+          "description": "MP3 audio."
+        },
+        {
+          "value": "pcm",
+          "description": "Headerless 16-bit little-endian PCM. The endpoint default."
+        }
+      ]
+    },
+    {
+      "name": "spring.ai.openrouter.audio.speech.provider.data-collection",
+      "values": [
+        {
+          "value": "allow",
+          "description": "Allow providers that may store or train on request data."
+        },
+        {
+          "value": "deny",
+          "description": "Use only providers that do not collect request data."
+        }
+      ]
+    },
+    {
+      "name": "spring.ai.openrouter.audio.transcription.provider.data-collection",
+      "values": [
+        {
+          "value": "allow",
+          "description": "Allow providers that may store or train on request data."
+        },
+        {
+          "value": "deny",
+          "description": "Use only providers that do not collect request data."
         }
       ]
     },

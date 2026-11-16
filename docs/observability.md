@@ -1,8 +1,8 @@
 # Observability
 
-Observations, usage metadata and logging for chat, embedding and image calls.
+Observations, usage metadata and logging for chat, embedding, image and audio calls.
 
-The starter includes Spring AI's standard observation auto-configuration for chat, embedding, and image models. OpenRouter model calls emit `gen_ai.client.operation` observations with the `openrouter` provider, operation, request model, response model where available, and token-usage context. When a `MeterRegistry` is present, chat and embedding usage is also recorded as `gen_ai.client.token.usage`.
+The starter includes Spring AI's standard observation auto-configuration for chat, embedding, image and audio models. OpenRouter model calls emit `gen_ai.client.operation` observations with the `openrouter` provider, operation, request model, response model where available, and token-usage context. Text-to-speech calls and streams, and transcription calls, are observed through Spring AI's audio conventions; transcription usage is in [`OpenRouterTranscriptionMetadata`](multimodal.md#transcription), not in token metrics. When a `MeterRegistry` is present, chat and embedding usage is also recorded as `gen_ai.client.token.usage`.
 
 Read usage with `OpenRouterUsage.from(...)`, which takes a `ChatResponse`, an `EmbeddingResponse` or an `ImageResponse` and never returns `null`. When the provider sent no usage, its token counts are `0` and its other values are `null`. Chat and embedding responses also return it from `getMetadata().getUsage()`, and image responses keep it in metadata under `OpenRouterMetadata.IMAGE_USAGE` (`openrouter.image.usage`). A usage of another type, such as the one Spring AI's `MessageAggregator` builds, keeps its token counts and cached reads. `OpenRouterUsage` retains provider cost, its breakdown, cached and reasoning token counts, and the native usage DTO. Cached reads and cache writes are also available through Spring AI's portable `Usage.getCacheReadInputTokens()` and `Usage.getCacheWriteInputTokens()`, from `cache_write_tokens` in both request modes. Streaming chat model observations retain the latest provider usage snapshot in both request modes, including cost and detailed counts. Completed streaming observations also keep the response metadata and aggregate each choice separately, with its index and finish reason. Like Spring AI's `MessageAggregator`, they do not keep generated images or audio; read media from the streamed responses. Aggregation is skipped when the observation registry is a no-op.
 
@@ -47,7 +47,7 @@ spring:
 
 ## OpenRouter sessions and traces
 
-OpenRouter can also group requests in its own observability output and send them to its broadcast destinations. Set [`sessionId` and `trace`](chat-options.md#sessions-and-traces) on chat, embedding or image options to name the session, trace, span and generation of a request there.
+OpenRouter can also group requests in its own observability output and send them to its broadcast destinations. Set [`sessionId` and `trace`](chat-options.md#sessions-and-traces) on chat, embedding, image, speech or transcription options to name the session, trace, span and generation of a request there.
 
 The library does not copy the current Micrometer trace into `trace`. To correlate OpenRouter's records with your application traces, pass the current span IDs per request:
 
@@ -59,4 +59,4 @@ String answer = client.prompt().user(question)
     .call().content();
 ```
 
-Applications may supply their own model observation handlers or `ChatModelObservationConvention`, `EmbeddingModelObservationConvention`, and `ImageModelObservationConvention` beans. Boot backs off a standard handler when the application supplies the same handler type, and the OpenRouter models use the custom conventions.
+Applications may supply their own model observation handlers or `ChatModelObservationConvention`, `EmbeddingModelObservationConvention`, `ImageModelObservationConvention`, `TextToSpeechModelObservationConvention` and `TranscriptionModelObservationConvention` beans. Boot backs off a standard handler when the application supplies the same handler type, and the OpenRouter models use the custom conventions.

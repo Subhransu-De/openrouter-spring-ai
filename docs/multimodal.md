@@ -1,6 +1,6 @@
 # Images, documents and audio
 
-Images, PDFs, audio and video as inputs, and generated images and audio as outputs.
+Images, PDFs, audio and video as inputs, generated images and audio as outputs, and the dedicated text-to-speech and transcription endpoints.
 
 ## Image inputs
 
@@ -157,3 +157,53 @@ These cases fail the stream:
 - `OpenRouterLimitExceededException` with `CHAT_AUDIO_BYTES` or `CHAT_AUDIO_CHOICES`: the fixed audio buffer limits (16 MiB, 128 audio choices per stream) are exceeded; see [Size, time and state limits](http-and-limits.md#size-time-and-state-limits).
 
 Assistant audio replay is rejected in both request modes, including identifier-only metadata. To continue with only the transcript, create a new text-only assistant message. This discards audio continuation state. Audio IDs and expiry metadata are kept for you but not replayed to the provider.
+
+## Text-to-speech
+
+`OpenRouterAudioSpeechModel` implements Spring AI's `TextToSpeechModel` on OpenRouter's [speech endpoint](https://openrouter.ai/docs/api/api-reference/tts/create-speech). The audio models are opt-in: set `spring.ai.model.audio.speech=openrouter` to get the bean. Pick a speech model and one of its voices:
+
+```java
+TextToSpeechResponse response = speechModel.call(new TextToSpeechPrompt("Your car is ready for pickup.",
+    OpenRouterAudioSpeechOptions.builder()
+        .model("your-speech-model")
+        .voice("your-voice")
+        .format("mp3")
+        .build()));
+byte[] mp3 = response.getResult().getOutput();
+```
+
+`stream(...)` emits each chunk of bytes as it arrives and does not buffer the whole body. Write the chunks in order to get the audio. A stream that fails after its first chunk ends with the error, not with completion, so keep the audio only when the stream completes. Cancelling the subscription closes the connection. Rate-limit rejections are retried before the first chunk only. The stream asks the server not to compress the body, because a server that compresses may hold chunks back.
+
+- `format` is sent as `response_format` and must be `mp3` or `pcm`. The endpoint defaults to `pcm`, which is headerless 16-bit little-endian audio, not a WAV file. Other formats are rejected when the options are built, including formats that Spring AI's portable `TextToSpeechOptions` carry for other providers.
+- `speed` must be positive. Providers without speed control ignore it or reject a value other than 1. `instructions` sets tone or pacing for the providers that support it.
+- OpenRouter applies only its data policy preferences to speech; `order`, `only` and `ignore` are not applied. Of the typed preferences only `dataCollection` is accepted, and setting another one fails before the request. `zdr` and provider-specific `provider.options` are not exposed yet.
+- Voice cloning (`input_references`) and multi-speaker input are not supported yet.
+- `call()` buffers the audio up to the [response body limit](http-and-limits.md#size-time-and-state-limits). Use `stream()` for long audio.
+
+Boot properties are under `spring.ai.openrouter.audio.speech.*`, such as `model`, `voice`, `format`, `speed`, `instructions`, `session-id`, `trace.*` and `provider.data-collection`.
+
+## Transcription
+
+`OpenRouterAudioTranscriptionModel` implements Spring AI's `TranscriptionModel` on OpenRouter's [transcription endpoint](https://openrouter.ai/docs/api/api-reference/stt/create-transcription). Set `spring.ai.model.audio.transcription=openrouter` to get the bean:
+
+```java
+AudioTranscriptionResponse response = transcriptionModel.call(new AudioTranscriptionPrompt(
+    new FileSystemResource("inspection-note.wav"),
+    OpenRouterAudioTranscriptionOptions.builder().model("your-transcription-model").language("en").build()));
+String text = response.getResult().getOutput();
+OpenRouterTranscriptionMetadata metadata = OpenRouterTranscriptionMetadata.from(response.getResult());
+Double cost = metadata.usage() != null ? metadata.usage().cost() : null;
+```
+
+The model reads the resource and sends it inline as base64 JSON. The audio format comes from `audioFormat`, or else from the extension of the resource's filename. A resource without either is rejected before the request. Resources larger than 25 MiB, OpenRouter's documented upload cap, are rejected before they are read in full. OpenAI and Groq models accept larger base64 bodies; raise the limit, up to 1 GiB, with `spring.ai.openrouter.audio.transcription.max-inline-audio-size` or `OpenRouterAudioTranscriptionModel.Builder.maxInlineAudioBytes(...)` for them. While a request is built, the audio, its base64 encoding and the JSON body are in memory at once, so a large limit needs several times that much heap. An audio format that is not 1 to 16 letters, digits or `+._-`, such as `wav~`, is rejected before the resource is read. Upstream providers time out after about 60 seconds of processing, so split long recordings.
+
+An HTTP(S) resource, such as a `UrlResource`, is downloaded by this application and sent inline by default. `UrlResource` downloads on the calling thread without a connect or read timeout, so for a remote file you do not control, download it with your own HTTP client and pass the bytes. With `sendAudioUrl(true)`, its URL is sent instead and the upstream provider downloads the file. The URL must then be publicly reachable, only some providers accept it, and the inline size limit does not apply. When the URL path has no extension, set `audioFormat`. Other resources are rejected when `sendAudioUrl` is set.
+
+- `responseFormat(OpenRouterTranscriptionFormat.VERBOSE_JSON)` adds the task, language, duration, confidence, segments and, when requested, words. `diarize` and `timestampGranularities` need it; a request that sets them with `json` fails before it is sent. Only some providers support `verbose_json`, diarization and `keyterms`, and OpenRouter rejects the others with HTTP 400.
+- `OpenRouterTranscriptionMetadata.from(transcription)` returns the usage (`seconds`, `cost` and tokens) and the `verbose_json` details, including each segment's timestamps, speaker, tokens and decoding statistics such as `avgLogprob` and `noSpeechProb`. The lists are empty, and the other values `null`, when the provider did not send them. A response without `text` raises `OpenRouterProtocolException`.
+- OpenRouter applies only its data policy preferences to transcription. Of the typed preferences only `dataCollection` is accepted, and setting another one fails before the request.
+- OpenRouter has no streaming transcription, so `stream(...)` fails with `UnsupportedOperationException`, Spring AI's default. Multipart uploads are not supported.
+
+Boot properties are under `spring.ai.openrouter.audio.transcription.*`, such as `model`, `language`, `response-format=verbose-json`, `timestamp-granularities=word,segment`, `audio-format`, `send-audio-url` and `provider.data-collection`.
+
+Unlike chat, embeddings and images, the audio models are opt-in, because Spring AI's other audio providers also create their models when the selector is unset, and an application that already uses one would otherwise get two beans of the same type. An audio selector that names `openrouter` also creates the OpenRouter client when chat, embeddings and images use other providers.

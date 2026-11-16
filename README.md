@@ -37,9 +37,10 @@ A native [Spring AI](https://spring.io/projects/spring-ai) integration for [Open
 - Usage accounting with cost, cached and reasoning tokens, and Micrometer observations.
 - Embeddings behind Spring AI's `EmbeddingModel`.
 - Image, PDF, audio and video inputs, image generation, and streamed chat audio output. See [Images, documents and audio](docs/multimodal.md).
+- Text-to-speech behind Spring AI's `TextToSpeechModel`, with streamed audio, and transcription behind `TranscriptionModel`. See [Text-to-speech](docs/multimodal.md#text-to-speech) and [Transcription](docs/multimodal.md#transcription).
 - Spring Boot auto-configuration under `spring.ai.openrouter.*`.
 
-Not supported yet: the models catalogue endpoint, OpenRouter server-side tools such as the web search plugin, and standalone text-to-speech or transcription.
+Not supported yet: the models catalogue endpoint, OpenRouter server-side tools such as the web search plugin, voice cloning and multi-speaker speech, and multipart transcription uploads.
 
 ## Install
 
