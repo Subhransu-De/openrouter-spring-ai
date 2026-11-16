@@ -99,6 +99,78 @@
     {
       "name": "spring.ai.openrouter.chat.response-format.schema",
       "description": "JSON schema document for a JSON schema format."
+    },
+    {
+      "name": "spring.ai.openrouter.chat.trace.trace-id",
+      "description": "Trace id that groups the generations of one trace, sent as trace.trace_id."
+    },
+    {
+      "name": "spring.ai.openrouter.chat.trace.trace-name",
+      "description": "Name of the trace, sent as trace.trace_name."
+    },
+    {
+      "name": "spring.ai.openrouter.chat.trace.span-name",
+      "description": "Name of the span that holds the generation, sent as trace.span_name."
+    },
+    {
+      "name": "spring.ai.openrouter.chat.trace.generation-name",
+      "description": "Name of the generation, sent as trace.generation_name."
+    },
+    {
+      "name": "spring.ai.openrouter.chat.trace.parent-span-id",
+      "description": "Id of the parent span, sent as trace.parent_span_id."
+    },
+    {
+      "name": "spring.ai.openrouter.chat.trace.metadata",
+      "description": "Custom trace keys sent next to the named fields. A key must not repeat a named field, such as trace_id."
+    },
+    {
+      "name": "spring.ai.openrouter.embedding.trace.trace-id",
+      "description": "Trace id that groups the generations of one trace, sent as trace.trace_id."
+    },
+    {
+      "name": "spring.ai.openrouter.embedding.trace.trace-name",
+      "description": "Name of the trace, sent as trace.trace_name."
+    },
+    {
+      "name": "spring.ai.openrouter.embedding.trace.span-name",
+      "description": "Name of the span that holds the generation, sent as trace.span_name."
+    },
+    {
+      "name": "spring.ai.openrouter.embedding.trace.generation-name",
+      "description": "Name of the generation, sent as trace.generation_name."
+    },
+    {
+      "name": "spring.ai.openrouter.embedding.trace.parent-span-id",
+      "description": "Id of the parent span, sent as trace.parent_span_id."
+    },
+    {
+      "name": "spring.ai.openrouter.embedding.trace.metadata",
+      "description": "Custom trace keys sent next to the named fields. A key must not repeat a named field, such as trace_id."
+    },
+    {
+      "name": "spring.ai.openrouter.image.trace.trace-id",
+      "description": "Trace id that groups the generations of one trace, sent as trace.trace_id."
+    },
+    {
+      "name": "spring.ai.openrouter.image.trace.trace-name",
+      "description": "Name of the trace, sent as trace.trace_name."
+    },
+    {
+      "name": "spring.ai.openrouter.image.trace.span-name",
+      "description": "Name of the span that holds the generation, sent as trace.span_name."
+    },
+    {
+      "name": "spring.ai.openrouter.image.trace.generation-name",
+      "description": "Name of the generation, sent as trace.generation_name."
+    },
+    {
+      "name": "spring.ai.openrouter.image.trace.parent-span-id",
+      "description": "Id of the parent span, sent as trace.parent_span_id."
+    },
+    {
+      "name": "spring.ai.openrouter.image.trace.metadata",
+      "description": "Custom trace keys sent next to the named fields. A key must not repeat a named field, such as trace_id."
     }
   ],
   "hints": [

@@ -1,6 +1,7 @@
 package de.subhransu.openrouter.springai.image;
 
 import org.jspecify.annotations.Nullable;
+import de.subhransu.openrouter.springai.chat.OpenRouterTrace;
 import de.subhransu.openrouter.springai.support.OptionChecks;
 import de.subhransu.openrouter.springai.support.OptionSnapshots;
 import java.util.List;
@@ -12,8 +13,9 @@ import org.springframework.ai.image.ImageOptions;
  * normalized OpenRouter fields: {@code n}, {@code size} (via width/height),
  * {@code resolution}, {@code aspect_ratio}, {@code quality}, {@code output_format},
  * {@code background}, {@code output_compression}, {@code seed}, {@code input_references}
- * (reference images for image-to-image work) and the {@code provider} object, set as
- * {@link Builder#providerExtraBody(Map) providerExtraBody}.
+ * (reference images for image-to-image work), {@code session_id}, {@code trace} and the
+ * {@code provider} object, set as {@link Builder#providerExtraBody(Map)
+ * providerExtraBody}.
  *
  * <p>
  * Images always come back base64-encoded, so the portable {@code responseFormat} is fixed
@@ -49,6 +51,10 @@ public class OpenRouterImageOptions implements ImageOptions {
 	private @Nullable List<String> inputReferences;
 
 	private @Nullable Map<String, @Nullable Object> providerExtraBody;
+
+	private @Nullable String sessionId;
+
+	private @Nullable OpenRouterTrace trace;
 
 	public static Builder builder() {
 		return new Builder();
@@ -99,6 +105,8 @@ public class OpenRouterImageOptions implements ImageOptions {
 			.seed(value(runtimeOptions.seed, this.seed))
 			.inputReferences(value(runtimeOptions.inputReferences, this.inputReferences))
 			.providerExtraBody(value(runtimeOptions.providerExtraBody, this.providerExtraBody))
+			.sessionId(value(runtimeOptions.sessionId, this.sessionId))
+			.trace(value(runtimeOptions.trace, this.trace))
 			.build();
 	}
 
@@ -180,6 +188,14 @@ public class OpenRouterImageOptions implements ImageOptions {
 		return this.providerExtraBody;
 	}
 
+	public @Nullable String getSessionId() {
+		return this.sessionId;
+	}
+
+	public @Nullable OpenRouterTrace getTrace() {
+		return this.trace;
+	}
+
 	/**
 	 * Return the OpenRouter {@code provider} object.
 	 * @return the provider object, or {@code null}
@@ -213,6 +229,8 @@ public class OpenRouterImageOptions implements ImageOptions {
 			this.options.seed = source.seed;
 			this.options.inputReferences = OptionSnapshots.list(source.inputReferences);
 			this.options.providerExtraBody = OptionSnapshots.map(source.providerExtraBody);
+			this.options.sessionId = source.sessionId;
+			this.options.trace = source.trace;
 		}
 
 		public Builder model(@Nullable String model) {
@@ -302,6 +320,24 @@ public class OpenRouterImageOptions implements ImageOptions {
 		@Deprecated(since = "0.2.0", forRemoval = true)
 		public Builder providerOptions(@Nullable Map<String, @Nullable Object> providerOptions) {
 			return providerExtraBody(providerOptions);
+		}
+
+		/**
+		 * Groups related requests for observability, sent as {@code session_id}. At most
+		 * 256 characters.
+		 */
+		public Builder sessionId(@Nullable String sessionId) {
+			this.options.sessionId = OptionChecks.sessionId(sessionId);
+			return this;
+		}
+
+		/**
+		 * Observability metadata, sent as {@code trace}. A per-request trace replaces the
+		 * default trace as a whole.
+		 */
+		public Builder trace(@Nullable OpenRouterTrace trace) {
+			this.options.trace = trace;
+			return this;
 		}
 
 		public OpenRouterImageOptions build() {

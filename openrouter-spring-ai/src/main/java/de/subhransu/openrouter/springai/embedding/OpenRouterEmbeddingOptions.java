@@ -2,12 +2,15 @@ package de.subhransu.openrouter.springai.embedding;
 
 import org.jspecify.annotations.Nullable;
 import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
+import de.subhransu.openrouter.springai.chat.OpenRouterTrace;
+import de.subhransu.openrouter.springai.support.OptionChecks;
 import org.springframework.ai.embedding.EmbeddingOptions;
 
 /**
  * Options for the OpenRouter embeddings endpoint. Mirrors the OpenRouter request fields:
- * {@code model}, {@code dimensions}, {@code encoding_format}, {@code user} and the
- * OpenRouter-specific {@code provider} routing preferences.
+ * {@code model}, {@code dimensions}, {@code encoding_format}, {@code user}, and the
+ * OpenRouter-specific {@code provider} routing preferences, {@code session_id} and
+ * {@code trace}.
  *
  * @author Subhransu De
  */
@@ -22,6 +25,10 @@ public class OpenRouterEmbeddingOptions implements EmbeddingOptions {
 	private @Nullable String user;
 
 	private @Nullable OpenRouterProviderPreferences provider;
+
+	private @Nullable String sessionId;
+
+	private @Nullable OpenRouterTrace trace;
 
 	public static Builder builder() {
 		return new Builder();
@@ -54,6 +61,8 @@ public class OpenRouterEmbeddingOptions implements EmbeddingOptions {
 			.encodingFormat(value(runtimeOptions.encodingFormat, this.encodingFormat))
 			.user(value(runtimeOptions.user, this.user))
 			.provider(value(runtimeOptions.provider, this.provider))
+			.sessionId(value(runtimeOptions.sessionId, this.sessionId))
+			.trace(value(runtimeOptions.trace, this.trace))
 			.build();
 	}
 
@@ -83,6 +92,14 @@ public class OpenRouterEmbeddingOptions implements EmbeddingOptions {
 		return this.provider;
 	}
 
+	public @Nullable String getSessionId() {
+		return this.sessionId;
+	}
+
+	public @Nullable OpenRouterTrace getTrace() {
+		return this.trace;
+	}
+
 	public static final class Builder {
 
 		private final OpenRouterEmbeddingOptions options;
@@ -98,6 +115,8 @@ public class OpenRouterEmbeddingOptions implements EmbeddingOptions {
 			this.options.encodingFormat = source.encodingFormat;
 			this.options.user = source.user;
 			this.options.provider = source.provider;
+			this.options.sessionId = source.sessionId;
+			this.options.trace = source.trace;
 		}
 
 		public Builder model(@Nullable String model) {
@@ -122,6 +141,24 @@ public class OpenRouterEmbeddingOptions implements EmbeddingOptions {
 
 		public Builder provider(@Nullable OpenRouterProviderPreferences provider) {
 			this.options.provider = provider;
+			return this;
+		}
+
+		/**
+		 * Groups related requests for observability, sent as {@code session_id}. At most
+		 * 256 characters.
+		 */
+		public Builder sessionId(@Nullable String sessionId) {
+			this.options.sessionId = OptionChecks.sessionId(sessionId);
+			return this;
+		}
+
+		/**
+		 * Observability metadata, sent as {@code trace}. A per-request trace replaces the
+		 * default trace as a whole.
+		 */
+		public Builder trace(@Nullable OpenRouterTrace trace) {
+			this.options.trace = trace;
 			return this;
 		}
 

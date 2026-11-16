@@ -8,6 +8,7 @@ import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
 import de.subhransu.openrouter.springai.chat.OpenRouterReasoningOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterResponseFormat;
 import de.subhransu.openrouter.springai.chat.OpenRouterServiceTier;
+import de.subhransu.openrouter.springai.chat.OpenRouterTrace;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -87,6 +88,18 @@ public class OpenRouterChatProperties {
 	 * End-user identifier forwarded to OpenRouter.
 	 */
 	private @Nullable String user;
+
+	/**
+	 * Default session id that groups related requests, sent as session_id. OpenRouter
+	 * routes a session to one provider. At most 256 characters.
+	 */
+	private @Nullable String sessionId;
+
+	/**
+	 * Observability metadata sent as trace. A request trace replaces it as a whole.
+	 */
+	@NestedConfigurationProperty
+	private @Nullable OpenRouterTrace trace;
 
 	/**
 	 * Explicit output format. When output-schema is also set, output-schema is sent and a
@@ -228,6 +241,8 @@ public class OpenRouterChatProperties {
 			.presencePenalty(this.presencePenalty)
 			.frequencyPenalty(this.frequencyPenalty)
 			.user(this.user)
+			.sessionId(this.sessionId)
+			.trace(this.trace)
 			.responseFormat(this.responseFormat)
 			.outputSchema(this.outputSchema)
 			.extraBody(this.extraBody)
@@ -360,6 +375,22 @@ public class OpenRouterChatProperties {
 
 	public void setUser(@Nullable String user) {
 		this.user = user;
+	}
+
+	public @Nullable String getSessionId() {
+		return this.sessionId;
+	}
+
+	public void setSessionId(@Nullable String sessionId) {
+		this.sessionId = sessionId;
+	}
+
+	public @Nullable OpenRouterTrace getTrace() {
+		return this.trace;
+	}
+
+	public void setTrace(@Nullable OpenRouterTrace trace) {
+		this.trace = trace;
 	}
 
 	public @Nullable OpenRouterResponseFormat getResponseFormat() {

@@ -27,3 +27,10 @@ dependencies {
 	testImplementation("org.springframework.security:spring-security-oauth2-client")
 	testImplementation("com.tngtech.archunit:archunit-junit5:$archunitVersion")
 }
+
+// The configuration processor merges META-INF/additional-spring-configuration-metadata.json
+// into the generated metadata, so the compile output depends on that resource too.
+// Without this input a build-cache hit can restore metadata from before the file changed.
+tasks.compileJava {
+	inputs.files(tasks.processResources)
+}

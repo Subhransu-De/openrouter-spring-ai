@@ -3,6 +3,7 @@ package de.subhransu.openrouter.springai.image.mapper;
 import org.jspecify.annotations.Nullable;
 import de.subhransu.openrouter.springai.api.dto.ContentPart;
 import de.subhransu.openrouter.springai.api.dto.ImagesRequest;
+import de.subhransu.openrouter.springai.chat.mapper.TraceMapper;
 import de.subhransu.openrouter.springai.image.OpenRouterImageOptions;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -19,7 +20,7 @@ public final class OpenRouterImageRequestMapper {
 		return new ImagesRequest(model, promptText(prompt), options.getN(), size(options), options.getResolution(),
 				options.getAspectRatio(), options.getQuality(), options.getOutputFormat(), options.getBackground(),
 				options.getOutputCompression(), options.getSeed(), stream ? true : null, inputReferences(options),
-				options.getProviderExtraBody());
+				options.getProviderExtraBody(), options.getSessionId(), TraceMapper.map(options.getTrace()));
 	}
 
 	// OpenRouter expects each reference as an image content object ({"type": "image_url",

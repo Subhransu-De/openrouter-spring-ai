@@ -26,7 +26,8 @@ public record ResponsesRequest(@Nullable String model, @Nullable List<String> mo
 		@JsonProperty("tool_choice") @Nullable Object toolChoice, @Nullable List<ResponsesTool> tools,
 		@Nullable List<String> modalities,
 		@JsonProperty("image_config") @Nullable Map<String, @Nullable Object> imageConfig,
-		@Nullable Map<String, @Nullable Object> text,
+		@Nullable Map<String, @Nullable Object> text, @JsonProperty("session_id") @Nullable String sessionId,
+		@Nullable Map<String, @Nullable Object> trace,
 		@JsonAnyGetter @Nullable Map<String, @Nullable Object> extraBody) {
 
 	public ResponsesRequest {
@@ -88,6 +89,10 @@ public record ResponsesRequest(@Nullable String model, @Nullable List<String> mo
 		private @Nullable Map<String, @Nullable Object> imageConfig;
 
 		private @Nullable Map<String, @Nullable Object> text;
+
+		private @Nullable String sessionId;
+
+		private @Nullable Map<String, @Nullable Object> trace;
 
 		private @Nullable Map<String, @Nullable Object> extraBody;
 
@@ -212,6 +217,16 @@ public record ResponsesRequest(@Nullable String model, @Nullable List<String> mo
 			return this;
 		}
 
+		public Builder sessionId(@Nullable String sessionId) {
+			this.sessionId = sessionId;
+			return this;
+		}
+
+		public Builder trace(@Nullable Map<String, @Nullable Object> trace) {
+			this.trace = trace;
+			return this;
+		}
+
 		public Builder extraBody(@Nullable Map<String, @Nullable Object> extraBody) {
 			this.extraBody = extraBody;
 			return this;
@@ -227,7 +242,7 @@ public record ResponsesRequest(@Nullable String model, @Nullable List<String> mo
 					this.stream, this.temperature, this.topP, this.topK, this.frequencyPenalty, this.presencePenalty,
 					this.metadata, this.provider, this.reasoning, this.route, this.serviceTier, this.user,
 					this.parallelToolCalls, this.toolChoice, this.tools, this.modalities, this.imageConfig, this.text,
-					this.extraBody);
+					this.sessionId, this.trace, this.extraBody);
 		}
 
 	}

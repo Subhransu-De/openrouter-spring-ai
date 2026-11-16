@@ -1,6 +1,6 @@
 # Chat options
 
-How per-request options combine with model defaults, how to set fallbacks, routing and attribution, and how option objects are copied.
+How per-request options combine with model defaults, how to set fallbacks, routing, attribution, sessions and traces, and how option objects are copied.
 
 Two rules decide which options a request uses:
 
@@ -71,6 +71,32 @@ spring.ai.openrouter.app.categories[0]=spring-ai
 ```
 
 The `app.*` properties set the `HTTP-Referer`, `X-OpenRouter-Title` and `X-OpenRouter-Categories` headers on every request. Categories are joined with commas. For reasoning, see [Reasoning and prompt caching](reasoning-and-caching.md).
+
+## Sessions and traces
+
+`sessionId` groups related requests, such as one conversation or agent run, and is sent as `session_id`. OpenRouter routes every chat request in a session to the same upstream provider, which helps prompt-cache hits across turns. It also groups the requests in OpenRouter's observability output. `trace` holds the `trace_id`, `trace_name`, `span_name`, `generation_name` and `parent_span_id` that OpenRouter sends to its broadcast destinations. Entries in its `metadata` map are sent next to them as custom keys.
+
+A session ID usually belongs to one conversation, so set it per request:
+
+```java
+String answer = client.prompt().user(question)
+    .options(OpenRouterChatOptions.builder()
+        .sessionId(conversationId)
+        .trace(OpenRouterTrace.builder().traceId(runId).generationName("answer").build()))
+    .call().content();
+```
+
+Both options work in Chat Completions and Responses mode, in calls and streams. `OpenRouterEmbeddingOptions` and `OpenRouterImageOptions` have the same two options. For embeddings and images OpenRouter uses the session ID only for observability and does not send it to the upstream provider.
+
+A request `sessionId` overrides the default. A request `trace` replaces the default trace as a whole; it does not merge with it field by field. The builders reject a `sessionId` longer than 256 characters, OpenRouter's limit, and a `metadata` key that repeats a named trace field, such as `trace_id`. Boot defaults are checked at startup:
+
+```properties
+spring.ai.openrouter.chat.session-id=synthetic-session
+spring.ai.openrouter.chat.trace.trace-name=example-app
+spring.ai.openrouter.chat.trace.metadata.environment=staging
+```
+
+The `embedding` and `image` prefixes take the same keys. A default session ID suits an application that runs one session per instance. Otherwise set it per request. `extraBody` still rejects `session_id` and `trace`; use the typed options.
 
 ## Option snapshots
 

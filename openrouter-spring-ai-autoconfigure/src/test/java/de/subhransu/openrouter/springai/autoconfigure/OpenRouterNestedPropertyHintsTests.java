@@ -6,6 +6,7 @@ import de.subhransu.openrouter.springai.chat.OpenRouterAudioOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
 import de.subhransu.openrouter.springai.chat.OpenRouterReasoningOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterResponseFormat;
+import de.subhransu.openrouter.springai.chat.OpenRouterTrace;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.RecordComponent;
 import java.util.ArrayList;
@@ -32,7 +33,10 @@ class OpenRouterNestedPropertyHintsTests {
 				Arguments.of(OpenRouterChatProperties.class, OpenRouterReasoningOptions.class),
 				Arguments.of(OpenRouterChatProperties.class, OpenRouterAudioOptions.class),
 				Arguments.of(OpenRouterChatProperties.class, OpenRouterResponseFormat.class),
-				Arguments.of(OpenRouterEmbeddingProperties.class, OpenRouterProviderPreferences.class));
+				Arguments.of(OpenRouterEmbeddingProperties.class, OpenRouterProviderPreferences.class),
+				Arguments.of(OpenRouterChatProperties.class, OpenRouterTrace.class),
+				Arguments.of(OpenRouterEmbeddingProperties.class, OpenRouterTrace.class),
+				Arguments.of(OpenRouterImageProperties.class, OpenRouterTrace.class));
 	}
 
 	@Tag("build-release")
