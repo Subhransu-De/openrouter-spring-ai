@@ -2,6 +2,7 @@ package de.subhransu.openrouter.springai.support;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
@@ -30,7 +31,59 @@ public final class OptionChecks {
 
 	private static final Set<String> WARNED = ConcurrentHashMap.newKeySet();
 
+	private static final List<String> VERBOSITY = List.of("low", "medium", "high", "xhigh", "max");
+
+	private static final int MAX_TOP_LOGPROBS = 20;
+
 	private OptionChecks() {
+	}
+
+	/**
+	 * Rejects an {@code extraBody} key that a typed field of the same options or request
+	 * also sets. As with provider sort, an extension never overrides a typed option
+	 * silently.
+	 * @param extraBody the extension fields
+	 * @param typed the non-null typed fields, keyed by wire name
+	 */
+	public static void rejectTypedConflicts(@Nullable Map<String, ?> extraBody, Map<String, Object> typed) {
+		if (extraBody != null) {
+			typed.forEach((key, value) -> {
+				if (extraBody.containsKey(key)) {
+					throw new IllegalArgumentException("extraBody " + key + " " + describe(extraBody.get(key))
+							+ " conflicts with the typed option " + describe(value) + "; set only one of them");
+				}
+			});
+		}
+	}
+
+	/**
+	 * Checks a verbosity against the values that OpenRouter documents.
+	 * @param option the option name used in the message
+	 * @param verbosity the verbosity to check
+	 * @return the same verbosity
+	 */
+	@Contract("_, !null -> !null")
+	public static @Nullable Object verbosity(String option, @Nullable Object verbosity) {
+		if (verbosity != null && !VERBOSITY.contains(verbosity)) {
+			throw new IllegalArgumentException(
+					option + " " + describe(verbosity) + " is not supported; use " + String.join(", ", VERBOSITY));
+		}
+		return verbosity;
+	}
+
+	/**
+	 * Checks that a {@code top_logprobs} value is an integer from 0 to 20.
+	 * @param option the option name used in the message
+	 * @param value the value to check
+	 * @return the same value
+	 */
+	@Contract("_, !null -> !null")
+	public static @Nullable Object topLogprobs(String option, @Nullable Object value) {
+		if (value != null && (!(value instanceof Number number) || number.doubleValue() < 0
+				|| number.doubleValue() > MAX_TOP_LOGPROBS || number.doubleValue() != number.intValue())) {
+			throw new IllegalArgumentException(option + " must be an integer from 0 to 20, but was " + describe(value));
+		}
+		return value;
 	}
 
 	/**

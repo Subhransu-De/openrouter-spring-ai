@@ -31,10 +31,16 @@ public record ChatCompletionRequest(@Nullable String model, @Nullable List<Strin
 		@Nullable String route, @Nullable UsageConfig usage, @Nullable List<String> modalities,
 		@JsonProperty("image_config") @Nullable Map<String, @Nullable Object> imageConfig, @Nullable AudioConfig audio,
 		@JsonProperty("session_id") @Nullable String sessionId, @Nullable Map<String, @Nullable Object> trace,
-		@JsonAnyGetter @Nullable Map<String, @Nullable Object> extraBody) {
+		@Nullable Boolean logprobs, @JsonProperty("top_logprobs") @Nullable Integer topLogprobs,
+		@JsonProperty("logit_bias") @Nullable Map<String, Integer> logitBias, @Nullable String verbosity,
+		@JsonProperty("prompt_cache_key") @Nullable String promptCacheKey,
+		@JsonProperty("prompt_cache_options") @Nullable PromptCacheOptions promptCacheOptions,
+		@Nullable Prediction prediction, @JsonAnyGetter @Nullable Map<String, @Nullable Object> extraBody) {
 
 	public ChatCompletionRequest {
-		extraBody = RequestExtensions.chatRequest(extraBody);
+		extraBody = RequestExtensions.chatRequest(extraBody,
+				RequestExtensions.typed("logprobs", logprobs, "top_logprobs", topLogprobs, "logit_bias", logitBias,
+						"verbosity", verbosity, "prompt_cache_key", promptCacheKey));
 	}
 
 	/**
@@ -110,6 +116,20 @@ public record ChatCompletionRequest(@Nullable String model, @Nullable List<Strin
 		private @Nullable String sessionId;
 
 		private @Nullable Map<String, @Nullable Object> trace;
+
+		private @Nullable Boolean logprobs;
+
+		private @Nullable Integer topLogprobs;
+
+		private @Nullable Map<String, Integer> logitBias;
+
+		private @Nullable String verbosity;
+
+		private @Nullable String promptCacheKey;
+
+		private @Nullable PromptCacheOptions promptCacheOptions;
+
+		private @Nullable Prediction prediction;
 
 		private @Nullable Map<String, @Nullable Object> extraBody;
 
@@ -276,6 +296,41 @@ public record ChatCompletionRequest(@Nullable String model, @Nullable List<Strin
 			return this;
 		}
 
+		public Builder logprobs(@Nullable Boolean logprobs) {
+			this.logprobs = logprobs;
+			return this;
+		}
+
+		public Builder topLogprobs(@Nullable Integer topLogprobs) {
+			this.topLogprobs = topLogprobs;
+			return this;
+		}
+
+		public Builder logitBias(@Nullable Map<String, Integer> logitBias) {
+			this.logitBias = logitBias;
+			return this;
+		}
+
+		public Builder verbosity(@Nullable String verbosity) {
+			this.verbosity = verbosity;
+			return this;
+		}
+
+		public Builder promptCacheKey(@Nullable String promptCacheKey) {
+			this.promptCacheKey = promptCacheKey;
+			return this;
+		}
+
+		public Builder promptCacheOptions(@Nullable PromptCacheOptions promptCacheOptions) {
+			this.promptCacheOptions = promptCacheOptions;
+			return this;
+		}
+
+		public Builder prediction(@Nullable Prediction prediction) {
+			this.prediction = prediction;
+			return this;
+		}
+
 		public Builder extraBody(@Nullable Map<String, @Nullable Object> extraBody) {
 			this.extraBody = extraBody;
 			return this;
@@ -292,7 +347,9 @@ public record ChatCompletionRequest(@Nullable String model, @Nullable List<Strin
 					this.topA, this.maxTokens, this.maxCompletionTokens, this.stop, this.seed, this.user, this.stream,
 					this.responseFormat, this.tools, this.toolChoice, this.parallelToolCalls, this.provider,
 					this.reasoning, this.serviceTier, this.metadata, this.route, this.usage, this.modalities,
-					this.imageConfig, this.audio, this.sessionId, this.trace, this.extraBody);
+					this.imageConfig, this.audio, this.sessionId, this.trace, this.logprobs, this.topLogprobs,
+					this.logitBias, this.verbosity, this.promptCacheKey, this.promptCacheOptions, this.prediction,
+					this.extraBody);
 		}
 
 	}

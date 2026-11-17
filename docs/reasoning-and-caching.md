@@ -55,6 +55,28 @@ chatModel.call(new Prompt(message));
 | Chat Completions / supported Alibaba models    | Text blocks; use five minutes. Model and endpoint support varies.                                                                                                                                                  |
 | Chat Completions / supported Gemini models     | Text blocks; use five minutes. Only the final boundary is used; a boundary in the first system message caches the normalized system prompt, including its trailing text. Put dynamic text in a later user message. |
 | Chat Completions / other routes                | Provider-dependent; no guarantee of explicit caching or TTL preservation. Select a supporting route.                                                                                                               |
-| Responses                                      | This metadata is rejected. Its per-block `prompt_cache_breakpoint` has different semantics and is not implemented here.                                                                                            |
+| Responses                                      | This metadata is rejected. Its per-block `prompt_cache_breakpoint` is not implemented here, so only [request-level controls](#request-level-cache-controls) apply.                                                 |
 
-Upstream providers enforce model eligibility and minimum prompt sizes; the library does not infer them (see [OpenRouter's prompt caching guide](https://openrouter.ai/docs/guides/best-practices/prompt-caching)). Request-level automatic caching, [`prompt_cache_key`](extensions.md), and cache usage accounting (cached token counts, see [Observability](observability.md)) are separate capabilities.
+Upstream providers enforce model eligibility and minimum prompt sizes; the library does not infer them (see [OpenRouter's prompt caching guide](https://openrouter.ai/docs/guides/best-practices/prompt-caching)). Request-level automatic caching (a top-level `cache_control`) is not exposed. Cache usage accounting (cached token counts, see [Observability](observability.md)) is a separate capability.
+
+## Request-level cache controls
+
+Two chat options apply to a whole request, in Chat Completions and Responses mode, in calls and streams:
+
+- `promptCacheKey` groups requests that share a prompt prefix, sent as `prompt_cache_key`. Without a `sessionId`, OpenRouter also uses it as the sticky routing key.
+- `promptCacheOptions` holds OpenRouter's `prompt_cache_options`. OpenRouter applies them only to OpenAI models that support explicit prompt caching (GPT-5.6 and newer); other providers do not use them.
+
+```java
+OpenRouterChatOptions options = OpenRouterChatOptions.builder()
+    .promptCacheKey("example-app")
+    .promptCacheOptions(OpenRouterPromptCacheOptions.explicit(OpenRouterPromptCacheOptions.TTL_12_HOURS))
+    .build();
+```
+
+Explicit mode, the only mode OpenRouter documents, turns off OpenAI's automatic breakpoints, so the provider caches only marked blocks. How it combines with the cache breakpoints above:
+
+- In Chat Completions, `OpenRouterCacheBreakpoint` marks the blocks. OpenRouter converts the `cache_control` marker to OpenAI's `prompt_cache_breakpoint`.
+- OpenRouter does not translate a breakpoint TTL for OpenAI, so `Ttl.ONE_HOUR` has no effect there. The `ttl` of `promptCacheOptions`, `30m` by default or `12h`, sets the minimum lifetime of every entry the request writes. The `12h` lifetime is billed at a higher cache-write rate.
+- A request without breakpoints is not cached. OpenRouter documents this as the way to avoid the cache-write charge for a prompt that is sent once. Responses mode has no breakpoints here, so explicit mode always turns caching off in that mode.
+
+The mode is required, because explicit mode turns off automatic caching: a Boot `prompt-cache-options.ttl` without `prompt-cache-options.mode=explicit` fails at startup. An undocumented mode or TTL is sent as written and logged once as a warning.

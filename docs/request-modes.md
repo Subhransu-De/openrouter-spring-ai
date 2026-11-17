@@ -12,6 +12,7 @@ Responses rejects these with `IllegalArgumentException` before sending a request
 
 - `stopSequences`, `seed`, `repetitionPenalty`, `minP` and `topA`.
 - `includeUsage`, with any non-null value.
+- `logprobs`, `logitBias`, `verbosity` and `prediction`. Responses takes `topLogprobs`, `promptCacheKey` and `promptCacheOptions`.
 - The `extraBody` keys `logit_bias`, `logprobs`, `verbosity` and `transforms`. The error names the mode and lists the keys Responses accepts, `prompt_cache_key` and `top_logprobs`.
 - Cache breakpoints.
 - Chat audio output.

@@ -125,6 +125,14 @@
       "description": "Custom trace keys sent next to the named fields. A key must not repeat a named field, such as trace_id."
     },
     {
+      "name": "spring.ai.openrouter.chat.prompt-cache-options.mode",
+      "description": "Prompt-cache mode, sent as prompt_cache_options.mode. Required when prompt-cache-options is set. explicit caches only the blocks marked with a cache breakpoint and turns off automatic caching."
+    },
+    {
+      "name": "spring.ai.openrouter.chat.prompt-cache-options.ttl",
+      "description": "Minimum lifetime of every cache entry the request writes, 30m or 12h, sent as prompt_cache_options.ttl. Unset keeps the provider default of 30 minutes."
+    },
+    {
       "name": "spring.ai.openrouter.embedding.trace.trace-id",
       "description": "Trace id that groups the generations of one trace, sent as trace.trace_id."
     },

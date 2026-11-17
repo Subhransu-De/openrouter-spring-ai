@@ -19,7 +19,9 @@ class RequestBuilderTests {
 
 	private static final ReasoningOptions REASONING = new ReasoningOptions("high", null, null, null);
 
-	private static final Map<String, Object> EXTRA_BODY = Map.of("prompt_cache_key", "key");
+	private static final PromptCacheOptions CACHE = new PromptCacheOptions("explicit", "12h");
+
+	private static final Map<String, Object> EXTRA_BODY = Map.of("transforms", List.of());
 
 	// Every value is distinct, so a builder method wired to the wrong component makes the
 	// records unequal. Same-typed neighbours such as the Double sampling fields are the
@@ -31,7 +33,8 @@ class RequestBuilderTests {
 				0.4, 0.5, 0.6, 0.7, 0.8, 9, 10, List.of("stop"), 11, "user", true, Map.of("type", "json_object"), tools,
 				"auto", false, PROVIDER, REASONING, "flex", Map.of("trace", "t"), "fallback", new UsageConfig(true),
 				List.of("text"), Map.of("aspect_ratio", "1:1"), new AudioConfig("alloy", "wav"), "session",
-				Map.of("trace_id", "id"), EXTRA_BODY);
+				Map.of("trace_id", "id"), true, 4, Map.of("50256", -100), "low", "key", CACHE, Prediction.content("p"),
+				EXTRA_BODY);
 
 		ChatCompletionRequest built = ChatCompletionRequest.builder()
 			.model("model")
@@ -66,6 +69,13 @@ class RequestBuilderTests {
 			.audio(new AudioConfig("alloy", "wav"))
 			.sessionId("session")
 			.trace(Map.of("trace_id", "id"))
+			.logprobs(true)
+			.topLogprobs(4)
+			.logitBias(Map.of("50256", -100))
+			.verbosity("low")
+			.promptCacheKey("key")
+			.promptCacheOptions(CACHE)
+			.prediction(Prediction.content("p"))
 			.extraBody(EXTRA_BODY)
 			.build();
 
@@ -78,7 +88,7 @@ class RequestBuilderTests {
 		ResponsesRequest expected = new ResponsesRequest("model", List.of("fallback"), "input", "instructions", 5, true,
 				0.1, 0.2, 3, 0.4, 0.5, Map.of("trace", "t"), PROVIDER, REASONING, "fallback", "flex", "user", false,
 				"auto", tools, List.of("text"), Map.of("aspect_ratio", "1:1"), Map.of("verbosity", "low"), "session",
-				Map.of("trace_id", "id"), EXTRA_BODY);
+				Map.of("trace_id", "id"), 4, "key", CACHE, Map.of());
 
 		ResponsesRequest built = ResponsesRequest.builder()
 			.model("model")
@@ -106,7 +116,10 @@ class RequestBuilderTests {
 			.text(Map.of("verbosity", "low"))
 			.sessionId("session")
 			.trace(Map.of("trace_id", "id"))
-			.extraBody(EXTRA_BODY)
+			.topLogprobs(4)
+			.promptCacheKey("key")
+			.promptCacheOptions(CACHE)
+			.extraBody(Map.of())
 			.build();
 
 		assertThat(built).isEqualTo(expected);

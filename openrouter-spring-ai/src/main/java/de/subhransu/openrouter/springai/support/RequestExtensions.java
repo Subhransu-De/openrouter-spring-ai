@@ -29,24 +29,83 @@ public final class RequestExtensions {
 
 	private static final Set<String> INDEXED_LISTS = Set.of("only", "transforms");
 
-	private static final List<String> VERBOSITY = List.of("low", "medium", "high", "xhigh", "max");
-
 	private static final String EXTRA_BODY = "extraBody ";
+
+	private static final String LOGPROBS = "logprobs";
+
+	private static final String TOP_LOGPROBS = "top_logprobs";
 
 	private static final String PROVIDER_EXTRA_BODY = "providerExtraBody ";
 
 	private RequestExtensions() {
 	}
 
-	@Contract("!null -> !null")
-	public static @Nullable Map<String, @Nullable Object> chatRequest(@Nullable Map<String, ?> fields) {
-		Map<String, @Nullable Object> result = chat(fields, false);
-		if (result != null && result.get("top_logprobs") != null && !Boolean.TRUE.equals(result.get("logprobs"))) {
-			throw new IllegalArgumentException(
-					"extraBody top_logprobs requires logprobs=true in " + ExtensionChecks.CHAT_MODE
-							+ ", but logprobs was " + OptionChecks.describe(result.get("logprobs")));
+	/**
+	 * Validates Chat Completions extensions together with the typed fields of the same
+	 * request. A typed field and an extension with the same wire key cannot both be set,
+	 * and {@code top_logprobs} from either source requires {@code logprobs=true} from
+	 * either source.
+	 * @param fields the extension fields
+	 * @param typed the non-null typed fields, keyed by wire name
+	 * @return the validated extension snapshot
+	 */
+	@Contract("!null, _ -> !null")
+	public static @Nullable Map<String, @Nullable Object> chatRequest(@Nullable Map<String, ?> fields,
+			Map<String, Object> typed) {
+		Map<String, @Nullable Object> result = request(fields, typed, false);
+		Object logprobs = effective(typed, result, LOGPROBS);
+		if (effective(typed, result, TOP_LOGPROBS) != null && !Boolean.TRUE.equals(logprobs)) {
+			throw new IllegalArgumentException("top_logprobs requires logprobs=true in " + ExtensionChecks.CHAT_MODE
+					+ ", but logprobs was " + OptionChecks.describe(logprobs));
 		}
 		return result;
+	}
+
+	/**
+	 * Validates Responses extensions together with the typed fields of the same request.
+	 * @param fields the extension fields
+	 * @param typed the non-null typed fields, keyed by wire name
+	 * @return the validated extension snapshot
+	 */
+	@Contract("!null, _ -> !null")
+	public static @Nullable Map<String, @Nullable Object> responsesRequest(@Nullable Map<String, ?> fields,
+			Map<String, Object> typed) {
+		return request(fields, typed, true);
+	}
+
+	/**
+	 * Collects the non-null typed fields of a request, keyed by wire name. Only fields
+	 * that are also extension keys can conflict; {@code prediction} and
+	 * {@code prompt_cache_options} are not extension keys, so they are left out.
+	 * @param keysAndValues alternating wire names and typed values
+	 * @return the non-null typed fields
+	 */
+	public static Map<String, Object> typed(@Nullable Object... keysAndValues) {
+		if (keysAndValues.length % 2 != 0) {
+			throw new IllegalArgumentException("typed fields need alternating names and values");
+		}
+		Map<String, Object> typed = new LinkedHashMap<>();
+		for (int index = 0; index + 1 < keysAndValues.length; index += 2) {
+			Object value = keysAndValues[index + 1];
+			if (value != null) {
+				typed.put(String.valueOf(keysAndValues[index]), value);
+			}
+		}
+		return typed;
+	}
+
+	private static @Nullable Map<String, @Nullable Object> request(@Nullable Map<String, ?> fields,
+			Map<String, Object> typed, boolean responses) {
+		Map<String, @Nullable Object> result = chat(fields, responses);
+		OptionChecks.rejectTypedConflicts(result, typed);
+		return result;
+	}
+
+	// A typed field takes the place of its extension key, which the conflict check
+	// guarantees is absent.
+	private static @Nullable Object effective(Map<String, Object> typed, @Nullable Map<String, @Nullable Object> fields,
+			String key) {
+		return typed.containsKey(key) ? typed.get(key) : fields != null ? fields.get(key) : null;
 	}
 
 	@Contract("!null, _ -> !null")
@@ -61,19 +120,8 @@ public final class RequestExtensions {
 		requireType(result, EXTRA_BODY, "prompt_cache_key", String.class);
 		requireType(result, EXTRA_BODY, "logit_bias", Map.class);
 		requireStringList(result, EXTRA_BODY, "transforms", "transform name strings");
-		Object verbosity = result.get("verbosity");
-		if (verbosity != null && !VERBOSITY.contains(verbosity)) {
-			throw new IllegalArgumentException("extraBody verbosity " + OptionChecks.describe(verbosity)
-					+ " is not supported; use " + String.join(", ", VERBOSITY));
-		}
-		if (result.containsKey("top_logprobs") && result.get("top_logprobs") != null) {
-			Object value = result.get("top_logprobs");
-			if (!(value instanceof Number number) || number.doubleValue() < 0 || number.doubleValue() > 20
-					|| number.doubleValue() != number.intValue()) {
-				throw new IllegalArgumentException("extraBody top_logprobs must be an integer from 0 to 20, but was "
-						+ OptionChecks.describe(value));
-			}
-		}
+		OptionChecks.verbosity(EXTRA_BODY + "verbosity", result.get("verbosity"));
+		OptionChecks.topLogprobs(EXTRA_BODY + TOP_LOGPROBS, result.get(TOP_LOGPROBS));
 		return result;
 	}
 
