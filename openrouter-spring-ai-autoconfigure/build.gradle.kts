@@ -14,7 +14,6 @@ dependencies {
 	api("org.springframework.ai:spring-ai-autoconfigure-model-image-observation")
 	api("org.springframework.ai:spring-ai-autoconfigure-model-audio-observation")
 
-	compileOnly("org.springframework.boot:spring-boot-configuration-processor")
 	annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
 	// Writes META-INF/spring-autoconfigure-metadata.properties so Boot can filter these
 	// auto-configurations by their class conditions without loading them.
