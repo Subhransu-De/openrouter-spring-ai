@@ -180,6 +180,15 @@ class OpenRouterAutoConfigurationTests {
 
 	@Tag("configuration.properties")
 	@Test
+	void bodyLimitDefaultsMatchApiDefaults() {
+		var defaults = new OpenRouterConnectionProperties();
+		assertThat(defaults.getMaxResponseBodySize().toBytes())
+			.isEqualTo(OpenRouterApi.DEFAULT_MAX_RESPONSE_BODY_BYTES);
+		assertThat(defaults.getMaxErrorBodySize().toBytes()).isEqualTo(OpenRouterApi.DEFAULT_MAX_ERROR_BODY_BYTES);
+	}
+
+	@Tag("configuration.properties")
+	@Test
 	void toolCallAggregationDefaultsMatchAggregatorDefaults() {
 		var defaults = new OpenRouterChatProperties().getToolCallAggregation();
 		assertThat(defaults.getMaxSize().toBytes()).isEqualTo(OpenRouterStreamingToolCallAggregator.DEFAULT_MAX_BYTES);
