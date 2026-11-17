@@ -1,4 +1,4 @@
-description = "OpenRouterApi client, DTOs, options, mappers, ChatModel, EmbeddingModel."
+description = "OpenRouter chat, embedding, image, speech and transcription models for Spring AI."
 
 val archunitVersion = rootProject.extra["archunitVersion"] as String
 

@@ -1,4 +1,4 @@
-description = "@AutoConfiguration and @ConfigurationProperties for the OpenRouter provider."
+description = "Spring Boot auto-configuration for the OpenRouter Spring AI models."
 
 val archunitVersion = rootProject.extra["archunitVersion"] as String
 

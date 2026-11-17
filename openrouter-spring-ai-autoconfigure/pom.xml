@@ -10,8 +10,8 @@
   </parent>
 
   <artifactId>openrouter-spring-ai-autoconfigure</artifactId>
-  <name>OpenRouter Spring AI :: Autoconfigure</name>
-  <description>@AutoConfiguration and @ConfigurationProperties for the OpenRouter provider.</description>
+  <name>OpenRouter Spring AI Auto Configuration</name>
+  <description>Spring Boot auto-configuration for the OpenRouter Spring AI models.</description>
 
   <properties>
     <flatten.mode>ossrh</flatten.mode>

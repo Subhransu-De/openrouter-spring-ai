@@ -118,17 +118,15 @@ jobs:
           bundle=target/central-publishing/central-bundle.zip
           test -s "$bundle"
           entries=$(jar tf "$bundle")
-          for artifact in openrouter-spring-ai-parent openrouter-spring-ai openrouter-spring-ai-autoconfigure openrouter-spring-ai-starter; do
+          for artifact in openrouter-spring-ai openrouter-spring-ai-autoconfigure openrouter-spring-ai-starter; do
             base="de/subhransu/$artifact/$VERSION/$artifact-$VERSION"
             grep -Fx "$base.pom" <<< "$entries"
-            if [[ "$artifact" != openrouter-spring-ai-parent ]]; then
-              for classifier in '' '-sources' '-javadoc'; do
-                grep -Fx "$base$classifier.jar" <<< "$entries"
-              done
-            fi
+            for classifier in '' '-sources' '-javadoc'; do
+              grep -Fx "$base$classifier.jar" <<< "$entries"
+            done
           done
-          if grep -E '(^|/)(openrouter-spring-ai-samples/|maven-metadata[^/]*\.xml$|_remote\.repositories$)' <<< "$entries"; then
-            echo 'Unexpected sample artifacts or repository metadata in release bundle.'
+          if grep -E '(^|/)(openrouter-spring-ai-samples/|openrouter-spring-ai-parent/|maven-metadata[^/]*\.xml$|_remote\.repositories$)' <<< "$entries"; then
+            echo 'Unexpected sample or parent artifacts or repository metadata in release bundle.'
             exit 1
           fi
       - name: Sign and upload with Maven; wait for Central validation
