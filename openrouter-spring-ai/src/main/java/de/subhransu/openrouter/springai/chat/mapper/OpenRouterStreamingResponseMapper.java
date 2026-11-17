@@ -4,7 +4,6 @@ import de.subhransu.openrouter.springai.chat.OpenRouterMetadata;
 import java.util.Objects;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionChunk;
 import de.subhransu.openrouter.springai.api.dto.Choice;
-import de.subhransu.openrouter.springai.api.dto.ToolCall;
 import de.subhransu.openrouter.springai.api.errors.OpenRouterInBandErrorExceptionFactory;
 import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
@@ -229,7 +228,7 @@ public final class OpenRouterStreamingResponseMapper {
 		AssistantMessage assistantMessage = AssistantMessage.builder()
 			.content(delta != null && delta.content() != null ? delta.content() : "")
 			.properties(snapshot)
-			.toolCalls(mapToolCalls(delta != null ? delta.toolCalls() : null))
+			.toolCalls(CompletedToolCalls.map(delta != null ? delta.toolCalls() : null))
 			.media(media)
 			.build();
 		ChatGenerationMetadata.Builder metadataBuilder = ChatGenerationMetadata.builder();
@@ -255,23 +254,6 @@ public final class OpenRouterStreamingResponseMapper {
 		ExtensionMetadata.put(properties, delta != null ? delta.extensions() : null, choice.extensions(),
 				delta != null ? delta.toolCalls() : null);
 		return properties;
-	}
-
-	private List<AssistantMessage.ToolCall> mapToolCalls(@Nullable List<? extends @Nullable ToolCall> toolCalls) {
-		if (toolCalls == null || toolCalls.isEmpty()) {
-			return List.of();
-		}
-		return ResponseValues.CHAT_COMPLETIONS.items(toolCalls, "tool call")
-			.stream()
-			.map(toolCall -> new AssistantMessage.ToolCall(toolCall.id() != null ? toolCall.id() : "",
-					ResponseValues.CHAT_COMPLETIONS.required(toolCall.type(), "tool call type"),
-					ResponseValues.CHAT_COMPLETIONS.required(
-							ResponseValues.CHAT_COMPLETIONS.required(toolCall.function(), "tool call function").name(),
-							"tool call name"),
-					ResponseValues.CHAT_COMPLETIONS
-						.required(ResponseValues.CHAT_COMPLETIONS.required(toolCall.function(), "tool call function")
-							.arguments(), "tool call arguments")))
-			.toList();
 	}
 
 	private ChatResponseMetadata mapMetadata(ChatCompletionChunk chunk, Map<String, @Nullable Object> extensions,
