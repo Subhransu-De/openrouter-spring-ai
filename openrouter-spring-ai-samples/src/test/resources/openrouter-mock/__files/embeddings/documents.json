@@ -1,0 +1,32 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "embedding",
+      "embedding": [
+        0.11,
+        0.72,
+        0.31
+      ],
+      "index": 1
+    },
+    {
+      "object": "embedding",
+      "embedding": [
+        0.64,
+        0.2,
+        0.47
+      ],
+      "index": 0
+    }
+  ],
+  "model": "synthetic/multimodal-embedding",
+  "usage": {
+    "prompt_tokens": 21,
+    "total_tokens": 21,
+    "cost": 4.2e-07,
+    "is_byok": false
+  },
+  "provider": "Synthetic",
+  "id": "gen-emb-documents-synthetic"
+}

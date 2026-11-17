@@ -25,8 +25,8 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Typed log probability, logit bias, verbosity and prompt-cache options on the wire, sent
- * by the auto-configured chat model to the OpenRouter mock, and the typed log
+ * Typed log probability, logit bias, verbosity, prompt-cache and prediction options on the
+ * wire, sent by the auto-configured chat model to the OpenRouter mock, and the typed log
  * probabilities read back from calls and streams.
  */
 @Tag("samples")
@@ -62,7 +62,8 @@ class OpenRouterTypedRequestOptionsIntegrationTests {
     OpenRouterChatOptions.Builder request = OpenRouterChatOptions.builder()
         .metadata(LOGPROBS_SCENE)
         .topLogprobs(1)
-        .promptCacheKey("conversation-9");
+        .promptCacheKey("conversation-9")
+        .prediction("Ready.");
     run(chatDefaults(), context -> {
       ChatClient chat = ChatClient.create(context.getBean(ChatModel.class));
       ChatResponse called = chat.prompt(QUESTION).options(request).call().chatResponse();
@@ -97,6 +98,8 @@ class OpenRouterTypedRequestOptionsIntegrationTests {
       assertThat(body.path("logit_bias")).isEqualTo(JSON.readTree("{\"50256\":-100}"));
       assertThat(body.path("verbosity").asString()).isEqualTo("low");
       assertThat(body.path("prompt_cache_key").asString()).isEqualTo("conversation-9");
+      assertThat(body.path("prediction"))
+          .isEqualTo(JSON.readTree("{\"type\":\"content\",\"content\":\"Ready.\"}"));
       assertThat(body.path("prompt_cache_options"))
           .isEqualTo(JSON.readTree("{\"mode\":\"explicit\",\"ttl\":\"12h\"}"));
     });
