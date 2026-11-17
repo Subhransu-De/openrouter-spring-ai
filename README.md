@@ -62,12 +62,16 @@ Use Java 17 or later. See [release compatibility](docs/getting-started.md#releas
 
 ## Examples
 
+The examples follow `main` (0.2.0-SNAPSHOT). Release 0.1.0 lacks some of these types and names; see the [changelog](CHANGELOG.md). Each call is a billable OpenRouter request.
+
 ### Setup
 
-Spring Boot reads the key from configuration and builds `OpenRouterApi`, `ChatClient.Builder` and the three models for you. The examples below use an injected `ChatClient` named `chatClient`, `EmbeddingModel embeddingModel` and `OpenRouterImageModel imageModel`. Declare a model bean only when you need different defaults.
+Spring Boot reads the key from configuration and builds `OpenRouterApi`, `ChatClient.Builder` and the chat, embedding and image models for you. The speech, transcription and document embedding models are opt-in. The examples below use these injected beans: `ChatClient chatClient`, `EmbeddingModel embeddingModel`, `OpenRouterImageModel imageModel`, `TextToSpeechModel speechModel`, `TranscriptionModel transcriptionModel` and `DocumentEmbeddingModel documentEmbeddingModel`.
+
+Set defaults with properties. Declare a model bean for a second model or without Boot; that bean ignores `spring.ai.openrouter.*`, and a chat bean owns the tool failure policy.
 
 <details open>
-<summary>Configuration, Chat model bean, Embedding model bean, Image model bean, Without auto-configuration</summary>
+<summary>Configuration, Chat client, Opt-in models, Chat model bean, Embedding model bean, Document embedding model bean, Image model bean, Speech model bean, Transcription model bean, OpenRouterApi bean</summary>
 
 <table>
 <tr>
@@ -97,8 +101,52 @@ spring:
 </td>
 </tr>
 <tr>
+<td><b>Chat client</b> · Boot provides the builder; build the client once.</td>
+<td align="right"><a href="docs/getting-started.md#install-and-make-a-first-call">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+@Bean
+ChatClient chatClient(ChatClient.Builder builder) {
+  return builder.build();
+}
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Opt-in models</b> · Speech, transcription and document embeddings are off until selected.</td>
+<td align="right"><a href="docs/multimodal.md#text-to-speech">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```yaml
+spring:
+  ai:
+    model:
+      embedding.multimodal: openrouter
+      audio:
+        speech: openrouter
+        transcription: openrouter
+    openrouter:
+      embedding:
+        model: mongodb/voyage-multimodal-3.5
+      audio:
+        speech:
+          model: hexgrad/kokoro-82m
+          voice: af_heart
+        transcription:
+          model: openai/whisper-1
+```
+
+</td>
+</tr>
+<tr>
 <td><b>Chat model bean</b> · Replaces the auto-configured chat model.</td>
-<td align="right"><a href="docs/chat-options.md">Docs</a></td>
+<td align="right"><a href="docs/getting-started.md#model-selection-and-replacement-beans">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -108,7 +156,7 @@ spring:
 OpenRouterChatModel chatModel(OpenRouterApi openRouterApi) {
   return OpenRouterChatModel.builder()
       .openRouterApi(openRouterApi)
-      .defaultOptions(OpenRouterChatOptions.builder().model("openai/gpt-oss-120b").build())
+      .options(OpenRouterChatOptions.builder().model("openai/gpt-oss-120b").build())
       .build();
 }
 ```
@@ -117,7 +165,7 @@ OpenRouterChatModel chatModel(OpenRouterApi openRouterApi) {
 </tr>
 <tr>
 <td><b>Embedding model bean</b> · Replaces the auto-configured embedding model.</td>
-<td align="right"><a href="docs/embeddings.md">Docs</a></td>
+<td align="right"><a href="docs/getting-started.md#model-selection-and-replacement-beans">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -127,7 +175,7 @@ OpenRouterChatModel chatModel(OpenRouterApi openRouterApi) {
 OpenRouterEmbeddingModel embeddingModel(OpenRouterApi openRouterApi) {
   return OpenRouterEmbeddingModel.builder()
       .openRouterApi(openRouterApi)
-      .defaultOptions(
+      .options(
           OpenRouterEmbeddingOptions.builder().model("openai/text-embedding-3-small").build())
       .build();
 }
@@ -136,8 +184,28 @@ OpenRouterEmbeddingModel embeddingModel(OpenRouterApi openRouterApi) {
 </td>
 </tr>
 <tr>
+<td><b>Document embedding model bean</b> · Replaces the auto-configured document embedding model.</td>
+<td align="right"><a href="docs/embeddings.md#text-and-image-documents">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+@Bean
+OpenRouterDocumentEmbeddingModel documentEmbeddingModel(OpenRouterApi openRouterApi) {
+  return OpenRouterDocumentEmbeddingModel.builder()
+      .openRouterApi(openRouterApi)
+      .options(
+          OpenRouterEmbeddingOptions.builder().model("mongodb/voyage-multimodal-3.5").build())
+      .build();
+}
+```
+
+</td>
+</tr>
+<tr>
 <td><b>Image model bean</b> · Replaces the auto-configured image model.</td>
-<td align="right"><a href="docs/multimodal.md#image-generation">Docs</a></td>
+<td align="right"><a href="docs/getting-started.md#model-selection-and-replacement-beans">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -147,8 +215,7 @@ OpenRouterEmbeddingModel embeddingModel(OpenRouterApi openRouterApi) {
 OpenRouterImageModel imageModel(OpenRouterApi openRouterApi) {
   return OpenRouterImageModel.builder()
       .openRouterApi(openRouterApi)
-      .defaultOptions(
-          OpenRouterImageOptions.builder().model("bytedance-seed/seedream-4.5").build())
+      .options(OpenRouterImageOptions.builder().model("bytedance-seed/seedream-4.5").build())
       .build();
 }
 ```
@@ -156,7 +223,49 @@ OpenRouterImageModel imageModel(OpenRouterApi openRouterApi) {
 </td>
 </tr>
 <tr>
-<td><b>Without auto-configuration</b> · Bind the key into a field.</td>
+<td><b>Speech model bean</b> · Replaces the auto-configured speech model.</td>
+<td align="right"><a href="docs/multimodal.md#text-to-speech">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+@Bean
+OpenRouterAudioSpeechModel speechModel(OpenRouterApi openRouterApi) {
+  return OpenRouterAudioSpeechModel.builder()
+      .openRouterApi(openRouterApi)
+      .options(
+          OpenRouterAudioSpeechOptions.builder()
+              .model("hexgrad/kokoro-82m")
+              .voice("af_heart")
+              .build())
+      .build();
+}
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Transcription model bean</b> · Replaces the auto-configured transcription model.</td>
+<td align="right"><a href="docs/multimodal.md#transcription">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+@Bean
+OpenRouterAudioTranscriptionModel transcriptionModel(OpenRouterApi openRouterApi) {
+  return OpenRouterAudioTranscriptionModel.builder()
+      .openRouterApi(openRouterApi)
+      .options(OpenRouterAudioTranscriptionOptions.builder().model("openai/whisper-1").build())
+      .build();
+}
+```
+
+</td>
+</tr>
+<tr>
+<td><b>OpenRouterApi bean</b> · Replaces the auto-configured client; start here without Boot.</td>
 <td align="right"><a href="docs/api.md">Docs</a></td>
 </tr>
 <tr>
@@ -185,7 +294,7 @@ class OpenRouterConfig {
 ### Text
 
 <details open>
-<summary>Text generation, Streaming, Per-request options, Structured output, Reasoning, Tool calling, Responses mode</summary>
+<summary>Text generation, Streaming, Per-request options, Structured output, Reasoning, Tool calling, Strict tools, Responses mode</summary>
 
 <table>
 <tr>
@@ -203,7 +312,7 @@ String answer = chatClient.prompt().user("Say hello.").call().content();
 </tr>
 <tr>
 <td><b>Streaming</b> · Text arrives as server-sent events.</td>
-<td align="right"><a href="docs/request-modes.md#stream-contract">Docs</a></td>
+<td align="right"><a href="docs/getting-started.md#install-and-make-a-first-call">Docs</a></td>
 </tr>
 <tr>
 <td colspan="2">
@@ -311,6 +420,26 @@ String answer =
 </td>
 </tr>
 <tr>
+<td><b>Strict tools</b> · Checks each tool schema before the request.</td>
+<td align="right"><a href="docs/tool-calling.md#strict-function-tools">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+String answer =
+    chatClient
+        .prompt()
+        .user("How warm is it in Oslo?")
+        .tools(new Weather())
+        .options(OpenRouterChatOptions.builder().toolStrict(true))
+        .call()
+        .content();
+```
+
+</td>
+</tr>
+<tr>
 <td><b>Responses mode</b> <sup>experimental</sup> · Sends to the /responses endpoint.</td>
 <td align="right"><a href="docs/request-modes.md">Docs</a></td>
 </tr>
@@ -351,10 +480,7 @@ String answer =
     chatClient
         .prompt()
         .user("Summarize this ticket.")
-        .options(
-            OpenRouterChatOptions.builder()
-                .model("openai/gpt-oss-120b")
-                .models(List.of("openai/gpt-oss-20b")))
+        .options(OpenRouterChatOptions.builder().models(List.of("openai/gpt-oss-20b")))
         .call()
         .content();
 ```
@@ -511,7 +637,7 @@ String summary =
 </td>
 </tr>
 <tr>
-<td><b>Audio input</b> · Bytes only; URLs are rejected.</td>
+<td><b>Audio input</b> · Bytes or a data URL; remote URLs are rejected.</td>
 <td align="right"><a href="docs/multimodal.md#pdf-audio-and-video-inputs">Docs</a></td>
 </tr>
 <tr>
@@ -670,9 +796,9 @@ Flux<ChatResponse> stream =
         .user("Say hello.")
         .options(
             OpenRouterChatOptions.builder()
-                .model("openai/gpt-4o-audio-preview")
+                .model("openai/gpt-audio-mini")
                 .modalities(OpenRouterModality.TEXT, OpenRouterModality.AUDIO)
-                .audio(new OpenRouterAudioOptions("alloy", "wav")))
+                .audio(new OpenRouterAudioOptions("alloy", "pcm16")))
         .stream()
         .chatResponse();
 stream.subscribe(
@@ -686,8 +812,57 @@ stream.subscribe(
                         .getMedia()
                         .forEach(
                             media -> {
-                              byte[] wav = OpenRouterMedia.bytes(media);
+                              byte[] audio = OpenRouterMedia.bytes(media);
                             })));
+```
+
+</td>
+</tr>
+</table>
+
+</details>
+
+### Speech
+
+<details>
+<summary>Text-to-speech, Speech streaming, Transcription</summary>
+
+<table>
+<tr>
+<td><b>Text-to-speech</b> · Raw PCM by default; set the format to mp3 for a playable file.</td>
+<td align="right"><a href="docs/multimodal.md#text-to-speech">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+byte[] audio = speechModel.call("Your car is ready for pickup.");
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Speech streaming</b> · Chunks arrive in order; keep the audio only when the stream completes.</td>
+<td align="right"><a href="docs/multimodal.md#text-to-speech">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+Flux<byte[]> chunks = speechModel.stream("Your car is ready for pickup.");
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Transcription</b> · The format comes from the file extension.</td>
+<td align="right"><a href="docs/multimodal.md#transcription">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+String text = transcriptionModel.transcribe(new FileSystemResource("inspection-note.wav"));
 ```
 
 </td>
@@ -699,7 +874,7 @@ stream.subscribe(
 ### Embeddings
 
 <details>
-<summary>Text embedding, Batch with options</summary>
+<summary>Text embedding, Batch with options, Text and image documents</summary>
 
 <table>
 <tr>
@@ -732,11 +907,30 @@ EmbeddingResponse response =
 
 </td>
 </tr>
+<tr>
+<td><b>Text and image documents</b> · One vector space; needs a model that accepts images.</td>
+<td align="right"><a href="docs/embeddings.md#text-and-image-documents">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+Document caption = new Document("A boardwalk through a green meadow");
+Document photo =
+    new Document(
+        new Media(MimeTypeUtils.IMAGE_PNG, URI.create("https://example.com/boardwalk.png")),
+        Map.of());
+EmbeddingResponse response =
+    documentEmbeddingModel.call(new DocumentEmbeddingRequest(caption, photo));
+```
+
+</td>
+</tr>
 </table>
 
 </details>
 
-### Caching and usage
+### Caching, usage and low-level
 
 <details>
 <summary>Prompt cache breakpoint, Usage and cost, Extra request fields, Low-level request</summary>
