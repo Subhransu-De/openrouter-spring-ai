@@ -206,4 +206,4 @@ An HTTP(S) resource, such as a `UrlResource`, is downloaded by this application 
 
 Boot properties are under `spring.ai.openrouter.audio.transcription.*`, such as `model`, `language`, `response-format=verbose-json`, `timestamp-granularities=word,segment`, `audio-format`, `send-audio-url` and `provider.data-collection`.
 
-Unlike chat, embeddings and images, the audio models are opt-in, because Spring AI's other audio providers also create their models when the selector is unset, and an application that already uses one would otherwise get two beans of the same type. An audio selector that names `openrouter` also creates the OpenRouter client when chat, embeddings and images use other providers.
+Unlike chat, text embeddings and images, the audio models are opt-in, because Spring AI's other audio providers also create their models when the selector is unset, and an application that already uses one would otherwise get two beans of the same type. An audio selector that names `openrouter` also creates the OpenRouter client when chat, embeddings and images use other providers.

@@ -1,11 +1,15 @@
 package de.subhransu.openrouter.springai.embedding;
 
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
+import de.subhransu.openrouter.springai.api.dto.EmbeddingsRequest;
 import de.subhransu.openrouter.springai.embedding.mapper.OpenRouterEmbeddingRequestMapper;
 import de.subhransu.openrouter.springai.embedding.mapper.OpenRouterEmbeddingResponseMapper;
 import de.subhransu.openrouter.springai.internal.Retries;
 import io.micrometer.observation.ObservationRegistry;
+import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Supplier;
 import org.jspecify.annotations.Nullable;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.document.MetadataMode;
@@ -68,18 +72,41 @@ public class OpenRouterEmbeddingModel implements EmbeddingModel {
 	@Override
 	public EmbeddingResponse call(EmbeddingRequest request) {
 		OpenRouterEmbeddingOptions options = buildRequestOptions(request.getOptions());
+		return observe(request.getInstructions(), options,
+				() -> this.requestMapper.map(request.getInstructions(), options), request.getInstructions().size());
+	}
+
+	/**
+	 * Embeds each document, text or image, with this model's options, retries and
+	 * observations. {@link OpenRouterDocumentEmbeddingModel} delegates here.
+	 */
+	EmbeddingResponse callDocuments(List<Document> documents, @Nullable EmbeddingOptions runtimeOptions) {
+		Assert.notNull(documents, "Documents must not be null");
+		Assert.noNullElements(documents, "Documents must not contain null elements");
+		OpenRouterEmbeddingOptions options = buildRequestOptions(runtimeOptions);
+		// The observation context takes text instructions; its convention reads only the
+		// options, so a media document contributes an empty entry.
+		List<String> instructions = documents.stream()
+			.map(document -> document.getMedia() != null ? ""
+					: Objects.requireNonNullElse(getEmbeddingContent(document), ""))
+			.toList();
+		return observe(instructions, options,
+				() -> this.requestMapper.mapDocuments(documents, this::getEmbeddingContent, options), documents.size());
+	}
+
+	private EmbeddingResponse observe(List<String> instructions, OpenRouterEmbeddingOptions options,
+			Supplier<EmbeddingsRequest> requestMapping, int inputCount) {
 		EmbeddingModelObservationContext observationContext = EmbeddingModelObservationContext.builder()
-			.embeddingRequest(new EmbeddingRequest(request.getInstructions(), options))
+			.embeddingRequest(new EmbeddingRequest(instructions, options))
 			.provider(PROVIDER_NAME)
 			.build();
 		return EmbeddingModelObservationDocumentation.EMBEDDING_MODEL_OPERATION
 			.observation(this.observationConvention, DEFAULT_OBSERVATION_CONVENTION, () -> observationContext,
 					this.observationRegistry)
 			.observe(() -> {
-				var embeddingsRequest = this.requestMapper.map(request.getInstructions(), options);
-				EmbeddingResponse response = Retries.invoke(this.retryTemplate,
-						() -> this.responseMapper.map(this.openRouterApi.embeddings(embeddingsRequest),
-								request.getInstructions().size(), options.getDimensions()));
+				EmbeddingsRequest embeddingsRequest = requestMapping.get();
+				EmbeddingResponse response = Retries.invoke(this.retryTemplate, () -> this.responseMapper
+					.map(this.openRouterApi.embeddings(embeddingsRequest), inputCount, options.getDimensions()));
 				observationContext.setResponse(response);
 				return response;
 			});
