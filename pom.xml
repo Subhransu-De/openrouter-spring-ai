@@ -80,7 +80,7 @@
     <archunit.version>1.5.1</archunit.version>
     <error-prone.version>2.52.0</error-prone.version>
     <error-prone-gradle-plugin.version>5.1.1</error-prone-gradle-plugin.version>
-    <nullaway.version>0.14.3</nullaway.version>
+    <nullaway.version>0.14.4</nullaway.version>
     <spring-javaformat.version>0.0.48</spring-javaformat.version>
     <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
     <checkstyle.version>14.4.0</checkstyle.version>
