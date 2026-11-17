@@ -2,7 +2,7 @@
 
 `OpenRouterImageModel` implements Spring AI's `ImageModel`. Boot creates it when `spring.ai.model.image` is `openrouter` or unset. To get images in a chat reply instead, see [Images from a chat model](chat.md#images-from-a-chat-model).
 
-The examples use these injected beans: `ChatClient chatClient`, `EmbeddingModel embeddingModel`, `OpenRouterImageModel imageModel`, `TextToSpeechModel speechModel`, `TranscriptionModel transcriptionModel` and `DocumentEmbeddingModel documentEmbeddingModel`. [Getting started](getting-started.md) shows how to get them. Each call is a billable OpenRouter request.
+The examples use an injected `OpenRouterImageModel imageModel`.
 
 ## Image generation
 
@@ -47,6 +47,4 @@ ImageResponse response =
 ## Good to know
 
 - `n` is an upper bound. A provider can return fewer images.
-- Streaming and more than one image depend on the endpoint.
-- `OpenRouterImageGenerationMetadata.mediaType()` is `null` when the provider reports none.
 - Set provider-specific fields with `OpenRouterImageOptions.builder().providerExtraBody(Map)`. Boot properties bind lists as maps and numbers as strings.

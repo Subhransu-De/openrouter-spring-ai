@@ -2,7 +2,7 @@
 
 `OpenRouterAudioSpeechModel` implements Spring AI's `TextToSpeechModel`, with streaming, and `OpenRouterAudioTranscriptionModel` implements `TranscriptionModel`. Both are opt-in: set `spring.ai.model.audio.speech=openrouter` and `spring.ai.model.audio.transcription=openrouter`. For audio in a chat reply, see [Audio output](chat.md#audio-output).
 
-The examples use these injected beans: `ChatClient chatClient`, `EmbeddingModel embeddingModel`, `OpenRouterImageModel imageModel`, `TextToSpeechModel speechModel`, `TranscriptionModel transcriptionModel` and `DocumentEmbeddingModel documentEmbeddingModel`. [Getting started](getting-started.md) shows how to get them. Each call is a billable OpenRouter request.
+The examples use an injected `TextToSpeechModel speechModel` and `TranscriptionModel transcriptionModel`.
 
 ## Text-to-speech
 
@@ -63,11 +63,6 @@ List<OpenRouterTranscriptionMetadata.Word> words = metadata.words();
 
 ## Good to know
 
-- **Speech format:** the endpoint returns `pcm` by default, which is headerless 16-bit audio and not a WAV file. Set the format to `mp3` for a playable file.
-- **Speech stream:** keep the audio only when the stream completes. Use `stream()` for long audio, because `call()` buffers the whole body.
-- **Voices:** most providers need a `voice`, and the names differ for each model. An unknown voice fails with HTTP 400.
+- **Speech format:** the endpoint returns `pcm` by default, which is headerless 16-bit audio and not a WAV file.
 - **Transcription size:** the audio is sent inline as base64, up to 25 MiB. `spring.ai.openrouter.audio.transcription.max-inline-audio-size` raises the limit.
-- **Long recordings:** upstream providers stop after about 60 seconds of processing, so split long recordings.
-- **Verbose output:** only some providers support `verbose_json`, diarization and `keyterms`.
 - **No streaming transcription:** OpenRouter has none, so `TranscriptionModel.stream(...)` fails with `UnsupportedOperationException`.
-- **Data policy:** an account with zero data retention switched on can use only the models that have an endpoint for it. Other models fail with HTTP 404.

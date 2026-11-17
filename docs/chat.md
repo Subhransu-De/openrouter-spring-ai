@@ -2,7 +2,7 @@
 
 `OpenRouterChatModel` implements Spring AI's `ChatModel`, with streaming. Boot creates it when `spring.ai.model.chat` is `openrouter` or unset, and `ChatClient` uses it.
 
-The examples use these injected beans: `ChatClient chatClient`, `EmbeddingModel embeddingModel`, `OpenRouterImageModel imageModel`, `TextToSpeechModel speechModel`, `TranscriptionModel transcriptionModel` and `DocumentEmbeddingModel documentEmbeddingModel`. [Getting started](getting-started.md) shows how to get them. Each call is a billable OpenRouter request.
+The examples use an injected `ChatClient chatClient`. [Getting started](getting-started.md#chat-client) shows how to build it.
 
 ## Text
 
@@ -466,16 +466,10 @@ ChatCompletionResponse response = openRouterApi.chatCompletion(request);
 
 ## Good to know
 
-- **Request modes:** use Chat Completions, the default. Responses is experimental and accepts fewer options. An option that a mode does not support fails before the request instead of being dropped.
-- **Structured output:** when `outputSchema` and `responseFormat` are both set, `outputSchema` wins. The library sends `strict` only when you set it.
-- **Tools:** Spring AI's `ToolCallingAdvisor` runs the tool loop. The model only advertises tools and returns tool calls.
+- **Request modes:** use Chat Completions, the default. Responses is experimental, and an option that it does not support fails before the request.
 - **Strict tools:** the library checks a strict schema and never rewrites it. Keep every parameter required, and write an optional value as a nullable type.
-- **Tool failures:** a failed tool returns `{"error":"Tool execution failed"}` to the model, and the loop continues. A custom `ToolCallingManager` bean must be built with `OpenRouterToolCallingManagers.withFailurePolicy(...)`, or startup fails.
-- **Reasoning:** keep the whole assistant message in the history, metadata included. The next request replays the reasoning from that metadata.
-- **Sessions:** a session keeps the chat requests of one conversation on the same upstream provider, so set `sessionId` for each request, not as a default.
+- **Tool failures:** a custom `ToolCallingManager` bean must be built with `OpenRouterToolCallingManagers.withFailurePolicy(...)`, or startup fails.
 - **Prompt cache options:** only OpenAI models that support explicit prompt caching accept `promptCacheOptions`. Other OpenAI models reject the request with HTTP 400.
-- **Log probabilities:** in Responses mode `topLogprobs` is sent, but `OpenRouterLogprobs.from(...)` returns an empty `Optional`.
-- **Attachments:** the library never fetches an attachment URL, and it keeps no list of models. Pick a model and a provider that accept the file type.
 - **Audio output:** only streaming Chat Completions returns audio. PCM bytes are raw audio, not a WAV file.
 
 Errors, retries, timeouts and cost are on the [Production](production.md) page.
