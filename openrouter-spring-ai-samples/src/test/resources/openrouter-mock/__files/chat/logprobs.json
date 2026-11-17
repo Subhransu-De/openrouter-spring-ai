@@ -4,6 +4,8 @@
   "created": 1767225600,
   "model": "openai/gpt-oss-120b",
   "provider": "OpenAI",
+  "system_fingerprint": "fp_synthetic",
+  "service_tier": "default",
   "choices": [
     {
       "index": 0,
@@ -35,13 +37,32 @@
       "message": {
         "role": "assistant",
         "content": "Ready.",
-        "refusal": null
+        "refusal": null,
+        "reasoning": null
       }
     }
   ],
-  "usage": {
+    "usage": {
     "prompt_tokens": 12,
     "completion_tokens": 2,
-    "total_tokens": 14
+    "total_tokens": 14,
+    "cost": 2.9e-06,
+    "is_byok": false,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "cache_write_tokens": 0,
+      "audio_tokens": 0,
+      "video_tokens": 0
+    },
+    "cost_details": {
+      "upstream_inference_cost": 2.9e-06,
+      "upstream_inference_prompt_cost": 1.8e-06,
+      "upstream_inference_completions_cost": 1.1e-06
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0,
+      "image_tokens": 0,
+      "audio_tokens": 0
+    }
   }
 }
