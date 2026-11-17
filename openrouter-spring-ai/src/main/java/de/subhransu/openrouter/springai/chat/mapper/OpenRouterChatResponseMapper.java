@@ -3,7 +3,6 @@ package de.subhransu.openrouter.springai.chat.mapper;
 import de.subhransu.openrouter.springai.chat.OpenRouterMetadata;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionResponse;
 import de.subhransu.openrouter.springai.api.dto.Choice;
-import de.subhransu.openrouter.springai.api.dto.ToolCall;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import de.subhransu.openrouter.springai.api.errors.OpenRouterInBandErrorExceptionFactory;
 import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
@@ -94,7 +93,7 @@ public final class OpenRouterChatResponseMapper {
 		AssistantMessage assistantMessage = AssistantMessage.builder()
 			.content(content.text())
 			.properties(properties)
-			.toolCalls(mapToolCalls(message.toolCalls()))
+			.toolCalls(CompletedToolCalls.map(message.toolCalls()))
 			.media(media)
 			.build();
 
@@ -109,23 +108,6 @@ public final class OpenRouterChatResponseMapper {
 				value -> metadataBuilder.metadata(RefusalMetadata.REFUSAL, value));
 		ChatGenerationMetadata metadata = metadataBuilder.build();
 		return new Generation(assistantMessage, metadata);
-	}
-
-	private List<AssistantMessage.ToolCall> mapToolCalls(@Nullable List<? extends @Nullable ToolCall> toolCalls) {
-		if (toolCalls == null || toolCalls.isEmpty()) {
-			return List.of();
-		}
-		return ResponseValues.CHAT_COMPLETIONS.items(toolCalls, "tool call")
-			.stream()
-			.map(toolCall -> new AssistantMessage.ToolCall(toolCall.id() != null ? toolCall.id() : "",
-					ResponseValues.CHAT_COMPLETIONS.required(toolCall.type(), "tool call type"),
-					ResponseValues.CHAT_COMPLETIONS.requiredText(
-							ResponseValues.CHAT_COMPLETIONS.required(toolCall.function(), "tool call function").name(),
-							"tool call name"),
-					ResponseValues.CHAT_COMPLETIONS
-						.required(ResponseValues.CHAT_COMPLETIONS.required(toolCall.function(), "tool call function")
-							.arguments(), "tool call arguments")))
-			.toList();
 	}
 
 	private ChatResponseMetadata mapMetadata(ChatCompletionResponse response) {
