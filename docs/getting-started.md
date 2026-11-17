@@ -119,6 +119,28 @@ Fallback models, provider routing, service tier and attribution headers are in [
 
 The snippets on this page use Boot 4.1.2, the version 0.1.0 was tested with, and the 0.1.0 starter brings in Spring AI 2.0.2. The versions come from the tagged and root POMs and the [published 0.1.0 parent POM](https://repo.maven.apache.org/maven2/de/subhransu/openrouter-spring-ai-parent/0.1.0/openrouter-spring-ai-parent-0.1.0.pom). CI targets JDK 17, 21 and 25. Other Boot and Spring AI versions are not covered. Release candidates are listed in the [changelog](../CHANGELOG.md).
 
+## Spring AI model interfaces
+
+This library implements each model interface of Spring AI 2.0.2 that OpenRouter has an endpoint for:
+
+| Spring AI interface                 | Class                               | Selector                               | Created by default |
+| ----------------------------------- | ----------------------------------- | -------------------------------------- | ------------------ |
+| `ChatModel`, with streaming         | `OpenRouterChatModel`               | `spring.ai.model.chat`                 | Yes                |
+| `EmbeddingModel`                    | `OpenRouterEmbeddingModel`          | `spring.ai.model.embedding`            | Yes                |
+| `DocumentEmbeddingModel`            | `OpenRouterDocumentEmbeddingModel`  | `spring.ai.model.embedding.multimodal` | No                 |
+| `ImageModel`                        | `OpenRouterImageModel`              | `spring.ai.model.image`                | Yes                |
+| `TextToSpeechModel`, with streaming | `OpenRouterAudioSpeechModel`        | `spring.ai.model.audio.speech`         | No                 |
+| `TranscriptionModel`                | `OpenRouterAudioTranscriptionModel` | `spring.ai.model.audio.transcription`  | No                 |
+
+A model that is not created by default needs its selector set to `openrouter`.
+
+Two parts of Spring AI have no OpenRouter counterpart:
+
+- `ModerationModel` is not implemented, because OpenRouter has no moderation endpoint.
+- `TranscriptionModel.stream(...)` fails with `UnsupportedOperationException`, because OpenRouter has no streaming transcription.
+
+To move an application from Spring AI's OpenAI starter, see [Switching from Spring AI's OpenAI starter](switching-from-openai.md).
+
 ## Model selection and replacement beans
 
 ![Each spring.ai.model selector picks none, another provider, or openrouter. With openrouter, a model bean that the application declares wins; otherwise the starter creates openRouterChatModel, openRouterEmbeddingModel or openRouterImageModel. The shared OpenRouterApi is created while any selector is openrouter, unless the application declares its own.](images/model-selection.svg)
