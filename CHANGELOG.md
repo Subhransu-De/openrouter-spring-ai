@@ -2,7 +2,9 @@
 
 Notable changes in each release. The full notes for each release are on the [Releases page](https://github.com/Subhransu-De/openrouter-spring-ai/releases).
 
-## Unreleased
+## [0.2.0](https://github.com/Subhransu-De/openrouter-spring-ai/releases/tag/v0.2.0) - 2026-11-18
+
+Adds speech, transcription and document embedding models, so every Spring AI model interface that OpenRouter can serve is implemented. Adds typed chat options and session and trace fields, and renames several public names.
 
 ### Upgrade notes
 
