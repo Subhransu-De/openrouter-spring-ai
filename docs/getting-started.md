@@ -216,7 +216,8 @@ To move an application from another Spring AI provider, see [Switching from anot
 | Source / artifact                                                                    | Java release target | Spring Boot | Spring AI |
 | ------------------------------------------------------------------------------------ | ------------------- | ----------- | --------- |
 | [0.1.0: `41786f9`](https://github.com/Subhransu-De/openrouter-spring-ai/tree/v0.1.0) | 17                  | 4.1.2       | 2.0.2     |
-| [0.2.0](https://github.com/Subhransu-De/openrouter-spring-ai/tree/v0.2.0)            | 17                  | 4.1.2       | 2.0.2     |
+| [0.2.0: `759beba`](https://github.com/Subhransu-De/openrouter-spring-ai/tree/v0.2.0) | 17                  | 4.1.2       | 2.0.2     |
+| Unreleased main (`0.3.0-SNAPSHOT`)                                                   | 17                  | 4.1.2       | 2.0.2     |
 
 Each release was tested with Boot 4.1.2, and its starter brings in Spring AI 2.0.2, as the [published 0.2.0 starter POM](https://repo.maven.apache.org/maven2/de/subhransu/openrouter-spring-ai-starter/0.2.0/openrouter-spring-ai-starter-0.2.0.pom) shows. Other Boot and Spring AI versions are not covered. Release candidates are listed in the [changelog](../CHANGELOG.md).
 
