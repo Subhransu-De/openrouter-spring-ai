@@ -290,16 +290,16 @@ String text = transcriptionModel.transcribe(new FileSystemResource("inspection-n
 
 ## Documentation
 
-| Page                                                                       | Spring AI interface                        | Examples                                                                                                    |
-| -------------------------------------------------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| [Getting started](docs/getting-started.md)                                 |                                            | Install, configuration, model beans, tested versions                                                        |
-| [Chat](docs/chat.md)                                                       | `ChatModel`                                | Text, streaming, structured output, reasoning, tools, routing, file inputs, image and audio output, caching |
-| [Images](docs/images.md)                                                   | `ImageModel`                               | Generation, streaming, image to image                                                                       |
-| [Embeddings](docs/embeddings.md)                                           | `EmbeddingModel`, `DocumentEmbeddingModel` | Text, batches, text and image documents                                                                     |
-| [Speech and transcription](docs/audio.md)                                  | `TextToSpeechModel`, `TranscriptionModel`  | Speech, streamed speech, transcription                                                                      |
-| [Production](docs/production.md)                                           |                                            | Retries, timeouts, limits, cost                                                                             |
-| [Supported API](docs/api.md)                                               |                                            | Types that applications can depend on                                                                       |
-| [Switching from Spring AI's OpenAI starter](docs/switching-from-openai.md) |                                            | What behaves differently                                                                                    |
+| Page                                                           | Spring AI interface                        | Examples                                                                                                    |
+| -------------------------------------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| [Getting started](docs/getting-started.md)                     |                                            | Install, configuration, model beans, tested versions                                                        |
+| [Chat](docs/chat.md)                                           | `ChatModel`                                | Text, streaming, structured output, reasoning, tools, routing, file inputs, image and audio output, caching |
+| [Images](docs/images.md)                                       | `ImageModel`                               | Generation, streaming, image to image                                                                       |
+| [Embeddings](docs/embeddings.md)                               | `EmbeddingModel`, `DocumentEmbeddingModel` | Text, batches, text and image documents                                                                     |
+| [Speech and transcription](docs/audio.md)                      | `TextToSpeechModel`, `TranscriptionModel`  | Speech, streamed speech, transcription                                                                      |
+| [Production](docs/production.md)                               |                                            | Retries, timeouts, limits, cost                                                                             |
+| [Supported API](docs/api.md)                                   |                                            | Types that applications can depend on                                                                       |
+| [Switching from another Spring AI provider](docs/switching.md) |                                            | What to change and what differs                                                                             |
 
 ## Modules
 

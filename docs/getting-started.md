@@ -209,7 +209,7 @@ Two parts of Spring AI have no OpenRouter counterpart:
 - `ModerationModel` is not implemented, because OpenRouter has no moderation endpoint.
 - `TranscriptionModel.stream(...)` fails with `UnsupportedOperationException`, because OpenRouter has no streaming transcription.
 
-To move an application from Spring AI's OpenAI starter, see [Switching from Spring AI's OpenAI starter](switching-from-openai.md).
+To move an application from another Spring AI provider, see [Switching from another Spring AI provider](switching.md).
 
 ## Release compatibility
 
