@@ -10,8 +10,8 @@
   </parent>
 
   <artifactId>openrouter-spring-ai</artifactId>
-  <name>OpenRouter Spring AI :: Core</name>
-  <description>OpenRouterApi client, DTOs, options, mappers, ChatModel, EmbeddingModel.</description>
+  <name>OpenRouter Spring AI</name>
+  <description>OpenRouter chat, embedding, image, speech and transcription models for Spring AI.</description>
 
   <properties>
     <flatten.mode>ossrh</flatten.mode>

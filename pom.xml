@@ -876,6 +876,8 @@
               <autoPublish>false</autoPublish>
               <waitUntil>validated</waitUntil>
               <excludeArtifacts>
+                <!-- No published module names the parent, so Central needs only the three libraries. -->
+                <excludeArtifact>openrouter-spring-ai-parent</excludeArtifact>
                 <excludeArtifact>openrouter-spring-ai-samples</excludeArtifact>
               </excludeArtifacts>
             </configuration>

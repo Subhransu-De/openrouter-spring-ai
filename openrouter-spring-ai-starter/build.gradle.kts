@@ -1,4 +1,4 @@
-description = "Starter that pulls in autoconfigure and core for one-line app integration."
+description = "Spring Boot starter for OpenRouter with Spring AI. Add this dependency to use the library."
 
 dependencies {
 	api(project(":openrouter-spring-ai-autoconfigure"))

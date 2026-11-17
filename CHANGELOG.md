@@ -69,7 +69,7 @@ Notable changes in each release. The full notes for each release are on the [Rel
 
 ### Changed
 
-- The POMs on Maven Central for `openrouter-spring-ai`, `openrouter-spring-ai-autoconfigure` and `openrouter-spring-ai-starter` now list only what a consumer resolves: compile dependencies with their versions, and no test dependencies, build configuration or parent link. The dependencies and their versions are unchanged.
+- The POMs on Maven Central for `openrouter-spring-ai`, `openrouter-spring-ai-autoconfigure` and `openrouter-spring-ai-starter` now list only what a consumer resolves: compile dependencies with their versions, and no test dependencies, build configuration or parent link. The dependencies and their versions are unchanged. The parent POM `openrouter-spring-ai-parent` is no longer published, because no published module refers to it. The artifact names and descriptions on Maven Central are rewritten for users of the library.
 - In Responses mode, setting both `maxTokens` and `maxCompletionTokens` to different values logs a warning. `maxCompletionTokens` is still sent as `max_output_tokens`; it is not rejected, because options merge field by field and a default of one with a request value of the other is a valid combination.
 - The `imageConfig` property description now matches its behavior: `image_config` is sent whenever it is set, not only with the image modality.
 - Embedding dimension discovery no longer holds a monitor during its HTTP call, so a virtual thread that runs it no longer pins its carrier thread on JDK 21 to 23.
