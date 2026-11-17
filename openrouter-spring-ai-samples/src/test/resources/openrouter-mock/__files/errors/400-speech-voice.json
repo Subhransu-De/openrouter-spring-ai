@@ -1,6 +1,6 @@
 {
   "error": {
     "code": 400,
-    "message": "Voice missing-voice is not available for synthetic/speech"
+    "message": "HTTP 400: Voice 'missing-voice' is not available for model 'synthetic/speech'. Available voices: garage-voice, bay-voice"
   }
 }

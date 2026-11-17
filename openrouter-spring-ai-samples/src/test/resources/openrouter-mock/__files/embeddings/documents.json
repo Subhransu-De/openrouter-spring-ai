@@ -25,7 +25,12 @@
     "prompt_tokens": 21,
     "total_tokens": 21,
     "cost": 4.2e-07,
-    "is_byok": false
+    "is_byok": false,
+    "cost_details": {
+      "upstream_inference_cost": 4.2e-07,
+      "upstream_inference_prompt_cost": 4.2e-07,
+      "upstream_inference_completions_cost": 0
+    }
   },
   "provider": "Synthetic",
   "id": "gen-emb-documents-synthetic"

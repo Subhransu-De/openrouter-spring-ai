@@ -8,7 +8,7 @@
   "response": {
     "status": 200,
     "headers": {
-      "Content-Type": "audio/pcm"
+      "Content-Type": "audio/pcm;rate=24000;channels=1"
     },
     "bodyFileName": "audio/speech.pcm",
     "chunkedDribbleDelay": {

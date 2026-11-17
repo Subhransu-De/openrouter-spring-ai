@@ -8,10 +8,13 @@ import de.subhransu.openrouter.springai.autoconfigure.OpenRouterApiAutoConfigura
 import de.subhransu.openrouter.springai.autoconfigure.OpenRouterChatAutoConfiguration;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterLogprobs;
+import de.subhransu.openrouter.springai.chat.OpenRouterUsage;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -86,6 +89,17 @@ class OpenRouterTypedRequestOptionsIntegrationTests {
             .containsExactly("Ready", "Done");
         assertThat(logprobs.content().get(0).topLogprobs().get(1).bytes()).isNull();
         assertThat(logprobs.refusal()).isEmpty();
+      }
+      // OpenRouter ends a stream with a finish chunk and then a usage chunk that repeats the
+      // finish reason. The text must not repeat, and the usage must come from the last chunk.
+      assertThat(streamed.stream().flatMap(response -> response.getResults().stream())
+          .map(generation -> generation.getOutput().getText()).filter(Objects::nonNull)
+          .collect(Collectors.joining())).isEqualTo("Ready.");
+      for (ChatResponse response : List.of(called, streamed.get(streamed.size() - 1))) {
+        OpenRouterUsage usage = OpenRouterUsage.from(response);
+        assertThat(usage.getPromptTokens()).isEqualTo(12);
+        assertThat(usage.getCompletionTokens()).isEqualTo(2);
+        assertThat(usage.getCost()).isEqualTo(0.0000029);
       }
     });
 
