@@ -1,6 +1,215 @@
 # Getting started
 
-The [README](../README.md#install) shows the install and a first call. This page holds what the code does not tell you: which versions are tested, and what goes wrong next to another provider starter.
+## Install
+
+Add the starter from Maven Central:
+
+```xml
+<dependency>
+    <groupId>de.subhransu</groupId>
+    <artifactId>openrouter-spring-ai-starter</artifactId>
+    <version>0.1.0</version>
+</dependency>
+```
+
+```kotlin
+implementation("de.subhransu:openrouter-spring-ai-starter:0.1.0")
+```
+
+Use Java 17 or later. See [release compatibility](#release-compatibility) for Spring Boot and Spring AI versions.
+
+## Configure
+
+Spring Boot reads the key from configuration and builds `OpenRouterApi`, `ChatClient.Builder` and the chat, embedding and image models. The speech, transcription and document embedding models are opt-in.
+
+### Configuration
+
+The key comes from the environment.
+
+```yaml
+spring:
+  ai:
+    model:
+      chat: openrouter
+      embedding: openrouter
+      image: openrouter
+    openrouter:
+      api-key: ${OPENROUTER_API_KEY}
+      chat:
+        model: openai/gpt-oss-120b
+      embedding:
+        model: openai/text-embedding-3-small
+      image:
+        model: bytedance-seed/seedream-4.5
+```
+
+### Chat client
+
+Boot provides the builder; build the client once.
+
+```java
+@Bean
+ChatClient chatClient(ChatClient.Builder builder) {
+  return builder.build();
+}
+```
+
+### Opt-in models
+
+Speech, transcription and document embeddings are off until selected.
+
+```yaml
+spring:
+  ai:
+    model:
+      embedding.multimodal: openrouter
+      audio:
+        speech: openrouter
+        transcription: openrouter
+    openrouter:
+      embedding:
+        model: mongodb/voyage-multimodal-3.5
+      audio:
+        speech:
+          model: hexgrad/kokoro-82m
+          voice: af_heart
+        transcription:
+          model: openai/whisper-1
+```
+
+## Model beans
+
+Declare a model bean for a second model, or without Boot. That bean ignores `spring.ai.openrouter.*`, and a chat bean owns the tool failure policy.
+
+### Chat model bean
+
+Replaces the auto-configured chat model.
+
+```java
+@Bean
+OpenRouterChatModel chatModel(OpenRouterApi openRouterApi) {
+  return OpenRouterChatModel.builder()
+      .openRouterApi(openRouterApi)
+      .options(OpenRouterChatOptions.builder().model("openai/gpt-oss-120b").build())
+      .build();
+}
+```
+
+### Embedding model bean
+
+Replaces the auto-configured embedding model.
+
+```java
+@Bean
+OpenRouterEmbeddingModel embeddingModel(OpenRouterApi openRouterApi) {
+  return OpenRouterEmbeddingModel.builder()
+      .openRouterApi(openRouterApi)
+      .options(
+          OpenRouterEmbeddingOptions.builder().model("openai/text-embedding-3-small").build())
+      .build();
+}
+```
+
+### Document embedding model bean
+
+Replaces the auto-configured document embedding model.
+
+```java
+@Bean
+OpenRouterDocumentEmbeddingModel documentEmbeddingModel(OpenRouterApi openRouterApi) {
+  return OpenRouterDocumentEmbeddingModel.builder()
+      .openRouterApi(openRouterApi)
+      .options(
+          OpenRouterEmbeddingOptions.builder().model("mongodb/voyage-multimodal-3.5").build())
+      .build();
+}
+```
+
+### Image model bean
+
+Replaces the auto-configured image model.
+
+```java
+@Bean
+OpenRouterImageModel imageModel(OpenRouterApi openRouterApi) {
+  return OpenRouterImageModel.builder()
+      .openRouterApi(openRouterApi)
+      .options(OpenRouterImageOptions.builder().model("bytedance-seed/seedream-4.5").build())
+      .build();
+}
+```
+
+### Speech model bean
+
+Replaces the auto-configured speech model.
+
+```java
+@Bean
+OpenRouterAudioSpeechModel speechModel(OpenRouterApi openRouterApi) {
+  return OpenRouterAudioSpeechModel.builder()
+      .openRouterApi(openRouterApi)
+      .options(
+          OpenRouterAudioSpeechOptions.builder()
+              .model("hexgrad/kokoro-82m")
+              .voice("af_heart")
+              .build())
+      .build();
+}
+```
+
+### Transcription model bean
+
+Replaces the auto-configured transcription model.
+
+```java
+@Bean
+OpenRouterAudioTranscriptionModel transcriptionModel(OpenRouterApi openRouterApi) {
+  return OpenRouterAudioTranscriptionModel.builder()
+      .openRouterApi(openRouterApi)
+      .options(OpenRouterAudioTranscriptionOptions.builder().model("openai/whisper-1").build())
+      .build();
+}
+```
+
+### OpenRouterApi bean
+
+Replaces the auto-configured client; start here without Boot.
+
+```java
+@Configuration
+class OpenRouterConfig {
+
+  @Value("${spring.ai.openrouter.api-key}")
+  private String apiKey;
+
+  @Bean
+  OpenRouterApi openRouterApi() {
+    return OpenRouterApi.builder().apiKey(apiKey).build();
+  }
+}
+```
+
+## Spring AI model interfaces
+
+This library implements each model interface of Spring AI 2.0.2 that OpenRouter has an endpoint for:
+
+| Spring AI interface                 | Class                               | Selector                               | Created by default | Page                                                 |
+| ----------------------------------- | ----------------------------------- | -------------------------------------- | ------------------ | ---------------------------------------------------- |
+| `ChatModel`, with streaming         | `OpenRouterChatModel`               | `spring.ai.model.chat`                 | Yes                | [Chat](chat.md)                                      |
+| `EmbeddingModel`                    | `OpenRouterEmbeddingModel`          | `spring.ai.model.embedding`            | Yes                | [Embeddings](embeddings.md)                          |
+| `DocumentEmbeddingModel`            | `OpenRouterDocumentEmbeddingModel`  | `spring.ai.model.embedding.multimodal` | No                 | [Embeddings](embeddings.md#text-and-image-documents) |
+| `ImageModel`                        | `OpenRouterImageModel`              | `spring.ai.model.image`                | Yes                | [Images](images.md)                                  |
+| `TextToSpeechModel`, with streaming | `OpenRouterAudioSpeechModel`        | `spring.ai.model.audio.speech`         | No                 | [Speech and transcription](audio.md)                 |
+| `TranscriptionModel`                | `OpenRouterAudioTranscriptionModel` | `spring.ai.model.audio.transcription`  | No                 | [Speech and transcription](audio.md#transcription)   |
+
+A model that is not created by default needs its selector set to `openrouter`.
+
+Two parts of Spring AI have no OpenRouter counterpart:
+
+- `ModerationModel` is not implemented, because OpenRouter has no moderation endpoint.
+- `TranscriptionModel.stream(...)` fails with `UnsupportedOperationException`, because OpenRouter has no streaming transcription.
+
+To move an application from Spring AI's OpenAI starter, see [Switching from Spring AI's OpenAI starter](switching-from-openai.md).
 
 ## Release compatibility
 
@@ -13,14 +222,8 @@ The [README](../README.md#install) shows the install and a first call. This page
 
 ## Next to another provider starter
 
-Set `spring.ai.model.chat`, `spring.ai.model.embedding` and `spring.ai.model.image` whenever more than one provider starter is present. Each one defaults to `openrouter`, so the README example sets the unused ones to `none`.
-
-The audio models and the text-and-image `DocumentEmbeddingModel` are the exception: they are opt-in through `spring.ai.model.audio.speech=openrouter`, `spring.ai.model.audio.transcription=openrouter` and `spring.ai.model.embedding.multimodal=openrouter`. Spring AI's other providers of these model types also create their models when the selector is unset, so a default of `openrouter` would give an application that already uses one of them two beans of the same type.
-
-Spring AI's provider auto-configurations, such as OpenAI's or Anthropic's, step aside only for a model of their own type. With a selector unset, every provider starter on the classpath creates a model of that type. Injecting `ChatClient.Builder` then fails, because it takes a single `ChatModel` and neither is `@Primary`. A consumer that injects a single `EmbeddingModel`, such as a vector store, fails the same way.
-
-Some providers select on narrower keys. Google GenAI and Vertex AI text embeddings use `spring.ai.model.embedding.text`, and Vertex AI multimodal embeddings use `spring.ai.model.embedding.multimodal`. Set those as well when such a starter is present.
-
-If you mark the other provider's model `@Primary` instead, OpenRouter's [tool failure policy](chat.md#tool-failure-policy) still applies to that provider's tool calls.
-
-The shared `OpenRouterApi` bean is created while any selector is `openrouter`, or a chat, embedding or image selector is unset, even when you declare every model yourself, and it then requires `spring.ai.openrouter.api-key`. If your own models do not use it, set the selectors to `none` or to the provider you use.
+- Set `spring.ai.model.chat`, `spring.ai.model.embedding` and `spring.ai.model.image` when more than one provider starter is present. With a selector unset, every provider starter creates a model of that type, and injecting `ChatClient.Builder` or a single `EmbeddingModel` fails.
+- Set a selector to `none` for a model type that you do not use.
+- Some providers select on narrower keys, such as `spring.ai.model.embedding.text` and `spring.ai.model.embedding.multimodal`. Set those as well when such a starter is present.
+- The shared `OpenRouterApi` bean is created while any selector is `openrouter`, or while a chat, embedding or image selector is unset. It then requires `spring.ai.openrouter.api-key`.
+- If you mark another provider's model `@Primary`, OpenRouter's tool failure policy still applies to that provider's tool calls.

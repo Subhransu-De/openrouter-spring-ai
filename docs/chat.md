@@ -1,101 +1,481 @@
 # Chat
 
-What the code does not tell you about chat: the status of each request mode, how OpenRouter treats sessions, how this library differs from Spring AI's OpenAI module, and how upstream providers handle caching.
+`OpenRouterChatModel` implements Spring AI's `ChatModel`, with streaming. Boot creates it when `spring.ai.model.chat` is `openrouter` or unset, and `ChatClient` uses it.
 
-## Request modes
+The examples use these injected beans: `ChatClient chatClient`, `EmbeddingModel embeddingModel`, `OpenRouterImageModel imageModel`, `TextToSpeechModel speechModel`, `TranscriptionModel transcriptionModel` and `DocumentEmbeddingModel documentEmbeddingModel`. [Getting started](getting-started.md) shows how to get them. Each call is a billable OpenRouter request.
 
-Use Chat Completions. It is the default and the production path. Responses sends requests to OpenRouter's `/responses` endpoint. It is experimental: opt in with `spring.ai.openrouter.chat.request-mode=responses` only to test that endpoint. It accepts fewer options, and an option it does not support fails before the request is sent instead of being dropped.
+## Text
 
-## Sessions
+### Text generation
 
-`sessionId` is sent as `session_id`. OpenRouter routes every chat request in a session to the same upstream provider, which keeps prompt-cache hits across turns, and groups the session in its observability output. For embeddings, images, speech and transcription, OpenRouter uses the session ID only for observability and does not send it upstream. The 256-character limit is OpenRouter's.
+One blocking call.
 
-A session ID usually belongs to one conversation, so set it per request. A Boot default suits only an application that runs one session per instance.
+```java
+String answer = chatClient.prompt().user("Say hello.").call().content();
+```
 
-## Structured output
+### Streaming
 
-- When both `outputSchema` and `responseFormat` are set, `outputSchema` wins, because `ChatClient.entity(...)` parses the reply against that schema. This follows Spring AI's OpenAI options.
-- The routed provider decides whether a schema is enforced.
-- Spring AI's OpenAI module sends a JSON-schema response format as `strict: true` unless told otherwise. This library sends `strict` only when you set it, so the provider's default applies.
-- A `completed` status or a `stop` finish reason does not prove that the output ended before the token limit. When it matters, compare the output token usage with `maxCompletionTokens`.
+Text arrives as server-sent events.
 
-## Tool calling
+```java
+Flux<String> tokens = chatClient.prompt().user("Tell a short story.").stream().content();
+```
 
-Spring AI 2.0 runs the tool loop in `ToolCallingAdvisor`, not in the chat model. The model advertises your tools and returns tool calls; it never runs them.
+### Per-request options
 
-`spring.ai.tools.resolution.fallback.enabled=true` lets the `ToolCallbackResolver` find a tool by name, so the model can run any tool bean it names.
+Unset fields keep the defaults.
 
-### Strict function tools
+```java
+String answer =
+    chatClient
+        .prompt()
+        .user("Say hello.")
+        .options(OpenRouterChatOptions.builder().temperature(0.0).maxCompletionTokens(200))
+        .call()
+        .content();
+```
 
-The library checks a strict schema and never rewrites it. Spring AI's OpenAI module rewrites each schema instead: it sets `additionalProperties: false`, makes optional properties nullable and lists every property as required. So a schema generated from a type with an optional field works there and fails here:
+### Structured output
 
-```json
-{
-  "type": "object",
-  "properties": { "city": { "type": "string" }, "note": { "type": "string" } },
-  "required": ["city"]
+Typed records from a JSON schema.
+
+```java
+record Answer(String answer) {}
+
+Answer answer =
+    chatClient
+        .prompt()
+        .user("What is the capital of Norway?")
+        .options(
+            OpenRouterChatOptions.builder()
+                .responseFormat(
+                    OpenRouterResponseFormat.jsonSchema(
+                        """
+                        {"type":"object",
+                         "properties":{"answer":{"type":"string"}},
+                         "required":["answer"],
+                         "additionalProperties":false}\
+                        """)))
+        .call()
+        .entity(Answer.class);
+```
+
+### Reasoning
+
+Read the model's thinking separately.
+
+```java
+ChatResponse response =
+    chatClient
+        .prompt()
+        .user("Plan a three-step migration.")
+        .options(
+            OpenRouterChatOptions.builder()
+                .reasoning(
+                    OpenRouterReasoningOptions.builder()
+                        .effort(OpenRouterReasoningEffort.MEDIUM)
+                        .build()))
+        .call()
+        .chatResponse();
+String thinking = OpenRouterMetadata.reasoning(response.getResult()).orElse("");
+```
+
+## Tools
+
+### Tool calling
+
+Spring AI runs the tool loop.
+
+```java
+class Weather {
+
+  @Tool(description = "Current temperature in a city")
+  String temperature(String city) {
+    return "21 C in " + city;
+  }
+}
+
+String answer =
+    chatClient.prompt().user("How warm is it in Oslo?").tools(new Weather()).call().content();
+```
+
+### Strict tools
+
+Checks each tool schema before the request.
+
+```java
+String answer =
+    chatClient
+        .prompt()
+        .user("How warm is it in Oslo?")
+        .tools(new Weather())
+        .options(OpenRouterChatOptions.builder().toolStrict(true))
+        .call()
+        .content();
+```
+
+## Request mode and sampling
+
+### Responses mode (experimental)
+
+Sends to the /responses endpoint.
+
+```java
+String answer =
+    chatClient
+        .prompt()
+        .user("Say hello.")
+        .options(OpenRouterChatOptions.builder().requestMode(OpenRouterRequestMode.RESPONSES))
+        .call()
+        .content();
+```
+
+### Log probabilities
+
+Each token's log probability and its alternatives.
+
+```java
+ChatResponse response =
+    chatClient
+        .prompt()
+        .user("Answer yes or no.")
+        .options(OpenRouterChatOptions.builder().logprobs(true).topLogprobs(3))
+        .call()
+        .chatResponse();
+List<OpenRouterLogprobs.Token> tokens =
+    OpenRouterLogprobs.from(response.getResult().getOutput())
+        .map(OpenRouterLogprobs::content)
+        .orElse(List.of()); // empty when the provider sent none
+```
+
+### Predicted output
+
+Faster edits when most of the answer is known.
+
+```java
+String code = "int count = 0;\ncount++;\n";
+String edited =
+    chatClient
+        .prompt()
+        .user("Rename the variable count to total:\n" + code)
+        .options(OpenRouterChatOptions.builder().prediction(code))
+        .call()
+        .content();
+```
+
+## Routing
+
+### Model fallbacks
+
+Tried in order when one fails.
+
+```java
+String answer =
+    chatClient
+        .prompt()
+        .user("Summarize this ticket.")
+        .options(OpenRouterChatOptions.builder().models(List.of("openai/gpt-oss-20b")))
+        .call()
+        .content();
+```
+
+### Provider routing
+
+Pick, order and sort providers.
+
+```java
+String answer =
+    chatClient
+        .prompt()
+        .user("Say hello.")
+        .options(
+            OpenRouterChatOptions.builder()
+                .provider(
+                    OpenRouterProviderPreferences.builder()
+                        .sort(OpenRouterProviderSort.THROUGHPUT)
+                        .build()))
+        .call()
+        .content();
+```
+
+### Service tier
+
+Trade speed for price.
+
+```java
+String answer =
+    chatClient
+        .prompt()
+        .user("Say hello.")
+        .options(OpenRouterChatOptions.builder().serviceTier(OpenRouterServiceTier.FLEX))
+        .call()
+        .content();
+```
+
+### Sessions and traces
+
+Keep a conversation on one provider.
+
+```java
+String answer =
+    chatClient
+        .prompt()
+        .user(question)
+        .options(
+            OpenRouterChatOptions.builder()
+                .sessionId(conversationId)
+                .trace(OpenRouterTrace.builder().traceId(runId).build()))
+        .call()
+        .content();
+```
+
+### Attribution headers
+
+Your app on OpenRouter rankings.
+
+```yaml
+spring:
+  ai:
+    openrouter:
+      app:
+        http-referer: https://example.com
+        title: Example app
+```
+
+## Inputs
+
+### Image input
+
+Needs a model that reads images.
+
+```java
+UserMessage message =
+    UserMessage.builder()
+        .text("What is in this image?")
+        .media(
+            Media.builder()
+                .mimeType(MimeTypeUtils.IMAGE_PNG)
+                .data(URI.create("https://example.com/cat.png"))
+                .build())
+        .build();
+String answer =
+    chatClient
+        .prompt()
+        .messages(message)
+        .options(OpenRouterChatOptions.builder().model("google/gemini-2.5-flash"))
+        .call()
+        .content();
+```
+
+### PDF input
+
+A URL, bytes or a data URL.
+
+```java
+UserMessage message =
+    UserMessage.builder()
+        .text("Summarize the attached document.")
+        .media(
+            Media.builder()
+                .mimeType(MimeTypeUtils.parseMimeType("application/pdf"))
+                .data(URI.create("https://example.com/report.pdf"))
+                .build())
+        .build();
+String summary =
+    chatClient
+        .prompt()
+        .messages(message)
+        .options(OpenRouterChatOptions.builder().model("google/gemini-2.5-flash"))
+        .call()
+        .content();
+```
+
+### Audio input
+
+Bytes or a data URL; remote URLs are rejected.
+
+```java
+UserMessage message =
+    UserMessage.builder()
+        .text("Transcribe this clip.")
+        .media(
+            Media.builder()
+                .mimeType(MimeTypeUtils.parseMimeType("audio/wav"))
+                .data(Files.readAllBytes(Path.of("clip.wav")))
+                .build())
+        .build();
+String transcript =
+    chatClient
+        .prompt()
+        .messages(message)
+        .options(OpenRouterChatOptions.builder().model("google/gemini-2.5-flash"))
+        .call()
+        .content();
+```
+
+### Video input
+
+URL support depends on the provider.
+
+```java
+UserMessage message =
+    UserMessage.builder()
+        .text("What happens in this video?")
+        .media(
+            Media.builder()
+                .mimeType(MimeTypeUtils.parseMimeType("video/mp4"))
+                .data(URI.create("https://example.com/clip.mp4"))
+                .build())
+        .build();
+String answer =
+    chatClient
+        .prompt()
+        .messages(message)
+        .options(OpenRouterChatOptions.builder().model("google/gemini-2.5-flash"))
+        .call()
+        .content();
+```
+
+## Image and audio output
+
+### Images from a chat model
+
+Images next to text in a reply.
+
+```java
+ChatResponse response =
+    chatClient
+        .prompt()
+        .user("Draw a lighthouse at dusk.")
+        .options(
+            OpenRouterChatOptions.builder()
+                .model("google/gemini-2.5-flash-image")
+                .modalities(OpenRouterModality.IMAGE, OpenRouterModality.TEXT))
+        .call()
+        .chatResponse();
+for (Media image : response.getResult().getOutput().getMedia()) {
+  byte[] png = OpenRouterMedia.bytes(image);
 }
 ```
 
-Spring AI's schema generator marks a parameter optional when it has `@ToolParam(required = false)`, `@Nullable` or an equivalent Jackson or OpenAPI annotation. For strict tools, keep every parameter required. For a value that may be absent, write the schema the way the rewrite would:
+### Audio output
 
-```json
-{
-  "type": "object",
-  "properties": {
-    "city": { "type": "string" },
-    "note": { "type": ["string", "null"] }
-  },
-  "required": ["city", "note"],
-  "additionalProperties": false
-}
+Streaming only.
+
+```java
+Flux<ChatResponse> stream =
+    chatClient
+        .prompt()
+        .user("Say hello.")
+        .options(
+            OpenRouterChatOptions.builder()
+                .model("openai/gpt-audio-mini")
+                .modalities(OpenRouterModality.TEXT, OpenRouterModality.AUDIO)
+                .audio(new OpenRouterAudioOptions("alloy", "pcm16")))
+        .stream()
+        .chatResponse();
+stream.subscribe(
+    response ->
+        response
+            .getResults()
+            .forEach(
+                result ->
+                    result
+                        .getOutput()
+                        .getMedia()
+                        .forEach(
+                            media -> {
+                              byte[] audio = OpenRouterMedia.bytes(media);
+                            })));
 ```
 
-The check covers the common [strict function contract](https://developers.openai.com/api/docs/guides/function-calling#strict-mode), not every provider keyword, size limit or model restriction. The library does not discover which routes support strict tools. A provider rejection surfaces as a normal API error, with no retry as non-strict.
+## Caching, usage and low-level
 
-### Tool failure policy
+### Prompt cache breakpoint
 
-By default, a failed tool returns `{"error":"Tool execution failed"}` to the model and the loop continues. The starter supplies `OpenRouterToolExecutionExceptionProcessor` before Spring AI creates its shared tool manager, so the policy also applies to other providers that use that manager. Startup logs a warning when another provider's chat model is in the context.
+Cache a stable prompt prefix.
 
-Spring AI does not expose which processor a `ToolCallingManager` uses, so a plain `ToolCallingManager.builder().build()` bean fails at startup. Build custom managers with `OpenRouterToolCallingManagers.withFailurePolicy(...)`, or implement `OpenRouterToolFailurePolicy`. The check accepts only processors declared as beans, so an inline processor instance fails it.
+```java
+String reference = "Reference material to reuse.\n";
+UserMessage message =
+    UserMessage.builder()
+        .text(reference + "Answer this turn's question.")
+        .metadata(
+            Map.of(
+                OpenRouterCacheBreakpoint.METADATA_KEY,
+                List.of(new OpenRouterCacheBreakpoint(reference.length()))))
+        .build();
+String answer = chatClient.prompt().messages(message).call().content();
+```
 
-One case is not detected: in a parent context with global lazy initialization, a `FactoryBean` manager whose product type is known only at runtime. Declare it as a regular eager bean.
+### Prompt cache options
 
-`spring.ai.openrouter.chat.allow-unsafe-tool-failure-results=true` skips the manager check and makes the application responsible for redacting failure results.
+Explicit caching and a 12-hour lifetime on OpenAI models.
 
-## Reasoning
+```java
+String answer =
+    chatClient
+        .prompt()
+        .messages(message) // carries an OpenRouterCacheBreakpoint
+        .options(
+            OpenRouterChatOptions.builder()
+                .promptCacheKey("example-app")
+                .promptCacheOptions(
+                    OpenRouterPromptCacheOptions.explicit(OpenRouterPromptCacheOptions.TTL_12_HOURS)))
+        .call()
+        .content();
+```
 
-Keep the whole assistant message, metadata included, in history. The next request and each tool round replay the reasoning from that metadata, in order. To redact reasoning, start a new conversation without it: in Responses mode, editing the text, tool calls or refusal while keeping the reasoning is rejected.
+### Usage and cost
 
-## Prompt caching
+Credits charged, tokens used.
 
-Attach a `List<OpenRouterCacheBreakpoint>` to a system or user message's metadata to mark the end of a stable prompt prefix. There are no cache defaults or Boot properties, because placement belongs to individual messages. A custom history store must restore the typed list: plain maps, for example after a JSON round trip, fail.
+```java
+ChatResponse response = chatClient.prompt().user("Say hello.").call().chatResponse();
+OpenRouterUsage usage = OpenRouterUsage.from(response);
+Double cost = usage.getCost(); // null when not reported
+```
 
-Support depends on the upstream provider:
+### Extra request fields
 
-| Request protocol / provider                    | Supported placement and lifetime                                                                                                                                                                                   |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Chat Completions / Claude-compatible providers | System and user text blocks; five minutes or one hour.                                                                                                                                                             |
-| Chat Completions / supported Alibaba models    | Text blocks; use five minutes. Model and endpoint support varies.                                                                                                                                                  |
-| Chat Completions / supported Gemini models     | Text blocks; use five minutes. Only the final boundary is used; a boundary in the first system message caches the normalized system prompt, including its trailing text. Put dynamic text in a later user message. |
-| Chat Completions / other routes                | Provider-dependent; no guarantee of explicit caching or TTL preservation. Select a supporting route.                                                                                                               |
-| Responses                                      | Rejected. Its per-block `prompt_cache_breakpoint` is not implemented here, so only [request-level controls](#request-level-cache-controls) apply.                                                                  |
+Fields without a typed option.
 
-Upstream providers enforce model eligibility and minimum prompt sizes; the library does not infer them. See [OpenRouter's prompt caching guide](https://openrouter.ai/docs/guides/best-practices/prompt-caching). Request-level automatic caching (a top-level `cache_control`) is not exposed.
+```java
+String answer =
+    chatClient
+        .prompt()
+        .user("Say hello.")
+        .options(OpenRouterChatOptions.builder().extraBody(Map.of("transforms", List.of())))
+        .call()
+        .content();
+```
 
-### Request-level cache controls
+### Low-level request
 
-- `promptCacheKey` groups requests that share a prompt prefix. Without a `sessionId`, OpenRouter also uses it as the sticky routing key.
-- OpenRouter applies `promptCacheOptions` only to OpenAI models that support explicit prompt caching (GPT-5.6 and newer); other providers ignore it.
-- Explicit mode, the only mode OpenRouter documents, turns off OpenAI's automatic caching, so the provider caches only blocks marked with an `OpenRouterCacheBreakpoint`. A request without breakpoints is not cached, which OpenRouter documents as the way to avoid the cache-write charge for a prompt sent once. Responses mode has no breakpoints here, so explicit mode always turns caching off there. That is why the mode is required, and why it is risky as a Boot default.
-- OpenRouter converts the `cache_control` marker to OpenAI's `prompt_cache_breakpoint` but does not translate its TTL, so `Ttl.ONE_HOUR` has no effect on OpenAI. The `ttl` of `promptCacheOptions` (`30m` by default, or `12h`) sets the minimum lifetime instead. The `12h` lifetime is billed at a higher cache-write rate.
+Inject OpenRouterApi; no Spring AI types.
 
-## Log probabilities and predicted output
+```java
+ChatCompletionRequest request =
+    ChatCompletionRequest.builder()
+        .model("openai/gpt-oss-120b")
+        .messages(List.of(new ChatMessage("user", "Say hello.", null, null, null)))
+        .build();
+ChatCompletionResponse response = openRouterApi.chatCompletion(request);
+```
 
-`logprobs`, `topLogprobs`, `logitBias`, `verbosity` and `prediction` are named as in Spring AI's `OpenAiChatOptions`, so code that moves from that integration keeps them. In Responses mode `topLogprobs` is sent, but the library does not read log probabilities from Responses output, so `OpenRouterLogprobs.from(...)` returns an empty `Optional`. A prediction belongs to one request, so it has no Boot property.
+## Good to know
 
-## Extra request fields
+- **Request modes:** use Chat Completions, the default. Responses is experimental and accepts fewer options. An option that a mode does not support fails before the request instead of being dropped.
+- **Structured output:** when `outputSchema` and `responseFormat` are both set, `outputSchema` wins. The library sends `strict` only when you set it.
+- **Tools:** Spring AI's `ToolCallingAdvisor` runs the tool loop. The model only advertises tools and returns tool calls.
+- **Strict tools:** the library checks a strict schema and never rewrites it. Keep every parameter required, and write an optional value as a nullable type.
+- **Tool failures:** a failed tool returns `{"error":"Tool execution failed"}` to the model, and the loop continues. A custom `ToolCallingManager` bean must be built with `OpenRouterToolCallingManagers.withFailurePolicy(...)`, or startup fails.
+- **Reasoning:** keep the whole assistant message in the history, metadata included. The next request replays the reasoning from that metadata.
+- **Sessions:** a session keeps the chat requests of one conversation on the same upstream provider, so set `sessionId` for each request, not as a default.
+- **Prompt cache options:** only OpenAI models that support explicit prompt caching accept `promptCacheOptions`. Other OpenAI models reject the request with HTTP 400.
+- **Log probabilities:** in Responses mode `topLogprobs` is sent, but `OpenRouterLogprobs.from(...)` returns an empty `Optional`.
+- **Attachments:** the library never fetches an attachment URL, and it keeps no list of models. Pick a model and a provider that accept the file type.
+- **Audio output:** only streaming Chat Completions returns audio. PCM bytes are raw audio, not a WAV file.
 
-`extraBody` and `providerExtraBody` accept the keys in OpenRouter's [parameter reference](https://openrouter.ai/docs/api_reference/parameters), [provider routing guide](https://openrouter.ai/docs/guides/routing/provider-selection) and [Responses schema](https://openrouter.ai/docs/api/api-reference/responses/create-a-response) that have no typed option. In Boot properties, keep the wire spelling with bracket notation, such as `spring.ai.openrouter.chat.extra-body.[top_logprobs]=0`.
-
-OpenRouter applies its [middle-out message transform](https://openrouter.ai/docs/guides/features/message-transforms) by default to endpoints with a context of 8,192 tokens or less. A prompt longer than the context is then shortened and answered without an error. To get a context-length error instead, send `extraBody(Map.of("transforms", List.of()))`, or set `spring.ai.openrouter.chat.extra-body.[transforms]=` in Boot properties.
+Errors, retries, timeouts and cost are on the [Production](production.md) page.
