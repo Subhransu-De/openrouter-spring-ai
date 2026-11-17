@@ -64,6 +64,20 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 
 	private @Nullable OpenRouterTrace trace;
 
+	private @Nullable Boolean logprobs;
+
+	private @Nullable Integer topLogprobs;
+
+	private @Nullable Map<String, Integer> logitBias;
+
+	private @Nullable String verbosity;
+
+	private @Nullable String promptCacheKey;
+
+	private @Nullable OpenRouterPromptCacheOptions promptCacheOptions;
+
+	private @Nullable String prediction;
+
 	private @Nullable OpenRouterResponseFormat responseFormat;
 
 	private @Nullable Boolean parallelToolCalls;
@@ -160,6 +174,13 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 		builder.user(value(runtimeOptions.user, this.user));
 		builder.sessionId(value(runtimeOptions.sessionId, this.sessionId));
 		builder.trace(value(runtimeOptions.trace, this.trace));
+		builder.logprobs(value(runtimeOptions.logprobs, this.logprobs));
+		builder.topLogprobs(value(runtimeOptions.topLogprobs, this.topLogprobs));
+		builder.logitBias(value(runtimeOptions.logitBias, this.logitBias));
+		builder.verbosity(value(runtimeOptions.verbosity, this.verbosity));
+		builder.promptCacheKey(value(runtimeOptions.promptCacheKey, this.promptCacheKey));
+		builder.promptCacheOptions(value(runtimeOptions.promptCacheOptions, this.promptCacheOptions));
+		builder.prediction(value(runtimeOptions.prediction, this.prediction));
 		// responseFormat and outputSchema both choose the output format. As in Spring
 		// AI's OpenAI options, where both write one field, a request that sets either
 		// replaces the default pair instead of combining with the other default.
@@ -271,6 +292,34 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 
 	public @Nullable OpenRouterTrace getTrace() {
 		return this.trace;
+	}
+
+	public @Nullable Boolean getLogprobs() {
+		return this.logprobs;
+	}
+
+	public @Nullable Integer getTopLogprobs() {
+		return this.topLogprobs;
+	}
+
+	public @Nullable Map<String, Integer> getLogitBias() {
+		return readOnlyMap(this.logitBias);
+	}
+
+	public @Nullable String getVerbosity() {
+		return this.verbosity;
+	}
+
+	public @Nullable String getPromptCacheKey() {
+		return this.promptCacheKey;
+	}
+
+	public @Nullable OpenRouterPromptCacheOptions getPromptCacheOptions() {
+		return this.promptCacheOptions;
+	}
+
+	public @Nullable String getPrediction() {
+		return this.prediction;
 	}
 
 	public @Nullable OpenRouterResponseFormat getResponseFormat() {
@@ -426,6 +475,13 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 			this.options.user = source.user;
 			this.options.sessionId = source.sessionId;
 			this.options.trace = source.trace;
+			this.options.logprobs = source.logprobs;
+			this.options.topLogprobs = source.topLogprobs;
+			this.options.logitBias = source.logitBias == null ? null : new LinkedHashMap<>(source.logitBias);
+			this.options.verbosity = source.verbosity;
+			this.options.promptCacheKey = source.promptCacheKey;
+			this.options.promptCacheOptions = source.promptCacheOptions;
+			this.options.prediction = source.prediction;
 			this.options.responseFormat = source.responseFormat;
 			this.options.parallelToolCalls = source.parallelToolCalls;
 			this.options.toolStrict = source.toolStrict;
@@ -574,6 +630,88 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 		 */
 		public Builder trace(@Nullable OpenRouterTrace trace) {
 			this.options.trace = trace;
+			return this;
+		}
+
+		/**
+		 * Whether to return the log probability of each output token, sent as
+		 * {@code logprobs}. Chat Completions only. Read the result with
+		 * {@link OpenRouterLogprobs#from}.
+		 */
+		public Builder logprobs(@Nullable Boolean logprobs) {
+			this.options.logprobs = logprobs;
+			return this;
+		}
+
+		/**
+		 * Number of most likely alternatives, from 0 to 20, to return for each output
+		 * token, sent as {@code top_logprobs}. Chat Completions also requires
+		 * {@code logprobs=true}.
+		 */
+		public Builder topLogprobs(@Nullable Integer topLogprobs) {
+			OptionChecks.topLogprobs("topLogprobs", topLogprobs);
+			this.options.topLogprobs = topLogprobs;
+			return this;
+		}
+
+		/**
+		 * Bias from -100 to 100 added to the logits of tokens, keyed by token ID in the
+		 * model's tokenizer, sent as {@code logit_bias}. Chat Completions only. A request
+		 * map replaces the default map.
+		 */
+		public Builder logitBias(@Nullable Map<String, Integer> logitBias) {
+			if (logitBias != null) {
+				logitBias.forEach((token, bias) -> {
+					if (token == null || bias == null) {
+						throw new IllegalArgumentException(
+								"logitBias must not contain null token IDs or biases, but was "
+										+ OptionChecks.describe(logitBias));
+					}
+				});
+			}
+			this.options.logitBias = logitBias == null ? null : new LinkedHashMap<>(logitBias);
+			return this;
+		}
+
+		/**
+		 * Response length and detail: low, medium, high, xhigh or max, sent as
+		 * {@code verbosity}. Chat Completions only.
+		 */
+		public Builder verbosity(@Nullable String verbosity) {
+			OptionChecks.verbosity("verbosity", verbosity);
+			this.options.verbosity = verbosity;
+			return this;
+		}
+
+		/**
+		 * Key that groups requests sharing a prompt prefix for provider caching, sent as
+		 * {@code prompt_cache_key}. Without a session ID, OpenRouter also uses it for
+		 * sticky routing.
+		 */
+		public Builder promptCacheKey(@Nullable String promptCacheKey) {
+			if (promptCacheKey != null && promptCacheKey.isEmpty()) {
+				throw new IllegalArgumentException("promptCacheKey must not be empty; leave it unset instead");
+			}
+			this.options.promptCacheKey = promptCacheKey;
+			return this;
+		}
+
+		/**
+		 * Request-level prompt-cache controls, sent as {@code prompt_cache_options}.
+		 * OpenRouter applies them to OpenAI models that support explicit prompt caching.
+		 */
+		public Builder promptCacheOptions(@Nullable OpenRouterPromptCacheOptions promptCacheOptions) {
+			this.options.promptCacheOptions = promptCacheOptions;
+			return this;
+		}
+
+		/**
+		 * Text that the response is expected to largely repeat, such as a file being
+		 * edited, sent as a {@code content} prediction. Supporting models answer faster.
+		 * Chat Completions only.
+		 */
+		public Builder prediction(@Nullable String prediction) {
+			this.options.prediction = prediction;
 			return this;
 		}
 
@@ -731,6 +869,12 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 
 		@Override
 		public OpenRouterChatOptions build() {
+			// merge() builds through here, so this also rejects a default extraBody key
+			// that meets a typed request option. The DTOs check low-level requests.
+			OptionChecks.rejectTypedConflicts(this.options.extraBody,
+					RequestExtensions.typed("logprobs", this.options.logprobs, "top_logprobs", this.options.topLogprobs,
+							"logit_bias", this.options.logitBias, "verbosity", this.options.verbosity,
+							"prompt_cache_key", this.options.promptCacheKey));
 			// Detached snapshot: mutating this builder after build() must not leak into
 			// the returned options. The copy constructor also deep-copies collections.
 			return new Builder(this.options).options;

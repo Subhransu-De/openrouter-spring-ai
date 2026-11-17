@@ -62,7 +62,8 @@ public final class OpenRouterMetadata {
 
 	/**
 	 * Unknown Chat Completions choice fields, including log probabilities ({@code Map}).
-	 * Assistant message metadata.
+	 * Assistant message metadata. Read the log probabilities with
+	 * {@link OpenRouterLogprobs#from(AssistantMessage)}.
 	 */
 	public static final String CHOICE_EXTENSIONS = "openrouter.choice.extensions";
 

@@ -1,0 +1,10 @@
+: OPENROUTER PROCESSING
+
+data: {"id":"gen-garage-logprobs-stream","object":"chat.completion.chunk","created":1767225600,"model":"openai/gpt-oss-120b","provider":"OpenAI","choices":[{"index":0,"delta":{"role":"assistant","content":"Ready"},"logprobs":{"content":[{"token":"Ready","logprob":-0.01,"bytes":[82,101,97,100,121],"top_logprobs":[{"token":"Ready","logprob":-0.01,"bytes":[82,101,97,100,121]},{"token":"Done","logprob":-4.6,"bytes":null}]}],"refusal":null},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-garage-logprobs-stream","object":"chat.completion.chunk","created":1767225600,"model":"openai/gpt-oss-120b","provider":"OpenAI","choices":[{"index":0,"delta":{"role":"assistant","content":"."},"logprobs":{"content":[{"token":".","logprob":-0.2,"bytes":[46],"top_logprobs":[{"token":".","logprob":-0.2,"bytes":[46]},{"token":"!","logprob":-1.7,"bytes":[33]}]}],"refusal":null},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-garage-logprobs-stream","object":"chat.completion.chunk","created":1767225600,"model":"openai/gpt-oss-120b","provider":"OpenAI","choices":[{"index":0,"delta":{"role":"assistant","content":""},"logprobs":null,"finish_reason":"stop","native_finish_reason":"stop"}],"usage":{"prompt_tokens":12,"completion_tokens":2,"total_tokens":14}}
+
+data: [DONE]
+

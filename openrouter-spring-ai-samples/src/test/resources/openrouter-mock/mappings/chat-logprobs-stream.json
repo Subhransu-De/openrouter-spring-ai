@@ -1,0 +1,27 @@
+{
+  "name": "chat-logprobs-stream",
+  "priority": 29,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/chat/completions",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.metadata.sceneId == 'logprobs-check')]"
+      },
+      {
+        "matchesJsonPath": "$[?(@.stream == true)]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "text/event-stream"
+    },
+    "bodyFileName": "chat/logprobs.sse",
+    "chunkedDribbleDelay": {
+      "numberOfChunks": 4,
+      "totalDuration": 40
+    }
+  }
+}

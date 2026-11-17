@@ -3,6 +3,7 @@ package de.subhransu.openrouter.springai.autoconfigure;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import de.subhransu.openrouter.springai.chat.OpenRouterAudioOptions;
+import de.subhransu.openrouter.springai.chat.OpenRouterPromptCacheOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
 import de.subhransu.openrouter.springai.chat.OpenRouterReasoningOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterResponseFormat;
@@ -37,6 +38,7 @@ class OpenRouterNestedPropertyHintsTests {
 				Arguments.of(OpenRouterChatProperties.class, OpenRouterTrace.class),
 				Arguments.of(OpenRouterEmbeddingProperties.class, OpenRouterTrace.class),
 				Arguments.of(OpenRouterImageProperties.class, OpenRouterTrace.class),
+				Arguments.of(OpenRouterChatProperties.class, OpenRouterPromptCacheOptions.class),
 				Arguments.of(OpenRouterAudioSpeechProperties.class, OpenRouterTrace.class),
 				Arguments.of(OpenRouterAudioTranscriptionProperties.class, OpenRouterTrace.class));
 	}

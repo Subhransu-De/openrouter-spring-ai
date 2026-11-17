@@ -27,11 +27,14 @@ public record ResponsesRequest(@Nullable String model, @Nullable List<String> mo
 		@Nullable List<String> modalities,
 		@JsonProperty("image_config") @Nullable Map<String, @Nullable Object> imageConfig,
 		@Nullable Map<String, @Nullable Object> text, @JsonProperty("session_id") @Nullable String sessionId,
-		@Nullable Map<String, @Nullable Object> trace,
+		@Nullable Map<String, @Nullable Object> trace, @JsonProperty("top_logprobs") @Nullable Integer topLogprobs,
+		@JsonProperty("prompt_cache_key") @Nullable String promptCacheKey,
+		@JsonProperty("prompt_cache_options") @Nullable PromptCacheOptions promptCacheOptions,
 		@JsonAnyGetter @Nullable Map<String, @Nullable Object> extraBody) {
 
 	public ResponsesRequest {
-		extraBody = RequestExtensions.chat(extraBody, true);
+		extraBody = RequestExtensions.responsesRequest(extraBody,
+				RequestExtensions.typed("top_logprobs", topLogprobs, "prompt_cache_key", promptCacheKey));
 	}
 
 	/**
@@ -93,6 +96,12 @@ public record ResponsesRequest(@Nullable String model, @Nullable List<String> mo
 		private @Nullable String sessionId;
 
 		private @Nullable Map<String, @Nullable Object> trace;
+
+		private @Nullable Integer topLogprobs;
+
+		private @Nullable String promptCacheKey;
+
+		private @Nullable PromptCacheOptions promptCacheOptions;
 
 		private @Nullable Map<String, @Nullable Object> extraBody;
 
@@ -227,6 +236,21 @@ public record ResponsesRequest(@Nullable String model, @Nullable List<String> mo
 			return this;
 		}
 
+		public Builder topLogprobs(@Nullable Integer topLogprobs) {
+			this.topLogprobs = topLogprobs;
+			return this;
+		}
+
+		public Builder promptCacheKey(@Nullable String promptCacheKey) {
+			this.promptCacheKey = promptCacheKey;
+			return this;
+		}
+
+		public Builder promptCacheOptions(@Nullable PromptCacheOptions promptCacheOptions) {
+			this.promptCacheOptions = promptCacheOptions;
+			return this;
+		}
+
 		public Builder extraBody(@Nullable Map<String, @Nullable Object> extraBody) {
 			this.extraBody = extraBody;
 			return this;
@@ -242,7 +266,8 @@ public record ResponsesRequest(@Nullable String model, @Nullable List<String> mo
 					this.stream, this.temperature, this.topP, this.topK, this.frequencyPenalty, this.presencePenalty,
 					this.metadata, this.provider, this.reasoning, this.route, this.serviceTier, this.user,
 					this.parallelToolCalls, this.toolChoice, this.tools, this.modalities, this.imageConfig, this.text,
-					this.sessionId, this.trace, this.extraBody);
+					this.sessionId, this.trace, this.topLogprobs, this.promptCacheKey, this.promptCacheOptions,
+					this.extraBody);
 		}
 
 	}

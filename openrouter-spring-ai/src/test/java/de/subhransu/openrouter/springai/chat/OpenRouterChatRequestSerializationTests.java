@@ -45,6 +45,8 @@ class OpenRouterChatRequestSerializationTests {
 
 	private static final String MAX_OUTPUT_TOKENS = "max_output_tokens";
 
+	private static final String PROMPT_CACHE_KEY = "/prompt_cache_key";
+
 	private final ObjectMapper objectMapper = new ObjectMapper();
 
 	private final OpenRouterChatRequestMapper chatMapper = new OpenRouterChatRequestMapper(this.objectMapper);
@@ -695,8 +697,15 @@ class OpenRouterChatRequestSerializationTests {
 			if ("rejected".equals(chatPath)) {
 				assertThatThrownBy(() -> this.chatMapper.map(messages, options, stream, tools))
 					.isInstanceOf(IllegalArgumentException.class);
-				assertThatThrownBy(() -> this.responsesMapper.map(messages, options, stream, tools))
-					.isInstanceOf(IllegalArgumentException.class);
+				if ("rejected".equals(responsesPath)) {
+					assertThatThrownBy(() -> this.responsesMapper.map(messages, options, stream, tools))
+						.isInstanceOf(IllegalArgumentException.class);
+				}
+				else {
+					JsonNode responses = this.objectMapper
+						.valueToTree(this.responsesMapper.map(messages, options, stream, tools));
+					assertThat(responses.at(responsesPath).isMissingNode()).as(name).isFalse();
+				}
 				continue;
 			}
 			JsonNode chat = this.objectMapper.valueToTree(this.chatMapper.map(messages, options, stream, tools));
@@ -737,6 +746,13 @@ class OpenRouterChatRequestSerializationTests {
 				{ "sessionId", "synthetic-session", "/session_id", "/session_id" },
 				{ "trace", OpenRouterTrace.builder().traceId("synthetic-trace").build(), "/trace/trace_id",
 						"/trace/trace_id" },
+				{ "logprobs", false, "/logprobs", "rejected" }, { "topLogprobs", 0, "rejected", "/top_logprobs" },
+				{ "logitBias", Map.of("50256", -100), "/logit_bias/50256", "rejected" },
+				{ "verbosity", "low", "/verbosity", "rejected" },
+				{ "promptCacheKey", "synthetic-key", PROMPT_CACHE_KEY, PROMPT_CACHE_KEY },
+				{ "promptCacheOptions", OpenRouterPromptCacheOptions.explicit("12h"), "/prompt_cache_options/ttl",
+						"/prompt_cache_options/ttl" },
+				{ "prediction", "synthetic prediction", "/prediction/content", "rejected" },
 				{ "responseFormat", OpenRouterResponseFormat.jsonObject(), "/response_format", "/text/format" },
 				{ "outputSchema", "{\"type\":\"object\"}", "/response_format/json_schema/schema",
 						"/text/format/schema" },
@@ -752,7 +768,7 @@ class OpenRouterChatRequestSerializationTests {
 				{ "modalities", List.of("text"), "/modalities", "/modalities" },
 				{ "imageConfig", Map.of("aspect_ratio", "1:1"), "/image_config", "/image_config" },
 				{ "audio", new OpenRouterAudioOptions("alloy", "pcm16"), "rejected", "rejected" },
-				{ "extraBody", Map.of("prompt_cache_key", "synthetic"), "/prompt_cache_key", "/prompt_cache_key" },
+				{ "extraBody", Map.of("prompt_cache_key", "synthetic"), PROMPT_CACHE_KEY, PROMPT_CACHE_KEY },
 				{ "providerExtraBody", Map.of("zdr", false), "/provider/zdr", "/provider/zdr" },
 				{ "toolCallbacks", List.of(), "/tools/0/function/name", "/tools/0/name" },
 				{ "toolContext", Map.of("test", "value"), null, null },

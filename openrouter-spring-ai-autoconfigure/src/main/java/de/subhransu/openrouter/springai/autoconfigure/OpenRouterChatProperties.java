@@ -4,6 +4,7 @@ import org.jspecify.annotations.Nullable;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterAudioOptions;
+import de.subhransu.openrouter.springai.chat.OpenRouterPromptCacheOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
 import de.subhransu.openrouter.springai.chat.OpenRouterReasoningOptions;
 import de.subhransu.openrouter.springai.chat.OpenRouterResponseFormat;
@@ -16,6 +17,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.NestedConfigurationProperty;
 import org.springframework.util.unit.DataSize;
 
+// Boot binds each key through a getter and a setter. The class total is the sum of those
+// one-path accessors, and splitting the class would change the property names.
+@SuppressWarnings("PMD.CyclomaticComplexity")
 @ConfigurationProperties(OpenRouterChatProperties.CONFIG_PREFIX)
 public class OpenRouterChatProperties {
 
@@ -100,6 +104,43 @@ public class OpenRouterChatProperties {
 	 */
 	@NestedConfigurationProperty
 	private @Nullable OpenRouterTrace trace;
+
+	/**
+	 * Whether to return the log probability of each output token, sent as logprobs. Chat
+	 * Completions only.
+	 */
+	private @Nullable Boolean logprobs;
+
+	/**
+	 * Number of most likely alternatives, from 0 to 20, returned for each output token,
+	 * sent as top_logprobs. Chat Completions also requires logprobs=true.
+	 */
+	private @Nullable Integer topLogprobs;
+
+	/**
+	 * Bias from -100 to 100 added to the logits of tokens, keyed by token id, sent as
+	 * logit_bias. Chat Completions only. A request map replaces this map.
+	 */
+	private @Nullable Map<String, Integer> logitBias;
+
+	/**
+	 * Response length and detail: low, medium, high, xhigh or max, sent as verbosity.
+	 * Chat Completions only.
+	 */
+	private @Nullable String verbosity;
+
+	/**
+	 * Key that groups requests sharing a prompt prefix for provider caching, sent as
+	 * prompt_cache_key.
+	 */
+	private @Nullable String promptCacheKey;
+
+	/**
+	 * Request-level prompt-cache controls for OpenAI models with explicit prompt caching,
+	 * sent as prompt_cache_options.
+	 */
+	@NestedConfigurationProperty
+	private @Nullable OpenRouterPromptCacheOptions promptCacheOptions;
 
 	/**
 	 * Explicit output format. When output-schema is also set, output-schema is sent and a
@@ -243,6 +284,12 @@ public class OpenRouterChatProperties {
 			.user(this.user)
 			.sessionId(this.sessionId)
 			.trace(this.trace)
+			.logprobs(this.logprobs)
+			.topLogprobs(this.topLogprobs)
+			.logitBias(this.logitBias)
+			.verbosity(this.verbosity)
+			.promptCacheKey(this.promptCacheKey)
+			.promptCacheOptions(this.promptCacheOptions)
 			.responseFormat(this.responseFormat)
 			.outputSchema(this.outputSchema)
 			.extraBody(this.extraBody)
@@ -399,6 +446,54 @@ public class OpenRouterChatProperties {
 
 	public void setResponseFormat(@Nullable OpenRouterResponseFormat responseFormat) {
 		this.responseFormat = responseFormat;
+	}
+
+	public @Nullable Boolean getLogprobs() {
+		return this.logprobs;
+	}
+
+	public void setLogprobs(@Nullable Boolean logprobs) {
+		this.logprobs = logprobs;
+	}
+
+	public @Nullable Integer getTopLogprobs() {
+		return this.topLogprobs;
+	}
+
+	public void setTopLogprobs(@Nullable Integer topLogprobs) {
+		this.topLogprobs = topLogprobs;
+	}
+
+	public @Nullable Map<String, Integer> getLogitBias() {
+		return this.logitBias;
+	}
+
+	public void setLogitBias(@Nullable Map<String, Integer> logitBias) {
+		this.logitBias = logitBias;
+	}
+
+	public @Nullable String getVerbosity() {
+		return this.verbosity;
+	}
+
+	public void setVerbosity(@Nullable String verbosity) {
+		this.verbosity = verbosity;
+	}
+
+	public @Nullable String getPromptCacheKey() {
+		return this.promptCacheKey;
+	}
+
+	public void setPromptCacheKey(@Nullable String promptCacheKey) {
+		this.promptCacheKey = promptCacheKey;
+	}
+
+	public @Nullable OpenRouterPromptCacheOptions getPromptCacheOptions() {
+		return this.promptCacheOptions;
+	}
+
+	public void setPromptCacheOptions(@Nullable OpenRouterPromptCacheOptions promptCacheOptions) {
+		this.promptCacheOptions = promptCacheOptions;
 	}
 
 	public @Nullable Map<String, @Nullable Object> getProviderExtraBody() {

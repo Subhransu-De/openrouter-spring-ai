@@ -179,6 +179,13 @@ class OpenRouterChatOptionsRobustnessTests {
 			.user("user-7")
 			.sessionId("session-7")
 			.trace(OpenRouterTrace.builder().traceId("trace-7").metadata(Map.of("tenant", "t")).build())
+			.logprobs(true)
+			.topLogprobs(3)
+			.logitBias(Map.of("50256", -100))
+			.verbosity("low")
+			.promptCacheKey("cache-7")
+			.promptCacheOptions(OpenRouterPromptCacheOptions.explicit("12h"))
+			.prediction("predicted text")
 			.responseFormat(OpenRouterResponseFormat.jsonObject())
 			.parallelToolCalls(true)
 			.toolStrict(true)
@@ -193,7 +200,7 @@ class OpenRouterChatOptionsRobustnessTests {
 			.modalities(List.of("image", "text"))
 			.imageConfig(Map.of("aspect_ratio", "16:9"))
 			.audio(new OpenRouterAudioOptions("alloy", "pcm16"))
-			.extraBody(Map.of("prompt_cache_key", "synthetic"))
+			.extraBody(Map.of("transforms", List.of()))
 			.providerExtraBody(Map.of("zdr", true))
 			.outputSchema("""
 					{

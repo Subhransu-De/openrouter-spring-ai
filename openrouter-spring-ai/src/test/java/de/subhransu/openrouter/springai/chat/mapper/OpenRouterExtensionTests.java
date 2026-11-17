@@ -8,6 +8,7 @@ import de.subhransu.openrouter.springai.api.dto.ChatCompletionResponse;
 import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
 import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatOptions;
+import de.subhransu.openrouter.springai.chat.OpenRouterLogprobs;
 import de.subhransu.openrouter.springai.chat.OpenRouterProviderPreferences;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -126,6 +127,10 @@ class OpenRouterExtensionTests {
 					assertThat(logprobs.get("content").get(0).get("token").asString()).isEqualTo("t0");
 					assertThat(logprobs.get("content").get(1).get("token").asString()).isEqualTo("t1");
 					assertThat(logprobs.get("refusal").size()).isEqualTo(2);
+					OpenRouterLogprobs typed = OpenRouterLogprobs.from(output).orElseThrow();
+					assertThat(typed.content()).extracting(OpenRouterLogprobs.Token::token).containsExactly("t0", "t1");
+					assertThat(typed.refusal()).extracting(OpenRouterLogprobs.Token::logprob)
+						.containsExactly(-2.0, -2.0);
 				}).verifyComplete();
 			}
 		}

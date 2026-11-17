@@ -294,7 +294,7 @@ class OpenRouterConfig {
 ### Text
 
 <details open>
-<summary>Text generation, Streaming, Per-request options, Structured output, Reasoning, Tool calling, Strict tools, Responses mode</summary>
+<summary>Text generation, Streaming, Per-request options, Structured output, Reasoning, Tool calling, Strict tools, Responses mode, Log probabilities, Predicted output</summary>
 
 <table>
 <tr>
@@ -452,6 +452,49 @@ String answer =
         .prompt()
         .user("Say hello.")
         .options(OpenRouterChatOptions.builder().requestMode(OpenRouterRequestMode.RESPONSES))
+        .call()
+        .content();
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Log probabilities</b> · Each token's log probability and its alternatives.</td>
+<td align="right"><a href="docs/chat-options.md#log-probabilities-logit-bias-verbosity-and-predicted-output">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+ChatResponse response =
+    chatClient
+        .prompt()
+        .user("Answer yes or no.")
+        .options(OpenRouterChatOptions.builder().logprobs(true).topLogprobs(3))
+        .call()
+        .chatResponse();
+List<OpenRouterLogprobs.Token> tokens =
+    OpenRouterLogprobs.from(response.getResult().getOutput())
+        .map(OpenRouterLogprobs::content)
+        .orElse(List.of()); // empty when the provider sent none
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Predicted output</b> · Faster edits when most of the answer is known.</td>
+<td align="right"><a href="docs/chat-options.md#log-probabilities-logit-bias-verbosity-and-predicted-output">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+String code = "int count = 0;\ncount++;\n";
+String edited =
+    chatClient
+        .prompt()
+        .user("Rename the variable count to total:\n" + code)
+        .options(OpenRouterChatOptions.builder().prediction(code))
         .call()
         .content();
 ```
@@ -933,7 +976,7 @@ EmbeddingResponse response =
 ### Caching, usage and low-level
 
 <details>
-<summary>Prompt cache breakpoint, Usage and cost, Extra request fields, Low-level request</summary>
+<summary>Prompt cache breakpoint, Prompt cache options, Usage and cost, Extra request fields, Low-level request</summary>
 
 <table>
 <tr>
@@ -954,6 +997,29 @@ UserMessage message =
                 List.of(new OpenRouterCacheBreakpoint(reference.length()))))
         .build();
 String answer = chatClient.prompt().messages(message).call().content();
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Prompt cache options</b> · Explicit caching and a 12-hour lifetime on OpenAI models.</td>
+<td align="right"><a href="docs/reasoning-and-caching.md#request-level-cache-controls">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+String answer =
+    chatClient
+        .prompt()
+        .messages(message) // carries an OpenRouterCacheBreakpoint
+        .options(
+            OpenRouterChatOptions.builder()
+                .promptCacheKey("example-app")
+                .promptCacheOptions(
+                    OpenRouterPromptCacheOptions.explicit(OpenRouterPromptCacheOptions.TTL_12_HOURS)))
+        .call()
+        .content();
 ```
 
 </td>

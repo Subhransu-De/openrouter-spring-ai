@@ -8,6 +8,7 @@ import de.subhransu.openrouter.springai.api.dto.ChatMessage;
 import de.subhransu.openrouter.springai.api.dto.ContentPart;
 import de.subhransu.openrouter.springai.api.dto.FunctionDefinition;
 import de.subhransu.openrouter.springai.api.dto.FunctionCall;
+import de.subhransu.openrouter.springai.api.dto.Prediction;
 import de.subhransu.openrouter.springai.api.dto.ProviderPreferences;
 import de.subhransu.openrouter.springai.api.dto.ReasoningOptions;
 import de.subhransu.openrouter.springai.api.dto.Tool;
@@ -44,6 +45,7 @@ public final class OpenRouterChatRequestMapper {
 		CacheBreakpointMapper.validate(messages);
 		var serviceTier = options.getServiceTier();
 		var audio = options.getAudio();
+		var prediction = options.getPrediction();
 		return ChatCompletionRequest.builder()
 			.model(options.getModel())
 			.models(options.getModels())
@@ -77,6 +79,13 @@ public final class OpenRouterChatRequestMapper {
 			.modalities(options.getModalities())
 			.imageConfig(options.getImageConfig())
 			.audio(audio != null ? new AudioConfig(audio.voice(), audio.format()) : null)
+			.logprobs(options.getLogprobs())
+			.topLogprobs(options.getTopLogprobs())
+			.logitBias(options.getLogitBias())
+			.verbosity(options.getVerbosity())
+			.promptCacheKey(options.getPromptCacheKey())
+			.promptCacheOptions(PromptCacheMapper.map(options.getPromptCacheOptions()))
+			.prediction(prediction != null ? Prediction.content(prediction) : null)
 			.extraBody(options.getExtraBody())
 			.build();
 	}

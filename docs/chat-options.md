@@ -1,6 +1,6 @@
 # Chat options
 
-How per-request options combine with model defaults, how to set fallbacks, routing, attribution, sessions and traces, and how option objects are copied.
+How per-request options combine with model defaults, how to set fallbacks, routing, attribution, sessions, traces, log probabilities and predicted output, and how option objects are copied.
 
 Two rules decide which options a request uses:
 
@@ -97,6 +97,58 @@ spring.ai.openrouter.chat.trace.metadata.environment=staging
 ```
 
 The `embedding` and `image` prefixes take the same keys. A default session ID suits an application that runs one session per instance. Otherwise set it per request. `extraBody` still rejects `session_id` and `trace`; use the typed options.
+
+## Log probabilities, logit bias, verbosity and predicted output
+
+Where Spring AI's `OpenAiChatOptions` has the same option, the name is the same, so code that moves from that integration keeps it. Each option is sent as the OpenRouter field in the second column:
+
+| Option               | Wire field             | Request modes               | Value                                                                                                      |
+| -------------------- | ---------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `logprobs`           | `logprobs`             | Chat Completions            | Whether to return the log probability of each output token                                                 |
+| `topLogprobs`        | `top_logprobs`         | Chat Completions, Responses | 0 to 20 alternatives per token; Chat Completions also needs `logprobs=true`                                |
+| `logitBias`          | `logit_bias`           | Chat Completions            | Token ID to a bias from -100 to 100; a request map replaces the default map                                |
+| `verbosity`          | `verbosity`            | Chat Completions            | `low`, `medium`, `high`, `xhigh` or `max`                                                                  |
+| `promptCacheKey`     | `prompt_cache_key`     | Chat Completions, Responses | A non-empty key; see [Request-level cache controls](reasoning-and-caching.md#request-level-cache-controls) |
+| `promptCacheOptions` | `prompt_cache_options` | Chat Completions, Responses | See [Request-level cache controls](reasoning-and-caching.md#request-level-cache-controls)                  |
+| `prediction`         | `prediction`           | Chat Completions            | Text that the answer is expected to largely repeat, such as a file being edited                            |
+
+Read the log probabilities with `OpenRouterLogprobs.from(assistantMessage)`. It returns an empty `Optional` when the provider sent neither content nor refusal tokens:
+
+```java
+ChatResponse response = client.prompt().user("Answer yes or no.")
+    .options(OpenRouterChatOptions.builder().logprobs(true).topLogprobs(3))
+    .call().chatResponse();
+OpenRouterLogprobs.from(response.getResult().getOutput()).ifPresent(logprobs -> {
+    for (OpenRouterLogprobs.Token token : logprobs.content()) {
+        System.out.println(token.token() + " " + token.logprob() + " " + token.topLogprobs());
+    }
+});
+```
+
+- `content()` holds the answer tokens and `refusal()` the refusal tokens, in output order. Entries without a token string or a numeric log probability are left out. `bytes()` is `null` when the provider sent no byte list or a value that is not an integer from 0 to 255.
+- In a stream, each message holds the tokens so far, so the last message holds them all.
+- The raw values stay in `openrouter.choice.extensions`; see [Optional request and response extensions](extensions.md).
+- In Responses mode `topLogprobs` is sent, but the library does not read log probabilities from Responses output, so the reader returns an empty `Optional`.
+
+The builders reject a `topLogprobs` outside 0 to 20, an undocumented `verbosity`, an empty `promptCacheKey`, a null token ID or bias, and a typed option together with the same `extraBody` key, such as `promptCacheKey` and `extraBody` `prompt_cache_key`. A Boot default with one of these fails at startup. These requests fail with `IllegalArgumentException` before HTTP:
+
+- A Responses request with `logprobs`, `logitBias`, `verbosity` or `prediction`, even when the value comes from the model defaults. See [Pitfall: switching the request mode](#pitfall-switching-the-request-mode).
+- A Chat Completions request with `topLogprobs` but without `logprobs=true`, from the typed option or `extraBody`.
+- A request option and a default that set the same field twice, once typed and once in `extraBody`. Use one of them.
+
+Model and provider support still applies. A prediction belongs to one request, so it has no Boot property. The other options do:
+
+```properties
+spring.ai.openrouter.chat.logprobs=true
+spring.ai.openrouter.chat.top-logprobs=3
+spring.ai.openrouter.chat.logit-bias.[50256]=-100
+spring.ai.openrouter.chat.verbosity=low
+spring.ai.openrouter.chat.prompt-cache-key=example-app
+spring.ai.openrouter.chat.prompt-cache-options.mode=explicit
+spring.ai.openrouter.chat.prompt-cache-options.ttl=12h
+```
+
+Explicit cache mode turns off the provider's automatic caching for every request without a cache breakpoint. Read [Request-level cache controls](reasoning-and-caching.md#request-level-cache-controls) before you set it as a default.
 
 ## Option snapshots
 

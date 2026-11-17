@@ -62,6 +62,11 @@ public final class OpenRouterResponsesRequestMapper {
 		rejectUnsupported("minP", options.getMinP());
 		rejectUnsupported("topA", options.getTopA());
 		rejectUnsupported("includeUsage", options.getIncludeUsage());
+		rejectUnsupported("logprobs", options.getLogprobs());
+		rejectUnsupported("logitBias", options.getLogitBias());
+		// Responses takes verbosity inside text, which this mode does not expose.
+		rejectUnsupported("verbosity", options.getVerbosity());
+		rejectUnsupported("prediction", options.getPrediction());
 		var serviceTier = options.getServiceTier();
 		return ResponsesRequest.builder()
 			.model(options.getModel())
@@ -89,6 +94,9 @@ public final class OpenRouterResponsesRequestMapper {
 			.modalities(options.getModalities())
 			.imageConfig(options.getImageConfig())
 			.text(mapText(options))
+			.topLogprobs(options.getTopLogprobs())
+			.promptCacheKey(options.getPromptCacheKey())
+			.promptCacheOptions(PromptCacheMapper.map(options.getPromptCacheOptions()))
 			.extraBody(options.getExtraBody())
 			.build();
 	}
