@@ -60,29 +60,959 @@ implementation("de.subhransu:openrouter-spring-ai-starter:0.1.0")
 
 Use Java 17 or later. See [release compatibility](docs/getting-started.md#release-compatibility) for Spring Boot and Spring AI versions.
 
-## Make a first call
+## Examples
 
-Set the API key and an [OpenRouter model id](https://openrouter.ai/models) in `vendor/model` form, such as `openai/gpt-oss-120b`. Turn off the modalities you do not use:
+The examples follow `main` (0.2.0-SNAPSHOT). Release 0.1.0 lacks some of these types and names; see the [changelog](CHANGELOG.md). Each call is a billable OpenRouter request.
 
-```properties
-spring.ai.model.chat=openrouter
-spring.ai.model.embedding=none
-spring.ai.model.image=none
-spring.ai.openrouter.api-key=${OPENROUTER_API_KEY}
-spring.ai.openrouter.chat.model=${OPENROUTER_MODEL}
+### Setup
+
+Spring Boot reads the key from configuration and builds `OpenRouterApi`, `ChatClient.Builder` and the chat, embedding and image models for you. The speech, transcription and document embedding models are opt-in. The examples below use these injected beans: `ChatClient chatClient`, `EmbeddingModel embeddingModel`, `OpenRouterImageModel imageModel`, `TextToSpeechModel speechModel`, `TranscriptionModel transcriptionModel` and `DocumentEmbeddingModel documentEmbeddingModel`.
+
+Set defaults with properties. Declare a model bean for a second model or without Boot; that bean ignores `spring.ai.openrouter.*`, and a chat bean owns the tool failure policy.
+
+<details open>
+<summary>Configuration, Chat client, Opt-in models, Chat model bean, Embedding model bean, Document embedding model bean, Image model bean, Speech model bean, Transcription model bean, OpenRouterApi bean</summary>
+
+<table>
+<tr>
+<td><b>Configuration</b> · The key comes from the environment.</td>
+<td align="right"><a href="docs/getting-started.md">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```yaml
+spring:
+  ai:
+    model:
+      chat: openrouter
+      embedding: openrouter
+      image: openrouter
+    openrouter:
+      api-key: ${OPENROUTER_API_KEY}
+      chat:
+        model: openai/gpt-oss-120b
+      embedding:
+        model: openai/text-embedding-3-small
+      image:
+        model: bytedance-seed/seedream-4.5
 ```
 
-Then use the auto-configured `ChatClient.Builder`:
+</td>
+</tr>
+<tr>
+<td><b>Chat client</b> · Boot provides the builder; build the client once.</td>
+<td align="right"><a href="docs/getting-started.md#install-and-make-a-first-call">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
 
 ```java
 @Bean
-CommandLineRunner hello(ChatClient.Builder builder) {
-    ChatClient client = builder.build();
-    return args -> System.out.println(client.prompt().user("Say hello.").call().content());
+ChatClient chatClient(ChatClient.Builder builder) {
+  return builder.build();
 }
 ```
 
-Each call is a billable OpenRouter request.
+</td>
+</tr>
+<tr>
+<td><b>Opt-in models</b> · Speech, transcription and document embeddings are off until selected.</td>
+<td align="right"><a href="docs/multimodal.md#text-to-speech">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```yaml
+spring:
+  ai:
+    model:
+      embedding.multimodal: openrouter
+      audio:
+        speech: openrouter
+        transcription: openrouter
+    openrouter:
+      embedding:
+        model: mongodb/voyage-multimodal-3.5
+      audio:
+        speech:
+          model: hexgrad/kokoro-82m
+          voice: af_heart
+        transcription:
+          model: openai/whisper-1
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Chat model bean</b> · Replaces the auto-configured chat model.</td>
+<td align="right"><a href="docs/getting-started.md#model-selection-and-replacement-beans">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+@Bean
+OpenRouterChatModel chatModel(OpenRouterApi openRouterApi) {
+  return OpenRouterChatModel.builder()
+      .openRouterApi(openRouterApi)
+      .options(OpenRouterChatOptions.builder().model("openai/gpt-oss-120b").build())
+      .build();
+}
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Embedding model bean</b> · Replaces the auto-configured embedding model.</td>
+<td align="right"><a href="docs/getting-started.md#model-selection-and-replacement-beans">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+@Bean
+OpenRouterEmbeddingModel embeddingModel(OpenRouterApi openRouterApi) {
+  return OpenRouterEmbeddingModel.builder()
+      .openRouterApi(openRouterApi)
+      .options(
+          OpenRouterEmbeddingOptions.builder().model("openai/text-embedding-3-small").build())
+      .build();
+}
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Document embedding model bean</b> · Replaces the auto-configured document embedding model.</td>
+<td align="right"><a href="docs/embeddings.md#text-and-image-documents">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+@Bean
+OpenRouterDocumentEmbeddingModel documentEmbeddingModel(OpenRouterApi openRouterApi) {
+  return OpenRouterDocumentEmbeddingModel.builder()
+      .openRouterApi(openRouterApi)
+      .options(
+          OpenRouterEmbeddingOptions.builder().model("mongodb/voyage-multimodal-3.5").build())
+      .build();
+}
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Image model bean</b> · Replaces the auto-configured image model.</td>
+<td align="right"><a href="docs/getting-started.md#model-selection-and-replacement-beans">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+@Bean
+OpenRouterImageModel imageModel(OpenRouterApi openRouterApi) {
+  return OpenRouterImageModel.builder()
+      .openRouterApi(openRouterApi)
+      .options(OpenRouterImageOptions.builder().model("bytedance-seed/seedream-4.5").build())
+      .build();
+}
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Speech model bean</b> · Replaces the auto-configured speech model.</td>
+<td align="right"><a href="docs/multimodal.md#text-to-speech">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+@Bean
+OpenRouterAudioSpeechModel speechModel(OpenRouterApi openRouterApi) {
+  return OpenRouterAudioSpeechModel.builder()
+      .openRouterApi(openRouterApi)
+      .options(
+          OpenRouterAudioSpeechOptions.builder()
+              .model("hexgrad/kokoro-82m")
+              .voice("af_heart")
+              .build())
+      .build();
+}
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Transcription model bean</b> · Replaces the auto-configured transcription model.</td>
+<td align="right"><a href="docs/multimodal.md#transcription">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+@Bean
+OpenRouterAudioTranscriptionModel transcriptionModel(OpenRouterApi openRouterApi) {
+  return OpenRouterAudioTranscriptionModel.builder()
+      .openRouterApi(openRouterApi)
+      .options(OpenRouterAudioTranscriptionOptions.builder().model("openai/whisper-1").build())
+      .build();
+}
+```
+
+</td>
+</tr>
+<tr>
+<td><b>OpenRouterApi bean</b> · Replaces the auto-configured client; start here without Boot.</td>
+<td align="right"><a href="docs/api.md">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+@Configuration
+class OpenRouterConfig {
+
+  @Value("${spring.ai.openrouter.api-key}")
+  private String apiKey;
+
+  @Bean
+  OpenRouterApi openRouterApi() {
+    return OpenRouterApi.builder().apiKey(apiKey).build();
+  }
+}
+```
+
+</td>
+</tr>
+</table>
+
+</details>
+
+### Text
+
+<details open>
+<summary>Text generation, Streaming, Per-request options, Structured output, Reasoning, Tool calling, Strict tools, Responses mode</summary>
+
+<table>
+<tr>
+<td><b>Text generation</b> · One blocking call.</td>
+<td align="right"><a href="docs/getting-started.md">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+String answer = chatClient.prompt().user("Say hello.").call().content();
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Streaming</b> · Text arrives as server-sent events.</td>
+<td align="right"><a href="docs/getting-started.md#install-and-make-a-first-call">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+Flux<String> tokens = chatClient.prompt().user("Tell a short story.").stream().content();
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Per-request options</b> · Unset fields keep the defaults.</td>
+<td align="right"><a href="docs/chat-options.md#replacement-and-composition">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+String answer =
+    chatClient
+        .prompt()
+        .user("Say hello.")
+        .options(OpenRouterChatOptions.builder().temperature(0.0).maxCompletionTokens(200))
+        .call()
+        .content();
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Structured output</b> · Typed records from a JSON schema.</td>
+<td align="right"><a href="docs/request-modes.md#structured-output">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+record Answer(String answer) {}
+
+Answer answer =
+    chatClient
+        .prompt()
+        .user("What is the capital of Norway?")
+        .options(
+            OpenRouterChatOptions.builder()
+                .responseFormat(
+                    OpenRouterResponseFormat.jsonSchema(
+                        """
+                        {"type":"object",
+                         "properties":{"answer":{"type":"string"}},
+                         "required":["answer"],
+                         "additionalProperties":false}\
+                        """)))
+        .call()
+        .entity(Answer.class);
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Reasoning</b> · Read the model's thinking separately.</td>
+<td align="right"><a href="docs/reasoning-and-caching.md">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+ChatResponse response =
+    chatClient
+        .prompt()
+        .user("Plan a three-step migration.")
+        .options(
+            OpenRouterChatOptions.builder()
+                .reasoning(
+                    OpenRouterReasoningOptions.builder()
+                        .effort(OpenRouterReasoningEffort.MEDIUM)
+                        .build()))
+        .call()
+        .chatResponse();
+String thinking = OpenRouterMetadata.reasoning(response.getResult()).orElse("");
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Tool calling</b> · Spring AI runs the tool loop.</td>
+<td align="right"><a href="docs/tool-calling.md">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+class Weather {
+
+  @Tool(description = "Current temperature in a city")
+  String temperature(String city) {
+    return "21 C in " + city;
+  }
+}
+
+String answer =
+    chatClient.prompt().user("How warm is it in Oslo?").tools(new Weather()).call().content();
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Strict tools</b> · Checks each tool schema before the request.</td>
+<td align="right"><a href="docs/tool-calling.md#strict-function-tools">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+String answer =
+    chatClient
+        .prompt()
+        .user("How warm is it in Oslo?")
+        .tools(new Weather())
+        .options(OpenRouterChatOptions.builder().toolStrict(true))
+        .call()
+        .content();
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Responses mode</b> <sup>experimental</sup> · Sends to the /responses endpoint.</td>
+<td align="right"><a href="docs/request-modes.md">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+String answer =
+    chatClient
+        .prompt()
+        .user("Say hello.")
+        .options(OpenRouterChatOptions.builder().requestMode(OpenRouterRequestMode.RESPONSES))
+        .call()
+        .content();
+```
+
+</td>
+</tr>
+</table>
+
+</details>
+
+### Routing
+
+<details>
+<summary>Model fallbacks, Provider routing, Service tier, Sessions and traces, Attribution headers</summary>
+
+<table>
+<tr>
+<td><b>Model fallbacks</b> · Tried in order when one fails.</td>
+<td align="right"><a href="docs/chat-options.md#routing-fallbacks-and-attribution">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+String answer =
+    chatClient
+        .prompt()
+        .user("Summarize this ticket.")
+        .options(OpenRouterChatOptions.builder().models(List.of("openai/gpt-oss-20b")))
+        .call()
+        .content();
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Provider routing</b> · Pick, order and sort providers.</td>
+<td align="right"><a href="docs/chat-options.md#routing-fallbacks-and-attribution">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+String answer =
+    chatClient
+        .prompt()
+        .user("Say hello.")
+        .options(
+            OpenRouterChatOptions.builder()
+                .provider(
+                    OpenRouterProviderPreferences.builder()
+                        .sort(OpenRouterProviderSort.THROUGHPUT)
+                        .build()))
+        .call()
+        .content();
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Service tier</b> · Trade speed for price.</td>
+<td align="right"><a href="docs/chat-options.md#routing-fallbacks-and-attribution">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+String answer =
+    chatClient
+        .prompt()
+        .user("Say hello.")
+        .options(OpenRouterChatOptions.builder().serviceTier(OpenRouterServiceTier.FLEX))
+        .call()
+        .content();
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Sessions and traces</b> · Keep a conversation on one provider.</td>
+<td align="right"><a href="docs/chat-options.md#sessions-and-traces">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+String answer =
+    chatClient
+        .prompt()
+        .user(question)
+        .options(
+            OpenRouterChatOptions.builder()
+                .sessionId(conversationId)
+                .trace(OpenRouterTrace.builder().traceId(runId).build()))
+        .call()
+        .content();
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Attribution headers</b> · Your app on OpenRouter rankings.</td>
+<td align="right"><a href="docs/chat-options.md#routing-fallbacks-and-attribution">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```yaml
+spring:
+  ai:
+    openrouter:
+      app:
+        http-referer: https://example.com
+        title: Example app
+```
+
+</td>
+</tr>
+</table>
+
+</details>
+
+### Inputs
+
+<details>
+<summary>Image input, PDF input, Audio input, Video input</summary>
+
+<table>
+<tr>
+<td><b>Image input</b> · Needs a model that reads images.</td>
+<td align="right"><a href="docs/multimodal.md#image-inputs">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+UserMessage message =
+    UserMessage.builder()
+        .text("What is in this image?")
+        .media(
+            Media.builder()
+                .mimeType(MimeTypeUtils.IMAGE_PNG)
+                .data(URI.create("https://example.com/cat.png"))
+                .build())
+        .build();
+String answer =
+    chatClient
+        .prompt()
+        .messages(message)
+        .options(OpenRouterChatOptions.builder().model("google/gemini-2.5-flash"))
+        .call()
+        .content();
+```
+
+</td>
+</tr>
+<tr>
+<td><b>PDF input</b> · A URL, bytes or a data URL.</td>
+<td align="right"><a href="docs/multimodal.md#pdf-audio-and-video-inputs">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+UserMessage message =
+    UserMessage.builder()
+        .text("Summarize the attached document.")
+        .media(
+            Media.builder()
+                .mimeType(MimeTypeUtils.parseMimeType("application/pdf"))
+                .data(URI.create("https://example.com/report.pdf"))
+                .build())
+        .build();
+String summary =
+    chatClient
+        .prompt()
+        .messages(message)
+        .options(OpenRouterChatOptions.builder().model("google/gemini-2.5-flash"))
+        .call()
+        .content();
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Audio input</b> · Bytes or a data URL; remote URLs are rejected.</td>
+<td align="right"><a href="docs/multimodal.md#pdf-audio-and-video-inputs">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+UserMessage message =
+    UserMessage.builder()
+        .text("Transcribe this clip.")
+        .media(
+            Media.builder()
+                .mimeType(MimeTypeUtils.parseMimeType("audio/wav"))
+                .data(Files.readAllBytes(Path.of("clip.wav")))
+                .build())
+        .build();
+String transcript =
+    chatClient
+        .prompt()
+        .messages(message)
+        .options(OpenRouterChatOptions.builder().model("google/gemini-2.5-flash"))
+        .call()
+        .content();
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Video input</b> · URL support depends on the provider.</td>
+<td align="right"><a href="docs/multimodal.md#pdf-audio-and-video-inputs">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+UserMessage message =
+    UserMessage.builder()
+        .text("What happens in this video?")
+        .media(
+            Media.builder()
+                .mimeType(MimeTypeUtils.parseMimeType("video/mp4"))
+                .data(URI.create("https://example.com/clip.mp4"))
+                .build())
+        .build();
+String answer =
+    chatClient
+        .prompt()
+        .messages(message)
+        .options(OpenRouterChatOptions.builder().model("google/gemini-2.5-flash"))
+        .call()
+        .content();
+```
+
+</td>
+</tr>
+</table>
+
+</details>
+
+### Outputs
+
+<details>
+<summary>Image generation, Image streaming, Image to image, Images from a chat model, Audio output</summary>
+
+<table>
+<tr>
+<td><b>Image generation</b> · Base64 images from the Image API.</td>
+<td align="right"><a href="docs/multimodal.md#image-generation">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+ImageResponse response = imageModel.call(new ImagePrompt("a red panda wearing sunglasses"));
+String base64 = response.getResult().getOutput().getB64Json();
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Image streaming</b> · Previews first, then the final image.</td>
+<td align="right"><a href="docs/multimodal.md#streaming">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+Flux<ImageResponse> events =
+    imageModel.stream(new ImagePrompt("a red panda wearing sunglasses"));
+events.subscribe(
+    response ->
+        response
+            .getResults()
+            .forEach(
+                result -> {
+                  boolean preview = OpenRouterImageGenerationMetadata.from(result).isPartial();
+                }));
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Image to image</b> · Start from a reference image.</td>
+<td align="right"><a href="docs/multimodal.md#image-options">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+ImageResponse response =
+    imageModel.call(
+        new ImagePrompt(
+            "the same sketch as a watercolour",
+            OpenRouterImageOptions.builder()
+                .inputReferences(List.of("https://example.com/sketch.png"))
+                .build()));
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Images from a chat model</b> · Images next to text in a reply.</td>
+<td align="right"><a href="docs/multimodal.md#chat-models-with-image-output">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+ChatResponse response =
+    chatClient
+        .prompt()
+        .user("Draw a lighthouse at dusk.")
+        .options(
+            OpenRouterChatOptions.builder()
+                .model("google/gemini-2.5-flash-image")
+                .modalities(OpenRouterModality.IMAGE, OpenRouterModality.TEXT))
+        .call()
+        .chatResponse();
+for (Media image : response.getResult().getOutput().getMedia()) {
+  byte[] png = OpenRouterMedia.bytes(image);
+}
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Audio output</b> · Streaming only.</td>
+<td align="right"><a href="docs/multimodal.md#chat-audio-output">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+Flux<ChatResponse> stream =
+    chatClient
+        .prompt()
+        .user("Say hello.")
+        .options(
+            OpenRouterChatOptions.builder()
+                .model("openai/gpt-audio-mini")
+                .modalities(OpenRouterModality.TEXT, OpenRouterModality.AUDIO)
+                .audio(new OpenRouterAudioOptions("alloy", "pcm16")))
+        .stream()
+        .chatResponse();
+stream.subscribe(
+    response ->
+        response
+            .getResults()
+            .forEach(
+                result ->
+                    result
+                        .getOutput()
+                        .getMedia()
+                        .forEach(
+                            media -> {
+                              byte[] audio = OpenRouterMedia.bytes(media);
+                            })));
+```
+
+</td>
+</tr>
+</table>
+
+</details>
+
+### Speech
+
+<details>
+<summary>Text-to-speech, Speech streaming, Transcription</summary>
+
+<table>
+<tr>
+<td><b>Text-to-speech</b> · Raw PCM by default; set the format to mp3 for a playable file.</td>
+<td align="right"><a href="docs/multimodal.md#text-to-speech">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+byte[] audio = speechModel.call("Your car is ready for pickup.");
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Speech streaming</b> · Chunks arrive in order; keep the audio only when the stream completes.</td>
+<td align="right"><a href="docs/multimodal.md#text-to-speech">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+Flux<byte[]> chunks = speechModel.stream("Your car is ready for pickup.");
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Transcription</b> · The format comes from the file extension.</td>
+<td align="right"><a href="docs/multimodal.md#transcription">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+String text = transcriptionModel.transcribe(new FileSystemResource("inspection-note.wav"));
+```
+
+</td>
+</tr>
+</table>
+
+</details>
+
+### Embeddings
+
+<details>
+<summary>Text embedding, Batch with options, Text and image documents</summary>
+
+<table>
+<tr>
+<td><b>Text embedding</b> · Works with Spring AI vector stores.</td>
+<td align="right"><a href="docs/embeddings.md">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+float[] vector = embeddingModel.embed("The quick brown fox");
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Batch with options</b> · Options merge with the defaults.</td>
+<td align="right"><a href="docs/embeddings.md">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+EmbeddingResponse response =
+    embeddingModel.call(
+        new EmbeddingRequest(
+            List.of("first text", "second text"),
+            OpenRouterEmbeddingOptions.builder().dimensions(256).build()));
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Text and image documents</b> · One vector space; needs a model that accepts images.</td>
+<td align="right"><a href="docs/embeddings.md#text-and-image-documents">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+Document caption = new Document("A boardwalk through a green meadow");
+Document photo =
+    new Document(
+        new Media(MimeTypeUtils.IMAGE_PNG, URI.create("https://example.com/boardwalk.png")),
+        Map.of());
+EmbeddingResponse response =
+    documentEmbeddingModel.call(new DocumentEmbeddingRequest(caption, photo));
+```
+
+</td>
+</tr>
+</table>
+
+</details>
+
+### Caching, usage and low-level
+
+<details>
+<summary>Prompt cache breakpoint, Usage and cost, Extra request fields, Low-level request</summary>
+
+<table>
+<tr>
+<td><b>Prompt cache breakpoint</b> · Cache a stable prompt prefix.</td>
+<td align="right"><a href="docs/reasoning-and-caching.md#explicit-prompt-cache-breakpoints">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+String reference = "Reference material to reuse.\n";
+UserMessage message =
+    UserMessage.builder()
+        .text(reference + "Answer this turn's question.")
+        .metadata(
+            Map.of(
+                OpenRouterCacheBreakpoint.METADATA_KEY,
+                List.of(new OpenRouterCacheBreakpoint(reference.length()))))
+        .build();
+String answer = chatClient.prompt().messages(message).call().content();
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Usage and cost</b> · Credits charged, tokens used.</td>
+<td align="right"><a href="docs/observability.md">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+ChatResponse response = chatClient.prompt().user("Say hello.").call().chatResponse();
+OpenRouterUsage usage = OpenRouterUsage.from(response);
+Double cost = usage.getCost(); // null when not reported
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Extra request fields</b> · Fields without a typed option.</td>
+<td align="right"><a href="docs/extensions.md">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+String answer =
+    chatClient
+        .prompt()
+        .user("Say hello.")
+        .options(OpenRouterChatOptions.builder().extraBody(Map.of("transforms", List.of())))
+        .call()
+        .content();
+```
+
+</td>
+</tr>
+<tr>
+<td><b>Low-level request</b> · Inject OpenRouterApi; no Spring AI types.</td>
+<td align="right"><a href="docs/api.md#build-low-level-requests">Docs</a></td>
+</tr>
+<tr>
+<td colspan="2">
+
+```java
+ChatCompletionRequest request =
+    ChatCompletionRequest.builder()
+        .model("openai/gpt-oss-120b")
+        .messages(List.of(new ChatMessage("user", "Say hello.", null, null, null)))
+        .build();
+ChatCompletionResponse response = openRouterApi.chatCompletion(request);
+```
+
+</td>
+</tr>
+</table>
+
+</details>
 
 ## Documentation
 
