@@ -43,6 +43,9 @@
     <revision>0.2.0-SNAPSHOT</revision>
 
     <java.version>17</java.version>
+    <!-- The parent keeps its build configuration, because the projects under config/gate-its inherit it.
+         Each published module sets ossrh, so its POM lists only what a consumer resolves. -->
+    <flatten.mode>resolveCiFriendliesOnly</flatten.mode>
     <!-- Integration projects under config/gate-its point this at the repository's config directory. -->
     <quality.config.dir>${maven.multiModuleProjectDirectory}/config</quality.config.dir>
     <checkstyle.config>${quality.config.dir}/checkstyle/checkstyle.xml</checkstyle.config>
@@ -292,7 +295,7 @@
         <version>${flatten-maven-plugin.version}</version>
         <configuration>
           <updatePomFile>true</updatePomFile>
-          <flattenMode>resolveCiFriendliesOnly</flattenMode>
+          <flattenMode>${flatten.mode}</flattenMode>
         </configuration>
         <executions>
           <execution>

@@ -14,6 +14,7 @@
   <description>Starter that pulls in autoconfigure and core for one-line app integration.</description>
 
   <properties>
+    <flatten.mode>ossrh</flatten.mode>
     <coverage.skip>${skipTests}</coverage.skip>
   </properties>
 
