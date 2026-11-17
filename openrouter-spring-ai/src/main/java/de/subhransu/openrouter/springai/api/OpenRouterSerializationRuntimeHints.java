@@ -9,6 +9,7 @@ import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
 import de.subhransu.openrouter.springai.api.dto.ResponsesInputMessage;
 import de.subhransu.openrouter.springai.api.dto.ResponsesFunctionCall;
 import de.subhransu.openrouter.springai.api.dto.ResponsesFunctionCallOutput;
+import de.subhransu.openrouter.springai.api.dto.EmbeddingInput;
 import de.subhransu.openrouter.springai.api.dto.EmbeddingsRequest;
 import de.subhransu.openrouter.springai.api.dto.EmbeddingsResponse;
 import de.subhransu.openrouter.springai.api.dto.ImagesRequest;
@@ -38,9 +39,9 @@ public final class OpenRouterSerializationRuntimeHints implements RuntimeHintsRe
 		new BindingReflectionHintsRegistrar().registerReflectionHints(hints.reflection(), ChatCompletionRequest.class,
 				ChatCompletionResponse.class, ChatCompletionChunk.class, ResponsesRequest.class, ResponsesResult.class,
 				ResponsesStreamEvent.class, ResponsesInputMessage.class, ResponsesFunctionCall.class,
-				ResponsesFunctionCallOutput.class, EmbeddingsRequest.class, EmbeddingsResponse.class,
-				ImagesRequest.class, ImagesResponse.class, ImagesStreamEvent.class, ContentPart.class,
-				SpeechRequest.class, TranscriptionRequest.class, TranscriptionResponse.class,
+				ResponsesFunctionCallOutput.class, EmbeddingsRequest.class, EmbeddingInput.class,
+				EmbeddingsResponse.class, ImagesRequest.class, ImagesResponse.class, ImagesStreamEvent.class,
+				ContentPart.class, SpeechRequest.class, TranscriptionRequest.class, TranscriptionResponse.class,
 				OpenRouterErrorResponse.class);
 	}
 

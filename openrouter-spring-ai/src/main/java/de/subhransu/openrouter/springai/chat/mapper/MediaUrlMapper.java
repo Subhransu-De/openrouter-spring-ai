@@ -8,15 +8,16 @@ import org.springframework.util.MimeType;
 /**
  * Derives the OpenRouter {@code image_url} value from Spring AI {@link Media}: URI-backed
  * media pass through as plain URLs, byte-backed media become {@code data:} base64 URLs.
+ * Chat and embedding inputs share it.
  *
  * @author Subhransu De
  */
-final class MediaUrlMapper {
+public final class MediaUrlMapper {
 
 	private MediaUrlMapper() {
 	}
 
-	static String imageUrl(Media media) {
+	public static String imageUrl(Media media) {
 		MimeType mimeType = media.getMimeType();
 		if (mimeType == null || !"image".equals(mimeType.getType())) {
 			throw new IllegalArgumentException(

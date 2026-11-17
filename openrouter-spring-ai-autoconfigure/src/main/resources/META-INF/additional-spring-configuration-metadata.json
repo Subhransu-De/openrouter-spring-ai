@@ -241,6 +241,15 @@
       ]
     },
     {
+      "name": "spring.ai.model.embedding.multimodal",
+      "values": [
+        {
+          "value": "openrouter",
+          "description": "Use OpenRouter for Spring AI multimodal document embedding model auto-configuration."
+        }
+      ]
+    },
+    {
       "name": "spring.ai.model.image",
       "values": [
         {

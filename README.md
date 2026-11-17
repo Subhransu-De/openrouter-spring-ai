@@ -35,7 +35,7 @@ A native [Spring AI](https://spring.io/projects/spring-ai) integration for [Open
 - [Reasoning options](docs/reasoning-and-caching.md), with reasoning text and opaque reasoning state replayed across tool rounds.
 - [Model fallback lists, provider routing, service tiers and attribution headers](docs/chat-options.md#routing-fallbacks-and-attribution), plus [optional OpenRouter fields](docs/extensions.md).
 - Usage accounting with cost, cached and reasoning tokens, and Micrometer observations.
-- Embeddings behind Spring AI's `EmbeddingModel`.
+- Embeddings behind Spring AI's `EmbeddingModel`, and text and image documents behind `DocumentEmbeddingModel`. See [Embeddings](docs/embeddings.md).
 - Image, PDF, audio and video inputs, image generation, and streamed chat audio output. See [Images, documents and audio](docs/multimodal.md).
 - Text-to-speech behind Spring AI's `TextToSpeechModel`, with streamed audio, and transcription behind `TranscriptionModel`. See [Text-to-speech](docs/multimodal.md#text-to-speech) and [Transcription](docs/multimodal.md#transcription).
 - Spring Boot auto-configuration under `spring.ai.openrouter.*`.

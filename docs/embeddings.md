@@ -38,3 +38,26 @@ With `none`, this library sends `Document.getText()` as is and does not call the
 `dimensions()` returns the configured dimensions when they are positive, without an API call. Otherwise it discovers them once per model instance and caches the result. Failed or invalid responses are not cached, and per-request overrides never update the cache. Build a new model to change its defaults. `getOptions()` returns a copy of them, typed as `OpenRouterEmbeddingOptions`; derive per-request options from it with `mutate()`.
 
 Discovery is a billable embedding request, retried under the model's `RetryTemplate`. A vector store may call `dimensions()` when it has no dimensions of its own. PgVector, for example, calls it when it initializes the schema, and on every add, delete and query to fill in its observation data. Then application startup, including an AOT cache training run, makes a network call. PgVector also catches a failed call and falls back to 1536 dimensions, so a failed discovery shows up as a table with the wrong dimension rather than as a startup error, and while discovery keeps failing, every operation repeats it. Prefer the vector store's own setting, such as `spring.ai.vectorstore.pgvector.dimensions`. `spring.ai.openrouter.embedding.dimensions` also avoids discovery, but it is sent as `dimensions` on every embedding request, which only some models accept.
+
+## Text and image documents
+
+`OpenRouterDocumentEmbeddingModel` implements Spring AI's `DocumentEmbeddingModel` for [models that accept image input](https://openrouter.ai/docs/api_reference/embeddings), such as multimodal retrieval models. It is opt-in and shares the `spring.ai.openrouter.embedding.*` properties with the text model:
+
+```properties
+spring.ai.model.embedding=openrouter
+spring.ai.model.embedding.multimodal=openrouter
+spring.ai.openrouter.embedding.model=vendor/multimodal-embedding-model
+```
+
+```java
+Document caption = new Document("A boardwalk through a green meadow");
+Document photo = new Document(new Media(MimeTypeUtils.IMAGE_PNG, URI.create("https://example.com/boardwalk.png")), Map.of());
+EmbeddingResponse response = documentEmbeddingModel.call(new DocumentEmbeddingRequest(caption, photo));
+```
+
+Because both beans read the same properties, text queries embedded with `EmbeddingModel` and image documents embedded with `DocumentEmbeddingModel` land in the same vector space. To use two different models, define your own `DocumentEmbeddingModel` bean with `OpenRouterDocumentEmbeddingModel.builder()`; the auto-configured one then backs off.
+
+- Each document becomes one entry of the `input` array with one part: a text document sends a `text` part, formatted with `metadata-mode` as above, and an image document sends an `image_url` part. A URL is sent as is, so the upstream provider downloads it; bytes become a base64 `data:` URL.
+- A Spring AI `Document` holds either text or one media item, never both, so this model cannot send the joint text-and-image entry that OpenRouter also accepts.
+- Media other than `image/*` fails with `IllegalArgumentException` before the request. A model that does not accept images answers with a provider error, such as HTTP 400, which raises `OpenRouterNonTransientApiException`.
+- Results follow the input order whatever order the response lists them in, and each carries the document id, its modality (`TEXT` or `IMAGE`) and MIME type in `EmbeddingResultMetadata`. Usage, retries, observations, request options and `dimensions()` behave as for `OpenRouterEmbeddingModel`. Dimension discovery sends one text request.

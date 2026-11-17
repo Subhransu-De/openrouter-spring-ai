@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.chat.OpenRouterChatModel;
+import de.subhransu.openrouter.springai.embedding.OpenRouterDocumentEmbeddingModel;
 import de.subhransu.openrouter.springai.embedding.OpenRouterEmbeddingModel;
 import de.subhransu.openrouter.springai.image.OpenRouterImageModel;
 import java.io.IOException;
@@ -33,6 +34,8 @@ class OpenRouterAutoConfigurationMetadataTests {
 			.contains(OpenRouterChatModel.class.getName());
 		assertThat(entry(metadata, OpenRouterEmbeddingAutoConfiguration.class, ON_CLASS))
 			.contains(OpenRouterEmbeddingModel.class.getName());
+		assertThat(entry(metadata, OpenRouterDocumentEmbeddingAutoConfiguration.class, ON_CLASS))
+			.contains(OpenRouterDocumentEmbeddingModel.class.getName());
 		assertThat(entry(metadata, OpenRouterImageAutoConfiguration.class, ON_CLASS))
 			.contains(OpenRouterImageModel.class.getName());
 		assertThat(entry(metadata, OpenRouterChatAutoConfiguration.class, "AutoConfigureAfter"))
