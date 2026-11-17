@@ -1,6 +1,6 @@
-# Supported API and nullability
+# Supported API
 
-This page lists the types applications can depend on, and the null contracts they follow.
+This page lists the types applications can depend on. Java visibility does not decide this: some public types are implementation details.
 
 ## Supported types
 
@@ -15,40 +15,18 @@ These types under `de.subhransu.openrouter.springai` are the supported API.
 | `chat.OpenRouterToolFailurePolicy`, `chat.OpenRouterToolCallingManagers`, `chat.OpenRouterToolExecutionExceptionProcessor` | Custom tool-manager failure policy, a factory for policy-declaring managers, and failure rendering. The policy accessor must return the actual, non-null processor. Tool execution belongs to Spring AI's advisor.                                                                                                                                                                                                                                                                              |
 | `errors`, `chat.errors`, `api.errors.OpenRouterInBandErrorException`                                                       | Exception types, diagnostic records, category enums, and inspection interfaces, including `OpenRouterFailure`. Values inside diagnostics are nullable; `getErrorDetails()` and `OpenRouterErrorDetails.metadata()` are not. `OpenRouterHttpFailure` is sealed; do not implement `OpenRouterFailure` or `OpenRouterChoiceFailure` either.                                                                                                                                                        |
 | `autoconfigure.*Properties` and `spring.ai.openrouter.*`                                                                   | Boot property binding. Custom model, API, and tool beans use the existing auto-configuration backoff rules.                                                                                                                                                                                                                                                                                                                                                                                     |
-| `autoconfigure.OpenRouterRestClientCustomizer`, `autoconfigure.OpenRouterWebClientCustomizer`                              | Beans that customize only the auto-configured `OpenRouterApi` clients. See [HTTP customization](http-and-limits.md#http-customization-and-timeout-ownership).                                                                                                                                                                                                                                                                                                                                   |
+| `autoconfigure.OpenRouterRestClientCustomizer`, `autoconfigure.OpenRouterWebClientCustomizer`                              | Beans that customize only the auto-configured `OpenRouterApi` clients.                                                                                                                                                                                                                                                                                                                                                                                                                          |
 
-The models implement the Spring AI interfaces `ChatModel` (which includes `StreamingChatModel`), `EmbeddingModel`, `ImageModel`, `TextToSpeechModel` (which includes `StreamingTextToSpeechModel`) and `TranscriptionModel`. `OpenRouterImageModel.stream()` is a provider extension. `OpenRouterEmbeddingModel` accepts a text `Document`; `OpenRouterDocumentEmbeddingModel` implements `DocumentEmbeddingModel` for text and image documents.
+`OpenRouterImageModel.stream()` is a provider extension beyond Spring AI's `ImageModel`.
 
-## Build low-level requests
+## Compatibility of low-level requests
 
-Build low-level requests by naming the fields you set; unset fields are omitted from the JSON body. `build()` throws `NullPointerException` when the required `messages` (Chat Completions) or `input` (Responses) is missing:
-
-```java
-ChatCompletionRequest request = ChatCompletionRequest.builder()
-    .model("your-model")
-    .messages(List.of(new ChatMessage("user", "Say hello.", null, null, null)))
-    .temperature(0.2)
-    .maxTokens(256)
-    .build();
-ChatCompletionResponse response = api.chatCompletion(request);
-```
-
-New request fields are added to the builders. The records' canonical constructors are public but grow with each field, so code that calls them breaks. `ChatMessage` has no builder, so the example calls its short constructor.
+New request fields are added to the `api.dto` builders. The records' canonical constructors are public but grow with each field, so code that calls them breaks between releases. Use `builder()`.
 
 ## Implementation details
 
-Mapper packages, `internal`, `support`, error factories/classifiers, `OpenRouterExceptionMessage`, `OpenRouterDiagnosticSanitizer` and `OpenRouterApi.diagnosticSanitizer(OpenRouterApi)`, `OpenRouterErrorResponse`, `OpenRouterErrorEnvelope`, deserializers, runtime hints, and the auto-configuration classes are implementation details even where Java visibility is public. The auto-configuration classes are `final` and expose no public methods; replace their beans instead. They are not supported extension points and may change between releases. Prefer the consumer types above.
+Mapper packages, `internal`, `support`, error factories/classifiers, `OpenRouterExceptionMessage`, `OpenRouterDiagnosticSanitizer` and `OpenRouterApi.diagnosticSanitizer(OpenRouterApi)`, `OpenRouterErrorResponse`, `OpenRouterErrorEnvelope`, deserializers, runtime hints, and the auto-configuration classes are implementation details even where Java visibility is public. Replace auto-configured beans instead of extending the auto-configuration classes. These types may change between releases.
 
 ## Nullability
 
-Consumer packages declare JSpecify `@NullMarked`, and `@Nullable` marks optional values. The annotations do not check anything at runtime. Kotlin with strict JSpecify checking and null-aware Java analyzers can reject unchecked use of nullable values, so use null checks or Kotlin safe calls.
-
-What to null-check:
-
-- Response fields that the provider may omit: usage, cost, media metadata, and the values inside exception diagnostics. The containers are never null: `getErrorDetails()` on every OpenRouter exception and `OpenRouterErrorDetails.metadata()`. When usage is absent, Spring AI metadata reports `EmptyUsage`; `OpenRouterUsage.from(...)` never returns `null`, and the typed metadata readers return an empty `Optional` instead of `null`. Missing response IDs and models keep Spring AI's defaults. Absent optional generation metadata keys are left out.
-- Low-level `api.dto` records. Their fields can be absent, and response arrays can contain null entries.
-- JSON metadata maps. Their values can be null.
-
-A nullable list or map does not make its elements nullable. Request lists and Spring AI tool callback and context entries must not hold nulls. A Chat Completions tool call without an ID still runs: the Spring AI ID is empty and the follow-up request leaves the wire ID out.
-
-For how a null option interacts with defaults, see [Replacement and composition](chat-options.md#replacement-and-composition).
+Consumer packages declare JSpecify `@NullMarked`, and `@Nullable` marks optional values. The annotations do not check anything at runtime. These containers are never `null`: `getErrorDetails()` on every OpenRouter exception, `OpenRouterErrorDetails.metadata()`, `OpenRouterUsage.from(...)`, `OpenRouterUsage.getCostDetails()` and the typed `OpenRouterMetadata` readers, which return an empty `Optional`.

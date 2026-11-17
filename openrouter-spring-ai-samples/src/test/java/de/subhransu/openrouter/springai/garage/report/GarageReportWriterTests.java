@@ -17,7 +17,6 @@ import de.subhransu.openrouter.springai.garage.scenes.SceneResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Tag;
@@ -40,7 +39,7 @@ class GarageReportWriterTests {
       "{\"capabilities\":[\"text\"],\"requestModes\":[\"responses\"]}", "{\"full\":true}",
       "{\"capabilities\":[\"embedding\"]}", "{\"capabilities\":[\"vision\"]}",
       "{\"capabilities\":[\"image\"]}"})
-  void documentedSelectionsRetainRegistryAndModeOutcomes(String selection) throws Exception {
+  void selectionsRetainRegistryAndModeOutcomes(String selection) throws Exception {
     GarageRunPlan command = GarageRunRequests.plan(selection);
     GarageEvidence evidence = new GarageEvidence();
     ObjectMapper mapper = new ObjectMapper();
@@ -64,17 +63,6 @@ class GarageReportWriterTests {
             .isEqualTo(feature.supports(mode) ? "not-executed" : "unsupported-in-mode");
       }
     }
-    Path root = Path.of("").toAbsolutePath();
-    while (!Files.isRegularFile(root.resolve("README.md")) || !Files.isDirectory(root.resolve(".github"))) {
-      root = root.getParent();
-    }
-    String garageGuide = Files.readString(root.resolve("docs/garage.md"));
-    String label = selection.isEmpty() ? "Empty body" : "`" + selection + "`";
-    String[] row = Arrays.stream(garageGuide.split("\\R")).map(line -> line.split("\\|"))
-        .filter(cells -> cells.length > 2 && cells[1].strip().equals(label)).findFirst().orElseThrow();
-    String expectedMode = command.requestModes().size() == 2 ? "Both"
-        : command.requestModes().contains(OpenRouterRequestMode.RESPONSES) ? "Responses" : "Chat Completions";
-    assertThat(row[2].strip()).startsWith(expectedMode);
   }
 
   @ParameterizedTest

@@ -96,5 +96,4 @@ text{font-family:"Libron",Georgia,serif;fill:var(--ink)}
 <text x="367" y="376"><tspan class="mb">…-autoconfigure</tspan><tspan class="s" dx="8">beans from spring.ai.openrouter.*</tspan></text>
 <rect class="card" x="170" y="394" width="545" height="30" rx="6" style="stroke:var(--libs);stroke-width:2"/>
 <text x="182" y="414"><tspan class="mb">openrouter-spring-ai-starter</tspan><tspan class="s" dx="8">the one dependency you add; brings ChatClient too</tspan></text>
-<text class="s" x="985" y="414" text-anchor="end">Garage demo app: …-samples</text>
 </svg>
