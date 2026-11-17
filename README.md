@@ -51,19 +51,19 @@ Add the starter from Maven Central:
 <dependency>
     <groupId>de.subhransu</groupId>
     <artifactId>openrouter-spring-ai-starter</artifactId>
-    <version>0.1.0</version>
+    <version>0.2.0</version>
 </dependency>
 ```
 
 ```kotlin
-implementation("de.subhransu:openrouter-spring-ai-starter:0.1.0")
+implementation("de.subhransu:openrouter-spring-ai-starter:0.2.0")
 ```
 
 Use Java 17 or later. See [release compatibility](docs/getting-started.md#release-compatibility) for Spring Boot and Spring AI versions.
 
 ## Examples
 
-One example for each model. Each page under Documentation has the rest. The examples follow `main` (0.2.0-SNAPSHOT); release 0.1.0 lacks some of these types and names, as the [changelog](CHANGELOG.md) shows. Each call is a billable OpenRouter request.
+One example for each model. Each page under Documentation has the rest. The examples need release 0.2.0; 0.1.0 lacks some of these types and names, as the [changelog](CHANGELOG.md) shows. Each call is a billable OpenRouter request.
 
 <table>
 <tr>
