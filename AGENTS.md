@@ -17,6 +17,6 @@ I like ambitious ideas, simple systems, and software that feels obvious. Do not 
 Release only when the developer asks for a version. For version `X.Y.Z`:
 
 1. Open a PR that names `X.Y.Z` in the `CHANGELOG.md` heading with the release date, in the install snippets of `README.md` and `docs/`, and in the compatibility table of `docs/getting-started.md`.
-2. When that PR is merged and CI on `main` is green for its commit, run the `Maven Central Release` workflow with the version and the full commit SHA. The developer publishes the validated deployment in Central Portal.
+2. When that PR is merged and CI on `main` is green for its commit, run the `Maven Central Release` workflow with the version, the full commit SHA and `upload` set to `true`. The developer publishes the validated deployment in Central Portal.
 3. Push the tag `vX.Y.Z` on that commit and create a draft GitHub release from the changelog section. Publish the draft when Maven Central serves the version.
 4. Open a PR that sets the root `pom.xml` revision to the next minor `-SNAPSHOT`, adds an empty `## Unreleased` section to `CHANGELOG.md`, and records the released commit in the compatibility table.
