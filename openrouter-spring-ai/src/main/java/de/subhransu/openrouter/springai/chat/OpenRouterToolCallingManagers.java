@@ -5,6 +5,7 @@ import java.util.function.Consumer;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.model.tool.DefaultToolCallingManager;
+import org.springframework.ai.model.tool.ToolCallDecisions;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.model.tool.ToolExecutionResult;
@@ -69,6 +70,12 @@ public final class OpenRouterToolCallingManagers {
 		@Override
 		public ToolExecutionResult executeToolCalls(Prompt prompt, ChatResponse chatResponse) {
 			return this.delegate.executeToolCalls(prompt, chatResponse);
+		}
+
+		@Override
+		public ToolExecutionResult executeToolCalls(Prompt prompt, ChatResponse chatResponse,
+				ToolCallDecisions decisions) {
+			return this.delegate.executeToolCalls(prompt, chatResponse, decisions);
 		}
 
 		@Override

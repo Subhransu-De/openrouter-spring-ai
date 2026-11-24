@@ -4,6 +4,10 @@ Notable changes in each release. The full notes for each release are on the [Rel
 
 ## Unreleased
 
+### Upgrade notes
+
+- Raises the baseline to Spring Boot 4.2.0 and Spring AI 2.1.0, including Spring AI 2.1's `ToolCallDecisions` confirmation forwarding in `OpenRouterToolCallingManagers.withFailurePolicy(...)`. Update any `spring-ai-bom` import to 2.1.x; applications on Boot 4.1 or Spring AI 2.0 stay on 0.2.0.
+
 ## [0.2.0](https://github.com/Subhransu-De/openrouter-spring-ai/releases/tag/v0.2.0) - 2026-11-18
 
 Adds speech, transcription and document embedding models, so every Spring AI model interface that OpenRouter can serve is implemented. Adds typed chat options and session and trace fields, and renames several public names.

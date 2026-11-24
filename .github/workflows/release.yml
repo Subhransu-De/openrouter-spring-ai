@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       commit:
-        description: Full commit SHA on main to release
+        description: Full commit SHA on the selected release branch (main or N.N.x)
         required: true
         type: string
       upload:
@@ -32,7 +32,7 @@ jobs:
   validate:
     name: Validate release request
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || (startsWith(github.ref, 'refs/heads/') && endsWith(github.ref, '.x'))
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -40,13 +40,27 @@ jobs:
           persist-credentials: false
       - name: Validate release inputs
         env:
+          BRANCH: ${{ github.ref_name }}
           VERSION: ${{ inputs.version }}
           COMMIT: ${{ inputs.commit }}
           GH_TOKEN: ${{ github.token }}
         run: |
+          if [[ "$BRANCH" != 'main' ]] && [[ ! "$BRANCH" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.x$ ]]; then
+            echo 'Releases must run from main or a maintenance branch named N.N.x.'
+            exit 1
+          fi
           [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-RC[1-9][0-9]*)?$ ]] || exit 1
+          if [[ "$BRANCH" != 'main' ]] && [[ "$VERSION" != "${BRANCH%x}"* ]]; then
+            echo "Version $VERSION does not match maintenance branch $BRANCH."
+            exit 1
+          fi
           [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || exit 1
-          git merge-base --is-ancestor "$COMMIT" origin/main
+          git merge-base --is-ancestor "$COMMIT" "origin/$BRANCH"
+          pom=$(git show "$COMMIT:pom.xml")
+          if [[ "$VERSION" != *-RC* ]] && grep -qE '<spring-(ai|boot)\.version>[^<]*-(M|RC|SNAPSHOT)[0-9]*<' <<< "$pom"; then
+            echo 'A final release cannot use a Spring AI or Spring Boot pre-release.'
+            exit 1
+          fi
           if git show-ref --verify --quiet "refs/tags/v$VERSION"; then
             echo 'This release tag already exists.'
             exit 1
@@ -55,7 +69,7 @@ jobs:
             echo 'Release and tag at least one candidate before the stable version.'
             exit 1
           fi
-          gh run list --workflow ci.yml --commit "$COMMIT" --status success --event push --json headSha --limit 20 |
+          gh run list --workflow ci.yml --branch "$BRANCH" --commit "$COMMIT" --status success --event push --json headSha --limit 20 |
             jq -e --arg commit "$COMMIT" 'any(.[]; .headSha == $commit)' > /dev/null
 
   test:
