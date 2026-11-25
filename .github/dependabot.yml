@@ -8,10 +8,25 @@ updates:
       timezone: "Asia/Kolkata"
     open-pull-requests-limit: 100
     groups:
+      spring:
+        patterns:
+          - "org.springframework.ai:*"
+          - "org.springframework.boot:*"
+        update-types:
+          - "patch"
       spotbugs:
         patterns:
           - "com.github.spotbugs:spotbugs"
           - "com.github.spotbugs:spotbugs-maven-plugin"
+    ignore:
+      - dependency-name: "org.springframework.ai:*"
+        update-types:
+          - "version-update:semver-minor"
+          - "version-update:semver-major"
+      - dependency-name: "org.springframework.boot:*"
+        update-types:
+          - "version-update:semver-minor"
+          - "version-update:semver-major"
     assignees:
       - "Subhransu-De"
     cooldown:

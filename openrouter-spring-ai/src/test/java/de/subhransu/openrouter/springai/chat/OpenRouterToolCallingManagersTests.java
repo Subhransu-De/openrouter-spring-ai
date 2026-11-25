@@ -20,18 +20,28 @@ import de.subhransu.openrouter.springai.api.dto.ToolCall;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.ToolCallingAdvisor;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.model.tool.ToolCallConfirmationRequiredException;
+import org.springframework.ai.model.tool.ToolCallDecision;
+import org.springframework.ai.model.tool.ToolCallDecisions;
 import org.springframework.ai.model.tool.ToolCallingManager;
+import org.springframework.ai.model.tool.ToolExecutionResult;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.execution.DefaultToolExecutionExceptionProcessor;
 import org.springframework.ai.tool.execution.ToolExecutionExceptionProcessor;
 import org.springframework.ai.tool.function.FunctionToolCallback;
+import org.springframework.ai.tool.metadata.ToolMetadata;
 import reactor.core.publisher.Flux;
 
 @Tag("tools")
@@ -107,6 +117,38 @@ class OpenRouterToolCallingManagersTests {
 		ArgumentCaptor<ChatCompletionRequest> captor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
 		verify(api, times(2)).chatCompletionStream(captor.capture());
 		assertSanitizedToolResult(captor.getAllValues().get(1).messages());
+	}
+
+	@Test
+	void forwardsToolCallDecisionsToResumeConfirmedTools() {
+		AtomicBoolean invoked = new AtomicBoolean(false);
+		ToolCallback confirmable = FunctionToolCallback.builder("confirmable", (Map<String, Object> input) -> {
+			invoked.set(true);
+			return "approved-result";
+		})
+			.description("Needs confirmation")
+			.inputType(Map.class)
+			.toolMetadata(ToolMetadata.builder().requiresConfirmation(true).build())
+			.build();
+		Prompt confirmPrompt = new Prompt(List.of(new UserMessage("go")),
+				OpenRouterChatOptions.builder().model(MODEL).toolCallbacks(List.of(confirmable)).build());
+		ChatResponse pendingResponse = new ChatResponse(List.of(new Generation(AssistantMessage.builder()
+			.toolCalls(List.of(new AssistantMessage.ToolCall("call-1", "function", "confirmable", "{}")))
+			.build())));
+		ToolCallingManager manager = safeManager();
+
+		assertThatThrownBy(() -> manager.executeToolCalls(confirmPrompt, pendingResponse))
+			.isInstanceOf(ToolCallConfirmationRequiredException.class);
+		assertThat(invoked).isFalse();
+
+		ToolExecutionResult resumed = manager.executeToolCalls(confirmPrompt, pendingResponse,
+				ToolCallDecisions.of(ToolCallDecision.allow("call-1")));
+
+		assertThat(invoked).isTrue();
+		assertThat(resumed.conversationHistory()).last()
+			.isInstanceOfSatisfying(ToolResponseMessage.class,
+					response -> assertThat(response.getResponses()).singleElement()
+						.satisfies(entry -> assertThat(entry.responseData()).contains("approved-result")));
 	}
 
 	@Test

@@ -38,7 +38,7 @@ public final class OpenRouterApiAutoConfiguration {
 
 	private static final Log logger = LogFactory.getLog(OpenRouterApiAutoConfiguration.class);
 
-	// Spring AI 2.0.2 auto-configurations that pass its ResponseErrorHandler bean to a
+	// Spring AI 2.1.0 auto-configurations that pass its ResponseErrorHandler bean to a
 	// provider client. Boot registers a matched auto-configuration under its class name,
 	// so a definition means the provider is on the classpath and its selector, if any,
 	// did not rule it out. It is a heuristic: the client factory inside can still back

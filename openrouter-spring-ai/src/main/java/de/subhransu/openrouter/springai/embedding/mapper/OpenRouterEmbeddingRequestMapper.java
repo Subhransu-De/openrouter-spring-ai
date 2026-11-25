@@ -66,7 +66,7 @@ public final class OpenRouterEmbeddingRequestMapper {
 		}
 		return new EmbeddingsRequest(model, input, options.getEncodingFormat(), options.getDimensions(),
 				options.getUser(), mapProvider(options.getProvider()), options.getSessionId(),
-				TraceMapper.map(options.getTrace()));
+				TraceMapper.map(options.getTrace()), options.getInputType());
 	}
 
 	private @Nullable ProviderPreferences mapProvider(@Nullable OpenRouterProviderPreferences provider) {

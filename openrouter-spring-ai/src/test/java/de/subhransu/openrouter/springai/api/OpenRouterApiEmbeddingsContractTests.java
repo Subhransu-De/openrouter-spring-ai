@@ -76,10 +76,12 @@ class OpenRouterApiEmbeddingsContractTests {
 			.andExpect(jsonPath("$.encoding_format").value("float"))
 			.andExpect(jsonPath("$.dimensions").value(256))
 			.andExpect(jsonPath("$.user").value("user-1"))
+			.andExpect(jsonPath("$.input_type").value("query"))
 			.andRespond(withSuccess(SUCCESS_BODY, MediaType.APPLICATION_JSON));
 
 		EmbeddingsResponse response = fixture.api()
-			.embeddings(new EmbeddingsRequest(MODEL, List.of("first", "second"), "float", 256, "user-1", null));
+			.embeddings(new EmbeddingsRequest(MODEL, List.of("first", "second"), "float", 256, "user-1", null, null,
+					null, "query"));
 
 		assertThat(response.data()).hasSize(2);
 		assertThat(response.data().get(0).embedding()).containsExactly(0.1f, -0.2f, 0.3f);
@@ -99,6 +101,7 @@ class OpenRouterApiEmbeddingsContractTests {
 			.andExpect(jsonPath("$.dimensions").doesNotExist())
 			.andExpect(jsonPath("$.user").doesNotExist())
 			.andExpect(jsonPath("$.provider").doesNotExist())
+			.andExpect(jsonPath("$.input_type").doesNotExist())
 			.andRespond(withSuccess(SUCCESS_BODY, MediaType.APPLICATION_JSON));
 
 		fixture.api().embeddings(new EmbeddingsRequest(MODEL, List.of("only"), null, null, null, null));

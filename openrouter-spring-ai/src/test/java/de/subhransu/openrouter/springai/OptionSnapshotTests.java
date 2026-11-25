@@ -272,11 +272,23 @@ class OptionSnapshotTests {
 			.model("first")
 			.dimensions(8)
 			.encodingFormat("float")
+			.inputType("document")
 			.user("synthetic");
 		var first = builder.build();
 		var copy = first.mutate().build();
-		var second = builder.model("second").dimensions(16).encodingFormat("base64").user("other").build();
-		var changed = first.mutate().model("changed").dimensions(32).encodingFormat("changed").user("changed").build();
+		var second = builder.model("second")
+			.dimensions(16)
+			.encodingFormat("base64")
+			.inputType("query")
+			.user("other")
+			.build();
+		var changed = first.mutate()
+			.model("changed")
+			.dimensions(32)
+			.encodingFormat("changed")
+			.inputType("changed")
+			.user("changed")
+			.build();
 		assertThat(builder.build()).usingRecursiveComparison().isEqualTo(second);
 		assertThat(first).usingRecursiveComparison().isEqualTo(copy);
 		assertThat(changed.getModel()).isEqualTo("changed");

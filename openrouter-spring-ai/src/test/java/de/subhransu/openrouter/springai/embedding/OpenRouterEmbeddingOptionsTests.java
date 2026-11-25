@@ -19,15 +19,18 @@ class OpenRouterEmbeddingOptionsTests {
 		OpenRouterEmbeddingOptions defaults = OpenRouterEmbeddingOptions.builder()
 			.model(MODEL)
 			.dimensions(256)
+			.inputType("document")
 			.user("default-user")
 			.build();
 
 		OpenRouterEmbeddingOptions merged = defaults
-			.merge(OpenRouterEmbeddingOptions.builder().model("qwen/qwen3-embedding-8b").build());
+			.merge(OpenRouterEmbeddingOptions.builder().model("qwen/qwen3-embedding-8b").inputType("query").build());
 
 		assertThat(merged.getModel()).isEqualTo("qwen/qwen3-embedding-8b");
 		assertThat(merged.getDimensions()).isEqualTo(256);
+		assertThat(merged.getInputType()).isEqualTo("query");
 		assertThat(merged.getUser()).isEqualTo("default-user");
+		assertThat(defaults.merge(OpenRouterEmbeddingOptions.builder().build()).getInputType()).isEqualTo("document");
 	}
 
 	@Test
@@ -60,12 +63,14 @@ class OpenRouterEmbeddingOptionsTests {
 		OpenRouterEmbeddingOptions source = OpenRouterEmbeddingOptions.builder()
 			.model(MODEL)
 			.encodingFormat("float")
+			.inputType("query")
 			.provider(provider)
 			.build();
 
 		OpenRouterEmbeddingOptions options = OpenRouterEmbeddingOptions.fromOptions(source);
 
 		assertThat(options.getEncodingFormat()).isEqualTo("float");
+		assertThat(options.getInputType()).isEqualTo("query");
 		assertThat(options.getProvider()).isEqualTo(provider);
 	}
 

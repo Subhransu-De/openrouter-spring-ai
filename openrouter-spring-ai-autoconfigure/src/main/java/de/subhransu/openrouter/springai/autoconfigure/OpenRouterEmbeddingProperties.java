@@ -34,6 +34,12 @@ public class OpenRouterEmbeddingProperties {
 	private @Nullable String encodingFormat;
 
 	/**
+	 * Hint describing the input role, sent as input_type, such as query or document
+	 * (values depend on the upstream provider).
+	 */
+	private @Nullable String inputType;
+
+	/**
 	 * End-user identifier forwarded to OpenRouter.
 	 */
 	private @Nullable String user;
@@ -61,6 +67,7 @@ public class OpenRouterEmbeddingProperties {
 			.model(this.model)
 			.dimensions(this.dimensions)
 			.encodingFormat(this.encodingFormat)
+			.inputType(this.inputType)
 			.user(this.user)
 			.sessionId(this.sessionId)
 			.trace(this.trace)
@@ -98,6 +105,14 @@ public class OpenRouterEmbeddingProperties {
 
 	public void setEncodingFormat(@Nullable String encodingFormat) {
 		this.encodingFormat = encodingFormat;
+	}
+
+	public @Nullable String getInputType() {
+		return this.inputType;
+	}
+
+	public void setInputType(@Nullable String inputType) {
+		this.inputType = inputType;
 	}
 
 	public @Nullable String getUser() {
