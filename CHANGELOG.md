@@ -2,11 +2,14 @@
 
 Notable changes in each release. The full notes for each release are on the [Releases page](https://github.com/Subhransu-De/openrouter-spring-ai/releases).
 
-## Unreleased
+## [0.3.0](https://github.com/Subhransu-De/openrouter-spring-ai/releases/tag/v0.3.0) - 2026-11-25
+
+Moves to Spring Boot 4.2.0 and Spring AI 2.1.0, and adds an input type for embedding models that distinguish queries from documents.
 
 ### Upgrade notes
 
-- Raises the baseline to Spring Boot 4.2.0 and Spring AI 2.1.0, including Spring AI 2.1's `ToolCallDecisions` confirmation forwarding in `OpenRouterToolCallingManagers.withFailurePolicy(...)`. Update any `spring-ai-bom` import to 2.1.x; applications on Boot 4.1 or Spring AI 2.0 stay on 0.2.0.
+- Raises the baseline to Spring Boot 4.2.0 and Spring AI 2.1.0, including Spring AI 2.1's `ToolCallDecisions` confirmation forwarding in `OpenRouterToolCallingManagers.withFailurePolicy(...)`. Update any `spring-ai-bom` import to 2.1.x: a 2.0.x import overrides the Spring AI version the starter brings in, and 0.3.0 does not support it. Applications on Boot 4.1 or Spring AI 2.0 stay on 0.2.0.
+- Do not move a 0.2.0 application to Spring AI 2.1 without moving to 0.3.0. In 0.2.0, the manager from `OpenRouterToolCallingManagers.withFailurePolicy(...)` does not forward Spring AI 2.1's tool-call confirmation, so a resumed confirmation fails with `UnsupportedOperationException`.
 
 ### Added
 

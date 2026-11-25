@@ -51,12 +51,12 @@ Add the starter from Maven Central:
 <dependency>
     <groupId>de.subhransu</groupId>
     <artifactId>openrouter-spring-ai-starter</artifactId>
-    <version>0.2.0</version>
+    <version>0.3.0</version>
 </dependency>
 ```
 
 ```kotlin
-implementation("de.subhransu:openrouter-spring-ai-starter:0.2.0")
+implementation("de.subhransu:openrouter-spring-ai-starter:0.3.0")
 ```
 
 Use Java 17 or later. See [release compatibility](docs/getting-started.md#release-compatibility) for Spring Boot and Spring AI versions.
