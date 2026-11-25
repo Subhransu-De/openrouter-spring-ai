@@ -16,6 +16,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.locks.LockSupport;
@@ -216,7 +217,8 @@ public final class GarageTelemetry implements ObservationHandler<Observation.Con
         .filter(item -> operationId.equals(item.get("operationId")))
         .filter(item -> !Boolean.TRUE.equals(item.get("expectedFailure")))
         .filter(item -> item.get(OUTCOME) instanceof String)
-        .sorted(Comparator.comparingLong(item -> (Long) item.get(START_ORDER)))
+        .sorted(Comparator.comparingLong(
+            item -> (Long) Objects.requireNonNull(item.get(START_ORDER), START_ORDER)))
         .map(item -> (String) item.get(OUTCOME))
         .toList();
   }
