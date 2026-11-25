@@ -2,6 +2,8 @@
 
 Notable changes in each release. The full notes for each release are on the [Releases page](https://github.com/Subhransu-De/openrouter-spring-ai/releases).
 
+## Unreleased
+
 ## [0.3.0](https://github.com/Subhransu-De/openrouter-spring-ai/releases/tag/v0.3.0) - 2026-11-25
 
 Moves to Spring Boot 4.2.0 and Spring AI 2.1.0, and adds an input type for embedding models that distinguish queries from documents.
