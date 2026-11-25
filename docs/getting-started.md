@@ -8,12 +8,12 @@ Add the starter from Maven Central:
 <dependency>
     <groupId>de.subhransu</groupId>
     <artifactId>openrouter-spring-ai-starter</artifactId>
-    <version>0.2.0</version>
+    <version>0.3.0</version>
 </dependency>
 ```
 
 ```kotlin
-implementation("de.subhransu:openrouter-spring-ai-starter:0.2.0")
+implementation("de.subhransu:openrouter-spring-ai-starter:0.3.0")
 ```
 
 Use Java 17 or later. See [release compatibility](#release-compatibility) for Spring Boot and Spring AI versions.
@@ -218,9 +218,9 @@ To move an application from another Spring AI provider, see [Switching from anot
 | ------------------------------------------------------------------------------------ | ------------------- | ----------- | --------- |
 | [0.1.0: `41786f9`](https://github.com/Subhransu-De/openrouter-spring-ai/tree/v0.1.0) | 17                  | 4.1.2       | 2.0.2     |
 | [0.2.0: `759beba`](https://github.com/Subhransu-De/openrouter-spring-ai/tree/v0.2.0) | 17                  | 4.1.2       | 2.0.2     |
-| Unreleased main (`0.3.0-SNAPSHOT`)                                                   | 17                  | 4.2.0       | 2.1.0     |
+| [0.3.0](https://github.com/Subhransu-De/openrouter-spring-ai/tree/v0.3.0)            | 17                  | 4.2.0       | 2.1.0     |
 
-Each release was built and tested against the Spring Boot and Spring AI versions above, and its starter POM pins those versions (see the [published 0.2.0 starter POM](https://repo.maven.apache.org/maven2/de/subhransu/openrouter-spring-ai-starter/0.2.0/openrouter-spring-ai-starter-0.2.0.pom)). Spring Boot manages its own starters but not Spring AI, so import `org.springframework.ai:spring-ai-bom` to pick a newer compatible patch release on the same Spring AI minor line. Release candidates are listed in the [changelog](../CHANGELOG.md).
+Each release was built and tested against the Spring Boot and Spring AI versions above, and its starter POM pins those versions (see the [published 0.3.0 starter POM](https://repo.maven.apache.org/maven2/de/subhransu/openrouter-spring-ai-starter/0.3.0/openrouter-spring-ai-starter-0.3.0.pom)). Spring Boot manages its own starters but not Spring AI, so import `org.springframework.ai:spring-ai-bom` to pick a newer compatible patch release on the same Spring AI minor line. Release candidates are listed in the [changelog](../CHANGELOG.md).
 
 ## Next to another provider starter
 
