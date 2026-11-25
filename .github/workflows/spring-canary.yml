@@ -53,11 +53,31 @@ jobs:
           version_re='^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9]+)*$'
           ai_version="$INPUT_AI"
           if [[ -z "$ai_version" ]]; then
-            # Maven Central lists spring-ai-bom versions in version order; tail selects the highest line.
-            # Use workflow_dispatch inputs to test a specific older line or pre-release.
+            # Pick the highest Spring AI version using Maven pre-release ordering (M < RC < GA),
+            # rather than assuming maven-metadata.xml is sorted when older lines get patches.
             ai_version=$(curl -fsSL https://repo1.maven.org/maven2/org/springframework/ai/spring-ai-bom/maven-metadata.xml \
-              | sed -n 's|.*<version>\([^<]*\)</version>.*|\1|p' \
-              | tail -n 1)
+              | python3 -c '
+          import re, sys, xml.etree.ElementTree as ET
+          versions = [e.text.strip() for e in ET.fromstring(sys.stdin.read()).findall("./versioning/versions/version") if e.text and e.text.strip()]
+          def key(v):
+              m = re.match(r"^(\d+)\.(\d+)\.(\d+)(?:[.-]([A-Za-z]+)(\d*))?$", v)
+              if not m:
+                  return (-1, 0, 0, (0, ""), 0, v)
+              maj, min_, pat, q, qn = m.groups()
+              ql = (q or "").lower()
+              if q is None:
+                  rank = (4, "")
+              elif ql in ("rc", "cr"):
+                  rank = (3, "")
+              elif ql in ("m", "milestone"):
+                  rank = (2, "")
+              elif ql == "snapshot":
+                  rank = (0, "")
+              else:
+                  rank = (1, ql)
+              return (int(maj), int(min_), int(pat), rank, int(qn or 0), v)
+          print(max(versions, key=key) if versions else "")
+          ')
           fi
           if [[ ! "$ai_version" =~ $version_re ]]; then
             echo "Invalid or unresolved Spring AI version: ${ai_version}"

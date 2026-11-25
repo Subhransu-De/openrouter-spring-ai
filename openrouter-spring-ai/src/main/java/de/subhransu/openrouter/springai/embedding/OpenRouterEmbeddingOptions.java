@@ -8,9 +8,9 @@ import org.springframework.ai.embedding.EmbeddingOptions;
 
 /**
  * Options for the OpenRouter embeddings endpoint. Mirrors the OpenRouter request fields:
- * {@code model}, {@code dimensions}, {@code encoding_format}, {@code user}, and the
- * OpenRouter-specific {@code provider} routing preferences, {@code session_id} and
- * {@code trace}.
+ * {@code model}, {@code dimensions}, {@code encoding_format}, {@code input_type},
+ * {@code user}, and the OpenRouter-specific {@code provider} routing preferences,
+ * {@code session_id} and {@code trace}.
  *
  * @author Subhransu De
  */
@@ -21,6 +21,8 @@ public class OpenRouterEmbeddingOptions implements EmbeddingOptions {
 	private @Nullable Integer dimensions;
 
 	private @Nullable String encodingFormat;
+
+	private @Nullable String inputType;
 
 	private @Nullable String user;
 
@@ -59,6 +61,7 @@ public class OpenRouterEmbeddingOptions implements EmbeddingOptions {
 			.model(value(runtimeOptions.model, this.model))
 			.dimensions(value(runtimeOptions.dimensions, this.dimensions))
 			.encodingFormat(value(runtimeOptions.encodingFormat, this.encodingFormat))
+			.inputType(value(runtimeOptions.inputType, this.inputType))
 			.user(value(runtimeOptions.user, this.user))
 			.provider(value(runtimeOptions.provider, this.provider))
 			.sessionId(value(runtimeOptions.sessionId, this.sessionId))
@@ -82,6 +85,10 @@ public class OpenRouterEmbeddingOptions implements EmbeddingOptions {
 
 	public @Nullable String getEncodingFormat() {
 		return this.encodingFormat;
+	}
+
+	public @Nullable String getInputType() {
+		return this.inputType;
 	}
 
 	public @Nullable String getUser() {
@@ -113,6 +120,7 @@ public class OpenRouterEmbeddingOptions implements EmbeddingOptions {
 			this.options.model = source.model;
 			this.options.dimensions = source.dimensions;
 			this.options.encodingFormat = source.encodingFormat;
+			this.options.inputType = source.inputType;
 			this.options.user = source.user;
 			this.options.provider = source.provider;
 			this.options.sessionId = source.sessionId;
@@ -131,6 +139,15 @@ public class OpenRouterEmbeddingOptions implements EmbeddingOptions {
 
 		public Builder encodingFormat(@Nullable String encodingFormat) {
 			this.options.encodingFormat = encodingFormat;
+			return this;
+		}
+
+		/**
+		 * Hint describing the input role, sent as {@code input_type}, such as
+		 * {@code query} or {@code document} (values depend on the upstream provider).
+		 */
+		public Builder inputType(@Nullable String inputType) {
+			this.options.inputType = inputType;
 			return this;
 		}
 

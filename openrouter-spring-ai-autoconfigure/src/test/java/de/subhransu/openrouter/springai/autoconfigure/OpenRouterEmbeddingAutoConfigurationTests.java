@@ -43,15 +43,14 @@ class OpenRouterEmbeddingAutoConfigurationTests {
 	@Tag("configuration.properties")
 	@Test
 	void bindsEmbeddingOptionsFromProperties() {
-		this.contextRunner
-			.withPropertyValues(API_KEY_PROPERTY, "spring.ai.openrouter.embedding.model=openai/text-embedding-3-small",
-					"spring.ai.openrouter.embedding.dimensions=256",
-					"spring.ai.openrouter.embedding.metadata-mode=embed",
-					"spring.ai.openrouter.embedding.encoding-format=float",
-					"spring.ai.openrouter.embedding.user=embed-user",
-					"spring.ai.openrouter.embedding.provider.data-collection=deny",
-					"spring.ai.openrouter.embedding.provider.order[0]=synthetic-a",
-					"spring.ai.openrouter.embedding.provider.sort=price")
+		this.contextRunner.withPropertyValues(API_KEY_PROPERTY,
+				"spring.ai.openrouter.embedding.model=openai/text-embedding-3-small",
+				"spring.ai.openrouter.embedding.dimensions=256", "spring.ai.openrouter.embedding.metadata-mode=embed",
+				"spring.ai.openrouter.embedding.encoding-format=float",
+				"spring.ai.openrouter.embedding.input-type=document", "spring.ai.openrouter.embedding.user=embed-user",
+				"spring.ai.openrouter.embedding.provider.data-collection=deny",
+				"spring.ai.openrouter.embedding.provider.order[0]=synthetic-a",
+				"spring.ai.openrouter.embedding.provider.sort=price")
 			.run(context -> {
 				OpenRouterEmbeddingModel embeddingModel = context.getBean(OpenRouterEmbeddingModel.class);
 				OpenRouterEmbeddingOptions options = (OpenRouterEmbeddingOptions) ReflectionTestUtils
@@ -63,6 +62,7 @@ class OpenRouterEmbeddingAutoConfigurationTests {
 					.getEmbeddingContent(new Document("synthetic passage", Map.of("topic", "synthetic-topic"))))
 					.isEqualTo("topic: synthetic-topic\n\nsynthetic passage");
 				assertThat(options.getEncodingFormat()).isEqualTo("float");
+				assertThat(options.getInputType()).isEqualTo("document");
 				assertThat(options.getUser()).isEqualTo("embed-user");
 				assertThat(options.getProvider()).isEqualTo(new OpenRouterProviderPreferences(null, null, "deny",
 						List.of("synthetic-a"), null, null, "price"));

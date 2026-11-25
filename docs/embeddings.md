@@ -42,3 +42,4 @@ EmbeddingResponse response =
 
 - **Metadata:** documents embed their raw text by default (`metadata-mode: none`). Set `spring.ai.openrouter.embedding.metadata-mode: embed` to include the metadata, as Spring AI's OpenAI model does.
 - **Dimensions:** without configured dimensions, `dimensions()` makes a billable request to find them. Set `spring.ai.openrouter.embedding.dimensions` or the vector store's own setting.
+- **Input type:** models that distinguish queries from indexed content, or require OpenRouter's `input_type` field (for example `query` / `document` or `search_query` / `search_document`), can be configured via `spring.ai.openrouter.embedding.input-type` or per request with `OpenRouterEmbeddingOptions.builder().inputType(...)`.

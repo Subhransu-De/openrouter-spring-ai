@@ -160,11 +160,16 @@ class OpenRouterDocumentEmbeddingModelTests {
 			.expect(once(), requestTo(BASE_URL + "/embeddings"))
 			.andExpect(jsonPath("$.model").value("synthetic/other-embed"))
 			.andExpect(jsonPath("$.dimensions").value(2))
+			.andExpect(jsonPath("$.input_type").value("document"))
 			.andRespond(withSuccess("{\"data\":[{\"index\":0,\"embedding\":[1,2]}]}", MediaType.APPLICATION_JSON));
 
 		fixture.model()
 			.call(new DocumentEmbeddingRequest(List.of(new Document("synthetic passage")),
-					OpenRouterEmbeddingOptions.builder().model("synthetic/other-embed").dimensions(2).build()));
+					OpenRouterEmbeddingOptions.builder()
+						.model("synthetic/other-embed")
+						.dimensions(2)
+						.inputType("document")
+						.build()));
 
 		fixture.server().verify();
 	}

@@ -162,16 +162,18 @@ class OpenRouterEmbeddingModelTests {
 	@Tag("embeddings.model")
 	@Test
 	void runtimeOptionsOverrideDefaults() {
-		Fixture fixture = fixture(OpenRouterEmbeddingOptions.builder().model(MODEL).dimensions(2).build());
+		Fixture fixture = fixture(
+				OpenRouterEmbeddingOptions.builder().model(MODEL).dimensions(2).inputType("document").build());
 		fixture.server()
 			.expect(once(), requestTo(BASE_URL + "/embeddings"))
 			.andExpect(jsonPath("$.model").value("qwen/qwen3-embedding-8b"))
 			.andExpect(jsonPath("$.dimensions").value(2))
+			.andExpect(jsonPath("$.input_type").value("query"))
 			.andRespond(withSuccess(SUCCESS_BODY, MediaType.APPLICATION_JSON));
 
 		fixture.model()
 			.call(new EmbeddingRequest(List.of("hello", "world"),
-					OpenRouterEmbeddingOptions.builder().model("qwen/qwen3-embedding-8b").build()));
+					OpenRouterEmbeddingOptions.builder().model("qwen/qwen3-embedding-8b").inputType("query").build()));
 
 		fixture.server().verify();
 	}
