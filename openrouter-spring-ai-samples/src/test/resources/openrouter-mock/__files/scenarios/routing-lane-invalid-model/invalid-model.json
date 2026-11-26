@@ -1,7 +1,0 @@
-{
-  "error": {
-    "message": "garage/primary-unavailable is not a valid model ID",
-    "code": 400
-  },
-  "user_id": "user_garage_synthetic"
-}
