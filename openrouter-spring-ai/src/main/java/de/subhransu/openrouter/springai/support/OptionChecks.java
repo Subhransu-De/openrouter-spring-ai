@@ -47,8 +47,6 @@ public final class OptionChecks {
 	// another control character must not reach a connector, whose errors would echo it.
 	private static final Pattern HEADER_NAME = Pattern.compile("[!#$%&'*+.^_`|~0-9A-Za-z-]+");
 
-	private static final Pattern HEADER_VALUE = Pattern.compile("(?:[!-~](?:[\\t -~]*[!-~])?)?");
-
 	private OptionChecks() {
 	}
 
@@ -178,7 +176,7 @@ public final class OptionChecks {
 			if (name == null || !HEADER_NAME.matcher(name).matches()) {
 				throw new IllegalArgumentException("customHeaders must contain only header names that are HTTP tokens");
 			}
-			if (value == null || !HEADER_VALUE.matcher(value).matches()) {
+			if (value == null || !isHeaderValue(value)) {
 				throw new IllegalArgumentException("customHeaders " + name
 						+ " must have a value of visible ASCII characters, with spaces or tabs only between them");
 			}
@@ -188,6 +186,21 @@ public final class OptionChecks {
 			}
 		});
 		return headers;
+	}
+
+	// Visible ASCII, with spaces or tabs only between visible characters. A loop instead
+	// of a regular expression, whose backtracking would be open to ReDoS.
+	private static boolean isHeaderValue(String value) {
+		for (int index = 0; index < value.length(); index++) {
+			char character = value.charAt(index);
+			boolean visible = character > ' ' && character <= '~';
+			boolean blank = character == ' ' || character == '\t';
+			boolean atEdge = index == 0 || index == value.length() - 1;
+			if (!visible && (!blank || atEdge)) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**

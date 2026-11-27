@@ -25,12 +25,25 @@ import tools.jackson.databind.JsonNode;
  */
 public final class OpenRouterDiagnosticSanitizer {
 
-	private static final OpenRouterDiagnosticSanitizer KEYLESS = new OpenRouterDiagnosticSanitizer(null);
+	private static final OpenRouterDiagnosticSanitizer KEYLESS = new OpenRouterDiagnosticSanitizer(List.of());
+
+	// Shorter values are not credentials, and redacting them would mangle diagnostics,
+	// for example a header value "3" inside a status code.
+	private static final int MIN_REDACTED_LENGTH = 8;
 
 	private final @Nullable Pattern apiKey;
 
-	private OpenRouterDiagnosticSanitizer(@Nullable Pattern apiKey) {
-		this.apiKey = apiKey;
+	// The secrets behind the pattern, kept to order a combined pattern longest first.
+	private final List<String> secrets;
+
+	private OpenRouterDiagnosticSanitizer(List<String> secrets) {
+		this.secrets = secrets;
+		// Longer secrets first, so a secret that starts with another is redacted whole.
+		this.apiKey = secrets.isEmpty() ? null
+				: Pattern.compile(secrets.stream()
+					.sorted(Comparator.comparingInt(String::length).reversed())
+					.map(secret -> OpenRouterExceptionMessage.encodedKeyPattern(secret).pattern())
+					.collect(Collectors.joining("|")));
 	}
 
 	/**
@@ -39,31 +52,23 @@ public final class OpenRouterDiagnosticSanitizer {
 	 * @return the sanitizer
 	 */
 	public static OpenRouterDiagnosticSanitizer forApiKey(@Nullable String apiKey) {
-		return StringUtils.hasText(apiKey)
-				? new OpenRouterDiagnosticSanitizer(OpenRouterExceptionMessage.encodedKeyPattern(apiKey)) : KEYLESS;
+		return StringUtils.hasText(apiKey) ? new OpenRouterDiagnosticSanitizer(List.of(apiKey)) : KEYLESS;
 	}
 
 	/**
 	 * Create a sanitizer that also redacts the given values, such as the custom header
 	 * values of one request, which a gateway can echo in an error body.
-	 * @param values values to redact; blank values are ignored
+	 * @param values values to redact; values shorter than eight characters are ignored,
+	 * because they are not credentials and would mangle the diagnostics
 	 * @return this sanitizer when there is nothing more to redact, otherwise a new one
 	 */
 	public OpenRouterDiagnosticSanitizer redacting(Collection<String> values) {
-		// Longer values first, so a value that contains another is redacted whole.
-		List<String> patterns = values.stream()
-			.filter(StringUtils::hasText)
+		List<String> secrets = new ArrayList<>(this.secrets);
+		values.stream()
+			.filter(value -> value.strip().length() >= MIN_REDACTED_LENGTH && !secrets.contains(value))
 			.distinct()
-			.sorted(Comparator.comparingInt(String::length).reversed())
-			.map(value -> OpenRouterExceptionMessage.encodedKeyPattern(value).pattern())
-			.collect(Collectors.toCollection(ArrayList::new));
-		if (patterns.isEmpty()) {
-			return this;
-		}
-		if (this.apiKey != null) {
-			patterns.add(this.apiKey.pattern());
-		}
-		return new OpenRouterDiagnosticSanitizer(Pattern.compile(String.join("|", patterns)));
+			.forEach(secrets::add);
+		return secrets.size() == this.secrets.size() ? this : new OpenRouterDiagnosticSanitizer(List.copyOf(secrets));
 	}
 
 	/**

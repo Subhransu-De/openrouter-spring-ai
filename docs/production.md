@@ -40,7 +40,7 @@ Rules for interceptors, filters and `OpenRouterRestClientCustomizer` or `OpenRou
 - Make them safe for concurrent use. Cloning a builder does not deep-copy their captured state.
 - Customize a single call through call context, and leave shared builders, factories and default headers unchanged.
 - Use only application-approved header names. Keep credentials and destinations fixed when you construct each client. Do not forward authorization through URI-rewriting filters or cross-origin redirects.
-- For a header on one chat request, set `customHeaders` on `OpenRouterChatOptions` instead (see [Custom headers](chat.md#custom-headers)). It rejects the headers that the client sets itself, so a request cannot replace the key or the attribution. HTTP error details redact the configured key and the request's header values; errors inside a successful response or stream redact only the configured key.
+- For a header on one chat request, set `customHeaders` on `OpenRouterChatOptions` instead (see [Custom headers](chat.md#custom-headers)). It rejects the headers that the client sets itself, so a request cannot replace the key or the attribution. HTTP error details redact the configured key and the request's header values of eight or more characters; errors inside a successful response or stream redact only the configured key.
 
 ## Connection details
 

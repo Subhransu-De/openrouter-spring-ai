@@ -56,7 +56,11 @@ public final class OpenRouterExceptionMessage {
 		if (value == null) {
 			return null;
 		}
-		String safeValue = neutralizeControls(value);
+		// Redact before and after neutralizing controls: neutralizing collapses
+		// whitespace,
+		// which changes a secret that contains a run of spaces or a tab.
+		String safeValue = apiKey != null ? apiKey.matcher(value).replaceAll("[REDACTED]") : value;
+		safeValue = neutralizeControls(safeValue);
 		if (apiKey != null) {
 			safeValue = apiKey.matcher(safeValue).replaceAll("[REDACTED]");
 		}
