@@ -202,6 +202,7 @@ class OpenRouterChatOptionsRobustnessTests {
 			.audio(new OpenRouterAudioOptions("alloy", "pcm16"))
 			.extraBody(Map.of("transforms", List.of()))
 			.providerExtraBody(Map.of("zdr", true))
+			.customHeaders(Map.of("X-Request-Tag", "synthetic"))
 			.outputSchema("""
 					{
 					  "type": "object"

@@ -2,6 +2,7 @@ package de.subhransu.openrouter.springai.support;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -34,6 +35,12 @@ public final class OptionChecks {
 	private static final List<String> VERBOSITY = List.of("low", "medium", "high", "xhigh", "max");
 
 	private static final int MAX_TOP_LOGPROBS = 20;
+
+	// Headers that OpenRouterApi sets itself, lower-cased. A request value would replace
+	// the configured API key, which the diagnostic sanitizer does not know, or the
+	// attribution and media types that the client owns.
+	private static final Set<String> CLIENT_HEADERS = Set.of("authorization", "content-type", "accept", "http-referer",
+			"x-openrouter-title", "x-openrouter-categories");
 
 	private OptionChecks() {
 	}
@@ -145,6 +152,33 @@ public final class OptionChecks {
 					+ " is not a valid audio format: use 1 to 16 letters, digits or +._-, starting with a letter or digit");
 		}
 		return format;
+	}
+
+	/**
+	 * Checks per-request HTTP headers: names must not be blank, values must not be null,
+	 * and no name may be one that the OpenRouter client sets itself. The message names
+	 * the header but never echoes a value, which can be a credential.
+	 * @param headers the headers to check
+	 * @return the same headers
+	 */
+	@Contract("!null -> !null")
+	public static @Nullable Map<String, String> customHeaders(@Nullable Map<String, String> headers) {
+		if (headers == null) {
+			return null;
+		}
+		headers.forEach((name, value) -> {
+			if (name == null || name.isBlank()) {
+				throw new IllegalArgumentException("customHeaders must not contain a blank header name");
+			}
+			if (value == null) {
+				throw new IllegalArgumentException("customHeaders " + name + " must not have a null value");
+			}
+			if (CLIENT_HEADERS.contains(name.toLowerCase(Locale.ROOT))) {
+				throw new IllegalArgumentException("customHeaders must not set " + name
+						+ ", which the OpenRouter client sets itself; configure it on OpenRouterApi instead");
+			}
+		});
+		return headers;
 	}
 
 	/**

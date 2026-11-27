@@ -143,6 +143,45 @@ class OpenRouterApiContractTests {
 		fixture.server().verify();
 	}
 
+	@Tag("http")
+	@Tag("http.client")
+	@Test
+	void callsSendCustomHeadersNextToTheClientHeaders() {
+		Fixture fixture = fixture(baseBuilder().appTitle("My App"));
+		fixture.server()
+			.expect(once(), requestTo(CHAT_COMPLETIONS))
+			.andExpect(header("X-Request-Tag", "run-7"))
+			.andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer test-key"))
+			.andExpect(header(TITLE_HEADER, "My App"))
+			.andRespond(withSuccess(CHAT_SUCCESS_BODY, MediaType.APPLICATION_JSON));
+		fixture.server()
+			.expect(once(), requestTo(RESPONSES))
+			.andExpect(header("X-Request-Tag", "run-8"))
+			.andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer test-key"))
+			.andRespond(withSuccess(RESPONSES_SUCCESS_BODY, MediaType.APPLICATION_JSON));
+
+		fixture.api().chatCompletion(minimalChatRequest(), Map.of("X-Request-Tag", "run-7"));
+		fixture.api().responses(minimalResponsesRequest(), Map.of("X-Request-Tag", "run-8"));
+		fixture.server().verify();
+	}
+
+	@Tag("http")
+	@Tag("http.client")
+	@ParameterizedTest
+	@ValueSource(strings = { "Authorization", "Content-Type", "Accept", "HTTP-Referer", "X-OpenRouter-Title",
+			"X-OpenRouter-Categories" })
+	void aCallRejectsAHeaderThatTheClientSetsWithoutSendingIt(String name) {
+		Fixture fixture = fixture(baseBuilder());
+
+		assertThatThrownBy(() -> fixture.api().chatCompletion(minimalChatRequest(), Map.of(name, "other-value")))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining(name)
+			.hasMessageNotContaining("other-value");
+		assertThatThrownBy(() -> fixture.api().responses(minimalResponsesRequest(), Map.of(name, "other-value")))
+			.isInstanceOf(IllegalArgumentException.class);
+		fixture.server().verify();
+	}
+
 	// ---------------------------------------------------------------------
 	// Attribution headers
 	// ---------------------------------------------------------------------

@@ -21,6 +21,7 @@ import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.lang.Contract;
 import org.springframework.util.Assert;
+import org.springframework.util.LinkedCaseInsensitiveMap;
 
 public class OpenRouterChatOptions implements ToolCallingChatOptions, StructuredOutputChatOptions {
 
@@ -107,6 +108,8 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 	private @Nullable Map<String, @Nullable Object> extraBody;
 
 	private @Nullable Map<String, @Nullable Object> providerExtraBody;
+
+	private @Nullable Map<String, String> customHeaders;
 
 	private @Nullable String outputSchema;
 
@@ -201,6 +204,7 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 		builder.imageConfig(value(runtimeOptions.imageConfig, this.imageConfig));
 		builder.extraBody(mergeMaps(this.extraBody, runtimeOptions.extraBody));
 		builder.providerExtraBody(mergeMaps(this.providerExtraBody, runtimeOptions.providerExtraBody));
+		builder.customHeaders(mergeHeaders(this.customHeaders, runtimeOptions.customHeaders));
 		// Framework merge semantics (ToolCallingChatOptions): runtime tool callbacks
 		// replace the defaults wholesale rather than accumulating, so the executing
 		// advisor sees exactly the tools that were advertised for this request.
@@ -382,6 +386,10 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 		return readOnlyMap(this.extraBody);
 	}
 
+	public @Nullable Map<String, String> getCustomHeaders() {
+		return readOnlyMap(this.customHeaders);
+	}
+
 	@Override
 	public @Nullable String getOutputSchema() {
 		return this.outputSchema;
@@ -434,6 +442,29 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 		if (runtime != null) {
 			merged.putAll(runtime);
 		}
+		return merged;
+	}
+
+	// Header names are case-insensitive, so a request value replaces a default value
+	// whatever the spelling of the name.
+	@Contract("!null -> !null")
+	private static @Nullable Map<String, String> copyHeaders(@Nullable Map<String, String> headers) {
+		if (headers == null) {
+			return null;
+		}
+		Map<String, String> copy = new LinkedCaseInsensitiveMap<>(headers.size(), Locale.ROOT);
+		copy.putAll(headers);
+		return copy;
+	}
+
+	private static @Nullable Map<String, String> mergeHeaders(@Nullable Map<String, String> defaults,
+			@Nullable Map<String, String> runtime) {
+		if (defaults == null || runtime == null) {
+			return runtime != null ? runtime : defaults;
+		}
+		Map<String, String> merged = new LinkedCaseInsensitiveMap<>(defaults.size() + runtime.size(), Locale.ROOT);
+		merged.putAll(defaults);
+		merged.putAll(runtime);
 		return merged;
 	}
 
@@ -498,6 +529,7 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 			this.options.extraBody = source.extraBody == null ? null : new LinkedHashMap<>(source.extraBody);
 			this.options.providerExtraBody = source.providerExtraBody == null ? null
 					: new LinkedHashMap<>(source.providerExtraBody);
+			this.options.customHeaders = copyHeaders(source.customHeaders);
 			this.options.outputSchema = source.outputSchema;
 			this.options.toolCallbacks = copyList(source.toolCallbacks);
 			this.options.toolContext = source.toolContext == null ? null : new LinkedHashMap<>(source.toolContext);
@@ -829,6 +861,18 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 
 		public Builder extraBody(@Nullable Map<String, @Nullable Object> extraBody) {
 			this.options.extraBody = RequestExtensions.chat(extraBody, false);
+			return this;
+		}
+
+		/**
+		 * HTTP headers sent with the request, in both request modes, in calls and
+		 * streams. A request map is merged into the default map by header name, ignoring
+		 * case, and a request value replaces a default value. Headers that the OpenRouter
+		 * client sets itself are rejected: Authorization, Content-Type, Accept,
+		 * HTTP-Referer, X-OpenRouter-Title and X-OpenRouter-Categories.
+		 */
+		public Builder customHeaders(@Nullable Map<String, String> customHeaders) {
+			this.options.customHeaders = copyHeaders(OptionChecks.customHeaders(customHeaders));
 			return this;
 		}
 

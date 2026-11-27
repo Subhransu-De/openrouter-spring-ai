@@ -40,6 +40,23 @@ Rules for interceptors, filters and `OpenRouterRestClientCustomizer` or `OpenRou
 - Make them safe for concurrent use. Cloning a builder does not deep-copy their captured state.
 - Customize a single call through call context, and leave shared builders, factories and default headers unchanged.
 - Use only application-approved header names. Keep credentials and destinations fixed when you construct each client. Do not forward authorization through URI-rewriting filters or cross-origin redirects.
+- For a header on one chat request, set `customHeaders` on `OpenRouterChatOptions` instead (see [Custom headers](chat.md#custom-headers)). It rejects the headers that the client sets itself, so a request cannot replace the key or the attribution. Error details redact only the configured key.
+
+## Connection details
+
+The auto-configured `OpenRouterApi` reads its base URL and API key from an `OpenRouterConnectionDetails` bean, a Spring Boot [`ConnectionDetails`](https://docs.spring.io/spring-boot/reference/features/dev-services.html). By default the bean comes from `spring.ai.openrouter.base-url` and `spring.ai.openrouter.api-key`. Define your own bean, for example in a test that points OpenRouter at a mock server, and the auto-configuration uses it instead of these two properties. The other `spring.ai.openrouter.*` properties still apply.
+
+```java
+@Bean
+OpenRouterConnectionDetails openRouterConnectionDetails(WireMockServer server) {
+  return new OpenRouterConnectionDetails() {
+    public String getBaseUrl() { return server.baseUrl() + "/api/v1"; }
+    public String getApiKey() { return "test-key"; }
+  };
+}
+```
+
+A missing or empty API key still fails startup. An application-defined `OpenRouterApi` bean does not read the connection details.
 
 ## Stream limits
 
@@ -53,7 +70,7 @@ When several choices buffer tool calls at once, a merged tool call leaves out us
 - Automatic per-family client selection. Build each model with its own `OpenRouterApi` instead.
 - Connection-pool metrics.
 - Credential-provider abstractions.
-- Typed successful rate-limit snapshots.
+- Rate limits in `ChatResponseMetadata`. OpenRouter sends no rate-limit headers on successful chat responses, so `getRateLimit()` stays empty. Read the key's limits and remaining credit from `GET /api/v1/key`.
 
 ## Cost and monitoring
 

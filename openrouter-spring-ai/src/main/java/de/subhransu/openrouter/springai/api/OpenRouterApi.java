@@ -20,6 +20,7 @@ import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import de.subhransu.openrouter.springai.internal.StreamRetries;
+import de.subhransu.openrouter.springai.support.OptionChecks;
 import java.io.ByteArrayOutputStream;
 import java.io.ByteArrayInputStream;
 import java.io.SequenceInputStream;
@@ -31,8 +32,10 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 import org.jspecify.annotations.Nullable;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.core.codec.DecodingException;
@@ -46,7 +49,6 @@ import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.http.codec.AbstractJacksonDecoder;
 import org.springframework.http.codec.DecoderHttpMessageReader;
 import org.springframework.util.Assert;
-import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -130,8 +132,9 @@ public class OpenRouterApi {
 		// supply their factory. This timeout field only guards streaming idle gaps.
 		RestClient.Builder restClientBuilder = builder.restClientBuilder != null ? builder.restClientBuilder.clone()
 				: RestClient.builder();
-		restClientBuilder.requestInterceptor(
-				new OpenRouterAttributionInterceptor(builder.httpReferer, builder.appTitle, builder.appCategories));
+		OpenRouterAttributionInterceptor attribution = new OpenRouterAttributionInterceptor(builder.httpReferer,
+				builder.appTitle, builder.appCategories);
+		restClientBuilder.requestInterceptor(attribution);
 		this.restClient = restClientBuilder.baseUrl(baseUrl)
 			.defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + builder.apiKey)
 			.defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
@@ -145,18 +148,16 @@ public class OpenRouterApi {
 			.defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + builder.apiKey)
 			.defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
 			.defaultHeader(HttpHeaders.ACCEPT, MediaType.TEXT_EVENT_STREAM_VALUE)
-			.defaultHeaders(headers -> {
-				addIfPresent(headers, "HTTP-Referer", builder.httpReferer);
-				addIfPresent(headers, "X-OpenRouter-Title", builder.appTitle);
-				addIfPresent(headers, "X-OpenRouter-Categories", builder.appCategories);
-			})
+			.defaultHeaders(attribution::addTo)
 			.build();
 	}
 
-	private static void addIfPresent(HttpHeaders headers, String name, @Nullable String value) {
-		if (StringUtils.hasText(value)) {
-			headers.set(name, value);
-		}
+	// Checked here as well as in the chat options, so a direct API caller cannot replace
+	// the configured key, which the diagnostic sanitizer redacts, or the attribution.
+	private static Consumer<HttpHeaders> requestHeaders(Map<String, String> headers) {
+		Assert.notNull(headers, "headers must not be null");
+		OptionChecks.customHeaders(headers);
+		return (outgoing) -> headers.forEach(outgoing::set);
 	}
 
 	public static Builder builder() {
@@ -179,23 +180,45 @@ public class OpenRouterApi {
 	}
 
 	public ChatCompletionResponse chatCompletion(ChatCompletionRequest request) {
-		return blockingPost("/chat/completions", request, ChatCompletionResponse.class);
+		return chatCompletion(request, Map.of());
+	}
+
+	/**
+	 * Create a chat completion with HTTP headers for this request only.
+	 * @param request the request
+	 * @param headers the headers to add; a header that this client sets itself, such as
+	 * Authorization, is rejected
+	 * @return the response
+	 */
+	public ChatCompletionResponse chatCompletion(ChatCompletionRequest request, Map<String, String> headers) {
+		return blockingPost("/chat/completions", request, ChatCompletionResponse.class, headers);
 	}
 
 	public ResponsesResult responses(ResponsesRequest request) {
-		return blockingPost("/responses", request, ResponsesResult.class);
+		return responses(request, Map.of());
+	}
+
+	/**
+	 * Create a response with HTTP headers for this request only.
+	 * @param request the request
+	 * @param headers the headers to add; a header that this client sets itself, such as
+	 * Authorization, is rejected
+	 * @return the response
+	 */
+	public ResponsesResult responses(ResponsesRequest request, Map<String, String> headers) {
+		return blockingPost("/responses", request, ResponsesResult.class, headers);
 	}
 
 	public EmbeddingsResponse embeddings(EmbeddingsRequest request) {
-		return blockingPost("/embeddings", request, EmbeddingsResponse.class);
+		return blockingPost("/embeddings", request, EmbeddingsResponse.class, Map.of());
 	}
 
 	public ImagesResponse images(ImagesRequest request) {
-		return blockingPost("/images", request, ImagesResponse.class);
+		return blockingPost("/images", request, ImagesResponse.class, Map.of());
 	}
 
 	public TranscriptionResponse transcription(TranscriptionRequest request) {
-		return blockingPost("/audio/transcriptions", request, TranscriptionResponse.class);
+		return blockingPost("/audio/transcriptions", request, TranscriptionResponse.class, Map.of());
 	}
 
 	/**
@@ -221,8 +244,8 @@ public class OpenRouterApi {
 		return this.speechExchange.stream(request);
 	}
 
-	private <T> T blockingPost(String uri, Object request, Class<T> responseType) {
-		var outgoing = this.restClient.post().uri(uri);
+	private <T> T blockingPost(String uri, Object request, Class<T> responseType, Map<String, String> headers) {
+		var outgoing = this.restClient.post().uri(uri).headers(requestHeaders(headers));
 		if (this.customObjectMapper) {
 			outgoing.body(output -> this.objectMapper.writeValue(output, request));
 		}
@@ -287,7 +310,18 @@ public class OpenRouterApi {
 	}
 
 	public Flux<ChatCompletionChunk> chatCompletionStream(ChatCompletionRequest request) {
-		return stream("/chat/completions", request, ChatCompletionChunk.class);
+		return chatCompletionStream(request, Map.of());
+	}
+
+	/**
+	 * Stream a chat completion with HTTP headers for this request only.
+	 * @param request the request
+	 * @param headers the headers to add; a header that this client sets itself, such as
+	 * Authorization, is rejected
+	 * @return the chunks
+	 */
+	public Flux<ChatCompletionChunk> chatCompletionStream(ChatCompletionRequest request, Map<String, String> headers) {
+		return stream("/chat/completions", request, ChatCompletionChunk.class, headers);
 	}
 
 	// Providers without native image streaming make OpenRouter ignore stream=true and
@@ -367,11 +401,23 @@ public class OpenRouterApi {
 	}
 
 	public Flux<ResponsesStreamEvent> responsesStream(ResponsesRequest request) {
-		return stream("/responses", request, ResponsesStreamEvent.class);
+		return responsesStream(request, Map.of());
 	}
 
-	private <T> Flux<T> stream(String uri, Object request, Class<T> eventType) {
-		return streamingPost(uri, request, SSE).retrieve()
+	/**
+	 * Stream a response with HTTP headers for this request only.
+	 * @param request the request
+	 * @param headers the headers to add; a header that this client sets itself, such as
+	 * Authorization, is rejected
+	 * @return the events
+	 */
+	public Flux<ResponsesStreamEvent> responsesStream(ResponsesRequest request, Map<String, String> headers) {
+		return stream("/responses", request, ResponsesStreamEvent.class, headers);
+	}
+
+	private <T> Flux<T> stream(String uri, Object request, Class<T> eventType, Map<String, String> headers) {
+		return streamingPost(uri, request, SSE).headers(requestHeaders(headers))
+			.retrieve()
 			.onStatus(HttpStatusCode::isError, response -> streamingError(uri, response))
 			.bodyToFlux(STRING_SSE_TYPE)
 			.transform(this::applyTimeout)
@@ -514,22 +560,13 @@ public class OpenRouterApi {
 								+ "response.incomplete, or response.failed");
 			}
 			if (event instanceof ChatCompletionChunk chunk) {
-				validateChunk(chunk, uri);
+				StreamEventBinder.validateChunk(chunk, uri);
 			}
 			return event;
 		}
 		catch (JacksonException ex) {
 			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.DECODE, uri,
 					"Failed to decode OpenRouter stream chunk", ex);
-		}
-	}
-
-	private void validateChunk(ChatCompletionChunk chunk, String uri) {
-		var choices = chunk.choices();
-		if (chunk.error() == null && ((CollectionUtils.isEmpty(choices) && chunk.usage() == null)
-				|| (choices != null && CollectionUtils.containsInstance(choices, null)))) {
-			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.MISSING_FIELD, uri,
-					"OpenRouter chat chunk requires non-null choices or usage");
 		}
 	}
 

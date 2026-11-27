@@ -168,6 +168,12 @@ public class OpenRouterChatProperties {
 	private @Nullable Map<String, @Nullable Object> providerExtraBody;
 
 	/**
+	 * HTTP headers sent with every chat request. Request headers are merged into them by
+	 * name. Authorization, Content-Type, Accept and the attribution headers are rejected.
+	 */
+	private @Nullable Map<String, String> customHeaders;
+
+	/**
 	 * Whether to request strict schemas for all function tools. Unset keeps the provider
 	 * default.
 	 */
@@ -294,6 +300,7 @@ public class OpenRouterChatProperties {
 			.outputSchema(this.outputSchema)
 			.extraBody(this.extraBody)
 			.providerExtraBody(this.providerExtraBody)
+			.customHeaders(this.customHeaders)
 			.toolStrict(this.toolStrict)
 			.parallelToolCalls(this.parallelToolCalls)
 			.toolChoice(this.toolChoice)
@@ -510,6 +517,14 @@ public class OpenRouterChatProperties {
 
 	public void setExtraBody(@Nullable Map<String, @Nullable Object> extraBody) {
 		this.extraBody = extraBody;
+	}
+
+	public @Nullable Map<String, String> getCustomHeaders() {
+		return this.customHeaders;
+	}
+
+	public void setCustomHeaders(@Nullable Map<String, String> customHeaders) {
+		this.customHeaders = customHeaders;
 	}
 
 	public @Nullable String getOutputSchema() {

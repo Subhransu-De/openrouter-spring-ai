@@ -243,6 +243,28 @@ spring:
         title: Example app
 ```
 
+### Custom headers
+
+HTTP headers for chat requests, in both request modes, in calls and streams.
+
+```yaml
+spring:
+  ai:
+    openrouter:
+      chat:
+        custom-headers:
+          X-Tenant: acme
+```
+
+```java
+String answer = chatClient.prompt().user(question)
+    .options(OpenRouterChatOptions.builder().customHeaders(Map.of("X-Request-Tag", runId)))
+    .call()
+    .content();
+```
+
+Request headers are merged into the default headers by name, ignoring case, and a request value replaces a default value. The headers that the client sets itself are rejected: `Authorization`, `Content-Type`, `Accept`, `HTTP-Referer`, `X-OpenRouter-Title` and `X-OpenRouter-Categories`. Set the key and the attribution on the client instead. The embedding, image and audio models take no custom headers; for headers on every request, use an `OpenRouterRestClientCustomizer` and an `OpenRouterWebClientCustomizer` (see [HTTP customization](production.md#http-customization)).
+
 ## Inputs
 
 ### Image input

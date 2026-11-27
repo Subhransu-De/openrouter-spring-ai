@@ -54,9 +54,15 @@ public final class OpenRouterApiAutoConfiguration {
 			"org.springframework.ai.model.ollama.autoconfigure.OllamaApiAutoConfiguration");
 
 	@Bean
+	@ConditionalOnMissingBean(OpenRouterConnectionDetails.class)
+	PropertiesOpenRouterConnectionDetails openRouterConnectionDetails(OpenRouterCommonProperties commonProperties) {
+		return new PropertiesOpenRouterConnectionDetails(commonProperties);
+	}
+
+	@Bean
 	@ConditionalOnMissingBean
-	OpenRouterApi openRouterApi(OpenRouterCommonProperties commonProperties,
-			OpenRouterConnectionProperties connectionProperties,
+	OpenRouterApi openRouterApi(OpenRouterConnectionDetails connectionDetails,
+			OpenRouterCommonProperties commonProperties, OpenRouterConnectionProperties connectionProperties,
 			ObjectProvider<ClientHttpRequestFactoryBuilder<?>> requestFactoryBuilderProvider,
 			ObjectProvider<HttpClientSettings> httpClientSettingsProvider,
 			ObjectProvider<RestClient.Builder> restClientBuilderProvider,
@@ -65,7 +71,7 @@ public final class OpenRouterApiAutoConfiguration {
 			ObjectProvider<OpenRouterWebClientCustomizer> webClientCustomizers,
 			ObjectProvider<JsonMapper> jsonMapperProvider, ObjectProvider<ObjectMapper> objectMapperProvider,
 			ObjectProvider<SpringAiRetryProperties> retryPropertiesProvider, ListableBeanFactory beanFactory) {
-		String apiKey = commonProperties.getApiKey();
+		String apiKey = connectionDetails.getApiKey();
 		Assert.hasText(apiKey, "OpenRouter API key must not be empty");
 		retryPropertiesProvider
 			.ifAvailable((retryProperties) -> reportUnusedRetrySettings(retryProperties, beanFactory));
@@ -80,7 +86,7 @@ public final class OpenRouterApiAutoConfiguration {
 		HttpClientSettings httpClientSettings = httpClientSettingsProvider.getIfAvailable(HttpClientSettings::defaults);
 		applyTimeouts(restClientBuilder, requestFactoryBuilder, httpClientSettings, connectionProperties);
 		return OpenRouterApi.builder()
-			.baseUrl(commonProperties.getBaseUrl())
+			.baseUrl(connectionDetails.getBaseUrl())
 			.apiKey(apiKey)
 			.httpReferer(app != null ? app.getHttpReferer() : null)
 			.appTitle(app != null ? app.getTitle() : null)
@@ -177,6 +183,30 @@ public final class OpenRouterApiAutoConfiguration {
 		StringJoiner joiner = new StringJoiner(",");
 		categories.forEach(joiner::add);
 		return joiner.toString();
+	}
+
+	/**
+	 * {@link OpenRouterConnectionDetails} backed by {@code spring.ai.openrouter.base-url}
+	 * and {@code spring.ai.openrouter.api-key}.
+	 */
+	static final class PropertiesOpenRouterConnectionDetails implements OpenRouterConnectionDetails {
+
+		private final OpenRouterCommonProperties properties;
+
+		PropertiesOpenRouterConnectionDetails(OpenRouterCommonProperties properties) {
+			this.properties = properties;
+		}
+
+		@Override
+		public @Nullable String getBaseUrl() {
+			return this.properties.getBaseUrl();
+		}
+
+		@Override
+		public @Nullable String getApiKey() {
+			return this.properties.getApiKey();
+		}
+
 	}
 
 }
