@@ -4,6 +4,10 @@ Notable changes in each release. The full notes for each release are on the [Rel
 
 ## Unreleased
 
+### Added
+
+- `OpenRouterDecisionModel`, an experimental Spring AI `DecisionModel` on OpenRouter's alpha Decisions API, with yes or no, choice and score questions, refusals, usage with cost and decision observations. It is opt-in with `spring.ai.model.decision=openrouter` and configured under `spring.ai.openrouter.decision.*`. See [Decisions](docs/decisions.md).
+
 ## [0.3.0](https://github.com/Subhransu-De/openrouter-spring-ai/releases/tag/v0.3.0) - 2026-11-25
 
 Moves to Spring Boot 4.2.0 and Spring AI 2.1.0, and adds an input type for embedding models that distinguish queries from documents.

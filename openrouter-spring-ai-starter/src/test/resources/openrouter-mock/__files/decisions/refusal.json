@@ -1,0 +1,25 @@
+{
+  "model": "liquid/d1.2-20261116",
+  "answers": {
+    "is_safe": {
+      "type": "noul",
+      "noul": 0.6941153656751077
+    },
+    "flagged": {
+      "type": "refusal"
+    }
+  },
+  "usage": {
+    "input_tokens": 123,
+    "output_tokens": 0,
+    "cost": 0.00000246,
+    "is_byok": false,
+    "cost_details": {
+      "upstream_inference_cost": 0.00000246,
+      "upstream_inference_prompt_cost": 0.00000246,
+      "upstream_inference_completions_cost": 0
+    }
+  },
+  "id": "gen-dec-1795800001-SyntheticFixture02",
+  "provider": "Liquid"
+}

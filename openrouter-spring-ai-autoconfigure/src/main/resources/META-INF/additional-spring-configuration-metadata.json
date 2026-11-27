@@ -227,6 +227,58 @@
     {
       "name": "spring.ai.openrouter.audio.transcription.trace.metadata",
       "description": "Custom trace keys sent next to the named fields. A key must not repeat a named field, such as trace_id."
+    },
+    {
+      "name": "spring.ai.openrouter.decision.provider.allow-fallbacks",
+      "description": "Whether OpenRouter may route to other upstream providers when the preferred ones are unavailable."
+    },
+    {
+      "name": "spring.ai.openrouter.decision.provider.require-parameters",
+      "description": "Whether to route only to upstream providers that support every parameter in the request."
+    },
+    {
+      "name": "spring.ai.openrouter.decision.provider.data-collection",
+      "description": "Data collection policy that upstream providers must meet: allow or deny. Other values are sent and logged once as a warning."
+    },
+    {
+      "name": "spring.ai.openrouter.decision.provider.order",
+      "description": "Comma-separated list of upstream provider slugs to try in order."
+    },
+    {
+      "name": "spring.ai.openrouter.decision.provider.ignore",
+      "description": "Comma-separated list of upstream provider slugs never to route to."
+    },
+    {
+      "name": "spring.ai.openrouter.decision.provider.quantizations",
+      "description": "Comma-separated list of model quantization levels to accept, such as fp8 or int4. Undocumented values are sent and logged once as a warning."
+    },
+    {
+      "name": "spring.ai.openrouter.decision.provider.sort",
+      "description": "Upstream provider ordering: price, throughput, latency or exacto. Other values are sent and logged once as a warning."
+    },
+    {
+      "name": "spring.ai.openrouter.decision.trace.trace-id",
+      "description": "Trace id that groups the generations of one trace, sent as trace.trace_id."
+    },
+    {
+      "name": "spring.ai.openrouter.decision.trace.trace-name",
+      "description": "Name of the trace, sent as trace.trace_name."
+    },
+    {
+      "name": "spring.ai.openrouter.decision.trace.span-name",
+      "description": "Name of the span that holds the generation, sent as trace.span_name."
+    },
+    {
+      "name": "spring.ai.openrouter.decision.trace.generation-name",
+      "description": "Name of the generation, sent as trace.generation_name."
+    },
+    {
+      "name": "spring.ai.openrouter.decision.trace.parent-span-id",
+      "description": "Id of the parent span, sent as trace.parent_span_id."
+    },
+    {
+      "name": "spring.ai.openrouter.decision.trace.metadata",
+      "description": "Custom trace keys sent next to the named fields. A key must not repeat a named field, such as trace_id."
     }
   ],
   "hints": [
@@ -281,6 +333,15 @@
         {
           "value": "openrouter",
           "description": "Use OpenRouter for Spring AI transcription model auto-configuration."
+        }
+      ]
+    },
+    {
+      "name": "spring.ai.model.decision",
+      "values": [
+        {
+          "value": "openrouter",
+          "description": "Use OpenRouter for Spring AI decision model auto-configuration."
         }
       ]
     },
@@ -522,6 +583,80 @@
         },
         {
           "value": "required"
+        }
+      ]
+    },
+    {
+      "name": "spring.ai.openrouter.decision.provider.sort",
+      "values": [
+        {
+          "value": "price",
+          "description": "Lowest price first."
+        },
+        {
+          "value": "throughput",
+          "description": "Highest throughput first."
+        },
+        {
+          "value": "latency",
+          "description": "Lowest latency first."
+        },
+        {
+          "value": "exacto"
+        }
+      ]
+    },
+    {
+      "name": "spring.ai.openrouter.decision.provider.data-collection",
+      "values": [
+        {
+          "value": "allow",
+          "description": "Allow providers that may store or train on request data."
+        },
+        {
+          "value": "deny",
+          "description": "Use only providers that do not collect request data."
+        }
+      ]
+    },
+    {
+      "name": "spring.ai.openrouter.decision.provider.quantizations",
+      "values": [
+        {
+          "value": "int4"
+        },
+        {
+          "value": "int8"
+        },
+        {
+          "value": "fp4"
+        },
+        {
+          "value": "mxfp4"
+        },
+        {
+          "value": "nvfp4"
+        },
+        {
+          "value": "fp6"
+        },
+        {
+          "value": "fp8"
+        },
+        {
+          "value": "mxfp8"
+        },
+        {
+          "value": "fp16"
+        },
+        {
+          "value": "bf16"
+        },
+        {
+          "value": "fp32"
+        },
+        {
+          "value": "unknown"
         }
       ]
     }

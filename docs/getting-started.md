@@ -201,12 +201,12 @@ This library implements these Spring AI 2.1.0 model interfaces:
 | `ImageModel`                        | `OpenRouterImageModel`              | `spring.ai.model.image`                | Yes                | [Images](images.md)                                  |
 | `TextToSpeechModel`, with streaming | `OpenRouterAudioSpeechModel`        | `spring.ai.model.audio.speech`         | No                 | [Speech and transcription](audio.md)                 |
 | `TranscriptionModel`                | `OpenRouterAudioTranscriptionModel` | `spring.ai.model.audio.transcription`  | No                 | [Speech and transcription](audio.md#transcription)   |
+| `DecisionModel`, experimental       | `OpenRouterDecisionModel`           | `spring.ai.model.decision`             | No                 | [Decisions](decisions.md)                            |
 
 A model that is not created by default needs its selector set to `openrouter`.
 
-Three parts of Spring AI are not implemented:
+Two parts of Spring AI are not implemented:
 
-- `DecisionModel`, added in Spring AI 2.1, is not implemented yet.
 - `ModerationModel` is not implemented, because OpenRouter has no moderation endpoint.
 - `TranscriptionModel.stream(...)` fails with `UnsupportedOperationException`, because OpenRouter has no streaming transcription.
 

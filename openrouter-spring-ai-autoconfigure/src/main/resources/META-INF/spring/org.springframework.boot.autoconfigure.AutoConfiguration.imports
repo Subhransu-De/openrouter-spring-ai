@@ -6,3 +6,4 @@ de.subhransu.openrouter.springai.autoconfigure.OpenRouterDocumentEmbeddingAutoCo
 de.subhransu.openrouter.springai.autoconfigure.OpenRouterImageAutoConfiguration
 de.subhransu.openrouter.springai.autoconfigure.OpenRouterAudioSpeechAutoConfiguration
 de.subhransu.openrouter.springai.autoconfigure.OpenRouterAudioTranscriptionAutoConfiguration
+de.subhransu.openrouter.springai.autoconfigure.OpenRouterDecisionAutoConfiguration

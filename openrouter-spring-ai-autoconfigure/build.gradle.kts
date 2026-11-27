@@ -13,6 +13,7 @@ dependencies {
 	api("org.springframework.ai:spring-ai-autoconfigure-model-embedding-observation")
 	api("org.springframework.ai:spring-ai-autoconfigure-model-image-observation")
 	api("org.springframework.ai:spring-ai-autoconfigure-model-audio-observation")
+	api("org.springframework.ai:spring-ai-autoconfigure-model-decision-observation")
 
 	annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
 	// Writes META-INF/spring-autoconfigure-metadata.properties so Boot can filter these

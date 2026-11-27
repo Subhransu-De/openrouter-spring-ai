@@ -9,6 +9,7 @@ import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionResponse;
 import de.subhransu.openrouter.springai.api.dto.ChatMessage;
 import de.subhransu.openrouter.springai.api.dto.Choice;
+import de.subhransu.openrouter.springai.api.dto.DecisionsResponse;
 import de.subhransu.openrouter.springai.api.dto.EmbeddingsResponse;
 import de.subhransu.openrouter.springai.api.dto.ImagesResponse;
 import de.subhransu.openrouter.springai.api.dto.Usage;
@@ -18,11 +19,15 @@ import de.subhransu.openrouter.springai.image.OpenRouterImageModel;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.observation.ChatModelMeterObservationHandler;
 import org.springframework.ai.chat.observation.ChatModelObservationConvention;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.decision.DecisionModel;
+import org.springframework.ai.decision.observation.DecisionModelMeterObservationHandler;
+import org.springframework.ai.decision.question.YesNoQuestion;
 import org.springframework.ai.embedding.observation.EmbeddingModelMeterObservationHandler;
 import org.springframework.ai.embedding.observation.EmbeddingModelObservationConvention;
 import org.springframework.ai.image.ImagePrompt;
@@ -47,6 +52,8 @@ class OpenRouterObservationAutoConfigurationTests {
 	private static final String EMBEDDING_MODEL = "openai/text-embedding-3-small";
 
 	private static final String IMAGE_MODEL = "bytedance-seed/seedream-4.5";
+
+	private static final String DECISION_MODEL = "typesafe/jev-1.14";
 
 	private static final String OPERATION_METER = "gen_ai.client.operation";
 
@@ -87,6 +94,29 @@ class OpenRouterObservationAutoConfigurationTests {
 			assertTokenMeter(meters, EMBEDDING_MODEL, "input", 4.0);
 			assertTokenMeter(meters, EMBEDDING_MODEL, "total", 4.0);
 		});
+	}
+
+	@Test
+	void anOptedInDecisionModelRecordsTheStandardDecisionMeters() {
+		this.contextRunner
+			.withPropertyValues("spring.ai.model.decision=openrouter",
+					"spring.ai.openrouter.decision.model=" + DECISION_MODEL)
+			.run(context -> {
+				assertThat(context).hasNotFailed();
+				assertThat(context).hasSingleBean(DecisionModelMeterObservationHandler.class);
+				OpenRouterApi api = context.getBean(OpenRouterApi.class);
+				when(api.decisions(any())).thenReturn(new DecisionsResponse("gen-dec-1", DECISION_MODEL, "TypeSafe",
+						Map.of("urgent", new DecisionsResponse.Answer("noul", 0.9, null, null, null, null)),
+						new Usage(6, 0, null, null, null, 0.0000003, null, null, null)));
+
+				context.getBean(DecisionModel.class)
+					.call("Brakes failed on the motorway.", Map.of("urgent", YesNoQuestion.of("Is this urgent?")));
+
+				MeterRegistry meters = context.getBean(MeterRegistry.class);
+				assertDurationMeter(meters, DECISION_MODEL);
+				assertTokenMeter(meters, DECISION_MODEL, "input", 6.0);
+				assertTokenMeter(meters, DECISION_MODEL, "total", 6.0);
+			});
 	}
 
 	@Test
