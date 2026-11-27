@@ -28,6 +28,7 @@ import org.springframework.core.io.buffer.DefaultDataBufferFactory;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -146,6 +147,73 @@ class OpenRouterApiStreamingContractTests {
 
 		assertThat(capture.request().get().url().getPath()).endsWith("/responses");
 		assertThat(capture.request().get().headers().getAccept()).contains(MediaType.TEXT_EVENT_STREAM);
+	}
+
+	@Tag("http")
+	@Tag("http.client")
+	@Test
+	void streamsSendCustomHeadersNextToTheClientHeaders() {
+		Capture chat = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE, DONE_ONLY_SSE);
+		chat.api()
+			.chatCompletionStream(chatRequest(), Map.of("X-Request-Tag", "run-7"))
+			.blockLast(Duration.ofSeconds(5));
+		Capture responses = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE, RESPONSES_COMPLETED_SSE);
+		responses.api()
+			.responsesStream(responsesRequest(), Map.of("X-Request-Tag", "run-8"))
+			.blockLast(Duration.ofSeconds(5));
+
+		HttpHeaders chatHeaders = chat.request().get().headers();
+		assertThat(chatHeaders.getFirst("X-Request-Tag")).isEqualTo("run-7");
+		assertThat(chatHeaders.getFirst(HttpHeaders.AUTHORIZATION)).isEqualTo("Bearer test-key");
+		assertThat(chatHeaders.getAccept()).containsExactly(MediaType.TEXT_EVENT_STREAM);
+		assertThat(responses.request().get().headers().getFirst("X-Request-Tag")).isEqualTo("run-8");
+	}
+
+	@Tag("http")
+	@Tag("http.client")
+	@Test
+	void aStreamRejectsAHeaderThatTheClientSetsWithoutSendingIt() {
+		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE, DONE_ONLY_SSE);
+
+		assertThatThrownBy(
+				() -> capture.api().chatCompletionStream(chatRequest(), Map.of("authorization", "Bearer other-key")))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageNotContaining("other-key");
+		assertThat(capture.request().get()).isNull();
+	}
+
+	@Tag("http")
+	@Tag("http.client")
+	@Test
+	void aStreamRejectsAMalformedHeaderValueWithoutSendingOrEchoingIt() {
+		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE, DONE_ONLY_SSE);
+		Map<String, String> headers = Map.of("X-Gateway-Token", OpenRouterApiContractTests.GATEWAY_SECRET + "\n");
+
+		assertThatThrownBy(() -> capture.api().chatCompletionStream(chatRequest(), headers))
+			.isInstanceOf(IllegalArgumentException.class)
+			.satisfies(thrown -> assertThat(OpenRouterApiContractTests.stackTrace(thrown))
+				.doesNotContain(OpenRouterApiContractTests.GATEWAY_SECRET));
+		assertThatThrownBy(() -> capture.api().responsesStream(responsesRequest(), headers))
+			.isInstanceOf(IllegalArgumentException.class)
+			.satisfies(thrown -> assertThat(OpenRouterApiContractTests.stackTrace(thrown))
+				.doesNotContain(OpenRouterApiContractTests.GATEWAY_SECRET));
+		assertThat(capture.request().get()).isNull();
+	}
+
+	@Tag("http")
+	@Tag("http.errors")
+	@Test
+	void aStreamErrorRedactsTheHeaderValuesThatAGatewayEchoes() {
+		Capture capture = capturingApi(HttpStatus.UNAUTHORIZED, MediaType.APPLICATION_JSON_VALUE,
+				OpenRouterApiContractTests.GATEWAY_ECHO_BODY);
+		Map<String, String> headers = Map.of("X-Gateway-Token", OpenRouterApiContractTests.GATEWAY_SECRET);
+
+		StepVerifier.create(capture.api().chatCompletionStream(chatRequest(), headers))
+			.expectErrorSatisfies(OpenRouterApiContractTests::assertGatewaySecretRedacted)
+			.verify();
+		StepVerifier.create(capture.api().responsesStream(responsesRequest(), headers))
+			.expectErrorSatisfies(OpenRouterApiContractTests::assertGatewaySecretRedacted)
+			.verify();
 	}
 
 	@Tag("http")

@@ -2,6 +2,7 @@ package de.subhransu.openrouter.springai.support;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -34,6 +35,17 @@ public final class OptionChecks {
 	private static final List<String> VERBOSITY = List.of("low", "medium", "high", "xhigh", "max");
 
 	private static final int MAX_TOP_LOGPROBS = 20;
+
+	// Headers that OpenRouterApi sets itself, lower-cased. A request value would replace
+	// the configured API key, which the diagnostic sanitizer does not know, or the
+	// attribution and media types that the client owns.
+	private static final Set<String> CLIENT_HEADERS = Set.of("authorization", "content-type", "accept", "http-referer",
+			"x-openrouter-title", "x-title", "x-openrouter-categories");
+
+	// RFC 9110 field-name (token) and field-value without obs-text. A value with CR, LF
+	// or
+	// another control character must not reach a connector, whose errors would echo it.
+	private static final Pattern HEADER_NAME = Pattern.compile("[!#$%&'*+.^_`|~0-9A-Za-z-]+");
 
 	private OptionChecks() {
 	}
@@ -145,6 +157,50 @@ public final class OptionChecks {
 					+ " is not a valid audio format: use 1 to 16 letters, digits or +._-, starting with a letter or digit");
 		}
 		return format;
+	}
+
+	/**
+	 * Checks per-request HTTP headers: names must be HTTP tokens, values must be visible
+	 * ASCII with inner spaces or tabs, and no name may be one that the OpenRouter client
+	 * sets itself. The message names a valid header name but never echoes a value, which
+	 * can be a credential.
+	 * @param headers the headers to check
+	 * @return the same headers
+	 */
+	@Contract("!null -> !null")
+	public static @Nullable Map<String, String> customHeaders(@Nullable Map<String, String> headers) {
+		if (headers == null) {
+			return null;
+		}
+		headers.forEach((name, value) -> {
+			if (name == null || !HEADER_NAME.matcher(name).matches()) {
+				throw new IllegalArgumentException("customHeaders must contain only header names that are HTTP tokens");
+			}
+			if (value == null || !isHeaderValue(value)) {
+				throw new IllegalArgumentException("customHeaders " + name
+						+ " must have a value of visible ASCII characters, with spaces or tabs only between them");
+			}
+			if (CLIENT_HEADERS.contains(name.toLowerCase(Locale.ROOT))) {
+				throw new IllegalArgumentException("customHeaders must not set " + name
+						+ ", which the OpenRouter client sets itself; configure it on OpenRouterApi instead");
+			}
+		});
+		return headers;
+	}
+
+	// Visible ASCII, with spaces or tabs only between visible characters. A loop instead
+	// of a regular expression, whose backtracking would be open to ReDoS.
+	private static boolean isHeaderValue(String value) {
+		for (int index = 0; index < value.length(); index++) {
+			char character = value.charAt(index);
+			boolean visible = character > ' ' && character <= '~';
+			boolean blank = character == ' ' || character == '\t';
+			boolean atEdge = index == 0 || index == value.length() - 1;
+			if (!visible && (!blank || atEdge)) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**

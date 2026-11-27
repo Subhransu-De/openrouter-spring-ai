@@ -1,0 +1,20 @@
+{
+  "name": "decisions-data-policy",
+  "priority": 20,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/alpha/decisions",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.model == 'synthetic/retained-decisions')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "errors/404-decision-data-policy.json"
+  }
+}

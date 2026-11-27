@@ -37,11 +37,16 @@ final class OpenRouterMock {
 		SERVER.resetScenarios();
 	}
 
-	/** Request bodies sent to one endpoint, oldest first. */
+	/** Request bodies sent to one endpoint of the versioned API, oldest first. */
 	static List<JsonNode> requests(String path) {
+		return requestsAt("/api/v1" + path);
+	}
+
+	/** Request bodies sent to one URL path, oldest first. */
+	static List<JsonNode> requestsAt(String url) {
 		return SERVER.getAllServeEvents()
 			.stream()
-			.filter(event -> event.getRequest().getUrl().equals("/api/v1" + path))
+			.filter(event -> event.getRequest().getUrl().equals(url))
 			.sorted(Comparator.comparing(event -> event.getRequest().getLoggedDate()))
 			.map(event -> JSON.readTree(event.getRequest().getBodyAsString()))
 			.toList();

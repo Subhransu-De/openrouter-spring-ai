@@ -16,6 +16,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoField;
+import java.util.Collection;
 import java.util.Locale;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
@@ -42,9 +43,27 @@ public final class OpenRouterHttpExceptionFactory {
 	}
 
 	OpenRouterHttpExceptionFactory(ObjectMapper objectMapper, @Nullable String apiKey, Clock clock) {
+		this(objectMapper, OpenRouterDiagnosticSanitizer.forApiKey(apiKey), clock);
+	}
+
+	private OpenRouterHttpExceptionFactory(ObjectMapper objectMapper, OpenRouterDiagnosticSanitizer sanitizer,
+			Clock clock) {
 		this.objectMapper = objectMapper;
-		this.sanitizer = OpenRouterDiagnosticSanitizer.forApiKey(apiKey);
+		this.sanitizer = sanitizer;
 		this.clock = clock;
+	}
+
+	/**
+	 * Return a factory for one request that also redacts the given values, such as its
+	 * custom header values, from the retained response body and error details.
+	 * Classification still reads the original body.
+	 * @param values values to redact; blank values are ignored
+	 * @return this factory when there is nothing more to redact, otherwise a new one
+	 */
+	public OpenRouterHttpExceptionFactory redacting(Collection<String> values) {
+		OpenRouterDiagnosticSanitizer requestSanitizer = this.sanitizer.redacting(values);
+		return requestSanitizer == this.sanitizer ? this
+				: new OpenRouterHttpExceptionFactory(this.objectMapper, requestSanitizer, this.clock);
 	}
 
 	public RuntimeException create(String endpoint, HttpStatusCode statusCode, HttpHeaders headers,

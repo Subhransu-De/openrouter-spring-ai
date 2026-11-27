@@ -4,14 +4,16 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.ai.chat.metadata.DefaultUsage;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.decision.DecisionResponse;
 import org.springframework.ai.embedding.EmbeddingResponse;
 import org.springframework.ai.image.ImageResponse;
 import de.subhransu.openrouter.springai.chat.mapper.UsageMapper;
 
 /**
  * Token counts, cost and cache details that OpenRouter reports for a call. Read it with
- * {@link #from(ChatResponse)}, {@link #from(EmbeddingResponse)} or
- * {@link #from(ImageResponse)}; they never return {@code null}.
+ * {@link #from(ChatResponse)}, {@link #from(EmbeddingResponse)},
+ * {@link #from(ImageResponse)} or {@link #from(DecisionResponse)}; they never return
+ * {@code null}.
  *
  * @author Subhransu De
  */
@@ -69,6 +71,16 @@ public class OpenRouterUsage extends DefaultUsage {
 	public static OpenRouterUsage from(ImageResponse response) {
 		return UsageMapper
 			.from(response.getMetadata().get(OpenRouterMetadata.IMAGE_USAGE) instanceof Usage usage ? usage : null);
+	}
+
+	/**
+	 * Read the usage of a decision response.
+	 * @param response the decision response
+	 * @return the usage; when the provider sent none, the token counts are {@code 0} and
+	 * the other values are {@code null}
+	 */
+	public static OpenRouterUsage from(DecisionResponse response) {
+		return UsageMapper.from(response.getMetadata().getUsage());
 	}
 
 	/**

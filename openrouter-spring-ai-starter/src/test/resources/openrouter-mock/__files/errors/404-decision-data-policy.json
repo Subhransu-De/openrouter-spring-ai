@@ -1,0 +1,6 @@
+{
+  "error": {
+    "message": "No endpoints found matching your guardrail restrictions and data policy.",
+    "code": 404
+  }
+}
