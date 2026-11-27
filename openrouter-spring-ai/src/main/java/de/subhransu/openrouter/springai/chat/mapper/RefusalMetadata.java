@@ -63,7 +63,8 @@ final class RefusalMetadata {
 			else if ("response.refusal.done".equals(event.type()) && event.refusal() != null) {
 				this.parts.computeIfAbsent(outputIndex, key -> new TreeMap<>()).put(contentIndex, event.refusal());
 			}
-			else if ("response.output_item.done".equals(event.type()) && item != null) {
+			else if ("response.output_item.done".equals(event.type()) && item != null && event.outputIndex() != null) {
+				// The terminal output places an item done without an output index.
 				snapshot(outputIndex, item);
 			}
 			terminal(event);

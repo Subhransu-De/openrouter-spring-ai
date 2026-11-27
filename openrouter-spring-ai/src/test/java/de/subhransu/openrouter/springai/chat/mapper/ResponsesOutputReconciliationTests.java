@@ -132,7 +132,7 @@ class ResponsesOutputReconciliationTests {
 					{"type":"response.output_text.done","text":"different-private-text"}
 					""");
 			case OUTPUT_ITEM_DONE -> event("""
-					{"type":"response.output_item.done","item":{"type":"message","content":[
+					{"type":"response.output_item.done","output_index":0,"item":{"type":"message","content":[
 					{"type":"output_text","text":"different-private-text"}]}}
 					""");
 			default -> terminal("completed", """
@@ -267,7 +267,7 @@ class ResponsesOutputReconciliationTests {
 	@Tag("multimodal")
 	@Tag("multimodal.image-output")
 	@Test
-	void imageIdentityUsesIdsOrIndexesAndNeverCollapsesDistinctEqualBytes() {
+	void imageIdentityUsesIndexesAndNeverCollapsesDistinctEqualBytes() {
 		var terminal = terminal("completed", """
 				{"type":"image_generation_call","result":"AQID"},
 				{"type":"image_generation_call","result":"AQID"},
@@ -281,13 +281,12 @@ class ResponsesOutputReconciliationTests {
 				{"type":"response.output_item.done","item":{"type":"image_generation_call","id":"i2","result":"AQID"}}
 				""");
 		assertThat(media(Flux.just(indexed, indexed, identified, identified, terminal))).hasSize(3);
-		var ambiguous = event("""
+		// An image done without an output index is placed by the terminal output.
+		var unindexed = event("""
 				{"type":"response.output_item.done","item":{"type":"image_generation_call","result":"AQID"}}
 				""");
-		StepVerifier.create(this.mapper.map(Flux.just(ambiguous)))
-			.expectErrorSatisfies(error -> assertThat(error).isInstanceOf(OpenRouterProtocolException.class)
-				.hasMessageContaining("ID or output index"))
-			.verify();
+		assertThat(media(Flux.just(unindexed))).isEmpty();
+		assertThat(media(Flux.just(unindexed, terminal))).hasSize(3);
 	}
 
 	@Tag("multimodal")

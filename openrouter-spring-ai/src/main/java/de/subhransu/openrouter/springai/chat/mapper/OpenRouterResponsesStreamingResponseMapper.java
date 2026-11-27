@@ -88,7 +88,7 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 		String reasoning = "response.reasoning_text.delta".equals(type) || summary ? event.delta() : null;
 		Map<String, Object> snapshot = reasoning(event, result, reasoning, accumulator);
 		RefusalMetadata.put(snapshot, refusal.update(event));
-		Integer itemIndex = parts != null ? parts.itemIndex(event) : event.outputIndex();
+		Integer itemIndex = event.outputIndex();
 		// Process item images before text reconciliation, as in the wire event order.
 		List<MessagePart> itemMedia = itemMedia(event, itemIndex, outputState);
 		Map<Integer, String> text = text(event, itemIndex, result, outputState);
@@ -214,7 +214,8 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 		if (state == null) {
 			return GeneratedImageMapper.responsesMedia(List.of(item)).stream().<MessagePart>map(MediaPart::of).toList();
 		}
-		return mediaParts(state.image(item, itemIndex), itemIndex);
+		// The terminal output places an image whose event has no output index.
+		return itemIndex != null ? mediaParts(state.image(item, itemIndex), itemIndex) : List.of();
 	}
 
 	// The images of the terminal output replace those of the event.

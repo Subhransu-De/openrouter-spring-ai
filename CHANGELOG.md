@@ -11,12 +11,13 @@ Notable changes in each release. The full notes for each release are on the [Rel
 - A tool-call-only reply no longer has an empty `TextPart`; `getText()` is still `""`.
 - A refusal now reports the finish reason category `FILTERED` instead of `COMPLETED`.
 - In Responses mode, an assistant message whose text or tool calls you edit now replays with those parts rebuilt; 0.3.0 rejected it as a stale output snapshot.
-- A Responses stream that sends no `response.created` event is grouped under a generated id, so its aggregated message has that id instead of the response id.
+- A Responses stream whose first event is not `response.created` is grouped under a generated id, so its aggregated message has that id instead of the response id, even if `response.created` arrives later.
+- A Responses `response.output_item.done` event without `output_index` no longer emits its text, image or refusal; the terminal output places the item. OpenRouter always sends the index.
 
 ### Added
 
 - Ordered message parts in both request modes, for `call` and `stream`: reasoning, text, tool calls and generated media, with the provider's `reasoning_details` or Responses reasoning item as the reasoning part's payload, and Responses server-side items as `UnknownPart`. The request mappers replay reasoning from the parts and skip reasoning that another provider signed. See [Reasoning](docs/chat.md#reasoning).
-- Streamed chunks carry the response id and indexed partial parts, so Spring AI's `MessageAggregator` rebuilds the message that `call` returns. Chat Completions media stays on its chunk and is not aggregated, as in Spring AI's OpenAI model.
+- Streamed chunks carry the response id and indexed partial parts, so Spring AI's `MessageAggregator` rebuilds the message that `call` returns. Chat Completions media stays on its chunk and is not aggregated, as in Spring AI's OpenAI model, so an aggregated message replays without it while the `call` message replays it.
 - `UserMessage` text and media are sent in their part order.
 - `customHeaders` on `OpenRouterChatOptions` and `spring.ai.openrouter.chat.custom-headers` for HTTP headers on chat requests, in both request modes, in calls and streams. Request headers merge into the defaults by name. Headers the client sets itself, such as `Authorization`, and malformed names or values are rejected. HTTP error details redact header values of eight or more characters. `OpenRouterApi` has matching overloads that take headers. See [Custom headers](docs/chat.md#custom-headers).
 - `OpenRouterConnectionDetails`, a Spring Boot `ConnectionDetails` bean that supplies the base URL and API key of the auto-configured `OpenRouterApi`. The default bean reads `spring.ai.openrouter.base-url` and `spring.ai.openrouter.api-key`; an application bean replaces it. See [Connection details](docs/production.md#connection-details).

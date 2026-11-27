@@ -9,6 +9,7 @@ import de.subhransu.openrouter.springai.api.dto.FunctionCall;
 import de.subhransu.openrouter.springai.api.dto.ToolCall;
 import de.subhransu.openrouter.springai.api.errors.OpenRouterInBandErrorExceptionFactory;
 import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
+import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import de.subhransu.openrouter.springai.chat.OpenRouterAudioOptions;
 import java.util.ArrayList;
@@ -315,18 +316,18 @@ public final class OpenRouterStreamingResponseMapper {
 
 	/**
 	 * The parts state of one subscription. A blocking reply has one reasoning part, one
-	 * text part and then the tool calls, so each choice reserves the indexes of its
-	 * reasoning and its text when it first streams anything, and each tool call takes the
-	 * next index when its first fragment or its complete call arrives. All reasoning
-	 * deltas of a choice then aggregate into one part, before its text, before its calls,
-	 * whatever order the chunks interleave them in. The {@code reasoning_details} of a
-	 * choice are attached once, on its finish chunk, so that the aggregated part holds
-	 * them all, as a blocking call does. Indexes are unique across choices, because the
-	 * aggregator groups parts by response id alone.
+	 * text part and then the tool calls, so each choice owns a block of indexes when it
+	 * first streams anything: its reasoning, its text, and then one index per tool call,
+	 * offset by the key the tool-call aggregator orders the call by. All reasoning deltas
+	 * of a choice then aggregate into one part, before its text, before its calls in the
+	 * order of the merged reply, whatever order the chunks interleave them in. The
+	 * {@code reasoning_details} of a choice are attached once, on its finish chunk, so
+	 * that the aggregated part holds them all, as a blocking call does. Indexes are
+	 * unique across choices, because the aggregator groups parts by response id alone.
 	 */
 	private final class Parts {
 
-		private int nextIndex;
+		private int nextChoice;
 
 		private final Map<Integer, ChoiceParts> choices = new LinkedHashMap<>();
 
@@ -342,16 +343,22 @@ public final class OpenRouterStreamingResponseMapper {
 				parts.add(StreamingParts.partial(
 						new ReasoningPart(StringUtils.hasLength(reasoning) ? reasoning : null, null,
 								details.isEmpty() ? null : MessageParts.chatPayload(details), Map.of()),
-						indexes.reasoning));
+						indexes.part(0)));
 			}
 			String content = delta != null ? delta.content() : null;
 			if (StringUtils.hasLength(content)) {
-				parts.add(StreamingParts.partial(TextPart.of(content), indexes.text));
+				parts.add(StreamingParts.partial(TextPart.of(content), indexes.part(1)));
 			}
-			for (AssistantMessage.ToolCall toolCall : CompletedToolCalls
-				.map(delta != null ? delta.toolCalls() : null)) {
-				Integer index = indexes.callIndexes.remove(toolCall.id());
-				parts.add(StreamingParts.complete(ToolCallPart.of(toolCall), index != null ? index : this.nextIndex++));
+			List<ToolCall> wire = ResponseValues.CHAT_COMPLETIONS.items(delta != null ? delta.toolCalls() : null,
+					"tool call");
+			List<AssistantMessage.ToolCall> toolCalls = CompletedToolCalls.map(wire);
+			// The merged calls are in key order; a call without a wire index follows the
+			// previous one, as in the aggregator.
+			int key = -1;
+			for (int position = 0; position < toolCalls.size(); position++) {
+				Integer wireIndex = wire.get(position).index();
+				key = wireIndex != null && wireIndex > key ? wireIndex : key + 1;
+				parts.add(StreamingParts.complete(ToolCallPart.of(toolCalls.get(position)), indexes.call(key)));
 			}
 			if (finished) {
 				this.choices.remove(choice);
@@ -364,8 +371,7 @@ public final class OpenRouterStreamingResponseMapper {
 		private ChoiceParts choice(int choice) {
 			ChoiceParts parts = this.choices.get(choice);
 			if (parts == null) {
-				parts = new ChoiceParts(this.nextIndex, this.nextIndex + 1);
-				this.nextIndex += 2;
+				parts = new ChoiceParts((long) this.nextChoice++ * ChoiceParts.SIZE);
 				this.choices.put(choice, parts);
 			}
 			return parts;
@@ -373,9 +379,10 @@ public final class OpenRouterStreamingResponseMapper {
 
 		/**
 		 * A response that holds the tool-call fragments of a buffered chunk as partial
-		 * parts. A fragment is shown once the id and name of its call are known; one
-		 * without a wire index cannot be correlated and is left to the complete call.
-		 * Returns {@code null} when no fragment can be shown yet.
+		 * parts, at the index of their wire index, which the complete call keeps. A
+		 * fragment is shown once the id and name of its call are known; one without a
+		 * wire index cannot be correlated and is left to the complete call. Returns
+		 * {@code null} when no fragment can be shown yet.
 		 */
 		@Nullable ChatResponse toolCallDeltas(ChatCompletionChunk chunk) {
 			List<Generation> generations = new ArrayList<>();
@@ -387,12 +394,8 @@ public final class OpenRouterStreamingResponseMapper {
 						"tool call fragment")) {
 					AssistantMessage.ToolCall call = indexes.delta(fragment);
 					if (call != null) {
-						Integer index = indexes.callIndexes.get(call.id());
-						if (index == null) {
-							index = this.nextIndex++;
-							indexes.callIndexes.put(call.id(), index);
-						}
-						parts.add(StreamingParts.partial(ToolCallPart.of(call), index));
+						parts.add(StreamingParts.partial(ToolCallPart.of(call),
+								indexes.call(Objects.requireNonNull(fragment.index()))));
 					}
 				}
 				if (!parts.isEmpty()) {
@@ -411,23 +414,37 @@ public final class OpenRouterStreamingResponseMapper {
 	}
 
 	/**
-	 * The stream indexes of one choice: its reasoning, its text, and each tool call by
-	 * id, until its complete call is stamped. The id and name of a call arrive on its
-	 * first fragment only, so they are kept by wire index.
+	 * The stream indexes of one choice, a block of {@link #SIZE} from its base: its
+	 * reasoning, its text, and each tool call by key. The id and name of a call arrive on
+	 * its first fragment only, so they are kept by wire index.
 	 */
 	private static final class ChoiceParts {
 
-		private final int reasoning;
+		private static final int SIZE = 1 << 16;
 
-		private final int text;
-
-		private final Map<String, Integer> callIndexes = new LinkedHashMap<>();
+		private final long base;
 
 		private final Map<Integer, AssistantMessage.ToolCall> callsByWireIndex = new LinkedHashMap<>();
 
-		private ChoiceParts(int reasoning, int text) {
-			this.reasoning = reasoning;
-			this.text = text;
+		private ChoiceParts(long base) {
+			this.base = base;
+		}
+
+		private int call(int key) {
+			if (key < 0 || key >= SIZE - 2) {
+				throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.CONTRACT, "/chat/completions",
+						"Tool call index out of range");
+			}
+			return part(2 + key);
+		}
+
+		private int part(int offset) {
+			long index = this.base + offset;
+			if (index > Integer.MAX_VALUE) {
+				throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.CONTRACT, "/chat/completions",
+						"Too many choices in one stream");
+			}
+			return (int) index;
 		}
 
 		// A fragment without a wire index cannot be correlated and is left to the

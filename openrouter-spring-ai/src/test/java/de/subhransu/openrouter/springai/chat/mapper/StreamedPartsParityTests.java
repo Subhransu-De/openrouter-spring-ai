@@ -47,6 +47,8 @@ class StreamedPartsParityTests {
 
 	private static final String GENERATION = "\"id\":\"gen-1\",";
 
+	private static final String OSLO_ARGUMENTS = "{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"Oslo\\\"}\"}}]}";
+
 	private final ObjectMapper mapper = new ObjectMapper();
 
 	@Test
@@ -54,9 +56,7 @@ class StreamedPartsParityTests {
 		String id = GENERATION;
 		List<ChatResponse> responses = chatStream(chunk(id,
 				"{\"role\":\"assistant\",\"reasoning\":\"Think.\",\"content\":\"Checking.\",\"tool_calls\":[{\"index\":0,\"id\":\"call1\",\"type\":\"function\",\"function\":{\"name\":\"lookup\",\"arguments\":\"{\\\"city\\\":\"}}]}",
-				null),
-				chunk(id, "{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"Oslo\\\"}\"}}]}", null),
-				chunk(id, "{}", "tool_calls"));
+				null), chunk(id, OSLO_ARGUMENTS, null), chunk(id, "{}", "tool_calls"));
 
 		AssistantMessage blocking = chatCall(
 				"""
@@ -78,7 +78,7 @@ class StreamedPartsParityTests {
 				chunk(id,
 						"{\"tool_calls\":[{\"index\":1,\"id\":\"call2\",\"type\":\"function\",\"function\":{\"name\":\"lookup\",\"arguments\":\"{\\\"city\\\":\"}}]}",
 						null),
-				chunk(id, "{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"Oslo\\\"}\"}}]}", null),
+				chunk(id, OSLO_ARGUMENTS, null),
 				chunk(id, "{\"tool_calls\":[{\"index\":1,\"function\":{\"arguments\":\"\\\"Rome\\\"}\"}}]}", null),
 				chunk(id, "{}", "tool_calls"));
 
@@ -94,13 +94,48 @@ class StreamedPartsParityTests {
 	}
 
 	@Test
+	void chatCompletionsCallsArrivingOutOfOrderKeepTheirWireOrder() {
+		String id = GENERATION;
+		List<ChatResponse> responses = chatStream(chunk(id, "{\"role\":\"assistant\",\"content\":\"Both.\"}", null),
+				chunk(id,
+						"{\"tool_calls\":[{\"index\":1,\"id\":\"call2\",\"type\":\"function\",\"function\":{\"name\":\"lookup\",\"arguments\":\"{\\\"city\\\":\"}}]}",
+						null),
+				chunk(id, "{\"reasoning\":\"Think.\"}", null),
+				chunk(id,
+						"{\"tool_calls\":[{\"index\":0,\"id\":\"call1\",\"type\":\"function\",\"function\":{\"name\":\"lookup\",\"arguments\":\"{\\\"city\\\":\"}}]}",
+						null),
+				chunk(id, "{\"content\":\" Done.\"}", null),
+				chunk(id, "{\"tool_calls\":[{\"index\":1,\"function\":{\"arguments\":\"\\\"Rome\\\"}\"}}]}", null),
+				chunk(id, OSLO_ARGUMENTS, null), chunk(id, "{}", "tool_calls"));
+
+		AssistantMessage blocking = chatCall("""
+				{"role":"assistant","reasoning":"Think.","content":"Both. Done.","tool_calls":[
+				 {"id":"call1","type":"function","function":{"name":"lookup","arguments":"{\\"city\\":\\"Oslo\\"}"}},
+				 {"id":"call2","type":"function","function":{"name":"lookup","arguments":"{\\"city\\":\\"Rome\\"}"}}]}
+				""");
+		AssistantMessage aggregated = aggregate(responses);
+		assertThat(aggregated.getParts()).isEqualTo(blocking.getParts());
+		assertThat(chatRequest(aggregated)).isEqualTo(chatRequest(blocking));
+		List<MessagePart> complete = responses.stream()
+			.flatMap(response -> response.getResult().getOutput().getParts().stream())
+			.filter(part -> part instanceof ToolCallPart && !StreamingParts.isPartial(part))
+			.toList();
+		assertThat(complete).hasSize(2)
+			.allSatisfy(call -> assertThat(StreamingParts.partIndex(call))
+				.isEqualTo(StreamingParts.partIndex(toolCallDeltas(responses).stream()
+					.filter(delta -> ((ToolCallPart) delta).toolCall()
+						.id()
+						.equals(((ToolCallPart) call).toolCall().id()))
+					.findFirst()
+					.orElseThrow())));
+	}
+
+	@Test
 	void chatCompletionsPublishesTheArgumentFragmentOfTheFinishChunk() {
 		String id = GENERATION;
 		List<ChatResponse> responses = chatStream(chunk(id,
 				"{\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"id\":\"call1\",\"type\":\"function\",\"function\":{\"name\":\"lookup\",\"arguments\":\"{\\\"city\\\":\"}}]}",
-				null),
-				chunk(id, "{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"Oslo\\\"}\"}}]}",
-						"tool_calls"));
+				null), chunk(id, OSLO_ARGUMENTS, "tool_calls"));
 
 		assertThat(toolCallDeltas(responses)).extracting(part -> ((ToolCallPart) part).toolCall().arguments())
 			.containsExactly("{\"city\":", "\"Oslo\"}");
@@ -158,7 +193,77 @@ class StreamedPartsParityTests {
 	}
 
 	@Test
-	void responsesUnindexedItemIsCorrelatedOrDeferredToTheTerminalSnapshot() {
+	void responsesTerminalSnapshotThatReplacesReasoningReplacesTheAggregatedPart() {
+		String output = """
+				[{"type":"reasoning","id":"rs1","encrypted_content":"synthetic-encrypted","summary":[{"type":"summary_text","text":"good"}]},
+				 {"type":"reasoning","id":"rs2","encrypted_content":"synthetic-encrypted","summary":[]}]
+				""";
+		List<ChatResponse> responses = responsesStream(event(CREATED), itemDone(0, this.mapper.readTree(
+				"{\"type\":\"reasoning\",\"id\":\"rs1\",\"summary\":[{\"type\":\"summary_text\",\"text\":\"draft\"}]}")),
+				itemDone(1, this.mapper.readTree(
+						"{\"type\":\"reasoning\",\"id\":\"rs2\",\"summary\":[{\"type\":\"summary_text\",\"text\":\"stale\"}]}")),
+				completed("resp_1", output));
+
+		AssistantMessage aggregated = aggregate(responses);
+		assertThat(aggregated.getParts()).isEqualTo(responsesCall("resp_1", output).getParts());
+		assertReplays(aggregated, output);
+	}
+
+	@Test
+	void responsesUnindexedImageIsPlacedByTheTerminalSnapshot() {
+		String output = """
+				[{"type":"reasoning","id":"rs1","encrypted_content":"synthetic-encrypted","summary":[]},
+				 {"type":"image_generation_call","id":"ig1","status":"completed","result":"AQID","output_format":"png"}]
+				""";
+		JsonNode items = this.mapper.readTree(output);
+		List<ChatResponse> responses = responsesStream(event(CREATED), itemDone(0, items.get(0)),
+				unindexedDone(items.get(1)), completed("resp_1", output));
+
+		AssistantMessage aggregated = aggregate(responses);
+		assertThat(aggregated.getParts()).isEqualTo(responsesCall("resp_1", output).getParts());
+		assertThatIllegalArgumentException().isThrownBy(() -> responsesRequest(aggregated))
+			.withMessageContaining("assistant media history");
+	}
+
+	@Test
+	void responsesUnindexedMessageAfterReasoningWaitsForTheTerminalSnapshot() {
+		String output = """
+				[{"type":"reasoning","id":"rs1","encrypted_content":"synthetic-encrypted","summary":[{"type":"summary_text","text":"Plan."}]},
+				 {"type":"message","id":"msg1","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Checking.","annotations":[]}]}]
+				""";
+		JsonNode items = this.mapper.readTree(output);
+		List<ChatResponse> responses = responsesStream(event(CREATED), itemDone(0, items.get(0)),
+				unindexedDone(items.get(1)), completed("resp_1", output));
+
+		assertThat(streamedText(responses)).isEqualTo("Checking.");
+		AssistantMessage aggregated = aggregate(responses);
+		assertThat(aggregated.getParts()).isEqualTo(responsesCall("resp_1", output).getParts());
+		assertReplays(aggregated, output);
+	}
+
+	@Test
+	void responsesUnindexedRefusalKeepsTheExplanationOfEachItem() {
+		String sparse = """
+				[{"type":"message","id":"msg1","role":"assistant","status":"completed","content":[{"type":"refusal"}]},
+				 {"type":"message","id":"msg2","role":"assistant","status":"completed","content":[{"type":"refusal"}]}]
+				""";
+		List<ChatResponse> responses = responsesStream(event(CREATED), event(
+				"{\"type\":\"response.refusal.delta\",\"output_index\":0,\"content_index\":0,\"delta\":\"Not allowed.\"}"),
+				itemDone(0, this.mapper.readTree(
+						"{\"type\":\"message\",\"id\":\"msg1\",\"role\":\"assistant\",\"status\":\"completed\",\"content\":[{\"type\":\"refusal\",\"refusal\":\"Not allowed.\"}]}")),
+				event("{\"type\":\"response.output_item.added\",\"output_index\":1,\"item\":{\"type\":\"message\",\"id\":\"msg2\",\"role\":\"assistant\",\"content\":[]}}"),
+				event("{\"type\":\"response.refusal.delta\",\"output_index\":1,\"content_index\":0,\"delta\":\"Still no.\"}"),
+				unindexedDone(this.mapper.readTree(
+						"{\"type\":\"message\",\"id\":\"msg2\",\"role\":\"assistant\",\"status\":\"completed\",\"content\":[{\"type\":\"refusal\",\"refusal\":\"Still no.\"}]}")),
+				completed("resp_1", sparse));
+
+		JsonNode input = responsesRequest(aggregate(responses)).get("input");
+		assertThat(input.at("/0/content/0/refusal").asString()).isEqualTo("Not allowed.");
+		assertThat(input.at("/1/content/0/refusal").asString()).isEqualTo("Still no.");
+	}
+
+	@Test
+	void responsesUnindexedItemIsDeferredToTheTerminalSnapshot() {
 		String output = """
 				[{"type":"reasoning","id":"rs1","encrypted_content":"synthetic-encrypted","summary":[{"type":"summary_text","text":"Plan."}]},
 				 {"type":"web_search_call","id":"ws1","status":"completed","action":{"query":"oslo"}},
@@ -167,12 +272,10 @@ class StreamedPartsParityTests {
 		JsonNode items = this.mapper.readTree(output);
 		List<ChatResponse> responses = responsesStream(event(CREATED),
 				event("{\"type\":\"response.reasoning_summary_text.delta\",\"output_index\":0,\"delta\":\"Plan.\"}"),
-				itemDone(0, items.get(0)),
-				event("{\"type\":\"response.output_item.done\",\"item\":" + items.get(1) + "}"),
+				itemDone(0, items.get(0)), unindexedDone(items.get(1)),
 				event("{\"type\":\"response.output_item.added\",\"output_index\":2,\"item\":{\"type\":\"message\",\"id\":\"msg1\",\"role\":\"assistant\",\"content\":[]}}"),
 				event("{\"type\":\"response.output_text.delta\",\"output_index\":2,\"content_index\":0,\"delta\":\"Checking.\"}"),
-				event("{\"type\":\"response.output_item.done\",\"item\":" + items.get(2) + "}"),
-				completed("resp_1", output));
+				unindexedDone(items.get(2)), completed("resp_1", output));
 
 		AssistantMessage aggregated = aggregate(responses);
 		assertThat(aggregated.getParts()).isEqualTo(responsesCall("resp_1", output).getParts());
@@ -338,6 +441,10 @@ class StreamedPartsParityTests {
 
 	private ResponsesStreamEvent itemDone(int index, JsonNode item) {
 		return event("{\"type\":\"response.output_item.done\",\"output_index\":" + index + ",\"item\":" + item + "}");
+	}
+
+	private ResponsesStreamEvent unindexedDone(JsonNode item) {
+		return event("{\"type\":\"response.output_item.done\",\"item\":" + item + "}");
 	}
 
 	private ResponsesStreamEvent event(String json) {
