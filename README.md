@@ -39,6 +39,7 @@ A native [Spring AI](https://spring.io/projects/spring-ai) integration for [Open
 - Image, PDF, audio and video inputs and streamed chat audio output. See [Chat](docs/chat.md#inputs).
 - Image generation behind Spring AI's `ImageModel`. See [Images](docs/images.md).
 - Text-to-speech behind Spring AI's `TextToSpeechModel`, with streamed audio, and transcription behind `TranscriptionModel`. See [Text-to-speech](docs/audio.md#text-to-speech) and [Transcription](docs/audio.md#transcription).
+- Typed yes or no, choice and score decisions behind Spring AI's `DecisionModel`, through OpenRouter's alpha Decisions API (experimental). See [Decisions](docs/decisions.md).
 - Spring Boot auto-configuration under `spring.ai.openrouter.*`.
 
 Not supported yet: the models catalogue endpoint, OpenRouter server-side tools such as the web search plugin, voice cloning and multi-speaker speech, and multipart transcription uploads.
@@ -297,6 +298,7 @@ String text = transcriptionModel.transcribe(new FileSystemResource("inspection-n
 | [Images](docs/images.md)                                       | `ImageModel`                               | Generation, streaming, image to image                                                                       |
 | [Embeddings](docs/embeddings.md)                               | `EmbeddingModel`, `DocumentEmbeddingModel` | Text, batches, text and image documents                                                                     |
 | [Speech and transcription](docs/audio.md)                      | `TextToSpeechModel`, `TranscriptionModel`  | Speech, streamed speech, transcription                                                                      |
+| [Decisions](docs/decisions.md)                                 | `DecisionModel`                            | Yes or no, choice and score questions, refusals, fields, conversations and images                           |
 | [Production](docs/production.md)                               |                                            | Retries, timeouts, limits, cost                                                                             |
 | [Supported API](docs/api.md)                                   |                                            | Types that applications can depend on                                                                       |
 | [Switching from another Spring AI provider](docs/switching.md) |                                            | What to change and what differs                                                                             |

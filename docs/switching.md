@@ -90,4 +90,5 @@ try {
 - **Finish reasons:** the values are `STOP`, `LENGTH`, `TOOL_CALLS` and `CONTENT_FILTER`. A value that the library does not know passes through unchanged.
 - **Rate limit:** `getRateLimit()` is empty, because OpenRouter sends no rate-limit headers on a successful response.
 - **Stored conversations:** a history that was stored with another provider's metadata continues without its reasoning state. This library replays only the reasoning that OpenRouter returned.
-- **Moderation and decisions:** `ModerationModel` is not available because OpenRouter has no moderation endpoint, and `DecisionModel` (added in Spring AI 2.1) is not implemented yet.
+- **Moderation:** `ModerationModel` is not available because OpenRouter has no moderation endpoint.
+- **Decisions:** `DecisionModel` is opt-in with `spring.ai.model.decision=openrouter` and experimental, because OpenRouter's Decisions API is in alpha. OpenRouter has no `box` counterpart in Spring AI's question types, and images go only in a content input. See [Decisions](decisions.md).

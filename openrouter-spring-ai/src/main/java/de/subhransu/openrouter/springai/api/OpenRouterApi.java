@@ -3,6 +3,8 @@ package de.subhransu.openrouter.springai.api;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionChunk;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionRequest;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionResponse;
+import de.subhransu.openrouter.springai.api.dto.DecisionsRequest;
+import de.subhransu.openrouter.springai.api.dto.DecisionsResponse;
 import de.subhransu.openrouter.springai.api.dto.EmbeddingsRequest;
 import de.subhransu.openrouter.springai.api.dto.EmbeddingsResponse;
 import de.subhransu.openrouter.springai.api.dto.ImagesRequest;
@@ -26,6 +28,7 @@ import java.io.SequenceInputStream;
 import java.util.Collections;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -70,6 +73,8 @@ public class OpenRouterApi {
 
 	private static final String SPEECH = "/audio/speech";
 
+	private static final String DECISIONS = "/alpha/decisions";
+
 	// Errors arrive as JSON, so the speech request accepts both.
 	private static final List<MediaType> SSE = List.of(MediaType.TEXT_EVENT_STREAM);
 
@@ -103,11 +108,17 @@ public class OpenRouterApi {
 
 	private final SpeechExchange speechExchange = new SpeechExchange();
 
+	private final String decisionsUrl;
+
 	private OpenRouterApi(Builder builder) {
 		Assert.hasText(builder.apiKey, "OpenRouter API key must not be empty");
 		Assert.notNull(builder.objectMapper, "ObjectMapper must not be null");
 
 		String baseUrl = StringUtils.hasText(builder.baseUrl) ? builder.baseUrl : DEFAULT_BASE_URL;
+		// The alpha Decisions API sits beside the versioned API, not under it.
+		this.decisionsUrl = URI.create(StringUtils.trimTrailingCharacter(baseUrl, '/') + "/")
+			.resolve(".." + DECISIONS)
+			.toString();
 		this.objectMapper = builder.objectMapper;
 		this.customObjectMapper = builder.customObjectMapper;
 		this.eventBinder = new StreamEventBinder(this.objectMapper, !this.customObjectMapper);
@@ -199,6 +210,18 @@ public class OpenRouterApi {
 	}
 
 	/**
+	 * Ask a Decisions model typed questions about a state. OpenRouter's Decisions API is
+	 * in alpha and sits beside the versioned API: the request goes to
+	 * {@code ../alpha/decisions} relative to the base URL, which is
+	 * {@code https://openrouter.ai/api/alpha/decisions} for the default base URL.
+	 * @param request the decisions request
+	 * @return one answer per question
+	 */
+	public DecisionsResponse decisions(DecisionsRequest request) {
+		return blockingPost(this.decisionsUrl, request, DecisionsResponse.class);
+	}
+
+	/**
 	 * Synthesize speech and return the complete audio. The body is buffered up to the
 	 * maximum response body size; use {@link #speechStream(SpeechRequest)} for long
 	 * audio.
@@ -221,6 +244,7 @@ public class OpenRouterApi {
 		return this.speechExchange.stream(request);
 	}
 
+	// The uri is a path under the base URL, or an absolute URL such as the decisions URL.
 	private <T> T blockingPost(String uri, Object request, Class<T> responseType) {
 		var outgoing = this.restClient.post().uri(uri);
 		if (this.customObjectMapper) {
