@@ -21,6 +21,8 @@ import de.subhransu.openrouter.springai.errors.OpenRouterHttpFailure;
 import de.subhransu.openrouter.springai.errors.OpenRouterErrorCategory;
 import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTransientApiException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Tag;
@@ -47,6 +49,11 @@ class OpenRouterApiContractTests {
 	private static final String CHAT_COMPLETIONS = BASE_URL + "/chat/completions";
 
 	private static final String RESPONSES = BASE_URL + "/responses";
+
+	static final String GATEWAY_SECRET = "synthetic-gateway-secret";
+
+	static final String GATEWAY_ECHO_BODY = "{\"error\":{\"code\":401,\"message\":\"gateway rejected token "
+			+ GATEWAY_SECRET + "\",\"metadata\":{\"echo\":\"" + GATEWAY_SECRET + "\"}}}";
 
 	private static final String TITLE_HEADER = "X-OpenRouter-Title";
 
@@ -168,7 +175,7 @@ class OpenRouterApiContractTests {
 	@Tag("http")
 	@Tag("http.client")
 	@ParameterizedTest
-	@ValueSource(strings = { "Authorization", "Content-Type", "Accept", "HTTP-Referer", "X-OpenRouter-Title",
+	@ValueSource(strings = { "Authorization", "Content-Type", "Accept", "HTTP-Referer", "X-OpenRouter-Title", "X-Title",
 			"X-OpenRouter-Categories" })
 	void aCallRejectsAHeaderThatTheClientSetsWithoutSendingIt(String name) {
 		Fixture fixture = fixture(baseBuilder());
@@ -180,6 +187,61 @@ class OpenRouterApiContractTests {
 		assertThatThrownBy(() -> fixture.api().responses(minimalResponsesRequest(), Map.of(name, "other-value")))
 			.isInstanceOf(IllegalArgumentException.class);
 		fixture.server().verify();
+	}
+
+	@Tag("http")
+	@Tag("http.client")
+	@ParameterizedTest
+	@ValueSource(strings = { GATEWAY_SECRET + "\n", GATEWAY_SECRET + "\r\nX-Injected: 1", " " + GATEWAY_SECRET,
+			GATEWAY_SECRET + "\u0000", GATEWAY_SECRET + "\u00e9" })
+	void aCallRejectsAMalformedHeaderValueWithoutSendingOrEchoingIt(String value) {
+		Fixture fixture = fixture(baseBuilder());
+		Map<String, String> headers = Map.of("X-Gateway-Token", value);
+
+		assertThatThrownBy(() -> fixture.api().chatCompletion(minimalChatRequest(), headers))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("X-Gateway-Token")
+			.satisfies(thrown -> assertThat(stackTrace(thrown)).doesNotContain(GATEWAY_SECRET));
+		assertThatThrownBy(() -> fixture.api().responses(minimalResponsesRequest(), headers))
+			.isInstanceOf(IllegalArgumentException.class)
+			.satisfies(thrown -> assertThat(stackTrace(thrown)).doesNotContain(GATEWAY_SECRET));
+		fixture.server().verify();
+	}
+
+	@Tag("http")
+	@Tag("http.errors")
+	@Test
+	void aCallErrorRedactsTheHeaderValuesThatAGatewayEchoes() {
+		Fixture fixture = fixture(baseBuilder());
+		for (String uri : List.of(CHAT_COMPLETIONS, RESPONSES)) {
+			fixture.server()
+				.expect(once(), requestTo(uri))
+				.andRespond(withStatus(HttpStatus.UNAUTHORIZED).contentType(MediaType.APPLICATION_JSON)
+					.body(GATEWAY_ECHO_BODY));
+		}
+		Map<String, String> headers = Map.of("X-Gateway-Token", GATEWAY_SECRET, "X-Tenant", "");
+
+		assertThatThrownBy(() -> fixture.api().chatCompletion(minimalChatRequest(), headers))
+			.satisfies(OpenRouterApiContractTests::assertGatewaySecretRedacted);
+		assertThatThrownBy(() -> fixture.api().responses(minimalResponsesRequest(), headers))
+			.satisfies(OpenRouterApiContractTests::assertGatewaySecretRedacted);
+		fixture.server().verify();
+	}
+
+	static void assertGatewaySecretRedacted(Throwable thrown) {
+		assertThat(thrown).isInstanceOf(OpenRouterNonTransientApiException.class);
+		OpenRouterHttpFailure failure = (OpenRouterHttpFailure) thrown;
+		assertThat(failure.getCategory()).isEqualTo(OpenRouterErrorCategory.AUTHENTICATION);
+		assertThat(failure.getResponseBody()).contains("[REDACTED]").doesNotContain(GATEWAY_SECRET);
+		assertThat(failure.getErrorDetails().message()).isEqualTo("gateway rejected token [REDACTED]");
+		assertThat(String.valueOf(failure.getErrorDetails())).doesNotContain(GATEWAY_SECRET);
+		assertThat(stackTrace(thrown)).doesNotContain(GATEWAY_SECRET);
+	}
+
+	static String stackTrace(Throwable thrown) {
+		StringWriter trace = new StringWriter();
+		thrown.printStackTrace(new PrintWriter(trace));
+		return trace.toString();
 	}
 
 	// ---------------------------------------------------------------------

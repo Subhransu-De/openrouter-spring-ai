@@ -40,7 +40,14 @@ public final class OptionChecks {
 	// the configured API key, which the diagnostic sanitizer does not know, or the
 	// attribution and media types that the client owns.
 	private static final Set<String> CLIENT_HEADERS = Set.of("authorization", "content-type", "accept", "http-referer",
-			"x-openrouter-title", "x-openrouter-categories");
+			"x-openrouter-title", "x-title", "x-openrouter-categories");
+
+	// RFC 9110 field-name (token) and field-value without obs-text. A value with CR, LF
+	// or
+	// another control character must not reach a connector, whose errors would echo it.
+	private static final Pattern HEADER_NAME = Pattern.compile("[!#$%&'*+.^_`|~0-9A-Za-z-]+");
+
+	private static final Pattern HEADER_VALUE = Pattern.compile("(?:[!-~](?:[\\t -~]*[!-~])?)?");
 
 	private OptionChecks() {
 	}
@@ -155,9 +162,10 @@ public final class OptionChecks {
 	}
 
 	/**
-	 * Checks per-request HTTP headers: names must not be blank, values must not be null,
-	 * and no name may be one that the OpenRouter client sets itself. The message names
-	 * the header but never echoes a value, which can be a credential.
+	 * Checks per-request HTTP headers: names must be HTTP tokens, values must be visible
+	 * ASCII with inner spaces or tabs, and no name may be one that the OpenRouter client
+	 * sets itself. The message names a valid header name but never echoes a value, which
+	 * can be a credential.
 	 * @param headers the headers to check
 	 * @return the same headers
 	 */
@@ -167,11 +175,12 @@ public final class OptionChecks {
 			return null;
 		}
 		headers.forEach((name, value) -> {
-			if (name == null || name.isBlank()) {
-				throw new IllegalArgumentException("customHeaders must not contain a blank header name");
+			if (name == null || !HEADER_NAME.matcher(name).matches()) {
+				throw new IllegalArgumentException("customHeaders must contain only header names that are HTTP tokens");
 			}
-			if (value == null) {
-				throw new IllegalArgumentException("customHeaders " + name + " must not have a null value");
+			if (value == null || !HEADER_VALUE.matcher(value).matches()) {
+				throw new IllegalArgumentException("customHeaders " + name
+						+ " must have a value of visible ASCII characters, with spaces or tabs only between them");
 			}
 			if (CLIENT_HEADERS.contains(name.toLowerCase(Locale.ROOT))) {
 				throw new IllegalArgumentException("customHeaders must not set " + name

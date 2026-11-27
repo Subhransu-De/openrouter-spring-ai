@@ -185,6 +185,40 @@ class OpenRouterApiStreamingContractTests {
 	@Tag("http")
 	@Tag("http.client")
 	@Test
+	void aStreamRejectsAMalformedHeaderValueWithoutSendingOrEchoingIt() {
+		Capture capture = capturingApi(HttpStatus.OK, MediaType.TEXT_EVENT_STREAM_VALUE, DONE_ONLY_SSE);
+		Map<String, String> headers = Map.of("X-Gateway-Token", OpenRouterApiContractTests.GATEWAY_SECRET + "\n");
+
+		assertThatThrownBy(() -> capture.api().chatCompletionStream(chatRequest(), headers))
+			.isInstanceOf(IllegalArgumentException.class)
+			.satisfies(thrown -> assertThat(OpenRouterApiContractTests.stackTrace(thrown))
+				.doesNotContain(OpenRouterApiContractTests.GATEWAY_SECRET));
+		assertThatThrownBy(() -> capture.api().responsesStream(responsesRequest(), headers))
+			.isInstanceOf(IllegalArgumentException.class)
+			.satisfies(thrown -> assertThat(OpenRouterApiContractTests.stackTrace(thrown))
+				.doesNotContain(OpenRouterApiContractTests.GATEWAY_SECRET));
+		assertThat(capture.request().get()).isNull();
+	}
+
+	@Tag("http")
+	@Tag("http.errors")
+	@Test
+	void aStreamErrorRedactsTheHeaderValuesThatAGatewayEchoes() {
+		Capture capture = capturingApi(HttpStatus.UNAUTHORIZED, MediaType.APPLICATION_JSON_VALUE,
+				OpenRouterApiContractTests.GATEWAY_ECHO_BODY);
+		Map<String, String> headers = Map.of("X-Gateway-Token", OpenRouterApiContractTests.GATEWAY_SECRET);
+
+		StepVerifier.create(capture.api().chatCompletionStream(chatRequest(), headers))
+			.expectErrorSatisfies(OpenRouterApiContractTests::assertGatewaySecretRedacted)
+			.verify();
+		StepVerifier.create(capture.api().responsesStream(responsesRequest(), headers))
+			.expectErrorSatisfies(OpenRouterApiContractTests::assertGatewaySecretRedacted)
+			.verify();
+	}
+
+	@Tag("http")
+	@Tag("http.client")
+	@Test
 	void chatCompletionStreamSendsAuthorizationAndStreamTrueOnTheWire() {
 		// The streaming WebClient is a separate code path from the blocking RestClient
 		// interceptor: a regression stripping the Bearer token (or the stream flag) from

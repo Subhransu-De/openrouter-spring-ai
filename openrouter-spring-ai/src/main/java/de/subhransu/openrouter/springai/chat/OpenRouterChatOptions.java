@@ -869,7 +869,10 @@ public class OpenRouterChatOptions implements ToolCallingChatOptions, Structured
 		 * streams. A request map is merged into the default map by header name, ignoring
 		 * case, and a request value replaces a default value. Headers that the OpenRouter
 		 * client sets itself are rejected: Authorization, Content-Type, Accept,
-		 * HTTP-Referer, X-OpenRouter-Title and X-OpenRouter-Categories.
+		 * HTTP-Referer, X-OpenRouter-Title, its alias X-Title, and
+		 * X-OpenRouter-Categories. Names must be HTTP tokens and values visible ASCII
+		 * with spaces or tabs only between characters. The values are redacted from HTTP
+		 * error details.
 		 */
 		public Builder customHeaders(@Nullable Map<String, String> customHeaders) {
 			this.options.customHeaders = copyHeaders(OptionChecks.customHeaders(customHeaders));

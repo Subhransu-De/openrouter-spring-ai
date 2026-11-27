@@ -75,7 +75,7 @@ class OpenRouterCustomHeadersTests {
 
 	@ParameterizedTest
 	@ValueSource(strings = { "Authorization", "authorization", "Content-Type", "Accept", "HTTP-Referer",
-			"X-OpenRouter-Title", "x-openrouter-categories" })
+			"X-OpenRouter-Title", "X-Title", "x-openrouter-categories" })
 	void rejectsHeadersThatTheClientSetsItself(String name) {
 		assertThatIllegalArgumentException()
 			.isThrownBy(() -> OpenRouterChatOptions.builder().customHeaders(Map.of(name, "secret-value")))
@@ -84,15 +84,38 @@ class OpenRouterCustomHeadersTests {
 			.withMessageNotContaining("secret-value");
 	}
 
-	@Test
-	void rejectsBlankNamesAndNullValuesWithoutEchoingValues() {
+	@ParameterizedTest
+	@ValueSource(strings = { "", " ", "X Tenant", "X-Tenant:", "X-Tenant\r\n", "X-T\u00e9nant", "secret-name\n" })
+	void rejectsHeaderNamesThatAreNotTokensWithoutEchoingThem(String name) {
 		assertThatIllegalArgumentException()
-			.isThrownBy(() -> OpenRouterChatOptions.builder().customHeaders(Map.of(" ", "secret-value")))
-			.withMessage("customHeaders must not contain a blank header name");
+			.isThrownBy(() -> OpenRouterChatOptions.builder().customHeaders(Map.of(name, "secret-value")))
+			.withMessage("customHeaders must contain only header names that are HTTP tokens");
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "secret-value\n", "secret-value\r\nX-Injected: 1", "secret\u0000value", " secret-value",
+			"secret-value\t", "secret-v\u00e4lue", "secret\u007fvalue" })
+	void rejectsMalformedValuesNamingTheHeaderButNeverTheValue(String value) {
+		assertThatIllegalArgumentException()
+			.isThrownBy(() -> OpenRouterChatOptions.builder().customHeaders(Map.of("X-Gateway-Token", value)))
+			.withMessageContaining("X-Gateway-Token")
+			.withMessageNotContaining("secret");
+	}
+
+	@Test
+	void acceptsVisibleValuesWithInnerSpacesAndEmptyValues() {
+		Map<String, String> headers = Map.of("X-Tag", "a b\tc", "X-Empty", "", "X-Mark", "!~");
+
+		assertThat(OpenRouterChatOptions.builder().customHeaders(headers).build().getCustomHeaders())
+			.containsExactlyInAnyOrderEntriesOf(headers);
+	}
+
+	@Test
+	void rejectsNullValuesWithoutEchoingValues() {
 		Map<String, String> nullValue = new HashMap<>();
 		nullValue.put("X-Request-Tag", null);
 		assertThatIllegalArgumentException().isThrownBy(() -> OpenRouterChatOptions.builder().customHeaders(nullValue))
-			.withMessage("customHeaders X-Request-Tag must not have a null value");
+			.withMessageStartingWith("customHeaders X-Request-Tag must have a value");
 	}
 
 	@Tag("api.request")

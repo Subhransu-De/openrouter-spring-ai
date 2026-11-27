@@ -6,7 +6,7 @@ Notable changes in each release. The full notes for each release are on the [Rel
 
 ### Added
 
-- `customHeaders` on `OpenRouterChatOptions` and `spring.ai.openrouter.chat.custom-headers` for HTTP headers on chat requests, in both request modes, in calls and streams. Request headers merge into the defaults by name. Headers the client sets itself, such as `Authorization`, are rejected. `OpenRouterApi` has matching overloads that take headers. See [Custom headers](docs/chat.md#custom-headers).
+- `customHeaders` on `OpenRouterChatOptions` and `spring.ai.openrouter.chat.custom-headers` for HTTP headers on chat requests, in both request modes, in calls and streams. Request headers merge into the defaults by name. Headers the client sets itself, such as `Authorization`, and malformed names or values are rejected. HTTP error details redact the header values. `OpenRouterApi` has matching overloads that take headers. See [Custom headers](docs/chat.md#custom-headers).
 - `OpenRouterConnectionDetails`, a Spring Boot `ConnectionDetails` bean that supplies the base URL and API key of the auto-configured `OpenRouterApi`. The default bean reads `spring.ai.openrouter.base-url` and `spring.ai.openrouter.api-key`; an application bean replaces it. See [Connection details](docs/production.md#connection-details).
 
 ## [0.3.0](https://github.com/Subhransu-De/openrouter-spring-ai/releases/tag/v0.3.0) - 2026-11-25

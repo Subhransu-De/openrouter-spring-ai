@@ -263,7 +263,7 @@ String answer = chatClient.prompt().user(question)
     .content();
 ```
 
-Request headers are merged into the default headers by name, ignoring case, and a request value replaces a default value. The headers that the client sets itself are rejected: `Authorization`, `Content-Type`, `Accept`, `HTTP-Referer`, `X-OpenRouter-Title` and `X-OpenRouter-Categories`. Set the key and the attribution on the client instead. The embedding, image and audio models take no custom headers; for headers on every request, use an `OpenRouterRestClientCustomizer` and an `OpenRouterWebClientCustomizer` (see [HTTP customization](production.md#http-customization)).
+Request headers are merged into the default headers by name, ignoring case, and a request value replaces a default value. The headers that the client sets itself are rejected: `Authorization`, `Content-Type`, `Accept`, `HTTP-Referer`, `X-OpenRouter-Title`, its alias `X-Title`, and `X-OpenRouter-Categories`. Set the key and the attribution on the client instead. A name must be an HTTP token, and a value must be visible ASCII with spaces or tabs only between characters, so a value copied with a trailing newline fails when the options are built. When two property sources spell a name in different cases, the higher-priority source wins. HTTP error details redact the request's header values, in case a gateway echoes them. The embedding, image and audio models take no custom headers; for headers on every request, use an `OpenRouterRestClientCustomizer` and an `OpenRouterWebClientCustomizer` (see [HTTP customization](production.md#http-customization)).
 
 ## Inputs
 

@@ -40,7 +40,7 @@ Rules for interceptors, filters and `OpenRouterRestClientCustomizer` or `OpenRou
 - Make them safe for concurrent use. Cloning a builder does not deep-copy their captured state.
 - Customize a single call through call context, and leave shared builders, factories and default headers unchanged.
 - Use only application-approved header names. Keep credentials and destinations fixed when you construct each client. Do not forward authorization through URI-rewriting filters or cross-origin redirects.
-- For a header on one chat request, set `customHeaders` on `OpenRouterChatOptions` instead (see [Custom headers](chat.md#custom-headers)). It rejects the headers that the client sets itself, so a request cannot replace the key or the attribution. Error details redact only the configured key.
+- For a header on one chat request, set `customHeaders` on `OpenRouterChatOptions` instead (see [Custom headers](chat.md#custom-headers)). It rejects the headers that the client sets itself, so a request cannot replace the key or the attribution. HTTP error details redact the configured key and the request's header values; errors inside a successful response or stream redact only the configured key.
 
 ## Connection details
 
@@ -70,7 +70,7 @@ When several choices buffer tool calls at once, a merged tool call leaves out us
 - Automatic per-family client selection. Build each model with its own `OpenRouterApi` instead.
 - Connection-pool metrics.
 - Credential-provider abstractions.
-- Rate limits in `ChatResponseMetadata`. OpenRouter sends no rate-limit headers on successful chat responses, so `getRateLimit()` stays empty. Read the key's limits and remaining credit from `GET /api/v1/key`.
+- Rate limits in `ChatResponseMetadata`. OpenRouter sends no rate-limit headers on successful chat responses, so `getRateLimit()` stays empty. `GET /api/v1/key` reports the key's spend limits and remaining credit, not live request-rate limits; its `rate_limit` field is deprecated. Some 429 responses carry reset information; the library reads only a `Retry-After` header, into `OpenRouterHttpFailure.getRetryAfter()`.
 
 ## Cost and monitoring
 
