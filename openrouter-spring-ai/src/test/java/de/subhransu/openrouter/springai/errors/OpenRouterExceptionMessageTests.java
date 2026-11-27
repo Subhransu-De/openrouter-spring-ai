@@ -118,6 +118,15 @@ class OpenRouterExceptionMessageTests {
 	}
 
 	@Test
+	void requestValueIsRedactedInItsJsonShortEscapedForm() {
+		OpenRouterDiagnosticSanitizer sanitizer = OpenRouterDiagnosticSanitizer.forApiKey(SYNTHETIC_KEY)
+			.redacting(List.of("gateway\tse\"c\\r/et"));
+
+		assertThat(sanitizer.sanitize("{\"echo\":\"gateway\\tse\\\"c\\\\r\\/et\"}"))
+			.isEqualTo("{\"echo\":\"[REDACTED]\"}");
+	}
+
+	@Test
 	void requestValueThatPrefixesTheKeyDoesNotExposeTheRestOfTheKey() {
 		String key = "synthetic-long-private-value";
 		OpenRouterDiagnosticSanitizer sanitizer = OpenRouterDiagnosticSanitizer.forApiKey(key)

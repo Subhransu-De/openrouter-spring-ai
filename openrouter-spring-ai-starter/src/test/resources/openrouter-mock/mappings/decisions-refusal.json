@@ -1,0 +1,20 @@
+{
+  "name": "decisions-refusal",
+  "priority": 30,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/alpha/decisions",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$.questions.flagged"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "decisions/refusal.json"
+  }
+}

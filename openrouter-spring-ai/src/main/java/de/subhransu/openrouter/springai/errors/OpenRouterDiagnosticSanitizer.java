@@ -63,12 +63,12 @@ public final class OpenRouterDiagnosticSanitizer {
 	 * @return this sanitizer when there is nothing more to redact, otherwise a new one
 	 */
 	public OpenRouterDiagnosticSanitizer redacting(Collection<String> values) {
-		List<String> secrets = new ArrayList<>(this.secrets);
+		List<String> combined = new ArrayList<>(this.secrets);
 		values.stream()
-			.filter(value -> value.strip().length() >= MIN_REDACTED_LENGTH && !secrets.contains(value))
+			.filter(value -> value.strip().length() >= MIN_REDACTED_LENGTH && !combined.contains(value))
 			.distinct()
-			.forEach(secrets::add);
-		return secrets.size() == this.secrets.size() ? this : new OpenRouterDiagnosticSanitizer(List.copyOf(secrets));
+			.forEach(combined::add);
+		return combined.size() == this.secrets.size() ? this : new OpenRouterDiagnosticSanitizer(List.copyOf(combined));
 	}
 
 	/**

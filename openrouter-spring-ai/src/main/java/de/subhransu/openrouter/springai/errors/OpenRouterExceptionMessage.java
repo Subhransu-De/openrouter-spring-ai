@@ -84,10 +84,26 @@ public final class OpenRouterExceptionMessage {
 			for (int index = offset; index < end; index++) {
 				pattern.append("\\\\u").append(HexFormat.of().toHexDigits(apiKey.charAt(index)));
 			}
+			String shortEscape = jsonShortEscape(character);
+			if (shortEscape != null) {
+				pattern.append('|').append(Pattern.quote(shortEscape));
+			}
 			pattern.append("))");
 			offset = end;
 		}
 		return Pattern.compile(pattern.toString());
+	}
+
+	// The JSON short escape of a character a secret can contain, such as a tab in a
+	// header value, which a gateway echoes in a JSON error body.
+	private static @Nullable String jsonShortEscape(String character) {
+		return switch (character) {
+			case "\t" -> "\\t";
+			case "\"" -> "\\\"";
+			case "\\" -> "\\\\";
+			case "/" -> "\\/";
+			default -> null;
+		};
 	}
 
 	/**

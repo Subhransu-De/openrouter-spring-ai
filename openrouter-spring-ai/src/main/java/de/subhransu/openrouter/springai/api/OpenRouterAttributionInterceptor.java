@@ -27,24 +27,20 @@ final class OpenRouterAttributionInterceptor implements ClientHttpRequestInterce
 	@Override
 	public ClientHttpResponse intercept(HttpRequest request, byte[] body, ClientHttpRequestExecution execution)
 			throws IOException {
-		addTo(request.getHeaders());
+		applyTo(request.getHeaders());
 		return execution.execute(request, body);
 	}
 
-	/**
-	 * Set the configured attribution headers. The streaming client uses this for its
-	 * default headers.
-	 * @param headers the headers to set them on
-	 */
-	void addTo(HttpHeaders headers) {
-		if (StringUtils.hasText(this.httpReferer)) {
-			headers.set("HTTP-Referer", this.httpReferer);
-		}
-		if (StringUtils.hasText(this.appTitle)) {
-			headers.set("X-OpenRouter-Title", this.appTitle);
-		}
-		if (StringUtils.hasText(this.appCategories)) {
-			headers.set("X-OpenRouter-Categories", this.appCategories);
+	// The WebClient sets the same headers as defaults.
+	void applyTo(HttpHeaders headers) {
+		setIfPresent(headers, "HTTP-Referer", this.httpReferer);
+		setIfPresent(headers, "X-OpenRouter-Title", this.appTitle);
+		setIfPresent(headers, "X-OpenRouter-Categories", this.appCategories);
+	}
+
+	private static void setIfPresent(HttpHeaders headers, String name, @Nullable String value) {
+		if (StringUtils.hasText(value)) {
+			headers.set(name, value);
 		}
 	}
 
