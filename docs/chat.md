@@ -22,7 +22,7 @@ Text arrives as server-sent events.
 Flux<String> tokens = chatClient.prompt().user("Tell a short story.").stream().content();
 ```
 
-Chunks follow Spring AI's streaming contract for message parts: every chunk carries the response id, and reasoning, text and tool-call argument deltas are partial parts with a part index. Spring AI's `MessageAggregator` rebuilds the message that `call()` returns. A partial `ToolCallPart` only shows a call while the model writes it; it is not a tool call, and the complete call follows once, at the same index. Streamed media stays on its chunk, as in Spring AI's own models.
+Chunks follow Spring AI's streaming contract for message parts: every chunk carries the response id, and reasoning, text and tool-call argument deltas are partial parts with a part index. Spring AI's `MessageAggregator` rebuilds the message that `call()` returns. A partial `ToolCallPart` only shows a call while the model writes it; it is not a tool call, and the complete call follows once, at the same index. In Chat Completions mode streamed media stays on its chunk, as in Spring AI's OpenAI model, so the aggregated message has none. In Responses mode a generated image is a complete part at its output index and aggregates with the rest.
 
 ### Per-request options
 
@@ -82,10 +82,12 @@ ChatResponse response =
         .chatResponse();
 String thinking =
     response.getResult().getOutput().getReasoning().stream()
-        .map(ReasoningPart::text)
+        .map(part -> part.text() != null ? part.text() : part.summary())
         .filter(Objects::nonNull)
         .collect(Collectors.joining());
 ```
+
+Responses reasoning models often return only a summary, so the example falls back to `summary()` when a part has no text, as `OpenRouterMetadata.reasoning(...)` did.
 
 The part's payload holds what the provider needs on the next turn: the `reasoning_details` in Chat Completions mode, signatures and encrypted entries included, or the reasoning output item in Responses mode. Send the assistant message back as it is, for example through Spring AI session memory, and the library replays the reasoning unchanged, which Anthropic and Gemini models need for tool loops.
 
@@ -143,7 +145,7 @@ String answer =
         .content();
 ```
 
-Each output item becomes one part, in order, and carries the item, so an assistant message replays its reasoning, messages and calls verbatim. Server-side items such as a web search call are kept as an `UnknownPart` and replayed too. A text or tool call part that you replace is rebuilt instead.
+Each output item becomes one part, in order, and carries the item, so an assistant message replays its reasoning, messages and calls verbatim. Server-side items such as a web search call are kept as an `UnknownPart` and replayed too. A text or tool call part that you replace is rebuilt instead, where 0.3.0 rejected the edited message as a stale output snapshot.
 
 ### Log probabilities
 

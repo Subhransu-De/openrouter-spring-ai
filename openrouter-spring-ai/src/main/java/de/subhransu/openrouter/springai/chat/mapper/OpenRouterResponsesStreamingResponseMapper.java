@@ -20,6 +20,7 @@ import java.util.Objects;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.part.MediaPart;
 import org.springframework.ai.chat.messages.part.MessagePart;
+import org.springframework.ai.chat.messages.part.StreamingParts;
 import org.springframework.ai.chat.metadata.ChatGenerationMetadata;
 import org.springframework.ai.chat.metadata.ChatResponseMetadata;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -87,18 +88,17 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 		String reasoning = "response.reasoning_text.delta".equals(type) || summary ? event.delta() : null;
 		Map<String, Object> snapshot = reasoning(event, result, reasoning, accumulator);
 		RefusalMetadata.put(snapshot, refusal.update(event));
+		Integer itemIndex = parts != null ? parts.itemIndex(event) : event.outputIndex();
 		// Process item images before text reconciliation, as in the wire event order.
-		List<Media> media = itemMedia(event, outputState);
-		Map<Integer, String> text = text(event, result, outputState);
+		List<MessagePart> itemMedia = itemMedia(event, itemIndex, outputState);
+		Map<Integer, String> text = text(event, itemIndex, result, outputState);
 		var output = result != null ? result.output() : null;
-		if (output != null && outputState != null) {
-			media = terminalMedia(output, outputState);
-		}
+		List<MessagePart> media = terminalMedia(output, outputState, itemMedia);
 
-		List<MessagePart> messageParts = parts != null ? parts.map(event, reasoning, summary, text, output, toolCalls)
+		List<MessagePart> messageParts = parts != null
+				? parts.map(event, reasoning, summary, text, output, toolCalls, refusal)
 				: ResponsesStreamParts.unindexed(reasoning, summary, text, toolCalls);
-		// Media is not indexed, as in Spring AI: the aggregator does not carry it.
-		media.forEach(medium -> messageParts.add(MediaPart.of(medium)));
+		messageParts.addAll(media);
 		AssistantMessage assistantMessage = AssistantMessage.builder()
 			.parts(MessageParts.orEmptyText(messageParts))
 			.properties(snapshot)
@@ -185,8 +185,8 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 	}
 
 	// The released text by output index.
-	private Map<Integer, String> text(ResponsesStreamEvent event, @Nullable ResponsesResult result,
-			@Nullable ResponsesOutputState state) {
+	private Map<Integer, String> text(ResponsesStreamEvent event, @Nullable Integer itemIndex,
+			@Nullable ResponsesResult result, @Nullable ResponsesOutputState state) {
 		var output = result != null ? result.output() : null;
 		if (output != null) {
 			return state != null ? state.terminal(output) : Map.of(0, OpenRouterResponsesResponseMapper.text(output));
@@ -202,25 +202,40 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 			return state.done(event);
 		}
 		var item = event.item();
-		return OUTPUT_ITEM_DONE.equals(event.type()) && item != null ? state.item(item, event.outputIndex()) : Map.of();
+		return OUTPUT_ITEM_DONE.equals(event.type()) && item != null ? state.item(item, itemIndex) : Map.of();
 	}
 
-	private List<Media> itemMedia(ResponsesStreamEvent event, @Nullable ResponsesOutputState state) {
+	private List<MessagePart> itemMedia(ResponsesStreamEvent event, @Nullable Integer itemIndex,
+			@Nullable ResponsesOutputState state) {
 		var item = event.item();
 		if (!OUTPUT_ITEM_DONE.equals(event.type()) || item == null || !"image_generation_call".equals(item.type())) {
 			return List.of();
 		}
-		return state != null ? state.image(item, event.outputIndex())
-				: GeneratedImageMapper.responsesMedia(List.of(item));
+		if (state == null) {
+			return GeneratedImageMapper.responsesMedia(List.of(item)).stream().<MessagePart>map(MediaPart::of).toList();
+		}
+		return mediaParts(state.image(item, itemIndex), itemIndex);
 	}
 
-	private List<Media> terminalMedia(List<? extends @Nullable ResponsesOutputItem> output,
-			ResponsesOutputState state) {
-		List<Media> images = new ArrayList<>();
+	// The images of the terminal output replace those of the event.
+	private List<MessagePart> terminalMedia(@Nullable List<? extends @Nullable ResponsesOutputItem> output,
+			@Nullable ResponsesOutputState state, List<MessagePart> itemMedia) {
+		if (output == null || state == null) {
+			return itemMedia;
+		}
+		List<MessagePart> images = new ArrayList<>();
 		for (int index = 0; index < output.size(); index++) {
-			images.addAll(state.image(output.get(index), index));
+			images.addAll(mediaParts(state.image(output.get(index), index), index));
 		}
 		return images;
+	}
+
+	// A generated image is the complete part of its output index, as in Spring AI's
+	// Responses model, so the aggregated message keeps it where a call has it.
+	private static List<MessagePart> mediaParts(List<Media> media, @Nullable Integer index) {
+		return media.stream()
+			.map(medium -> index != null ? StreamingParts.complete(MediaPart.of(medium), index) : MediaPart.of(medium))
+			.toList();
 	}
 
 	private @Nullable ResponseError eventError(ResponsesStreamEvent event) {

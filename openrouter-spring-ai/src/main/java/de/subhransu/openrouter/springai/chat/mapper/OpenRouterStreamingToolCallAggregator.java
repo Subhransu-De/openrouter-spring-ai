@@ -713,11 +713,16 @@ public final class OpenRouterStreamingToolCallAggregator {
 				long chunkBytes = serializedBytes(choiceChunk);
 				buffered.add(choiceChunk, chunkBytes);
 				retain(chunkBytes);
-				if (choice.finishReason() != null || OpenRouterChoiceErrorExceptionFactory.isFailure(choice)) {
-					finishChoice(choice, buffered, index, ready);
-				}
-				else if (this.toolCallDeltas && hasToolCallDelta(choice)) {
+				boolean failed = OpenRouterChoiceErrorExceptionFactory.isFailure(choice);
+				boolean finished = choice.finishReason() != null || failed;
+				// The finish chunk can carry the last argument fragment of a call that
+				// already streamed.
+				if (this.toolCallDeltas && hasToolCallDelta(choice)
+						&& (!finished || !failed && buffered.chunks.size() > 1)) {
 					this.deltas.add(choiceChunk);
+				}
+				if (finished) {
+					finishChoice(choice, buffered, index, ready);
 				}
 			}
 		}

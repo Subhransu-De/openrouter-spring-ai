@@ -137,7 +137,7 @@ final class MessageParts {
 	}
 
 	// Reasoning items keep their text in content and their summary in summary.
-	static @Nullable String reasoningText(ResponsesOutputItem item, String field) {
+	private static @Nullable String reasoningText(ResponsesOutputItem item, String field) {
 		JsonNode raw = item.rawItem();
 		JsonNode values = raw != null ? raw.get(field) : null;
 		if (values == null || !values.isArray() || values.isEmpty()) {

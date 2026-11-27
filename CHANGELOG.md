@@ -10,11 +10,13 @@ Notable changes in each release. The full notes for each release are on the [Rel
 - Streamed Chat Completions tool calls now send partial `ToolCallPart` chunks with the arguments before the complete call. `getToolCalls()` and `ToolCallingAdvisor` ignore them; code that counts raw chunks sees more of them.
 - A tool-call-only reply no longer has an empty `TextPart`; `getText()` is still `""`.
 - A refusal now reports the finish reason category `FILTERED` instead of `COMPLETED`.
+- In Responses mode, an assistant message whose text or tool calls you edit now replays with those parts rebuilt; 0.3.0 rejected it as a stale output snapshot.
+- A Responses stream that sends no `response.created` event is grouped under a generated id, so its aggregated message has that id instead of the response id.
 
 ### Added
 
 - Ordered message parts in both request modes, for `call` and `stream`: reasoning, text, tool calls and generated media, with the provider's `reasoning_details` or Responses reasoning item as the reasoning part's payload, and Responses server-side items as `UnknownPart`. The request mappers replay reasoning from the parts and skip reasoning that another provider signed. See [Reasoning](docs/chat.md#reasoning).
-- Streamed chunks carry the response id and indexed partial parts, so Spring AI's `MessageAggregator` rebuilds the message that `call` returns.
+- Streamed chunks carry the response id and indexed partial parts, so Spring AI's `MessageAggregator` rebuilds the message that `call` returns. Chat Completions media stays on its chunk and is not aggregated, as in Spring AI's OpenAI model.
 - `UserMessage` text and media are sent in their part order.
 
 ## [0.3.0](https://github.com/Subhransu-De/openrouter-spring-ai/releases/tag/v0.3.0) - 2026-11-25

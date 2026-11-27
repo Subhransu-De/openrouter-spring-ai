@@ -115,6 +115,22 @@ class OpenRouterStreamingToolCallAggregatorTests {
 		assertThat(this.aggregator.aggregate(Flux.just(complete), true).collectList().block())
 			.extracting(OpenRouterStreamingToolCallAggregator.Output::toolCallDelta)
 			.containsExactly(false);
+		// The finish chunk of a call that already streamed carries its last fragment.
+		Choice tail = toolFragment(0, 0, null, null, "\"Oslo\"}");
+		ChatCompletionChunk finish = chunk(new Choice(0, null, tail.delta(), "tool_calls", null, null, Map.of()));
+		List<OpenRouterStreamingToolCallAggregator.Output> finished = this.aggregator
+			.aggregate(Flux.just(first, finish), true)
+			.collectList()
+			.block();
+		assertThat(finished).extracting(OpenRouterStreamingToolCallAggregator.Output::toolCallDelta)
+			.containsExactly(true, true, false);
+		assertThat(finished.get(1).chunk()).isEqualTo(finish);
+		// A failed choice has no delta: the merged chunk reports the failure.
+		ChatCompletionChunk failure = chunk(new Choice(0, null, tail.delta(), null, null,
+				new ChoiceError("503", "Provider failed during tool call", Map.of())));
+		assertThat(this.aggregator.aggregate(Flux.just(first, failure), true).collectList().block())
+			.extracting(OpenRouterStreamingToolCallAggregator.Output::toolCallDelta)
+			.containsExactly(true, false);
 	}
 
 	private static Map<String, Object> nullValue(String key) {

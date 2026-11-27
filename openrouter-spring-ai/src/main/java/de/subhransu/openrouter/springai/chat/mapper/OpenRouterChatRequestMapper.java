@@ -182,7 +182,7 @@ public final class OpenRouterChatRequestMapper {
 		// Text and media keep their order in the message.
 		List<ContentPart> parts = new ArrayList<>();
 		for (MessagePart part : userMessage.getParts()) {
-			if (part instanceof TextPart text && StringUtils.hasText(text.text())) {
+			if (part instanceof TextPart text && StringUtils.hasLength(text.text())) {
 				parts.add(ContentPart.text(text.text()));
 			}
 			else if (part instanceof MediaPart media) {

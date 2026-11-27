@@ -9,6 +9,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import org.jspecify.annotations.Nullable;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.ArrayNode;
+import tools.jackson.databind.node.ObjectNode;
 
 final class RefusalMetadata {
 
@@ -66,6 +69,32 @@ final class RefusalMetadata {
 			terminal(event);
 			return this.parts.isEmpty() ? null
 					: this.parts.values().stream().flatMap(part -> part.values().stream()).reduce("", String::concat);
+		}
+
+		/**
+		 * The message item with each refusal it omits filled in from the stream, so that
+		 * a sparse snapshot replays the explanation already received.
+		 */
+		ResponsesOutputItem reconcile(int outputIndex, ResponsesOutputItem item) {
+			Map<Integer, String> received = this.parts.get(outputIndex);
+			JsonNode raw = item.rawItem();
+			if (received == null || raw == null || !raw.path("content").isArray()) {
+				return item;
+			}
+			ObjectNode reconciled = (ObjectNode) raw.deepCopy();
+			ArrayNode parts = (ArrayNode) reconciled.get("content");
+			boolean changed = false;
+			for (int index = 0; index < parts.size(); index++) {
+				String refusal = received.get(index);
+				if (parts.get(index) instanceof ObjectNode part && "refusal".equals(part.path("type").asString(""))
+						&& !part.hasNonNull("refusal") && refusal != null && !refusal.isEmpty()) {
+					part.put("refusal", refusal);
+					changed = true;
+				}
+			}
+			return changed ? new ResponsesOutputItem(item.id(), item.type(), item.status(), item.role(), item.content(),
+					item.callId(), item.name(), item.arguments(), item.result(), item.outputFormat(), reconciled)
+					: item;
 		}
 
 		private void terminal(ResponsesStreamEvent event) {

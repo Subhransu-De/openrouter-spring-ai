@@ -137,7 +137,7 @@ public final class OpenRouterResponsesResponseMapper {
 	}
 
 	// One part per output item, in output order, so replay keeps the transcript order.
-	static List<MessagePart> parts(@Nullable List<? extends @Nullable ResponsesOutputItem> output) {
+	private static List<MessagePart> parts(@Nullable List<? extends @Nullable ResponsesOutputItem> output) {
 		List<MessagePart> parts = new ArrayList<>();
 		for (ResponsesOutputItem item : ResponseValues.RESPONSES.<ResponsesOutputItem>items(output, "output item")) {
 			MessagePart part = MessageParts.responses(item);

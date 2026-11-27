@@ -329,18 +329,21 @@ class OpenRouterChatModelObservationTests {
 				{"input_tokens":0,"output_tokens":0,"total_tokens":0,"cost":0,
 				 "input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":0}}
 				""", "null" };
-		when(api.responsesStream(any()))
-			.thenReturn(
-					Flux.defer(() -> Flux.just(mapper.readValue("""
-							{"type":"response.output_text.delta","delta":"Hello"}
-							""", ResponsesStreamEvent.class),
-							mapper.readValue(
-									"""
-											{"type":"response.completed","response":{"id":"synthetic","model":"test-model",
-											 "status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"Hello"}]}],"usage":%s}}
-											"""
-										.formatted(usages[subscription.getAndIncrement()]),
-									ResponsesStreamEvent.class))));
+		when(api.responsesStream(any())).thenReturn(
+				// The wire opens every stream with the response id.
+				Flux.defer(
+						() -> Flux.just(mapper.readValue("""
+								{"type":"response.created","response":{"id":"synthetic","status":"in_progress"}}
+								""", ResponsesStreamEvent.class), mapper.readValue("""
+								{"type":"response.output_text.delta","delta":"Hello"}
+								""", ResponsesStreamEvent.class),
+								mapper.readValue(
+										"""
+												{"type":"response.completed","response":{"id":"synthetic","model":"test-model",
+												 "status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"Hello"}]}],"usage":%s}}
+												"""
+											.formatted(usages[subscription.getAndIncrement()]),
+										ResponsesStreamEvent.class))));
 		when(api.chatCompletionStream(any())).thenReturn(Flux.defer(() -> Flux.just(mapper.readValue("""
 				{"id":"synthetic","model":"test-model","choices":[{"index":0,"delta":{"content":"Hello"}}]}
 				""", ChatCompletionChunk.class), mapper.readValue("""
@@ -349,7 +352,9 @@ class OpenRouterChatModelObservationTests {
 		Flux<ChatResponse> stream = model(api)
 			.stream(new Prompt("synthetic", OpenRouterChatOptions.builder().requestMode(mode).build()));
 		for (int i = 0; i < usages.length; i++) {
-			StepVerifier.create(stream).expectNextCount(2).verifyComplete();
+			StepVerifier.create(stream)
+				.expectNextCount(mode == OpenRouterRequestMode.RESPONSES ? 3 : 2)
+				.verifyComplete();
 		}
 		assertThat(observed).hasSize(3);
 		for (int i = 0; i < 2; i++) {

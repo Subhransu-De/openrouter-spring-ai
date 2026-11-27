@@ -6,12 +6,11 @@ import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
 import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.TreeMap;
+import java.util.UUID;
 import org.jspecify.annotations.Nullable;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.part.MessagePart;
@@ -25,14 +24,17 @@ import org.springframework.util.StringUtils;
 /**
  * The parts of a Responses stream, following Spring AI's {@link StreamingParts} contract.
  * The output index of an item is the index of its part. Text, reasoning and tool-call
- * argument deltas are partial parts. When an item completes, its part is emitted partial
- * and emptied of what already streamed, carrying the item as payload, so the aggregated
- * message replays it verbatim. Complete tool calls are emitted once, by the terminal
- * event, so that an incomplete round never yields a call.
+ * argument deltas are partial parts. When an item completes, and again when the terminal
+ * output repeats it, its part is emitted partial with only the text that has not streamed
+ * yet, carrying the latest item as payload, so the aggregated message replays the final
+ * item verbatim and a consumer of the stream never sees text twice. Complete tool calls
+ * are emitted once, by the terminal event, so that an incomplete round never yields a
+ * call.
  * <p>
- * One instance serves one subscription. It remembers the response id, which output
- * indexes streamed reasoning deltas or completed their item, and the id and name of each
- * function call whose arguments stream.
+ * One instance serves one subscription. It remembers the id that groups the chunks, how
+ * much reasoning text and summary each output index emitted, the output index of each
+ * item announced with one, and the id and name of each function call whose arguments
+ * stream.
  *
  * @author Subhransu De
  */
@@ -42,35 +44,51 @@ final class ResponsesStreamParts {
 
 	private @Nullable String responseId;
 
-	private final Set<Integer> streamedReasoningText = new HashSet<>();
+	private final Map<Integer, Integer> reasoningText = new HashMap<>();
 
-	private final Set<Integer> streamedReasoningSummary = new HashSet<>();
+	private final Map<Integer, Integer> reasoningSummary = new HashMap<>();
 
-	private final Set<Integer> doneItems = new HashSet<>();
+	private final Map<String, Integer> itemIndexes = new HashMap<>();
 
 	private final Map<Integer, AssistantMessage.ToolCall> streamingCalls = new HashMap<>();
 
+	/**
+	 * The id that groups the chunks of this stream in Spring AI's aggregator. The first
+	 * event fixes it: the response id when that event carries one, as
+	 * {@code response.created} does, or else a generated id, so that a stream whose id
+	 * arrives only with its terminal event still aggregates to one message.
+	 */
 	@Nullable String responseId() {
 		return this.responseId;
 	}
 
+	/**
+	 * The output index of the item of an event: its own, or else the one its item was
+	 * announced with. Returns {@code null} when neither is known, so that the item waits
+	 * for the terminal output, which places every item.
+	 */
+	@Nullable Integer itemIndex(ResponsesStreamEvent event) {
+		ResponsesOutputItem item = event.item();
+		if (event.outputIndex() != null || item == null || item.id() == null) {
+			return event.outputIndex();
+		}
+		return this.itemIndexes.get(item.id());
+	}
+
 	List<MessagePart> map(ResponsesStreamEvent event, @Nullable String reasoning, boolean summary,
 			Map<Integer, String> text, @Nullable List<? extends @Nullable ResponsesOutputItem> output,
-			List<IndexedItem> toolCalls) {
-		ResponsesResult response = event.response();
-		if (this.responseId == null && response != null) {
-			this.responseId = response.id();
-		}
+			List<IndexedItem> toolCalls, RefusalMetadata.Accumulator refusal) {
+		remember(event);
 		Map<Integer, Slot> slots = new TreeMap<>();
 		int index = index(event.outputIndex());
 		if (StringUtils.hasLength(reasoning)) {
-			(summary ? this.streamedReasoningSummary : this.streamedReasoningText).add(index);
+			(summary ? this.reasoningSummary : this.reasoningText).merge(index, reasoning.length(), Integer::sum);
 			merge(slots, index,
 					new ReasoningPart(summary ? null : reasoning, summary ? reasoning : null, null, Map.of()));
 		}
 		text.forEach((textIndex, value) -> merge(slots, textIndex, TextPart.of(value)));
 		toolCallDelta(slots, index, event);
-		completedItems(slots, index, event, output);
+		completedItems(slots, event, output, refusal);
 		List<MessagePart> parts = new ArrayList<>();
 		for (IndexedItem toolCall : toolCalls) {
 			ToolCallPart part = toolCallPart(toolCall.item());
@@ -142,10 +160,42 @@ final class ResponsesStreamParts {
 	}
 
 	void clear() {
-		this.streamedReasoningText.clear();
-		this.streamedReasoningSummary.clear();
-		this.doneItems.clear();
+		this.reasoningText.clear();
+		this.reasoningSummary.clear();
+		this.itemIndexes.clear();
 		this.streamingCalls.clear();
+	}
+
+	// The first event fixes the grouping id; an item announced with its output index
+	// keeps it.
+	private void remember(ResponsesStreamEvent event) {
+		if (this.responseId == null) {
+			ResponsesResult response = event.response();
+			String id = response != null ? response.id() : null;
+			this.responseId = StringUtils.hasText(id) ? id : "openrouter-stream-" + UUID.randomUUID();
+		}
+		ResponsesOutputItem item = event.item();
+		Integer itemIndex = event.outputIndex();
+		if (item != null && item.id() != null && itemIndex != null) {
+			this.itemIndexes.putIfAbsent(item.id(), itemIndex);
+		}
+	}
+
+	// An item completes with its done event, and again with the terminal output, which
+	// may have changed it.
+	private void completedItems(Map<Integer, Slot> slots, ResponsesStreamEvent event,
+			@Nullable List<? extends @Nullable ResponsesOutputItem> output, RefusalMetadata.Accumulator refusal) {
+		ResponsesOutputItem item = event.item();
+		Integer itemIndex = itemIndex(event);
+		if (OUTPUT_ITEM_DONE.equals(event.type()) && item != null && itemIndex != null) {
+			itemPart(slots, itemIndex, item, refusal);
+		}
+		if (output != null) {
+			for (int position = 0; position < output.size(); position++) {
+				itemPart(slots, position, ResponseValues.RESPONSES.required(output.get(position), "output item"),
+						refusal);
+			}
+		}
 	}
 
 	// A call is announced when its item is added; its arguments deltas follow.
@@ -167,35 +217,15 @@ final class ResponsesStreamParts {
 		}
 	}
 
-	// An item completes with its done event, or with the terminal output when its done
-	// event never arrived.
-	private void completedItems(Map<Integer, Slot> slots, int index, ResponsesStreamEvent event,
-			@Nullable List<? extends @Nullable ResponsesOutputItem> output) {
-		ResponsesOutputItem item = event.item();
-		if (OUTPUT_ITEM_DONE.equals(event.type()) && item != null) {
-			this.doneItems.add(index);
-			itemPart(slots, index, item);
-		}
-		if (output == null) {
-			return;
-		}
-		for (int position = 0; position < output.size(); position++) {
-			ResponsesOutputItem outputItem = output.get(position);
-			if (outputItem != null && this.doneItems.add(position)) {
-				itemPart(slots, position, outputItem);
-			}
-		}
-	}
-
 	// The part of a completed item, emptied of what already streamed. Its text arrives
-	// through the text reconciliation; function calls complete at the end.
-	private void itemPart(Map<Integer, Slot> slots, int index, ResponsesOutputItem item) {
-		MessagePart part = MessageParts.responses(item);
+	// through the text reconciliation, function calls complete at the end, and generated
+	// images are mapped with the media.
+	private void itemPart(Map<Integer, Slot> slots, int index, ResponsesOutputItem item,
+			RefusalMetadata.Accumulator refusal) {
+		MessagePart part = MessageParts.responses(refusal.reconcile(index, item));
 		if (part instanceof ReasoningPart reasoning) {
-			merge(slots, index,
-					new ReasoningPart(this.streamedReasoningText.contains(index) ? null : reasoning.text(),
-							this.streamedReasoningSummary.contains(index) ? null : reasoning.summary(),
-							reasoning.payload(), Map.of()));
+			merge(slots, index, new ReasoningPart(unseen(this.reasoningText, index, reasoning.text()),
+					unseen(this.reasoningSummary, index, reasoning.summary()), reasoning.payload(), Map.of()));
 		}
 		else if (part instanceof TextPart textPart) {
 			merge(slots, index, new TextPart("", textPart.payload(), Map.of()));
@@ -203,6 +233,17 @@ final class ResponsesStreamParts {
 		else if (part instanceof UnknownPart) {
 			slots.put(index, new Slot(part, false));
 		}
+	}
+
+	// The end of a snapshot that has not streamed yet; nothing when the snapshot is no
+	// longer than what streamed.
+	private static @Nullable String unseen(Map<Integer, Integer> emitted, int index, @Nullable String snapshot) {
+		Integer seen = emitted.get(index);
+		if (snapshot == null || seen != null && snapshot.length() <= seen) {
+			return null;
+		}
+		emitted.put(index, snapshot.length());
+		return seen == null ? snapshot : snapshot.substring(seen);
 	}
 
 	private static ToolCallPart toolCallPart(ResponsesOutputItem item) {

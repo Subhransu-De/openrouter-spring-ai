@@ -21,9 +21,7 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.part.MediaPart;
 import org.springframework.ai.chat.messages.part.MessagePart;
-import org.springframework.ai.chat.messages.part.OpaquePayload;
 import org.springframework.ai.chat.messages.part.ReasoningPart;
-import org.springframework.ai.chat.messages.part.StreamingPartIndexer;
 import org.springframework.ai.chat.messages.part.StreamingParts;
 import org.springframework.ai.chat.messages.part.TextPart;
 import org.springframework.ai.chat.messages.part.ToolCallPart;
@@ -316,60 +314,61 @@ public final class OpenRouterStreamingResponseMapper {
 	}
 
 	/**
-	 * The parts state of one subscription. One {@link StreamingPartIndexer} serves every
-	 * choice, as in Spring AI, because the aggregator groups parts by response id alone.
-	 * The {@code reasoning_details} of a choice are attached once, on its finish chunk,
-	 * as the payload of its first reasoning part, so that the aggregated part holds them
-	 * all, as a blocking call does.
+	 * The parts state of one subscription. A blocking reply has one reasoning part, one
+	 * text part and then the tool calls, so each choice reserves the indexes of its
+	 * reasoning and its text when it first streams anything, and each tool call takes the
+	 * next index when its first fragment or its complete call arrives. All reasoning
+	 * deltas of a choice then aggregate into one part, before its text, before its calls,
+	 * whatever order the chunks interleave them in. The {@code reasoning_details} of a
+	 * choice are attached once, on its finish chunk, so that the aggregated part holds
+	 * them all, as a blocking call does. Indexes are unique across choices, because the
+	 * aggregator groups parts by response id alone.
 	 */
 	private final class Parts {
 
-		private final StreamingPartIndexer indexer = new StreamingPartIndexer();
+		private int nextIndex;
 
-		private final Map<Integer, Integer> reasoningIndexByChoice = new LinkedHashMap<>();
-
-		private final Map<String, AssistantMessage.ToolCall> callsByDelta = new LinkedHashMap<>();
+		private final Map<Integer, ChoiceParts> choices = new LinkedHashMap<>();
 
 		List<MessagePart> chunk(int choice, boolean finished, @Nullable Delta delta, Map<String, Object> snapshot,
 				List<Media> media) {
+			ChoiceParts indexes = choice(choice);
 			List<MessagePart> parts = new ArrayList<>();
 			String reasoning = delta != null ? delta.reasoning() : null;
-			boolean details = delta != null && !CollectionUtils.isEmpty(delta.reasoningDetails());
-			if (StringUtils.hasLength(reasoning) || details && !this.reasoningIndexByChoice.containsKey(choice)) {
-				MessagePart part = this.indexer.stamp(
-						new ReasoningPart(StringUtils.hasLength(reasoning) ? reasoning : null, null, null, Map.of()));
-				this.reasoningIndexByChoice.putIfAbsent(choice, Objects.requireNonNull(StreamingParts.partIndex(part)));
-				parts.add(part);
+			List<JsonNode> details = finished
+					? ResponseValues.CHAT_COMPLETIONS.items(ReasoningMetadata.details(snapshot), "reasoning detail")
+					: List.of();
+			if (StringUtils.hasLength(reasoning) || !details.isEmpty()) {
+				parts.add(StreamingParts.partial(
+						new ReasoningPart(StringUtils.hasLength(reasoning) ? reasoning : null, null,
+								details.isEmpty() ? null : MessageParts.chatPayload(details), Map.of()),
+						indexes.reasoning));
 			}
 			String content = delta != null ? delta.content() : null;
 			if (StringUtils.hasLength(content)) {
-				parts.add(this.indexer.stamp(TextPart.of(content)));
+				parts.add(StreamingParts.partial(TextPart.of(content), indexes.text));
 			}
 			for (AssistantMessage.ToolCall toolCall : CompletedToolCalls
 				.map(delta != null ? delta.toolCalls() : null)) {
-				parts.add(this.indexer.stamp(ToolCallPart.of(toolCall)));
+				Integer index = indexes.callIndexes.remove(toolCall.id());
+				parts.add(StreamingParts.complete(ToolCallPart.of(toolCall), index != null ? index : this.nextIndex++));
 			}
-			Integer reasoningIndex = finished ? this.reasoningIndexByChoice.remove(choice) : null;
-			List<JsonNode> allDetails = ResponseValues.CHAT_COMPLETIONS.items(ReasoningMetadata.details(snapshot),
-					"reasoning detail");
-			if (reasoningIndex != null && !allDetails.isEmpty()) {
-				attach(parts, reasoningIndex, MessageParts.chatPayload(allDetails));
+			if (finished) {
+				this.choices.remove(choice);
 			}
 			// Media is not indexed, as in Spring AI: the aggregator does not carry it.
 			media.forEach(medium -> parts.add(MediaPart.of(medium)));
 			return MessageParts.orEmptyText(parts);
 		}
 
-		// A chunk holds at most one part per index.
-		private void attach(List<MessagePart> parts, int index, OpaquePayload payload) {
-			for (int position = 0; position < parts.size(); position++) {
-				if (parts.get(position) instanceof ReasoningPart reasoning
-						&& Integer.valueOf(index).equals(StreamingParts.partIndex(reasoning))) {
-					parts.set(position, new ReasoningPart(reasoning.text(), null, payload, reasoning.attributes()));
-					return;
-				}
+		private ChoiceParts choice(int choice) {
+			ChoiceParts parts = this.choices.get(choice);
+			if (parts == null) {
+				parts = new ChoiceParts(this.nextIndex, this.nextIndex + 1);
+				this.nextIndex += 2;
+				this.choices.put(choice, parts);
 			}
-			parts.add(StreamingParts.partial(new ReasoningPart(null, null, payload, Map.of()), index));
+			return parts;
 		}
 
 		/**
@@ -382,12 +381,18 @@ public final class OpenRouterStreamingResponseMapper {
 			List<Generation> generations = new ArrayList<>();
 			for (Choice choice : ResponseValues.CHAT_COMPLETIONS.items(chunk.choices(), "choice")) {
 				Delta delta = choice.delta();
+				ChoiceParts indexes = choice(choiceIndex(choice));
 				List<MessagePart> parts = new ArrayList<>();
 				for (ToolCall fragment : ResponseValues.CHAT_COMPLETIONS.items(delta != null ? delta.toolCalls() : null,
 						"tool call fragment")) {
-					AssistantMessage.ToolCall call = delta(choiceIndex(choice), fragment);
+					AssistantMessage.ToolCall call = indexes.delta(fragment);
 					if (call != null) {
-						parts.add(this.indexer.stampToolCallDelta(ToolCallPart.of(call)));
+						Integer index = indexes.callIndexes.get(call.id());
+						if (index == null) {
+							index = this.nextIndex++;
+							indexes.callIndexes.put(call.id(), index);
+						}
+						parts.add(StreamingParts.partial(ToolCallPart.of(call), index));
 					}
 				}
 				if (!parts.isEmpty()) {
@@ -403,22 +408,46 @@ public final class OpenRouterStreamingResponseMapper {
 			return generations.isEmpty() ? null : new ChatResponse(generations, metadata.build());
 		}
 
-		private AssistantMessage.@Nullable ToolCall delta(int choice, ToolCall fragment) {
-			if (fragment.index() == null) {
+	}
+
+	/**
+	 * The stream indexes of one choice: its reasoning, its text, and each tool call by
+	 * id, until its complete call is stamped. The id and name of a call arrive on its
+	 * first fragment only, so they are kept by wire index.
+	 */
+	private static final class ChoiceParts {
+
+		private final int reasoning;
+
+		private final int text;
+
+		private final Map<String, Integer> callIndexes = new LinkedHashMap<>();
+
+		private final Map<Integer, AssistantMessage.ToolCall> callsByWireIndex = new LinkedHashMap<>();
+
+		private ChoiceParts(int reasoning, int text) {
+			this.reasoning = reasoning;
+			this.text = text;
+		}
+
+		// A fragment without a wire index cannot be correlated and is left to the
+		// complete call.
+		private AssistantMessage.@Nullable ToolCall delta(ToolCall fragment) {
+			Integer wireIndex = fragment.index();
+			if (wireIndex == null) {
 				return null;
 			}
-			String key = choice + ":" + fragment.index();
 			FunctionCall function = fragment.function();
 			String name = function != null ? function.name() : null;
 			String arguments = function != null && function.arguments() != null ? function.arguments() : "";
 			if (StringUtils.hasText(fragment.id()) && StringUtils.hasText(name)) {
-				this.callsByDelta.putIfAbsent(key, new AssistantMessage.ToolCall(Objects.requireNonNull(fragment.id()),
-						"function", Objects.requireNonNull(name), ""));
+				this.callsByWireIndex.putIfAbsent(wireIndex, new AssistantMessage.ToolCall(
+						Objects.requireNonNull(fragment.id()), "function", Objects.requireNonNull(name), ""));
 			}
 			else if (arguments.isEmpty()) {
 				return null;
 			}
-			AssistantMessage.ToolCall call = this.callsByDelta.get(key);
+			AssistantMessage.ToolCall call = this.callsByWireIndex.get(wireIndex);
 			return call != null ? new AssistantMessage.ToolCall(call.id(), call.type(), call.name(), arguments) : null;
 		}
 

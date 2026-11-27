@@ -194,13 +194,14 @@ public final class OpenRouterResponsesRequestMapper {
 	}
 
 	private void assistant(Message message, List<Object> items) {
-		if (message instanceof AssistantMessage assistant
-				&& assistant.getParts().stream().anyMatch(part -> MessageParts.responsesItem(part) != null)) {
+		if (message instanceof AssistantMessage assistant && assistant.getParts()
+			.stream()
+			.anyMatch(part -> !StreamingParts.isPartial(part) && MessageParts.responsesItem(part) != null)) {
 			replayParts(assistant, items);
 			return;
 		}
-		// A message without Responses parts, such as one stored by 0.3.0, replays its
-		// legacy output snapshot.
+		// A message without complete Responses parts, such as one stored by 0.3.0 or a
+		// single stream chunk, replays its legacy output snapshot.
 		Object reasoning = message.getMetadata().get(ReasoningMetadata.RESPONSES_ITEMS);
 		if (reasoning instanceof List<?> reasoningItems && !reasoningItems.isEmpty()) {
 			Object output = message.getMetadata().get(ReasoningMetadata.RESPONSES_OUTPUT_ITEMS);
@@ -291,7 +292,7 @@ public final class OpenRouterResponsesRequestMapper {
 		// Text and media keep their order in the message.
 		List<ResponsesContent> content = new ArrayList<>();
 		for (MessagePart part : userMessage.getParts()) {
-			if (part instanceof TextPart text && StringUtils.hasText(text.text())) {
+			if (part instanceof TextPart text && StringUtils.hasLength(text.text())) {
 				content.add(new ResponsesContent("input_text", text.text()));
 			}
 			else if (part instanceof MediaPart media) {
