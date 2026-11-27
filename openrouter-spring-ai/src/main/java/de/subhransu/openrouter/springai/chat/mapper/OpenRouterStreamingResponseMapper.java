@@ -4,8 +4,12 @@ import de.subhransu.openrouter.springai.chat.OpenRouterMetadata;
 import java.util.Objects;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionChunk;
 import de.subhransu.openrouter.springai.api.dto.Choice;
+import de.subhransu.openrouter.springai.api.dto.Delta;
+import de.subhransu.openrouter.springai.api.dto.FunctionCall;
+import de.subhransu.openrouter.springai.api.dto.ToolCall;
 import de.subhransu.openrouter.springai.api.errors.OpenRouterInBandErrorExceptionFactory;
 import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
+import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import de.subhransu.openrouter.springai.chat.OpenRouterAudioOptions;
 import java.util.ArrayList;
@@ -16,12 +20,20 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import org.jspecify.annotations.Nullable;
 import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.part.MediaPart;
+import org.springframework.ai.chat.messages.part.MessagePart;
+import org.springframework.ai.chat.messages.part.ReasoningPart;
+import org.springframework.ai.chat.messages.part.StreamingParts;
+import org.springframework.ai.chat.messages.part.TextPart;
+import org.springframework.ai.chat.messages.part.ToolCallPart;
 import org.springframework.ai.chat.metadata.ChatGenerationMetadata;
 import org.springframework.ai.chat.metadata.ChatResponseMetadata;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.content.Media;
 import org.springframework.util.CollectionUtils;
+import org.springframework.util.StringUtils;
+import tools.jackson.databind.JsonNode;
 import reactor.core.publisher.Flux;
 
 public final class OpenRouterStreamingResponseMapper {
@@ -60,7 +72,8 @@ public final class OpenRouterStreamingResponseMapper {
 
 	public ChatResponse map(ChatCompletionChunk chunk) {
 		return map(chunk, new LinkedHashMap<>(), new LinkedHashMap<>(), new ResponseExtensions(),
-				new AudioOutputMapper(null), new ChatStreamBudget(this.maxStateBytes, this.maxStateChoices));
+				new AudioOutputMapper(null), new ChatStreamBudget(this.maxStateBytes, this.maxStateChoices),
+				new Parts());
 	}
 
 	/**
@@ -75,19 +88,48 @@ public final class OpenRouterStreamingResponseMapper {
 	}
 
 	public Flux<ChatResponse> map(Flux<ChatCompletionChunk> chunks, @Nullable OpenRouterAudioOptions audioOptions) {
+		return mapOutputs(chunks.map(chunk -> new OpenRouterStreamingToolCallAggregator.Output(chunk, false)),
+				audioOptions);
+	}
+
+	/**
+	 * Maps a stream through the tool-call aggregator, streaming the tool-call arguments
+	 * as partial {@code ToolCallPart}s while the aggregator buffers them. Each complete
+	 * call follows once, at the index of its deltas.
+	 * @param chunks streamed OpenRouter chat-completion chunks
+	 * @param aggregator the aggregator that merges tool-call fragments
+	 * @param audioOptions the requested audio output, or {@code null}
+	 * @return mapped Spring AI responses
+	 */
+	public Flux<ChatResponse> map(Flux<ChatCompletionChunk> chunks, OpenRouterStreamingToolCallAggregator aggregator,
+			@Nullable OpenRouterAudioOptions audioOptions) {
+		return mapOutputs(aggregator.aggregate(chunks, true), audioOptions);
+	}
+
+	private Flux<ChatResponse> mapOutputs(Flux<OpenRouterStreamingToolCallAggregator.Output> outputs,
+			@Nullable OpenRouterAudioOptions audioOptions) {
 		return Flux.defer(() -> {
 			Map<Integer, PartialOutputAccumulator> partialOutputs = new LinkedHashMap<>();
 			Map<Integer, ReasoningMetadata.Accumulator> reasoning = new LinkedHashMap<>();
 			ResponseExtensions extensions = new ResponseExtensions();
 			AudioOutputMapper audio = new AudioOutputMapper(audioOptions);
 			ChatStreamBudget budget = new ChatStreamBudget(this.maxStateBytes, this.maxStateChoices);
+			Parts parts = new Parts();
 			AtomicReference<ChatCompletionChunk> last = new AtomicReference<>();
-			return chunks.doOnNext(last::set)
-				.map(chunk -> map(chunk, partialOutputs, reasoning, extensions, audio, budget))
+			return outputs
+				.mapNotNull(output -> output.toolCallDelta() ? parts.toolCallDeltas(output.chunk())
+						: mapChunk(output.chunk(), partialOutputs, reasoning, extensions, audio, budget, parts, last))
 				// Runs only after normal completion; errors and cancellation skip it.
 				.concatWith(Flux.defer(() -> completeAudio(audio, reasoning, extensions, last.get())))
 				.doFinally(signal -> audio.clear());
 		});
+	}
+
+	private ChatResponse mapChunk(ChatCompletionChunk chunk, Map<Integer, PartialOutputAccumulator> partialOutputs,
+			Map<Integer, ReasoningMetadata.Accumulator> reasoning, ResponseExtensions extensions,
+			AudioOutputMapper audio, ChatStreamBudget budget, Parts parts, AtomicReference<ChatCompletionChunk> last) {
+		last.set(chunk);
+		return map(chunk, partialOutputs, reasoning, extensions, audio, budget, parts);
 	}
 
 	private Flux<ChatResponse> completeAudio(AudioOutputMapper audio,
@@ -101,9 +143,8 @@ public final class OpenRouterStreamingResponseMapper {
 			ReasoningMetadata.Accumulator accumulator = reasoning.computeIfAbsent(completion.index(),
 					key -> new ReasoningMetadata.Accumulator());
 			AssistantMessage message = AssistantMessage.builder()
-				.content("")
+				.parts(MessageParts.assistant(null, "", List.of(), completion.media()))
 				.properties(accumulator.append(completion.metadata()))
-				.media(completion.media())
 				.build();
 			// No finish reason is fabricated: the provider did not send one.
 			ChatGenerationMetadata.Builder metadata = ChatGenerationMetadata.builder()
@@ -117,7 +158,7 @@ public final class OpenRouterStreamingResponseMapper {
 
 	private ChatResponse map(ChatCompletionChunk chunk, Map<Integer, PartialOutputAccumulator> partialOutputs,
 			Map<Integer, ReasoningMetadata.Accumulator> reasoning, ResponseExtensions extensions,
-			AudioOutputMapper audio, ChatStreamBudget budget) {
+			AudioOutputMapper audio, ChatStreamBudget budget, Parts parts) {
 		var error = chunk.error();
 		if (error != null) {
 			// Mid-stream failures arrive as a normal chunk with a top-level error object
@@ -139,7 +180,8 @@ public final class OpenRouterStreamingResponseMapper {
 		for (Choice choice : choices) {
 			if (!audio.finished(choice)) {
 				generations.add(mapGeneration(choice, chunk.model(), audio, budget,
-						reasoning.computeIfAbsent(choiceIndex(choice), key -> new ReasoningMetadata.Accumulator())));
+						reasoning.computeIfAbsent(choiceIndex(choice), key -> new ReasoningMetadata.Accumulator()),
+						parts));
 			}
 		}
 		clearFinishedChoices(chunk, partialOutputs);
@@ -212,7 +254,7 @@ public final class OpenRouterStreamingResponseMapper {
 	}
 
 	private Generation mapGeneration(Choice choice, @Nullable String model, AudioOutputMapper audio,
-			ChatStreamBudget budget, ReasoningMetadata.Accumulator reasoning) {
+			ChatStreamBudget budget, ReasoningMetadata.Accumulator reasoning, Parts parts) {
 		var delta = choice.delta();
 		if (delta != null && !CollectionUtils.isEmpty(delta.toolCalls())
 				&& !FinishReasonMapper.isToolCallCompletion(choice.finishReason())) {
@@ -226,13 +268,14 @@ public final class OpenRouterStreamingResponseMapper {
 		audio.append(choice, properties, media);
 		Map<String, Object> snapshot = reasoning.append(properties);
 		AssistantMessage assistantMessage = AssistantMessage.builder()
-			.content(delta != null && delta.content() != null ? delta.content() : "")
+			.parts(parts.chunk(choiceIndex(choice), choice.finishReason() != null, delta, snapshot, media))
 			.properties(snapshot)
-			.toolCalls(CompletedToolCalls.map(delta != null ? delta.toolCalls() : null))
-			.media(media)
 			.build();
 		ChatGenerationMetadata.Builder metadataBuilder = ChatGenerationMetadata.builder();
 		metadataBuilder.finishReason(FinishReasonMapper.map(choice.finishReason()));
+		if (choice.finishReason() != null) {
+			metadataBuilder.finishReasonCategory(FinishReasonMapper.category(snapshot.get(RefusalMetadata.REFUSAL)));
+		}
 		ResponseValues.ifPresent(model, value -> metadataBuilder.metadata(OpenRouterMetadata.MODEL, value));
 		ResponseValues.ifPresent(choice.index(),
 				value -> metadataBuilder.metadata(OpenRouterMetadata.CHOICE_INDEX, value));
@@ -241,7 +284,7 @@ public final class OpenRouterStreamingResponseMapper {
 		ResponseValues.ifPresent(snapshot.get(RefusalMetadata.REFUSAL),
 				value -> metadataBuilder.metadata(RefusalMetadata.REFUSAL, value));
 		ResponseValues.ifPresent(delta != null ? delta.reasoning() : null,
-				value -> metadataBuilder.metadata(OpenRouterMetadata.REASONING, value));
+				value -> metadataBuilder.metadata(ReasoningMetadata.REASONING, value));
 		ChatGenerationMetadata metadata = metadataBuilder.build();
 		return new Generation(assistantMessage, metadata);
 	}
@@ -269,6 +312,162 @@ public final class OpenRouterStreamingResponseMapper {
 		metadataBuilder.keyValue(OpenRouterMetadata.OBJECT, chunk.object());
 		metadataBuilder.keyValue(OpenRouterMetadata.CREATED, chunk.created());
 		return metadataBuilder.build();
+	}
+
+	/**
+	 * The parts state of one subscription. A blocking reply has one reasoning part, one
+	 * text part and then the tool calls, so each choice owns a block of indexes when it
+	 * first streams anything: its reasoning, its text, and then one index per tool call,
+	 * offset by the key the tool-call aggregator orders the call by. All reasoning deltas
+	 * of a choice then aggregate into one part, before its text, before its calls in the
+	 * order of the merged reply, whatever order the chunks interleave them in. The
+	 * {@code reasoning_details} of a choice are attached once, on its finish chunk, so
+	 * that the aggregated part holds them all, as a blocking call does. Indexes are
+	 * unique across choices, because the aggregator groups parts by response id alone.
+	 */
+	private final class Parts {
+
+		private int nextChoice;
+
+		private final Map<Integer, ChoiceParts> choices = new LinkedHashMap<>();
+
+		List<MessagePart> chunk(int choice, boolean finished, @Nullable Delta delta, Map<String, Object> snapshot,
+				List<Media> media) {
+			ChoiceParts indexes = choice(choice);
+			List<MessagePart> parts = new ArrayList<>();
+			String reasoning = delta != null ? delta.reasoning() : null;
+			List<JsonNode> details = finished
+					? ResponseValues.CHAT_COMPLETIONS.items(ReasoningMetadata.details(snapshot), "reasoning detail")
+					: List.of();
+			if (StringUtils.hasLength(reasoning) || !details.isEmpty()) {
+				parts.add(StreamingParts.partial(
+						new ReasoningPart(StringUtils.hasLength(reasoning) ? reasoning : null, null,
+								details.isEmpty() ? null : MessageParts.chatPayload(details), Map.of()),
+						indexes.part(0)));
+			}
+			String content = delta != null ? delta.content() : null;
+			if (StringUtils.hasLength(content)) {
+				parts.add(StreamingParts.partial(TextPart.of(content), indexes.part(1)));
+			}
+			List<ToolCall> wire = ResponseValues.CHAT_COMPLETIONS.items(delta != null ? delta.toolCalls() : null,
+					"tool call");
+			List<AssistantMessage.ToolCall> toolCalls = CompletedToolCalls.map(wire);
+			// The merged calls are in key order; a call without a wire index follows the
+			// previous one, as in the aggregator.
+			int key = -1;
+			for (int position = 0; position < toolCalls.size(); position++) {
+				Integer wireIndex = wire.get(position).index();
+				key = wireIndex != null && wireIndex > key ? wireIndex : key + 1;
+				parts.add(StreamingParts.complete(ToolCallPart.of(toolCalls.get(position)), indexes.call(key)));
+			}
+			if (finished) {
+				this.choices.remove(choice);
+			}
+			// Media is not indexed, as in Spring AI: the aggregator does not carry it.
+			media.forEach(medium -> parts.add(MediaPart.of(medium)));
+			return MessageParts.orEmptyText(parts);
+		}
+
+		private ChoiceParts choice(int choice) {
+			ChoiceParts parts = this.choices.get(choice);
+			if (parts == null) {
+				parts = new ChoiceParts((long) this.nextChoice++ * ChoiceParts.SIZE);
+				this.choices.put(choice, parts);
+			}
+			return parts;
+		}
+
+		/**
+		 * A response that holds the tool-call fragments of a buffered chunk as partial
+		 * parts, at the index of their wire index, which the complete call keeps. A
+		 * fragment is shown once the id and name of its call are known; one without a
+		 * wire index cannot be correlated and is left to the complete call. Returns
+		 * {@code null} when no fragment can be shown yet.
+		 */
+		@Nullable ChatResponse toolCallDeltas(ChatCompletionChunk chunk) {
+			List<Generation> generations = new ArrayList<>();
+			for (Choice choice : ResponseValues.CHAT_COMPLETIONS.items(chunk.choices(), "choice")) {
+				Delta delta = choice.delta();
+				ChoiceParts indexes = choice(choiceIndex(choice));
+				List<MessagePart> parts = new ArrayList<>();
+				for (ToolCall fragment : ResponseValues.CHAT_COMPLETIONS.items(delta != null ? delta.toolCalls() : null,
+						"tool call fragment")) {
+					AssistantMessage.ToolCall call = indexes.delta(fragment);
+					if (call != null) {
+						parts.add(StreamingParts.partial(ToolCallPart.of(call),
+								indexes.call(Objects.requireNonNull(fragment.index()))));
+					}
+				}
+				if (!parts.isEmpty()) {
+					generations.add(new Generation(AssistantMessage.builder().parts(parts).build(),
+							ChatGenerationMetadata.builder()
+								.metadata(OpenRouterMetadata.CHOICE_INDEX, choiceIndex(choice))
+								.build()));
+				}
+			}
+			ChatResponseMetadata.Builder metadata = ChatResponseMetadata.builder();
+			ResponseValues.ifPresent(chunk.id(), metadata::id);
+			ResponseValues.ifPresent(chunk.model(), metadata::model);
+			return generations.isEmpty() ? null : new ChatResponse(generations, metadata.build());
+		}
+
+	}
+
+	/**
+	 * The stream indexes of one choice, a block of {@link #SIZE} from its base: its
+	 * reasoning, its text, and each tool call by key. The id and name of a call arrive on
+	 * its first fragment only, so they are kept by wire index.
+	 */
+	private static final class ChoiceParts {
+
+		private static final int SIZE = 1 << 16;
+
+		private final long base;
+
+		private final Map<Integer, AssistantMessage.ToolCall> callsByWireIndex = new LinkedHashMap<>();
+
+		private ChoiceParts(long base) {
+			this.base = base;
+		}
+
+		private int call(int key) {
+			if (key < 0 || key >= SIZE - 2) {
+				throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.CONTRACT, "/chat/completions",
+						"Tool call index out of range");
+			}
+			return part(2 + key);
+		}
+
+		private int part(int offset) {
+			long index = this.base + offset;
+			if (index > Integer.MAX_VALUE) {
+				throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.CONTRACT, "/chat/completions",
+						"Too many choices in one stream");
+			}
+			return (int) index;
+		}
+
+		// A fragment without a wire index cannot be correlated and is left to the
+		// complete call.
+		private AssistantMessage.@Nullable ToolCall delta(ToolCall fragment) {
+			Integer wireIndex = fragment.index();
+			if (wireIndex == null) {
+				return null;
+			}
+			FunctionCall function = fragment.function();
+			String name = function != null ? function.name() : null;
+			String arguments = function != null && function.arguments() != null ? function.arguments() : "";
+			if (StringUtils.hasText(fragment.id()) && StringUtils.hasText(name)) {
+				this.callsByWireIndex.putIfAbsent(wireIndex, new AssistantMessage.ToolCall(
+						Objects.requireNonNull(fragment.id()), "function", Objects.requireNonNull(name), ""));
+			}
+			else if (arguments.isEmpty()) {
+				return null;
+			}
+			AssistantMessage.ToolCall call = this.callsByWireIndex.get(wireIndex);
+			return call != null ? new AssistantMessage.ToolCall(call.id(), call.type(), call.name(), arguments) : null;
+		}
+
 	}
 
 	private static final class ResponseExtensions {

@@ -182,7 +182,11 @@ class ResponsesSnapshotHistoryTests {
 			Flux<ResponsesStreamEvent> events = Flux.range(0, wire.output().size())
 				.map(index -> new ResponsesStreamEvent("response.output_item.done", null, wire.output().get(index),
 						null, null, null, null, null, null, null, index, null))
-				.concatWithValues(new ResponsesStreamEvent("response.completed", null, null, wire, null));
+				.concatWithValues(new ResponsesStreamEvent("response.completed", null, null, wire, null))
+				// The wire opens every stream with the response id.
+				.startWith(this.mapper.readValue(
+						"{\"type\":\"response.created\",\"response\":{\"id\":\"resp_1\",\"status\":\"in_progress\"}}",
+						ResponsesStreamEvent.class));
 			new MessageAggregator()
 				.aggregate(new OpenRouterResponsesStreamingResponseMapper().map(events), aggregated::set)
 				.blockLast();

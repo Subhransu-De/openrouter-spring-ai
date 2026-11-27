@@ -30,7 +30,11 @@ import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.MessageType;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.messages.UserMessage;
-import org.springframework.ai.content.Media;
+import org.springframework.ai.chat.messages.part.MediaPart;
+import org.springframework.ai.chat.messages.part.MessagePart;
+import org.springframework.ai.chat.messages.part.StreamingParts;
+import org.springframework.ai.chat.messages.part.TextPart;
+import org.springframework.ai.chat.messages.part.ToolCallPart;
 import org.springframework.ai.tool.definition.ToolDefinition;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
@@ -190,6 +194,14 @@ public final class OpenRouterResponsesRequestMapper {
 	}
 
 	private void assistant(Message message, List<Object> items) {
+		if (message instanceof AssistantMessage assistant && assistant.getParts()
+			.stream()
+			.anyMatch(part -> !StreamingParts.isPartial(part) && MessageParts.responsesItem(part) != null)) {
+			replayParts(assistant, items);
+			return;
+		}
+		// A message without complete Responses parts, such as one stored by 0.3.0 or a
+		// single stream chunk, replays its legacy output snapshot.
 		Object reasoning = message.getMetadata().get(ReasoningMetadata.RESPONSES_ITEMS);
 		if (reasoning instanceof List<?> reasoningItems && !reasoningItems.isEmpty()) {
 			Object output = message.getMetadata().get(ReasoningMetadata.RESPONSES_OUTPUT_ITEMS);
@@ -217,6 +229,34 @@ public final class OpenRouterResponsesRequestMapper {
 			for (AssistantMessage.ToolCall toolCall : assistantMessage.getToolCalls()) {
 				items.add(new ResponsesFunctionCall("function_call", toolCall.id(), toolCall.name(),
 						toolCall.arguments()));
+			}
+		}
+	}
+
+	/**
+	 * One input item per part, in part order. A part that carries the output item it was
+	 * mapped from replays that item verbatim, so reasoning keeps its encrypted content
+	 * and its position before the calls it led to. A text or tool call part without one,
+	 * for example after the text was rewritten, is rebuilt. Reasoning without a Responses
+	 * payload is skipped, as in Spring AI's {@code OpenAiResponsesChatModel}: the API
+	 * does not accept reasoning that another provider or mode produced.
+	 */
+	private void replayParts(AssistantMessage message, List<Object> items) {
+		for (MessagePart part : message.getParts()) {
+			String item = MessageParts.responsesItem(part);
+			if (StreamingParts.isPartial(part)) {
+				continue;
+			}
+			if (item != null) {
+				items.add(this.objectMapper.readTree(item));
+			}
+			else if (part instanceof TextPart text && StringUtils.hasLength(text.text())) {
+				items.add(new ResponsesOutputItem(null, MESSAGE_TYPE, "completed", "assistant",
+						List.of(new ResponsesContent("output_text", text.text()))));
+			}
+			else if (part instanceof ToolCallPart toolCall) {
+				AssistantMessage.ToolCall call = toolCall.toolCall();
+				items.add(new ResponsesFunctionCall("function_call", call.id(), call.name(), call.arguments()));
 			}
 		}
 	}
@@ -249,12 +289,15 @@ public final class OpenRouterResponsesRequestMapper {
 			return new ResponsesInputMessage(MESSAGE_TYPE, role,
 					List.of(new ResponsesContent("input_text", message.getText())));
 		}
+		// Text and media keep their order in the message.
 		List<ResponsesContent> content = new ArrayList<>();
-		if (StringUtils.hasText(userMessage.getText())) {
-			content.add(new ResponsesContent("input_text", userMessage.getText()));
-		}
-		for (Media media : userMessage.getMedia()) {
-			content.add(MediaContentMapper.responses(media));
+		for (MessagePart part : userMessage.getParts()) {
+			if (part instanceof TextPart text && StringUtils.hasLength(text.text())) {
+				content.add(new ResponsesContent("input_text", text.text()));
+			}
+			else if (part instanceof MediaPart media) {
+				content.add(MediaContentMapper.responses(media.media()));
+			}
 		}
 		return new ResponsesInputMessage(MESSAGE_TYPE, role, content);
 	}

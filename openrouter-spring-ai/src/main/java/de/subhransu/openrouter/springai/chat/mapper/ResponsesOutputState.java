@@ -6,6 +6,7 @@ import de.subhransu.openrouter.springai.api.dto.ResponsesOutputItem;
 import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
@@ -16,11 +17,9 @@ final class ResponsesOutputState {
 
 	private final Map<Integer, TextItem> text = new HashMap<>();
 
-	private final Map<String, Image> imageIds = new HashMap<>();
+	private final Map<Integer, Image> images = new HashMap<>();
 
-	private final Map<Integer, Image> imageIndexes = new HashMap<>();
-
-	private final Map<Integer, String> indexedImageIds = new HashMap<>();
+	private final Map<Integer, String> imageIds = new HashMap<>();
 
 	private int outputCursor;
 
@@ -30,7 +29,7 @@ final class ResponsesOutputState {
 
 	private int lastContent = -1;
 
-	String delta(ResponsesStreamEvent event) {
+	Map<Integer, String> delta(ResponsesStreamEvent event) {
 		Part part = part(index(event.outputIndex()), index(event.contentIndex()));
 		if (part.done) {
 			throw protocol("Text delta follows a completed content part");
@@ -39,21 +38,22 @@ final class ResponsesOutputState {
 		return drain();
 	}
 
-	String done(ResponsesStreamEvent event) {
+	Map<Integer, String> done(ResponsesStreamEvent event) {
 		snapshot(index(event.outputIndex()), index(event.contentIndex()),
 				ResponseValues.RESPONSES.required(event.text(), "output text snapshot"));
 		return drain();
 	}
 
-	String item(ResponsesOutputItem item, @Nullable Integer outputIndex) {
-		// Unindexed non-text items cannot locate a gap in the text sequence.
-		if (outputIndex != null || "message".equals(item.type())) {
-			snapshot(item, index(outputIndex));
+	// An item without an output index waits for the terminal output, which places it.
+	Map<Integer, String> item(ResponsesOutputItem item, @Nullable Integer outputIndex) {
+		if (outputIndex == null) {
+			return Map.of();
 		}
+		snapshot(item, index(outputIndex));
 		return drain();
 	}
 
-	String terminal(List<? extends @Nullable ResponsesOutputItem> output) {
+	Map<Integer, String> terminal(List<? extends @Nullable ResponsesOutputItem> output) {
 		if (this.text.entrySet()
 			.stream()
 			.anyMatch(entry -> entry.getKey() >= output.size()
@@ -66,54 +66,30 @@ final class ResponsesOutputState {
 		return drain();
 	}
 
-	List<Media> image(@Nullable ResponsesOutputItem item, @Nullable Integer outputIndex) {
+	// The media of an image item the first time its output index completes.
+	List<Media> image(@Nullable ResponsesOutputItem item, int outputIndex) {
 		if (item == null || !"image_generation_call".equals(item.type()) || item.result() == null) {
 			return List.of();
 		}
-		validateImageIdentity(item, outputIndex);
-		Image byId = item.id() != null ? this.imageIds.get(item.id()) : null;
-		Image byIndex = outputIndex != null ? this.imageIndexes.get(index(outputIndex)) : null;
-		Image previous = byId != null ? byId : byIndex;
-		Image current = new Image(item.result(), item.outputFormat() != null ? item.outputFormat() : "png");
-		validateImageSnapshot(byId, byIndex, previous, current);
-		retainImage(item, outputIndex, previous != null ? previous : current);
-		return previous != null ? List.of() : GeneratedImageMapper.responsesMedia(List.of(item));
-	}
-
-	private void validateImageSnapshot(@Nullable Image byId, @Nullable Image byIndex, @Nullable Image previous,
-			Image current) {
-		if (byId != null && byIndex != null && byId != byIndex || previous != null && !previous.equals(current)) {
-			throw protocol("Generated image snapshot contradicts an emitted item");
-		}
-	}
-
-	private void validateImageIdentity(ResponsesOutputItem item, @Nullable Integer outputIndex) {
-		if (item.id() == null && outputIndex == null) {
-			throw protocol(OpenRouterProtocolException.Kind.MISSING_FIELD,
-					"Generated image requires an item ID or output index");
-		}
-		if (item.id() != null && outputIndex != null) {
-			String previousId = this.indexedImageIds.putIfAbsent(outputIndex, item.id());
+		index(outputIndex);
+		if (item.id() != null) {
+			String previousId = this.imageIds.putIfAbsent(outputIndex, item.id());
 			if (previousId != null && !previousId.equals(item.id())) {
 				throw protocol("Generated image ID contradicts its output index");
 			}
 		}
-	}
-
-	private void retainImage(ResponsesOutputItem item, @Nullable Integer outputIndex, Image retained) {
-		if (item.id() != null) {
-			this.imageIds.put(item.id(), retained);
+		Image current = new Image(item.result(), item.outputFormat() != null ? item.outputFormat() : "png");
+		Image previous = this.images.putIfAbsent(outputIndex, current);
+		if (previous != null && !previous.equals(current)) {
+			throw protocol("Generated image snapshot contradicts an emitted item");
 		}
-		if (outputIndex != null) {
-			this.imageIndexes.put(outputIndex, retained);
-		}
+		return previous != null ? List.of() : GeneratedImageMapper.responsesMedia(List.of(item));
 	}
 
 	void clear() {
 		this.text.clear();
+		this.images.clear();
 		this.imageIds.clear();
-		this.imageIndexes.clear();
-		this.indexedImageIds.clear();
 	}
 
 	private void snapshot(ResponsesOutputItem item, int outputIndex) {
@@ -154,8 +130,9 @@ final class ResponsesOutputState {
 				ignored -> new Part());
 	}
 
-	private String drain() {
-		StringBuilder suffix = new StringBuilder();
+	// The released text by output index, in output order.
+	private Map<Integer, String> drain() {
+		Map<Integer, String> released = new LinkedHashMap<>();
 		TextItem item;
 		while ((item = this.text.get(this.outputCursor)) != null) {
 			Part part = item.parts.get(this.contentCursor);
@@ -170,15 +147,15 @@ final class ResponsesOutputState {
 			if (part.value.length() > part.emitted) {
 				this.lastOutput = this.outputCursor;
 				this.lastContent = this.contentCursor;
+				released.merge(this.outputCursor, part.value.substring(part.emitted), String::concat);
 			}
-			suffix.append(part.value, part.emitted, part.value.length());
 			part.emitted = part.value.length();
 			if (!part.done) {
 				break;
 			}
 			this.contentCursor++;
 		}
-		return suffix.toString();
+		return released;
 	}
 
 	private static int index(@Nullable Integer index) {

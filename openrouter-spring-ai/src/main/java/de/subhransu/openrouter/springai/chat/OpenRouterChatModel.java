@@ -161,8 +161,8 @@ public class OpenRouterChatModel implements ChatModel {
 						Flux<ChatCompletionChunk> chunks = CollectionUtils.isEmpty(headers)
 								? this.openRouterApi.chatCompletionStream(request)
 								: this.openRouterApi.chatCompletionStream(request, headers);
-						yield this.streamingResponseMapper.map(this.streamingToolCallAggregator
-							.aggregate(StreamRetries.stream(chunks, this.retryTemplate)), options.getAudio());
+						yield this.streamingResponseMapper.map(StreamRetries.stream(chunks, this.retryTemplate),
+								this.streamingToolCallAggregator, options.getAudio());
 					}
 					case RESPONSES -> {
 						ResponsesRequest request = this.responsesRequestMapper.map(prompt.getInstructions(), options,

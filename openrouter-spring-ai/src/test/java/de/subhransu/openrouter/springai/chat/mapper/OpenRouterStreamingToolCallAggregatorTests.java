@@ -38,6 +38,8 @@ import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.part.StreamingParts;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.content.Media;
 import org.springframework.util.MimeTypeUtils;
@@ -83,6 +85,52 @@ class OpenRouterStreamingToolCallAggregatorTests {
 				}
 			}
 		}
+	}
+
+	@Tag("tools")
+	@Tag("tools.stream-assembly")
+	@Test
+	void toolCallDeltasStreamAheadOfTheMergedChunkOnlyWhenRequested() {
+		ChatCompletionChunk first = chunk(toolFragment(0, 0, "call-0", "lookup", "{\"city\":"));
+		ChatCompletionChunk text = chunk(textChoice(0, "between"));
+		ChatCompletionChunk second = chunk(toolFragment(0, 0, null, null, "\"Oslo\"}"));
+		ChatCompletionChunk last = chunk(finishChoice(0));
+
+		List<OpenRouterStreamingToolCallAggregator.Output> outputs = this.aggregator
+			.aggregate(Flux.just(first, text, second, last), true)
+			.collectList()
+			.block();
+		assertThat(outputs).extracting(OpenRouterStreamingToolCallAggregator.Output::toolCallDelta)
+			.containsExactly(true, true, false);
+		assertThat(outputs.get(0).chunk()).isEqualTo(first);
+		assertThat(outputs.get(1).chunk()).isEqualTo(second);
+		assertThat(outputs.get(2).chunk().choices().get(0).delta().toolCalls().get(0).function().arguments())
+			.isEqualTo("{\"city\":\"Oslo\"}");
+		assertThat(this.aggregator.aggregate(Flux.just(first, text, second, last), false).collectList().block())
+			.extracting(OpenRouterStreamingToolCallAggregator.Output::toolCallDelta)
+			.containsExactly(false);
+		// A call that completes in the chunk it starts in has no delta.
+		Choice whole = toolFragment(0, 0, "call-0", "lookup", "{}");
+		ChatCompletionChunk complete = chunk(new Choice(0, null, whole.delta(), "tool_calls", null, null, Map.of()));
+		assertThat(this.aggregator.aggregate(Flux.just(complete), true).collectList().block())
+			.extracting(OpenRouterStreamingToolCallAggregator.Output::toolCallDelta)
+			.containsExactly(false);
+		// The finish chunk of a call that already streamed carries its last fragment.
+		Choice tail = toolFragment(0, 0, null, null, "\"Oslo\"}");
+		ChatCompletionChunk finish = chunk(new Choice(0, null, tail.delta(), "tool_calls", null, null, Map.of()));
+		List<OpenRouterStreamingToolCallAggregator.Output> finished = this.aggregator
+			.aggregate(Flux.just(first, finish), true)
+			.collectList()
+			.block();
+		assertThat(finished).extracting(OpenRouterStreamingToolCallAggregator.Output::toolCallDelta)
+			.containsExactly(true, true, false);
+		assertThat(finished.get(1).chunk()).isEqualTo(finish);
+		// A failed choice has no delta: the merged chunk reports the failure.
+		ChatCompletionChunk failure = chunk(new Choice(0, null, tail.delta(), null, null,
+				new ChoiceError("503", "Provider failed during tool call", Map.of())));
+		assertThat(this.aggregator.aggregate(Flux.just(first, failure), true).collectList().block())
+			.extracting(OpenRouterStreamingToolCallAggregator.Output::toolCallDelta)
+			.containsExactly(true, false);
 	}
 
 	private static Map<String, Object> nullValue(String key) {
@@ -366,8 +414,13 @@ class OpenRouterStreamingToolCallAggregatorTests {
 					.allSatisfy(media -> assertThat(media.getMimeType()).isEqualTo(MimeTypeUtils.IMAGE_PNG));
 				assertThat(streamed.getResult().getOutput().getMedia()).extracting(Media::getData)
 					.containsExactly("data:image/png;base64,AQID", "data:image/png;base64,BAUG");
-				assertThat(streamed.getResult().getOutput()).usingRecursiveComparison()
-					.ignoringFields("media.name")
+				// The chunk carries indexed parts; without the stream index they are the
+				// parts of the blocking response.
+				assertThat(AssistantMessage.builder()
+					.parts(streamed.getResult().getOutput().getParts().stream().map(StreamingParts::strip).toList())
+					.properties(streamed.getResult().getOutput().getMetadata())
+					.build()).usingRecursiveComparison()
+					.ignoringFieldsMatchingRegexes(".*media.*name")
 					.isEqualTo(synchronous.getResult().getOutput());
 				assertThat(streamed.getResult().getMetadata().getFinishReason()).isEqualTo("TOOL_CALLS")
 					.isEqualTo(synchronous.getResult().getMetadata().getFinishReason());
@@ -507,7 +560,7 @@ class OpenRouterStreamingToolCallAggregatorTests {
 		constructor.setAccessible(true);
 		return constructor.newInstance(aggregator, (Consumer<Throwable>) failure -> {
 			throw new AssertionError(failure);
-		});
+		}, false);
 	}
 
 	@Tag("tools")

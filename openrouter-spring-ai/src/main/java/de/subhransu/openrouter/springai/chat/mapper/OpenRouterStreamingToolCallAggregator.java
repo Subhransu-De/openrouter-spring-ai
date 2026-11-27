@@ -90,10 +90,20 @@ public final class OpenRouterStreamingToolCallAggregator {
 	}
 
 	public Flux<ChatCompletionChunk> aggregate(Flux<ChatCompletionChunk> chunks) {
-		return Flux.create(sink -> subscribe(chunks, sink), FluxSink.OverflowStrategy.BUFFER);
+		return aggregate(chunks, false).map(Output::chunk);
 	}
 
-	private void subscribe(Flux<ChatCompletionChunk> chunks, FluxSink<ChatCompletionChunk> sink) {
+	/**
+	 * Aggregates as {@link #aggregate(Flux)}, and with {@code toolCallDeltas} also emits
+	 * each buffered chunk that holds tool-call fragments as it arrives, marked as a
+	 * delta, so that the response mapper can stream the arguments as partial parts. The
+	 * merged chunk still follows; a delta is never a tool call.
+	 */
+	Flux<Output> aggregate(Flux<ChatCompletionChunk> chunks, boolean toolCallDeltas) {
+		return Flux.create(sink -> subscribe(chunks, sink, toolCallDeltas), FluxSink.OverflowStrategy.BUFFER);
+	}
+
+	private void subscribe(Flux<ChatCompletionChunk> chunks, FluxSink<Output> sink, boolean toolCallDeltas) {
 		AtomicBoolean cancelled = new AtomicBoolean();
 		AtomicLong pendingRequests = new AtomicLong();
 		AtomicReference<@Nullable Subscription> upstream = new AtomicReference<>();
@@ -104,7 +114,7 @@ public final class OpenRouterStreamingToolCallAggregator {
 				sink.error(failure);
 			}
 		};
-		AggregationState state = new AggregationState(fail);
+		AggregationState state = new AggregationState(fail, toolCallDeltas);
 		sink.onRequest(requested -> {
 			pendingRequests.updateAndGet(current -> addSaturated(current, requested));
 			drainRequests.run();
@@ -135,7 +145,7 @@ public final class OpenRouterStreamingToolCallAggregator {
 			@Override
 			public void onNext(ChatCompletionChunk chunk) {
 				try {
-					List<ChatCompletionChunk> ready = state.accept(chunk);
+					List<Output> ready = state.acceptAll(chunk);
 					ready.forEach(sink::next);
 					if (ready.isEmpty() && !cancelled.get()) {
 						pendingRequests.updateAndGet(current -> addSaturated(current, 1));
@@ -608,8 +618,22 @@ public final class OpenRouterStreamingToolCallAggregator {
 
 		private final Consumer<Throwable> timeoutHandler;
 
-		private AggregationState(Consumer<Throwable> timeoutHandler) {
+		private final boolean toolCallDeltas;
+
+		private final List<ChatCompletionChunk> deltas = new ArrayList<>();
+
+		private AggregationState(Consumer<Throwable> timeoutHandler, boolean toolCallDeltas) {
 			this.timeoutHandler = timeoutHandler;
+			this.toolCallDeltas = toolCallDeltas;
+		}
+
+		private synchronized List<Output> acceptAll(ChatCompletionChunk chunk) {
+			this.deltas.clear();
+			List<ChatCompletionChunk> ready = accept(chunk);
+			List<Output> outputs = new ArrayList<>(this.deltas.size() + ready.size());
+			this.deltas.forEach(delta -> outputs.add(new Output(delta, true)));
+			ready.forEach(merged -> outputs.add(new Output(merged, false)));
+			return outputs;
 		}
 
 		private long serializedBytes(ChatCompletionChunk chunk) {
@@ -689,7 +713,15 @@ public final class OpenRouterStreamingToolCallAggregator {
 				long chunkBytes = serializedBytes(choiceChunk);
 				buffered.add(choiceChunk, chunkBytes);
 				retain(chunkBytes);
-				if (choice.finishReason() != null || OpenRouterChoiceErrorExceptionFactory.isFailure(choice)) {
+				boolean failed = OpenRouterChoiceErrorExceptionFactory.isFailure(choice);
+				boolean finished = choice.finishReason() != null || failed;
+				// The finish chunk can carry the last argument fragment of a call that
+				// already streamed.
+				if (this.toolCallDeltas && hasToolCallDelta(choice)
+						&& (!finished || !failed && buffered.chunks.size() > 1)) {
+					this.deltas.add(choiceChunk);
+				}
+				if (finished) {
 					finishChoice(choice, buffered, index, ready);
 				}
 			}
@@ -916,6 +948,16 @@ public final class OpenRouterStreamingToolCallAggregator {
 
 		}
 
+	}
+
+	/**
+	 * A chunk of the aggregated stream: a chunk to map as it is, or a buffered chunk
+	 * whose tool-call fragments are only a delta.
+	 *
+	 * @param chunk the chunk
+	 * @param toolCallDelta whether only the tool-call fragments of the chunk count
+	 */
+	record Output(ChatCompletionChunk chunk, boolean toolCallDelta) {
 	}
 
 	private static final class ExtensionDelivery {

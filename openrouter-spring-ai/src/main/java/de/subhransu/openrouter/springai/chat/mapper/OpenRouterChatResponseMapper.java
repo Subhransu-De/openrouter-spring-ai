@@ -91,17 +91,17 @@ public final class OpenRouterChatResponseMapper {
 		RefusalMetadata.put(properties, message.refusal());
 		ExtensionMetadata.put(properties, message.extensions(), choice.extensions(), message.toolCalls());
 		AssistantMessage assistantMessage = AssistantMessage.builder()
-			.content(content.text())
+			.parts(MessageParts.assistant(MessageParts.chatReasoning(message.reasoning(), message.reasoningDetails()),
+					content.text(), CompletedToolCalls.map(message.toolCalls()), media))
 			.properties(properties)
-			.toolCalls(CompletedToolCalls.map(message.toolCalls()))
-			.media(media)
 			.build();
 
 		ChatGenerationMetadata.Builder metadataBuilder = ChatGenerationMetadata.builder();
 		metadataBuilder.finishReason(FinishReasonMapper.map(choice.finishReason()));
+		metadataBuilder.finishReasonCategory(FinishReasonMapper.category(properties.get(RefusalMetadata.REFUSAL)));
 		ResponseValues.ifPresent(model, value -> metadataBuilder.metadata(OpenRouterMetadata.MODEL, value));
 		ResponseValues.ifPresent(message.reasoning(),
-				value -> metadataBuilder.metadata(OpenRouterMetadata.REASONING, value));
+				value -> metadataBuilder.metadata(ReasoningMetadata.REASONING, value));
 		ResponseValues.ifPresent(choice.nativeFinishReason(),
 				value -> metadataBuilder.metadata(OpenRouterMetadata.NATIVE_FINISH_REASON, value));
 		ResponseValues.ifPresent(properties.get(RefusalMetadata.REFUSAL),
