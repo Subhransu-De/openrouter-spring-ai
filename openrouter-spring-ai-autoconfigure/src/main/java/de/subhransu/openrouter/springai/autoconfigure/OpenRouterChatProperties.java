@@ -12,9 +12,11 @@ import de.subhransu.openrouter.springai.chat.OpenRouterServiceTier;
 import de.subhransu.openrouter.springai.chat.OpenRouterTrace;
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.NestedConfigurationProperty;
+import org.springframework.util.LinkedCaseInsensitiveMap;
 import org.springframework.util.unit.DataSize;
 
 // Boot binds each key through a getter and a setter. The class total is the sum of those
@@ -168,6 +170,12 @@ public class OpenRouterChatProperties {
 	private @Nullable Map<String, @Nullable Object> providerExtraBody;
 
 	/**
+	 * HTTP headers sent with every chat request. Request headers are merged into them by
+	 * name. Authorization, Content-Type, Accept and the attribution headers are rejected.
+	 */
+	private @Nullable Map<String, String> customHeaders;
+
+	/**
 	 * Whether to request strict schemas for all function tools. Unset keeps the provider
 	 * default.
 	 */
@@ -294,6 +302,7 @@ public class OpenRouterChatProperties {
 			.outputSchema(this.outputSchema)
 			.extraBody(this.extraBody)
 			.providerExtraBody(this.providerExtraBody)
+			.customHeaders(firstHeaderWins(this.customHeaders))
 			.toolStrict(this.toolStrict)
 			.parallelToolCalls(this.parallelToolCalls)
 			.toolChoice(this.toolChoice)
@@ -510,6 +519,25 @@ public class OpenRouterChatProperties {
 
 	public void setExtraBody(@Nullable Map<String, @Nullable Object> extraBody) {
 		this.extraBody = extraBody;
+	}
+
+	// Boot binds a higher-priority property source first, so when two sources spell a
+	// header name in different cases, the first entry is the one to keep.
+	private static @Nullable Map<String, String> firstHeaderWins(@Nullable Map<String, String> headers) {
+		if (headers == null) {
+			return null;
+		}
+		Map<String, String> normalized = new LinkedCaseInsensitiveMap<>(headers.size(), Locale.ROOT);
+		headers.forEach(normalized::putIfAbsent);
+		return normalized;
+	}
+
+	public @Nullable Map<String, String> getCustomHeaders() {
+		return this.customHeaders;
+	}
+
+	public void setCustomHeaders(@Nullable Map<String, String> customHeaders) {
+		this.customHeaders = customHeaders;
 	}
 
 	public @Nullable String getOutputSchema() {

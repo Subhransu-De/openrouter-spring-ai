@@ -101,6 +101,42 @@ class OpenRouterExceptionMessageTests {
 	}
 
 	@Test
+	void requestValuesRedactOnlyCredentialLengthValues() {
+		OpenRouterDiagnosticSanitizer sanitizer = OpenRouterDiagnosticSanitizer.forApiKey(SYNTHETIC_KEY)
+			.redacting(List.of("3", "tenant", "gw-token-0123456789"));
+
+		assertThat(sanitizer.sanitize("{\"code\":401,\"tenant\":\"gw-token-0123456789\"}"))
+			.isEqualTo("{\"code\":401,\"tenant\":\"[REDACTED]\"}");
+	}
+
+	@Test
+	void requestValueWithInnerWhitespaceIsRedactedBeforeWhitespaceIsCollapsed() {
+		OpenRouterDiagnosticSanitizer sanitizer = OpenRouterDiagnosticSanitizer.forApiKey(SYNTHETIC_KEY)
+			.redacting(List.of("gateway  secret\tvalue"));
+
+		assertThat(sanitizer.sanitize("echo gateway  secret\tvalue")).isEqualTo("echo [REDACTED]");
+	}
+
+	@Test
+	void requestValueIsRedactedInItsJsonShortEscapedForm() {
+		OpenRouterDiagnosticSanitizer sanitizer = OpenRouterDiagnosticSanitizer.forApiKey(SYNTHETIC_KEY)
+			.redacting(List.of("gateway\tse\"c\\r/et"));
+
+		assertThat(sanitizer.sanitize("{\"echo\":\"gateway\\tse\\\"c\\\\r\\/et\"}"))
+			.isEqualTo("{\"echo\":\"[REDACTED]\"}");
+	}
+
+	@Test
+	void requestValueThatPrefixesTheKeyDoesNotExposeTheRestOfTheKey() {
+		String key = "synthetic-long-private-value";
+		OpenRouterDiagnosticSanitizer sanitizer = OpenRouterDiagnosticSanitizer.forApiKey(key)
+			.redacting(List.of("synthetic-long"));
+
+		assertThat(sanitizer.sanitize("echo " + key + " and synthetic-long"))
+			.isEqualTo("echo [REDACTED] and [REDACTED]");
+	}
+
+	@Test
 	void hostMessageNeverIncludesTheProviderDiagnostic() {
 		assertThat(OpenRouterExceptionMessage.build("OpenRouter request failed", "provider\r\ninjected"))
 			.isEqualTo("OpenRouter request failed");

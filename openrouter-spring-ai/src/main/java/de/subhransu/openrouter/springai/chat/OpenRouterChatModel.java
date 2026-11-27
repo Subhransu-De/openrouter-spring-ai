@@ -5,8 +5,10 @@ import org.springframework.util.Assert;
 import tools.jackson.databind.ObjectMapper;
 import de.subhransu.openrouter.springai.api.OpenRouterApi;
 import de.subhransu.openrouter.springai.api.OpenRouterRequestMode;
+import de.subhransu.openrouter.springai.api.dto.ChatCompletionChunk;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionRequest;
 import de.subhransu.openrouter.springai.api.dto.ResponsesRequest;
+import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterChatRequestMapper;
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterChatResponseMapper;
 import de.subhransu.openrouter.springai.chat.mapper.OpenRouterResponsesRequestMapper;
@@ -22,6 +24,7 @@ import io.micrometer.observation.ObservationRegistry;
 import io.micrometer.observation.contextpropagation.ObservationThreadLocalAccessor;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -154,16 +157,22 @@ public class OpenRouterChatModel implements ChatModel {
 				return switch (resolveRequestMode(options)) {
 					case CHAT_COMPLETIONS -> {
 						ChatCompletionRequest request = buildChatCompletionsRequest(prompt, options, true);
-						yield this.streamingResponseMapper.map(
-								this.streamingToolCallAggregator.aggregate(StreamRetries
-									.stream(this.openRouterApi.chatCompletionStream(request), this.retryTemplate)),
-								options.getAudio());
+						Map<String, String> headers = options.getCustomHeaders();
+						Flux<ChatCompletionChunk> chunks = CollectionUtils.isEmpty(headers)
+								? this.openRouterApi.chatCompletionStream(request)
+								: this.openRouterApi.chatCompletionStream(request, headers);
+						yield this.streamingResponseMapper.map(this.streamingToolCallAggregator
+							.aggregate(StreamRetries.stream(chunks, this.retryTemplate)), options.getAudio());
 					}
 					case RESPONSES -> {
 						ResponsesRequest request = this.responsesRequestMapper.map(prompt.getInstructions(), options,
 								true, resolveToolDefinitions(options));
+						Map<String, String> headers = options.getCustomHeaders();
+						Flux<ResponsesStreamEvent> events = CollectionUtils.isEmpty(headers)
+								? this.openRouterApi.responsesStream(request)
+								: this.openRouterApi.responsesStream(request, headers);
 						yield this.responsesStreamingResponseMapper
-							.map(StreamRetries.stream(this.openRouterApi.responsesStream(request), this.retryTemplate));
+							.map(StreamRetries.stream(events, this.retryTemplate));
 					}
 				};
 			});
@@ -208,17 +217,22 @@ public class OpenRouterChatModel implements ChatModel {
 		}
 	}
 
+	// Without custom headers the model keeps calling the one-argument API methods, so an
+	// OpenRouterApi subclass that overrides only those still sees every request.
 	private ChatResponse callChatCompletions(Prompt prompt, OpenRouterChatOptions options) {
 		ChatCompletionRequest request = buildChatCompletionsRequest(prompt, options, false);
-		return Retries.invoke(this.retryTemplate,
-				() -> this.responseMapper.map(this.openRouterApi.chatCompletion(request)));
+		Map<String, String> headers = options.getCustomHeaders();
+		return Retries.invoke(this.retryTemplate, () -> this.responseMapper.map(CollectionUtils.isEmpty(headers)
+				? this.openRouterApi.chatCompletion(request) : this.openRouterApi.chatCompletion(request, headers)));
 	}
 
 	private ChatResponse callResponses(Prompt prompt, OpenRouterChatOptions options) {
 		ResponsesRequest request = this.responsesRequestMapper.map(prompt.getInstructions(), options, false,
 				resolveToolDefinitions(options));
+		Map<String, String> headers = options.getCustomHeaders();
 		return Retries.invoke(this.retryTemplate,
-				() -> this.responsesResponseMapper.map(this.openRouterApi.responses(request)));
+				() -> this.responsesResponseMapper.map(CollectionUtils.isEmpty(headers)
+						? this.openRouterApi.responses(request) : this.openRouterApi.responses(request, headers)));
 	}
 
 	private ChatCompletionRequest buildChatCompletionsRequest(Prompt prompt, OpenRouterChatOptions options,

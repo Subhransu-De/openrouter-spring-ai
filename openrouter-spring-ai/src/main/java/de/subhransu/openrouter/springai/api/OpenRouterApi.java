@@ -22,6 +22,7 @@ import de.subhransu.openrouter.springai.errors.OpenRouterLimitExceededException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import de.subhransu.openrouter.springai.internal.StreamRetries;
+import de.subhransu.openrouter.springai.support.OptionChecks;
 import java.io.ByteArrayOutputStream;
 import java.io.ByteArrayInputStream;
 import java.io.SequenceInputStream;
@@ -33,8 +34,10 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 import org.jspecify.annotations.Nullable;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.core.codec.DecodingException;
@@ -48,7 +51,6 @@ import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.http.codec.AbstractJacksonDecoder;
 import org.springframework.http.codec.DecoderHttpMessageReader;
 import org.springframework.util.Assert;
-import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -154,6 +156,15 @@ public class OpenRouterApi {
 			.build();
 	}
 
+	// Checked here as well as in the chat options, so a direct API caller cannot replace
+	// the configured key, which the diagnostic sanitizer redacts, or the attribution, or
+	// send a malformed value that a connector would echo in its exception.
+	private static Consumer<HttpHeaders> requestHeaders(Map<String, String> headers) {
+		Assert.notNull(headers, "headers must not be null");
+		OptionChecks.customHeaders(headers);
+		return (outgoing) -> headers.forEach(outgoing::set);
+	}
+
 	public static Builder builder() {
 		return new Builder();
 	}
@@ -174,23 +185,45 @@ public class OpenRouterApi {
 	}
 
 	public ChatCompletionResponse chatCompletion(ChatCompletionRequest request) {
-		return blockingPost("/chat/completions", request, ChatCompletionResponse.class);
+		return chatCompletion(request, Map.of());
+	}
+
+	/**
+	 * Create a chat completion with HTTP headers for this request only.
+	 * @param request the request
+	 * @param headers the headers to add; a header that this client sets itself, such as
+	 * Authorization, is rejected, and the values are redacted from error details
+	 * @return the response
+	 */
+	public ChatCompletionResponse chatCompletion(ChatCompletionRequest request, Map<String, String> headers) {
+		return blockingPost("/chat/completions", request, ChatCompletionResponse.class, headers);
 	}
 
 	public ResponsesResult responses(ResponsesRequest request) {
-		return blockingPost("/responses", request, ResponsesResult.class);
+		return responses(request, Map.of());
+	}
+
+	/**
+	 * Create a response with HTTP headers for this request only.
+	 * @param request the request
+	 * @param headers the headers to add; a header that this client sets itself, such as
+	 * Authorization, is rejected, and the values are redacted from error details
+	 * @return the response
+	 */
+	public ResponsesResult responses(ResponsesRequest request, Map<String, String> headers) {
+		return blockingPost("/responses", request, ResponsesResult.class, headers);
 	}
 
 	public EmbeddingsResponse embeddings(EmbeddingsRequest request) {
-		return blockingPost("/embeddings", request, EmbeddingsResponse.class);
+		return blockingPost("/embeddings", request, EmbeddingsResponse.class, Map.of());
 	}
 
 	public ImagesResponse images(ImagesRequest request) {
-		return blockingPost("/images", request, ImagesResponse.class);
+		return blockingPost("/images", request, ImagesResponse.class, Map.of());
 	}
 
 	public TranscriptionResponse transcription(TranscriptionRequest request) {
-		return blockingPost("/audio/transcriptions", request, TranscriptionResponse.class);
+		return blockingPost("/audio/transcriptions", request, TranscriptionResponse.class, Map.of());
 	}
 
 	/**
@@ -204,7 +237,7 @@ public class OpenRouterApi {
 	 */
 	public DecisionsResponse decisions(DecisionsRequest request) {
 		return blockingPost(DECISIONS, this.restClient.post().uri(DecisionsUri::resolve), request,
-				DecisionsResponse.class);
+				DecisionsResponse.class, this.httpExceptionFactory);
 	}
 
 	/**
@@ -230,12 +263,14 @@ public class OpenRouterApi {
 		return this.speechExchange.stream(request);
 	}
 
-	private <T> T blockingPost(String uri, Object request, Class<T> responseType) {
-		return blockingPost(uri, this.restClient.post().uri(uri), request, responseType);
+	private <T> T blockingPost(String uri, Object request, Class<T> responseType, Map<String, String> headers) {
+		return blockingPost(uri, this.restClient.post().uri(uri).headers(requestHeaders(headers)), request,
+				responseType, this.httpExceptionFactory.redacting(headers.values()));
 	}
 
 	// The uri labels errors with the logical endpoint, apart from the transport URI.
-	private <T> T blockingPost(String uri, RestClient.RequestBodySpec outgoing, Object request, Class<T> responseType) {
+	private <T> T blockingPost(String uri, RestClient.RequestBodySpec outgoing, Object request, Class<T> responseType,
+			OpenRouterHttpExceptionFactory errors) {
 		if (this.customObjectMapper) {
 			outgoing.body(output -> this.objectMapper.writeValue(output, request));
 		}
@@ -243,20 +278,21 @@ public class OpenRouterApi {
 			outgoing.body(request);
 		}
 		return TransportFailures.blocking(uri,
-				() -> outgoing.exchange((httpRequest, response) -> readResponse(uri, response, responseType)));
+				() -> outgoing.exchange((httpRequest, response) -> readResponse(uri, response, responseType, errors)));
 	}
 
-	private <T> T readResponse(String uri, ClientHttpResponse response, Class<T> responseType) throws IOException {
+	private <T> T readResponse(String uri, ClientHttpResponse response, Class<T> responseType,
+			OpenRouterHttpExceptionFactory errors) throws IOException {
 		HttpStatusCode statusCode = response.getStatusCode();
 		if (this.responseDecoder != null && !statusCode.isError()) {
 			return this.responseDecoder.decode(uri, statusCode, response.getBody(), responseType);
 		}
-		return readBlockingResponse(uri, response, responseType);
+		return readBlockingResponse(uri, response, responseType, errors);
 	}
 
-	private <T> T readBlockingResponse(String uri, ClientHttpResponse response, Class<T> responseType)
-			throws IOException {
-		BoundedBody body = checkedBody(uri, response);
+	private <T> T readBlockingResponse(String uri, ClientHttpResponse response, Class<T> responseType,
+			OpenRouterHttpExceptionFactory errors) throws IOException {
+		BoundedBody body = checkedBody(uri, response, errors);
 		try {
 			T decoded = body.decode(this.objectMapper, responseType);
 			if (decoded == null) {
@@ -275,14 +311,15 @@ public class OpenRouterApi {
 	 * Read a non-empty success body within the response limit, or throw the classified
 	 * error for an error status.
 	 */
-	private BoundedBody checkedBody(String uri, ClientHttpResponse response) throws IOException {
+	private BoundedBody checkedBody(String uri, ClientHttpResponse response, OpenRouterHttpExceptionFactory errors)
+			throws IOException {
 		HttpStatusCode statusCode = response.getStatusCode();
 		int limit = statusCode.isError() ? this.maxErrorBodyBytes : this.maxResponseBodyBytes;
 		BoundedBody body = BoundedBody.read(response.getBody(), limit);
 		if (body.exceeded()) {
 			if (statusCode.isError()) {
 				String excerpt = new String(body.bytes(), StandardCharsets.UTF_8);
-				throw this.httpExceptionFactory.createErrorBodyLimit(uri, statusCode, excerpt, limit, limit + 1L);
+				throw errors.createErrorBodyLimit(uri, statusCode, excerpt, limit, limit + 1L);
 			}
 			throw new OpenRouterLimitExceededException(
 					OpenRouterLimitExceededException.Limit.BLOCKING_RESPONSE_BODY_BYTES, limit, limit + 1L, uri,
@@ -290,7 +327,7 @@ public class OpenRouterApi {
 		}
 		if (statusCode.isError()) {
 			String errorBody = new String(body.bytes(), StandardCharsets.UTF_8);
-			throw this.httpExceptionFactory.create(uri, statusCode, response.getHeaders(), errorBody);
+			throw errors.create(uri, statusCode, response.getHeaders(), errorBody);
 		}
 		if (body.size() == 0) {
 			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.EMPTY_BODY, uri,
@@ -300,7 +337,18 @@ public class OpenRouterApi {
 	}
 
 	public Flux<ChatCompletionChunk> chatCompletionStream(ChatCompletionRequest request) {
-		return stream("/chat/completions", request, ChatCompletionChunk.class);
+		return chatCompletionStream(request, Map.of());
+	}
+
+	/**
+	 * Stream a chat completion with HTTP headers for this request only.
+	 * @param request the request
+	 * @param headers the headers to add; a header that this client sets itself, such as
+	 * Authorization, is rejected, and the values are redacted from error details
+	 * @return the chunks
+	 */
+	public Flux<ChatCompletionChunk> chatCompletionStream(ChatCompletionRequest request, Map<String, String> headers) {
+		return stream("/chat/completions", request, ChatCompletionChunk.class, headers);
 	}
 
 	// Providers without native image streaming make OpenRouter ignore stream=true and
@@ -310,7 +358,7 @@ public class OpenRouterApi {
 	public Flux<ImagesStreamEvent> imagesStream(ImagesRequest request) {
 		return streamingPost(IMAGES, request, SSE).exchangeToFlux((response) -> {
 			if (response.statusCode().isError()) {
-				return streamingError(IMAGES, response).flatMapMany(Flux::error);
+				return streamingError(IMAGES, response, this.httpExceptionFactory).flatMapMany(Flux::error);
 			}
 			MediaType contentType = response.headers().contentType().orElse(MediaType.APPLICATION_JSON);
 			if (MediaType.TEXT_EVENT_STREAM.isCompatibleWith(contentType)) {
@@ -380,19 +428,33 @@ public class OpenRouterApi {
 	}
 
 	public Flux<ResponsesStreamEvent> responsesStream(ResponsesRequest request) {
-		return stream("/responses", request, ResponsesStreamEvent.class);
+		return responsesStream(request, Map.of());
 	}
 
-	private <T> Flux<T> stream(String uri, Object request, Class<T> eventType) {
-		return streamingPost(uri, request, SSE).retrieve()
-			.onStatus(HttpStatusCode::isError, response -> streamingError(uri, response))
+	/**
+	 * Stream a response with HTTP headers for this request only.
+	 * @param request the request
+	 * @param headers the headers to add; a header that this client sets itself, such as
+	 * Authorization, is rejected, and the values are redacted from error details
+	 * @return the events
+	 */
+	public Flux<ResponsesStreamEvent> responsesStream(ResponsesRequest request, Map<String, String> headers) {
+		return stream("/responses", request, ResponsesStreamEvent.class, headers);
+	}
+
+	private <T> Flux<T> stream(String uri, Object request, Class<T> eventType, Map<String, String> headers) {
+		var outgoing = streamingPost(uri, request, SSE).headers(requestHeaders(headers));
+		OpenRouterHttpExceptionFactory errors = this.httpExceptionFactory.redacting(headers.values());
+		return outgoing.retrieve()
+			.onStatus(HttpStatusCode::isError, response -> streamingError(uri, response, errors))
 			.bodyToFlux(STRING_SSE_TYPE)
 			.transform(this::applyTimeout)
 			.transform(events -> decodeStream(events, eventType, uri))
 			.onErrorMap(error -> TransportFailures.stream(uri, this.maxResponseBodyBytes, error));
 	}
 
-	private Mono<RuntimeException> streamingError(String uri, ClientResponse response) {
+	private Mono<RuntimeException> streamingError(String uri, ClientResponse response,
+			OpenRouterHttpExceptionFactory errors) {
 		return Mono.defer(() -> {
 			ByteArrayOutputStream prefix = new ByteArrayOutputStream();
 			return response.bodyToFlux(DataBuffer.class).map(buffer -> {
@@ -409,12 +471,9 @@ public class OpenRouterApi {
 				}
 			}).takeUntil(Boolean::booleanValue).last(false).map(exceeded -> {
 				String body = prefix.toString(StandardCharsets.UTF_8);
-				return exceeded
-						? this.httpExceptionFactory.createErrorBodyLimit(uri, response.statusCode(), body,
-								this.maxErrorBodyBytes, this.maxErrorBodyBytes + 1L,
-								OpenRouterLimitExceededException.Limit.STREAMING_ERROR_BODY_BYTES)
-						: this.httpExceptionFactory.create(uri, response.statusCode(),
-								response.headers().asHttpHeaders(), body);
+				return exceeded ? errors.createErrorBodyLimit(uri, response.statusCode(), body, this.maxErrorBodyBytes,
+						this.maxErrorBodyBytes + 1L, OpenRouterLimitExceededException.Limit.STREAMING_ERROR_BODY_BYTES)
+						: errors.create(uri, response.statusCode(), response.headers().asHttpHeaders(), body);
 			}).flatMap(StreamRetries::rejected);
 		});
 	}
@@ -527,22 +586,13 @@ public class OpenRouterApi {
 								+ "response.incomplete, or response.failed");
 			}
 			if (event instanceof ChatCompletionChunk chunk) {
-				validateChunk(chunk, uri);
+				StreamEventBinder.validateChunk(chunk, uri);
 			}
 			return event;
 		}
 		catch (JacksonException ex) {
 			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.DECODE, uri,
 					"Failed to decode OpenRouter stream chunk", ex);
-		}
-	}
-
-	private void validateChunk(ChatCompletionChunk chunk, String uri) {
-		var choices = chunk.choices();
-		if (chunk.error() == null && ((CollectionUtils.isEmpty(choices) && chunk.usage() == null)
-				|| (choices != null && CollectionUtils.containsInstance(choices, null)))) {
-			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.MISSING_FIELD, uri,
-					"OpenRouter chat chunk requires non-null choices or usage");
 		}
 	}
 
@@ -566,7 +616,7 @@ public class OpenRouterApi {
 				outgoing.body(request);
 			}
 			return TransportFailures.blocking(SPEECH, () -> outgoing.exchange((httpRequest, response) -> {
-				BoundedBody body = checkedBody(SPEECH, response);
+				BoundedBody body = checkedBody(SPEECH, response, OpenRouterApi.this.httpExceptionFactory);
 				rejectJsonAudio(response.getHeaders().getContentType());
 				return body.bytes();
 			}));
@@ -579,7 +629,8 @@ public class OpenRouterApi {
 			return streamingPost(SPEECH, request, AUDIO_OR_ERROR).header(HttpHeaders.ACCEPT_ENCODING, "identity")
 				.exchangeToFlux(response -> {
 					if (response.statusCode().isError()) {
-						return streamingError(SPEECH, response).flatMapMany(Flux::error);
+						return streamingError(SPEECH, response, OpenRouterApi.this.httpExceptionFactory)
+							.flatMapMany(Flux::error);
 					}
 					try {
 						rejectJsonAudio(response.headers().contentType().orElse(null));

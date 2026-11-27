@@ -772,6 +772,8 @@ class OpenRouterChatRequestSerializationTests {
 				{ "providerExtraBody", Map.of("zdr", false), "/provider/zdr", "/provider/zdr" },
 				{ "toolCallbacks", List.of(), "/tools/0/function/name", "/tools/0/name" },
 				{ "toolContext", Map.of("test", "value"), null, null },
+				// Sent as HTTP headers, never in the request body.
+				{ "customHeaders", Map.of("X-Request-Tag", "value"), null, null },
 				{ "stopSequences", List.of("STOP"), "/stop", "rejected" }, { "seed", 0, "/seed", "rejected" },
 				{ "repetitionPenalty", 1.0, "/repetition_penalty", "rejected" }, { "minP", 0.0, "/min_p", "rejected" },
 				{ "topA", 0.0, "/top_a", "rejected" }, { "includeUsage", false, "/usage/include", "rejected" } };

@@ -1,8 +1,10 @@
 package de.subhransu.openrouter.springai.api;
 
+import de.subhransu.openrouter.springai.api.dto.ChatCompletionChunk;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
+import org.springframework.util.CollectionUtils;
 import org.springframework.util.ConcurrentReferenceHashMap;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.StreamReadFeature;
@@ -45,6 +47,15 @@ final class StreamEventBinder {
 			}
 		}
 		return bindTree(line, eventType, endpoint);
+	}
+
+	static void validateChunk(ChatCompletionChunk chunk, String endpoint) {
+		var choices = chunk.choices();
+		if (chunk.error() == null && ((CollectionUtils.isEmpty(choices) && chunk.usage() == null)
+				|| (choices != null && CollectionUtils.containsInstance(choices, null)))) {
+			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.MISSING_FIELD, endpoint,
+					"OpenRouter chat chunk requires non-null choices or usage");
+		}
 	}
 
 	private <T> T bindTree(String line, Class<T> eventType, String endpoint) {
