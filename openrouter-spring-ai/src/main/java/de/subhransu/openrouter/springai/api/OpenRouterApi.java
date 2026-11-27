@@ -28,7 +28,6 @@ import java.io.SequenceInputStream;
 import java.util.Collections;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -73,7 +72,7 @@ public class OpenRouterApi {
 
 	private static final String SPEECH = "/audio/speech";
 
-	private static final String DECISIONS = "/alpha/decisions";
+	static final String DECISIONS = "/alpha/decisions";
 
 	// Errors arrive as JSON, so the speech request accepts both.
 	private static final List<MediaType> SSE = List.of(MediaType.TEXT_EVENT_STREAM);
@@ -108,17 +107,11 @@ public class OpenRouterApi {
 
 	private final SpeechExchange speechExchange = new SpeechExchange();
 
-	private final String decisionsUrl;
-
 	private OpenRouterApi(Builder builder) {
 		Assert.hasText(builder.apiKey, "OpenRouter API key must not be empty");
 		Assert.notNull(builder.objectMapper, "ObjectMapper must not be null");
 
 		String baseUrl = StringUtils.hasText(builder.baseUrl) ? builder.baseUrl : DEFAULT_BASE_URL;
-		// The alpha Decisions API sits beside the versioned API, not under it.
-		this.decisionsUrl = URI.create(StringUtils.trimTrailingCharacter(baseUrl, '/') + "/")
-			.resolve(".." + DECISIONS)
-			.toString();
 		this.objectMapper = builder.objectMapper;
 		this.customObjectMapper = builder.customObjectMapper;
 		this.eventBinder = new StreamEventBinder(this.objectMapper, !this.customObjectMapper);
@@ -141,8 +134,9 @@ public class OpenRouterApi {
 		// supply their factory. This timeout field only guards streaming idle gaps.
 		RestClient.Builder restClientBuilder = builder.restClientBuilder != null ? builder.restClientBuilder.clone()
 				: RestClient.builder();
-		restClientBuilder.requestInterceptor(
-				new OpenRouterAttributionInterceptor(builder.httpReferer, builder.appTitle, builder.appCategories));
+		OpenRouterAttributionInterceptor attribution = new OpenRouterAttributionInterceptor(builder.httpReferer,
+				builder.appTitle, builder.appCategories);
+		restClientBuilder.requestInterceptor(attribution);
 		this.restClient = restClientBuilder.baseUrl(baseUrl)
 			.defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + builder.apiKey)
 			.defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
@@ -156,18 +150,8 @@ public class OpenRouterApi {
 			.defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + builder.apiKey)
 			.defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
 			.defaultHeader(HttpHeaders.ACCEPT, MediaType.TEXT_EVENT_STREAM_VALUE)
-			.defaultHeaders(headers -> {
-				addIfPresent(headers, "HTTP-Referer", builder.httpReferer);
-				addIfPresent(headers, "X-OpenRouter-Title", builder.appTitle);
-				addIfPresent(headers, "X-OpenRouter-Categories", builder.appCategories);
-			})
+			.defaultHeaders(attribution::applyTo)
 			.build();
-	}
-
-	private static void addIfPresent(HttpHeaders headers, String name, @Nullable String value) {
-		if (StringUtils.hasText(value)) {
-			headers.set(name, value);
-		}
 	}
 
 	public static Builder builder() {
@@ -211,14 +195,16 @@ public class OpenRouterApi {
 
 	/**
 	 * Ask a Decisions model typed questions about a state. OpenRouter's Decisions API is
-	 * in alpha and sits beside the versioned API: the request goes to
-	 * {@code ../alpha/decisions} relative to the base URL, which is
-	 * {@code https://openrouter.ai/api/alpha/decisions} for the default base URL.
+	 * in alpha and sits beside the versioned API: for a base URL whose path ends in
+	 * {@code /v1} the request goes to the sibling {@code alpha/decisions}, which is
+	 * {@code https://openrouter.ai/api/alpha/decisions} for the default base URL; any
+	 * other base URL gets {@code /alpha/decisions} appended, like the other endpoints.
 	 * @param request the decisions request
 	 * @return one answer per question
 	 */
 	public DecisionsResponse decisions(DecisionsRequest request) {
-		return blockingPost(this.decisionsUrl, request, DecisionsResponse.class);
+		return blockingPost(DECISIONS, this.restClient.post().uri(DecisionsUri::resolve), request,
+				DecisionsResponse.class);
 	}
 
 	/**
@@ -244,9 +230,12 @@ public class OpenRouterApi {
 		return this.speechExchange.stream(request);
 	}
 
-	// The uri is a path under the base URL, or an absolute URL such as the decisions URL.
 	private <T> T blockingPost(String uri, Object request, Class<T> responseType) {
-		var outgoing = this.restClient.post().uri(uri);
+		return blockingPost(uri, this.restClient.post().uri(uri), request, responseType);
+	}
+
+	// The uri labels errors with the logical endpoint, apart from the transport URI.
+	private <T> T blockingPost(String uri, RestClient.RequestBodySpec outgoing, Object request, Class<T> responseType) {
 		if (this.customObjectMapper) {
 			outgoing.body(output -> this.objectMapper.writeValue(output, request));
 		}

@@ -33,8 +33,8 @@ import org.springframework.util.Assert;
  *
  * <p>
  * A text input is sent as a string, fields as a JSON object and a conversation as its
- * messages. Images are sent as {@code image_url} parts, and only in a content input,
- * because OpenRouter reads images only at the top level of the request state. An answer
+ * messages. Images are sent as {@code image_url} parts, and only in a content input, at
+ * the top level of the request state, where every Decisions model reads them. An answer
  * that does not fit its question fails with an
  * {@link de.subhransu.openrouter.springai.errors.OpenRouterProtocolException}.
  *
@@ -60,11 +60,13 @@ public class OpenRouterDecisionModel implements DecisionModel {
 
 	private final OpenRouterDecisionRequestMapper requestMapper = new OpenRouterDecisionRequestMapper();
 
-	private final OpenRouterDecisionResponseMapper responseMapper = new OpenRouterDecisionResponseMapper();
+	private final OpenRouterDecisionResponseMapper responseMapper;
 
 	private OpenRouterDecisionModel(Builder builder) {
 		Assert.notNull(builder.openRouterApi, "OpenRouterApi must not be null");
 		this.openRouterApi = builder.openRouterApi;
+		this.responseMapper = new OpenRouterDecisionResponseMapper(
+				OpenRouterApi.diagnosticSanitizer(this.openRouterApi));
 		this.defaultOptions = builder.defaultOptions != null ? builder.defaultOptions.mutate().build()
 				: OpenRouterDecisionOptions.builder().build();
 		this.retryTemplate = builder.retryTemplate != null ? builder.retryTemplate : RetryUtils.DEFAULT_RETRY_TEMPLATE;

@@ -2,6 +2,7 @@ package de.subhransu.openrouter.springai.api;
 
 import org.jspecify.annotations.Nullable;
 import java.io.IOException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpRequest;
 import org.springframework.http.client.ClientHttpRequestExecution;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
@@ -26,16 +27,21 @@ final class OpenRouterAttributionInterceptor implements ClientHttpRequestInterce
 	@Override
 	public ClientHttpResponse intercept(HttpRequest request, byte[] body, ClientHttpRequestExecution execution)
 			throws IOException {
-		if (StringUtils.hasText(this.httpReferer)) {
-			request.getHeaders().set("HTTP-Referer", this.httpReferer);
-		}
-		if (StringUtils.hasText(this.appTitle)) {
-			request.getHeaders().set("X-OpenRouter-Title", this.appTitle);
-		}
-		if (StringUtils.hasText(this.appCategories)) {
-			request.getHeaders().set("X-OpenRouter-Categories", this.appCategories);
-		}
+		applyTo(request.getHeaders());
 		return execution.execute(request, body);
+	}
+
+	// The WebClient sets the same headers as defaults.
+	void applyTo(HttpHeaders headers) {
+		setIfPresent(headers, "HTTP-Referer", this.httpReferer);
+		setIfPresent(headers, "X-OpenRouter-Title", this.appTitle);
+		setIfPresent(headers, "X-OpenRouter-Categories", this.appCategories);
+	}
+
+	private static void setIfPresent(HttpHeaders headers, String name, @Nullable String value) {
+		if (StringUtils.hasText(value)) {
+			headers.set(name, value);
+		}
 	}
 
 }

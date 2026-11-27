@@ -4,6 +4,7 @@ import de.subhransu.openrouter.springai.api.dto.DecisionsResponse;
 import de.subhransu.openrouter.springai.api.dto.Usage;
 import de.subhransu.openrouter.springai.chat.OpenRouterMetadata;
 import de.subhransu.openrouter.springai.chat.mapper.UsageMapper;
+import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -39,7 +40,9 @@ import org.springframework.ai.decision.question.YesNoQuestion;
  * A response that does not answer the prompt fails with an
  * {@link OpenRouterProtocolException} instead of being read as a verdict: a missing or
  * extra answer, an answer of another type than its question, such as a {@code box}, or a
- * value outside the question's options, levels or probability range.
+ * value outside the question's options, levels or probability range, or a null
+ * probability. The message names the mismatch with credentials redacted and keeps no
+ * cause, so no raw answer value travels with it.
  *
  * @author Subhransu De
  */
@@ -47,6 +50,14 @@ public final class OpenRouterDecisionResponseMapper {
 
 	private static final String ENDPOINT = "/alpha/decisions";
 
+	private final OpenRouterDiagnosticSanitizer sanitizer;
+
+	public OpenRouterDecisionResponseMapper(OpenRouterDiagnosticSanitizer sanitizer) {
+		this.sanitizer = sanitizer;
+	}
+
+	// The cause is dropped on purpose: its message can carry raw answer values.
+	@SuppressWarnings("PMD.PreserveStackTrace")
 	public DecisionResponse map(DecisionPrompt prompt, DecisionsResponse response) {
 		Usage usage = response.usage();
 		DecisionResponseMetadata metadata = DecisionResponseMetadata.builder()
@@ -68,7 +79,8 @@ public final class OpenRouterDecisionResponseMapper {
 		}
 		catch (IllegalArgumentException | IllegalStateException ex) {
 			throw new OpenRouterProtocolException(OpenRouterProtocolException.Kind.CONTRACT, ENDPOINT,
-					"OpenRouter decisions response does not answer the prompt: " + ex.getMessage(), ex);
+					"OpenRouter decisions response does not answer the prompt: "
+							+ this.sanitizer.sanitize(ex.getMessage()));
 		}
 	}
 
@@ -90,7 +102,7 @@ public final class OpenRouterDecisionResponseMapper {
 		if (question instanceof ChoiceQuestion && "choice".equals(type)) {
 			return ChoiceAnswer.builder()
 				.value(required(name, "choice", answer.choice()))
-				.probabilities(probabilities(answer))
+				.probabilities(probabilities(name, answer))
 				.confidence(answer.confidence())
 				.build();
 		}
@@ -105,23 +117,23 @@ public final class OpenRouterDecisionResponseMapper {
 				+ question.getClass().getSimpleName());
 	}
 
-	private static Map<String, Double> probabilities(DecisionsResponse.Answer answer) {
+	// An omitted distribution stays empty; a null entry is not a probability.
+	private static Map<String, Double> probabilities(String name, DecisionsResponse.Answer answer) {
 		Map<String, Double> probabilities = new LinkedHashMap<>();
 		Map<String, @Nullable Double> reported = answer.probabilities();
 		if (reported != null) {
-			reported.forEach((option, probability) -> {
-				if (probability != null) {
-					probabilities.put(option, probability);
-				}
-			});
+			reported.forEach((option, probability) -> probabilities.put(option,
+					required(name, "probability for '" + option + "'", probability)));
 		}
 		return probabilities;
 	}
 
 	// OpenRouter keys level probabilities by index; an empty report stays empty, as the
-	// ScoreAnswer contract promises, and unreported levels count as zero.
+	// ScoreAnswer contract promises, and unreported levels count as zero. A key that is
+	// not an index fails without its parse error, which repeats the raw key.
+	@SuppressWarnings("PMD.PreserveStackTrace")
 	private static List<Double> levelProbabilities(String name, DecisionsResponse.Answer answer, int levels) {
-		Map<String, Double> reported = probabilities(answer);
+		Map<String, Double> reported = probabilities(name, answer);
 		if (reported.isEmpty()) {
 			return List.of();
 		}
@@ -132,7 +144,7 @@ public final class OpenRouterDecisionResponseMapper {
 				level = Integer.parseInt(key);
 			}
 			catch (NumberFormatException ex) {
-				throw new IllegalStateException(answerTo(name) + " reports a probability for level '" + key + "'", ex);
+				throw new IllegalStateException(answerTo(name) + " reports a probability for level '" + key + "'");
 			}
 			if (level < 0 || level >= levels) {
 				throw new IllegalStateException(

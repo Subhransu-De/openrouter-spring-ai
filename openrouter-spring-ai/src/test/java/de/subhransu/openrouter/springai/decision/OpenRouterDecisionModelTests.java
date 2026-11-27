@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -57,6 +58,7 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.util.MimeType;
 import org.springframework.util.MimeTypeUtils;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.util.DefaultUriBuilderFactory;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -279,6 +281,7 @@ class OpenRouterDecisionModelTests {
 	@ParameterizedTest
 	@ValueSource(strings = { "{\"q\":{\"type\":\"choice\",\"choice\":\"other\"}}",
 			"{\"q\":{\"type\":\"choice\",\"choice\":\"a\",\"probabilities\":{\"a\":0.5,\"z\":0.5}}}",
+			"{\"q\":{\"type\":\"choice\",\"choice\":\"a\",\"probabilities\":{\"a\":1,\"b\":null}}}",
 			"{\"q\":{\"type\":\"score\",\"score\":1}}" })
 	void choiceAnswersThatDoNotFitThePromptAreProtocolErrors(String answers) {
 		assertProtocolError(answers, ChoiceQuestion.of("Which?", "a", "b"));
@@ -287,9 +290,50 @@ class OpenRouterDecisionModelTests {
 	@ParameterizedTest
 	@ValueSource(strings = { "{\"q\":{\"type\":\"score\",\"score\":2.5}}",
 			"{\"q\":{\"type\":\"score\",\"score\":1,\"probabilities\":{\"3\":1}}}",
-			"{\"q\":{\"type\":\"score\",\"score\":1,\"probabilities\":{\"high\":1}}}" })
+			"{\"q\":{\"type\":\"score\",\"score\":1,\"probabilities\":{\"high\":1}}}",
+			"{\"q\":{\"type\":\"score\",\"score\":1,\"probabilities\":{\"0\":0.1,\"1\":null,\"2\":0.9}}}" })
 	void scoreAnswersThatDoNotFitThePromptAreProtocolErrors(String answers) {
 		assertProtocolError(answers, ScoreQuestion.of("How?", "low", "mid", "high"));
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "{\"q\":{\"type\":\"choice\",\"choice\":\"%s\"}}",
+			"{\"q\":{\"type\":\"choice\",\"choice\":\"a\",\"probabilities\":{\"%s\":1}}}",
+			"{\"q\":{\"type\":\"%s\"}}" })
+	void aMalformedAnswerNeverCarriesTheApiKeyIntoTheFailure(String answers) {
+		String apiKey = "decision-Key+/=_0123456789";
+		RestClient.Builder restClient = RestClient.builder();
+		MockRestServiceServer server = MockRestServiceServer.bindTo(restClient).build();
+		OpenRouterApi api = OpenRouterApi.builder()
+			.apiKey(apiKey)
+			.baseUrl("https://openrouter.test/api/v1")
+			.restClientBuilder(restClient)
+			.build();
+		server.expect(once(), requestTo(URL))
+			.andRespond(withSuccess("{\"answers\":" + answers.formatted(apiKey) + "}", MediaType.APPLICATION_JSON));
+		OpenRouterDecisionModel model = OpenRouterDecisionModel.builder()
+			.openRouterApi(api)
+			.options(OpenRouterDecisionOptions.builder().model(MODEL).build())
+			.build();
+
+		assertThatThrownBy(() -> model.call("text", Map.of("q", ChoiceQuestion.of("Which?", "a", "b"))))
+			.isInstanceOf(OpenRouterProtocolException.class)
+			.satisfies(failure -> {
+				for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+					assertThat(String.valueOf(cause.getMessage())).doesNotContain(apiKey);
+					assertThat(cause.toString()).doesNotContain(apiKey);
+				}
+			});
+	}
+
+	@Test
+	void anAnswerContractErrorAndAnHttpErrorShareTheDecisionsEndpointLabel() {
+		Fixture fixture = fixture(OpenRouterDecisionOptions.builder().model(MODEL).build());
+		fixture.expectSuccess("{\"answers\":{\"q\":{\"type\":\"score\",\"score\":1}}}");
+
+		assertThatThrownBy(() -> fixture.model().call("text", Map.of("q", YesNoQuestion.of("Is it?"))))
+			.isInstanceOfSatisfying(OpenRouterProtocolException.class,
+					failure -> assertThat(failure.getEndpoint()).isEqualTo("/alpha/decisions"));
 	}
 
 	@Test
@@ -317,7 +361,9 @@ class OpenRouterDecisionModelTests {
 		assertThatThrownBy(() -> fixture.model().call("text", Map.of("q", YesNoQuestion.of("Is it?"))))
 			.isInstanceOf(OpenRouterNonTransientApiException.class)
 			.satisfies(failure -> assertThat(((OpenRouterHttpFailure) failure).getStatusCode().value()).isEqualTo(404))
-			.hasMessageContaining("/alpha/decisions");
+			.satisfies(failure -> assertThat(((OpenRouterHttpFailure) failure).getEndpoint())
+				.isEqualTo("/alpha/decisions"))
+			.hasMessageNotContaining("openrouter.test");
 	}
 
 	@Test
@@ -348,14 +394,38 @@ class OpenRouterDecisionModelTests {
 
 	@Test
 	void decisionsGoBesideTheVersionedApiOfACustomBaseUrl() {
-		RestClient.Builder restClient = RestClient.builder();
+		assertDecisionsGoTo(RestClient.builder(), "https://gateway.test/openrouter/v1/",
+				"https://gateway.test/openrouter/alpha/decisions");
+	}
+
+	@Test
+	void decisionsGoUnderAHostOnlyBaseUrl() {
+		assertDecisionsGoTo(RestClient.builder(), "http://gateway.test:8080",
+				"http://gateway.test:8080/alpha/decisions");
+	}
+
+	@Test
+	void decisionsFollowACustomUriBuilderFactory() {
+		RestClient.Builder restClient = RestClient.builder()
+			.uriBuilderFactory(new DefaultUriBuilderFactory("https://gateway.test/openrouter/v1"));
+		assertDecisionsGoTo(restClient, null, "https://gateway.test/openrouter/alpha/decisions");
+	}
+
+	@Test
+	void aTemplatedBaseUrlIsExpandedWhenDecisionsAreRequested() {
+		RestClient.Builder restClient = RestClient.builder().defaultUriVariables(Map.of("host", "gateway.test"));
+		assertDecisionsGoTo(restClient, "https://{host}/api/v1", "https://gateway.test/api/alpha/decisions");
+	}
+
+	private static void assertDecisionsGoTo(RestClient.Builder restClient, @Nullable String baseUrl,
+			String expectedUrl) {
 		MockRestServiceServer server = MockRestServiceServer.bindTo(restClient).build();
 		OpenRouterApi api = OpenRouterApi.builder()
 			.apiKey("test-key")
-			.baseUrl("https://gateway.test/openrouter/v1/")
+			.baseUrl(baseUrl)
 			.restClientBuilder(restClient)
 			.build();
-		server.expect(once(), requestTo("https://gateway.test/openrouter/alpha/decisions"))
+		server.expect(once(), requestTo(expectedUrl))
 			.andExpect(method(HttpMethod.POST))
 			.andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer test-key"))
 			.andRespond(withSuccess(noulAnswer(), MediaType.APPLICATION_JSON));

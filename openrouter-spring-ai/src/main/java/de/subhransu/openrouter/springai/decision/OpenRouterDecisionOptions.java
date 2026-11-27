@@ -133,6 +133,14 @@ public final class OpenRouterDecisionOptions implements DecisionOptions {
 			return this;
 		}
 
+		// A shallow copy is enough: the added fields are strings and immutable records.
+		@Override
+		@SuppressWarnings({ "java:S1182", "java:S2975" }) // Spring AI's builder contract
+															// requires clone().
+		public Builder clone() {
+			return super.clone();
+		}
+
 		@Override
 		public Builder combineWith(DecisionOptions.Builder<?> other) {
 			super.combineWith(other);
