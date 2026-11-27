@@ -6,6 +6,7 @@ import de.subhransu.openrouter.springai.api.dto.ResponsesOutputItem;
 import de.subhransu.openrouter.springai.api.dto.ResponsesStreamEvent;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
@@ -30,7 +31,7 @@ final class ResponsesOutputState {
 
 	private int lastContent = -1;
 
-	String delta(ResponsesStreamEvent event) {
+	Map<Integer, String> delta(ResponsesStreamEvent event) {
 		Part part = part(index(event.outputIndex()), index(event.contentIndex()));
 		if (part.done) {
 			throw protocol("Text delta follows a completed content part");
@@ -39,13 +40,13 @@ final class ResponsesOutputState {
 		return drain();
 	}
 
-	String done(ResponsesStreamEvent event) {
+	Map<Integer, String> done(ResponsesStreamEvent event) {
 		snapshot(index(event.outputIndex()), index(event.contentIndex()),
 				ResponseValues.RESPONSES.required(event.text(), "output text snapshot"));
 		return drain();
 	}
 
-	String item(ResponsesOutputItem item, @Nullable Integer outputIndex) {
+	Map<Integer, String> item(ResponsesOutputItem item, @Nullable Integer outputIndex) {
 		// Unindexed non-text items cannot locate a gap in the text sequence.
 		if (outputIndex != null || "message".equals(item.type())) {
 			snapshot(item, index(outputIndex));
@@ -53,7 +54,7 @@ final class ResponsesOutputState {
 		return drain();
 	}
 
-	String terminal(List<? extends @Nullable ResponsesOutputItem> output) {
+	Map<Integer, String> terminal(List<? extends @Nullable ResponsesOutputItem> output) {
 		if (this.text.entrySet()
 			.stream()
 			.anyMatch(entry -> entry.getKey() >= output.size()
@@ -154,8 +155,9 @@ final class ResponsesOutputState {
 				ignored -> new Part());
 	}
 
-	private String drain() {
-		StringBuilder suffix = new StringBuilder();
+	// The released text by output index, in output order.
+	private Map<Integer, String> drain() {
+		Map<Integer, String> released = new LinkedHashMap<>();
 		TextItem item;
 		while ((item = this.text.get(this.outputCursor)) != null) {
 			Part part = item.parts.get(this.contentCursor);
@@ -170,15 +172,15 @@ final class ResponsesOutputState {
 			if (part.value.length() > part.emitted) {
 				this.lastOutput = this.outputCursor;
 				this.lastContent = this.contentCursor;
+				released.merge(this.outputCursor, part.value.substring(part.emitted), String::concat);
 			}
-			suffix.append(part.value, part.emitted, part.value.length());
 			part.emitted = part.value.length();
 			if (!part.done) {
 				break;
 			}
 			this.contentCursor++;
 		}
-		return suffix.toString();
+		return released;
 	}
 
 	private static int index(@Nullable Integer index) {

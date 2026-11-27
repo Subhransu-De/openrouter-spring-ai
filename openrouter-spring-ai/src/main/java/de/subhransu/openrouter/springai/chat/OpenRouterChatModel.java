@@ -154,10 +154,9 @@ public class OpenRouterChatModel implements ChatModel {
 				return switch (resolveRequestMode(options)) {
 					case CHAT_COMPLETIONS -> {
 						ChatCompletionRequest request = buildChatCompletionsRequest(prompt, options, true);
-						yield this.streamingResponseMapper.map(
-								this.streamingToolCallAggregator.aggregate(StreamRetries
-									.stream(this.openRouterApi.chatCompletionStream(request), this.retryTemplate)),
-								options.getAudio());
+						yield this.streamingResponseMapper.map(StreamRetries
+							.stream(this.openRouterApi.chatCompletionStream(request), this.retryTemplate),
+								this.streamingToolCallAggregator, options.getAudio());
 					}
 					case RESPONSES -> {
 						ResponsesRequest request = this.responsesRequestMapper.map(prompt.getInstructions(), options,

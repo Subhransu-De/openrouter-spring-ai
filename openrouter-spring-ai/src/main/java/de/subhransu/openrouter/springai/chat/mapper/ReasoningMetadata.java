@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.Map;
 
 // Provider reasoning is opaque conversation state; preserve its wire order.
+// Deprecated keys: still written for one release, read when a message has no parts.
+@SuppressWarnings("removal")
 final class ReasoningMetadata {
 
 	static final String REASONING = OpenRouterMetadata.REASONING;

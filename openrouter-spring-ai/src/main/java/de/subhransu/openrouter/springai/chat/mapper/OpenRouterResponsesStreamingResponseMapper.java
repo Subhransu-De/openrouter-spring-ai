@@ -1,6 +1,7 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
 import de.subhransu.openrouter.springai.chat.OpenRouterMetadata;
+import de.subhransu.openrouter.springai.chat.mapper.ResponsesStreamParts.IndexedItem;
 import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -15,7 +16,10 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.part.MediaPart;
+import org.springframework.ai.chat.messages.part.MessagePart;
 import org.springframework.ai.chat.metadata.ChatGenerationMetadata;
 import org.springframework.ai.chat.metadata.ChatResponseMetadata;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -24,6 +28,12 @@ import org.springframework.ai.content.Media;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+/**
+ * Maps Responses stream events to chat responses. The parts of each chunk follow Spring
+ * AI's streaming contract, see {@link ResponsesStreamParts}.
+ *
+ * @author Subhransu De
+ */
 public final class OpenRouterResponsesStreamingResponseMapper {
 
 	private static final String OUTPUT_ITEM_DONE = "response.output_item.done";
@@ -54,69 +64,82 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 
 	/**
 	 * Map one event without stream history. Text-done and message-item snapshots do not
-	 * emit text. Generated images are emitted only by item-done events. Use
-	 * {@link #map(Flux)} for subscription-local snapshot reconciliation.
+	 * emit text. Generated images are emitted only by item-done events. Parts carry no
+	 * stream index. Use {@link #map(Flux)} for subscription-local snapshot reconciliation
+	 * and indexed parts.
 	 */
 	public ChatResponse map(ResponsesStreamEvent event) {
 		return map(event, new ReasoningMetadata.Accumulator(), new ArrayList<>(), new RefusalMetadata.Accumulator(),
-				null);
+				null, null);
 	}
 
 	private ChatResponse map(ResponsesStreamEvent event, ReasoningMetadata.Accumulator accumulator,
-			List<ResponsesOutputItem> pending, RefusalMetadata.Accumulator refusal,
-			@Nullable ResponsesOutputState outputState) {
+			List<IndexedItem> pending, RefusalMetadata.Accumulator refusal, @Nullable ResponsesOutputState outputState,
+			@Nullable ResponsesStreamParts parts) {
 		validateEvent(event);
 		String type = event.type();
 		ResponsesResult result = terminalResult(event);
 		String nativeFinishReason = FinishReasonMapper.responses(result, null);
 		String status = result != null ? result.status() : null;
-		List<AssistantMessage.ToolCall> toolCalls = toolCalls(event, result, pending, status);
+		List<IndexedItem> toolCalls = ResponsesStreamParts.toolCalls(event, result, pending, status, this.sanitizer);
 		String finishReason = toolCalls.isEmpty() ? nativeFinishReason : "tool_calls";
-		String reasoning = "response.reasoning_text.delta".equals(type)
-				|| "response.reasoning_summary_text.delta".equals(type) ? event.delta() : null;
+		boolean summary = "response.reasoning_summary_text.delta".equals(type);
+		String reasoning = "response.reasoning_text.delta".equals(type) || summary ? event.delta() : null;
 		Map<String, Object> snapshot = reasoning(event, result, reasoning, accumulator);
 		RefusalMetadata.put(snapshot, refusal.update(event));
 		// Process item images before text reconciliation, as in the wire event order.
 		List<Media> media = itemMedia(event, outputState);
-		String text = text(event, result, outputState);
+		Map<Integer, String> text = text(event, result, outputState);
 		var output = result != null ? result.output() : null;
 		if (output != null && outputState != null) {
 			media = terminalMedia(output, outputState);
 		}
 
+		List<MessagePart> messageParts = parts != null ? parts.map(event, reasoning, summary, text, output, toolCalls)
+				: ResponsesStreamParts.unindexed(reasoning, summary, text, toolCalls);
+		// Media is not indexed, as in Spring AI: the aggregator does not carry it.
+		media.forEach(medium -> messageParts.add(MediaPart.of(medium)));
 		AssistantMessage assistantMessage = AssistantMessage.builder()
+			.parts(MessageParts.orEmptyText(messageParts))
 			.properties(snapshot)
-			.content(text)
-			.toolCalls(toolCalls)
-			.media(media)
 			.build();
-		ChatGenerationMetadata generationMetadata = EMPTY_GENERATION_METADATA;
-		if (outputState == null || result != null || !snapshot.isEmpty()) {
-			ChatGenerationMetadata.Builder generationMetadataBuilder = ChatGenerationMetadata.builder();
-			generationMetadataBuilder.finishReason(FinishReasonMapper.map(finishReason));
-			ResponseValues.ifPresent(nativeFinishReason,
-					value -> generationMetadataBuilder.metadata(OpenRouterMetadata.NATIVE_FINISH_REASON, value));
-			ResponseValues.ifPresent(status,
-					value -> generationMetadataBuilder.metadata(OpenRouterMetadata.RESPONSES_STATUS, value));
-			ResponseValues.ifPresent(result,
-					terminal -> ResponseValues.ifPresent(terminal.incompleteDetails(),
-							value -> generationMetadataBuilder.metadata(OpenRouterMetadata.RESPONSES_INCOMPLETE_DETAILS,
-									value)));
-			ResponseValues.ifPresent(snapshot.get(RefusalMetadata.REFUSAL),
-					value -> generationMetadataBuilder.metadata(RefusalMetadata.REFUSAL, value));
-			ResponseValues.ifPresent(reasoning,
-					value -> generationMetadataBuilder.metadata(OpenRouterMetadata.REASONING, value));
-			generationMetadata = generationMetadataBuilder.build();
-		}
+		ChatGenerationMetadata generationMetadata = outputState == null || result != null || !snapshot.isEmpty()
+				? generationMetadata(result, finishReason, nativeFinishReason, snapshot, reasoning)
+				: EMPTY_GENERATION_METADATA;
 		ChatResponseMetadata.Builder responseMetadata = ChatResponseMetadata.builder();
 		responseMetadata.keyValue(OpenRouterMetadata.OBJECT, type);
+		String responseId = parts != null ? parts.responseId() : null;
 		if (result != null) {
 			ResponseValues.ifPresent(result.id(), responseMetadata::id);
 			ResponseValues.ifPresent(result.model(), responseMetadata::model);
 			ResponseValues.ifPresent(UsageMapper.map(result.usage()), responseMetadata::usage);
 		}
+		// The aggregator groups indexed parts by response id, so every chunk carries it.
+		ResponseValues.ifPresent(responseId, responseMetadata::id);
 		return new ChatResponse(List.of(new Generation(assistantMessage, generationMetadata)),
 				responseMetadata.build());
+	}
+
+	private static ChatGenerationMetadata generationMetadata(@Nullable ResponsesResult result,
+			@Nullable String finishReason, @Nullable String nativeFinishReason, Map<String, Object> snapshot,
+			@Nullable String reasoning) {
+		ChatGenerationMetadata.Builder generationMetadataBuilder = ChatGenerationMetadata.builder();
+		generationMetadataBuilder.finishReason(FinishReasonMapper.map(finishReason));
+		if (result != null) {
+			generationMetadataBuilder
+				.finishReasonCategory(FinishReasonMapper.category(snapshot.get(RefusalMetadata.REFUSAL)));
+			ResponseValues.ifPresent(result.status(),
+					value -> generationMetadataBuilder.metadata(OpenRouterMetadata.RESPONSES_STATUS, value));
+			ResponseValues.ifPresent(result.incompleteDetails(), value -> generationMetadataBuilder
+				.metadata(OpenRouterMetadata.RESPONSES_INCOMPLETE_DETAILS, value));
+		}
+		ResponseValues.ifPresent(nativeFinishReason,
+				value -> generationMetadataBuilder.metadata(OpenRouterMetadata.NATIVE_FINISH_REASON, value));
+		ResponseValues.ifPresent(snapshot.get(RefusalMetadata.REFUSAL),
+				value -> generationMetadataBuilder.metadata(RefusalMetadata.REFUSAL, value));
+		ResponseValues.ifPresent(reasoning,
+				value -> generationMetadataBuilder.metadata(ReasoningMetadata.REASONING, value));
+		return generationMetadataBuilder.build();
 	}
 
 	private void validateEvent(ResponsesStreamEvent event) {
@@ -148,35 +171,6 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 		return result;
 	}
 
-	private List<AssistantMessage.ToolCall> toolCalls(ResponsesStreamEvent event, @Nullable ResponsesResult result,
-			List<ResponsesOutputItem> pending, @Nullable String status) {
-		var item = event.item();
-		if (OUTPUT_ITEM_DONE.equals(event.type()) && item != null && "function_call".equals(item.type())) {
-			// A later incomplete item or response must prevent every callback in the
-			// round.
-			pending.add(item);
-		}
-		if (result == null) {
-			return List.of();
-		}
-		var details = result.incompleteDetails();
-		String reason = details != null ? details.reason() : null;
-		List<AssistantMessage.ToolCall> calls = OpenRouterResponsesResponseMapper.toolCalls(status, reason, pending,
-				this.sanitizer);
-		var output = result.output();
-		if (output != null) {
-			// Validate both representations: a snapshot cannot erase a non-final item
-			// status.
-			List<AssistantMessage.ToolCall> terminal = OpenRouterResponsesResponseMapper.toolCalls(status, reason,
-					output, this.sanitizer);
-			if (!terminal.isEmpty()) {
-				calls = terminal;
-			}
-		}
-		pending.clear();
-		return calls;
-	}
-
 	private Map<String, Object> reasoning(ResponsesStreamEvent event, @Nullable ResponsesResult result,
 			@Nullable String reasoning, ReasoningMetadata.Accumulator accumulator) {
 		Map<String, Object> metadata = ReasoningMetadata.chat(reasoning, null);
@@ -190,23 +184,25 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 		return output != null ? accumulator.replace(ReasoningMetadata.responses(output)) : snapshot;
 	}
 
-	private String text(ResponsesStreamEvent event, @Nullable ResponsesResult result,
+	// The released text by output index.
+	private Map<Integer, String> text(ResponsesStreamEvent event, @Nullable ResponsesResult result,
 			@Nullable ResponsesOutputState state) {
 		var output = result != null ? result.output() : null;
 		if (output != null) {
-			return state != null ? state.terminal(output) : OpenRouterResponsesResponseMapper.text(output);
+			return state != null ? state.terminal(output) : Map.of(0, OpenRouterResponsesResponseMapper.text(output));
 		}
 		if ("response.output_text.delta".equals(event.type())) {
-			return state != null ? state.delta(event) : event.delta() != null ? event.delta() : "";
+			return state != null ? state.delta(event)
+					: Map.of(0, event.delta() != null ? Objects.requireNonNull(event.delta()) : "");
 		}
 		if (state == null) {
-			return "";
+			return Map.of();
 		}
 		if ("response.output_text.done".equals(event.type())) {
 			return state.done(event);
 		}
 		var item = event.item();
-		return OUTPUT_ITEM_DONE.equals(event.type()) && item != null ? state.item(item, event.outputIndex()) : "";
+		return OUTPUT_ITEM_DONE.equals(event.type()) && item != null ? state.item(item, event.outputIndex()) : Map.of();
 	}
 
 	private List<Media> itemMedia(ResponsesStreamEvent event, @Nullable ResponsesOutputState state) {
@@ -256,15 +252,17 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 
 		private final ReasoningMetadata.Accumulator reasoning = new ReasoningMetadata.Accumulator();
 
-		private final List<ResponsesOutputItem> pending = new ArrayList<>();
+		private final List<IndexedItem> pending = new ArrayList<>();
 
 		private final RefusalMetadata.Accumulator refusal = new RefusalMetadata.Accumulator();
 
 		private final ResponsesOutputState output = new ResponsesOutputState();
 
+		private final ResponsesStreamParts parts = new ResponsesStreamParts();
+
 		private synchronized ChatResponse map(ResponsesStreamEvent event) {
 			return OpenRouterResponsesStreamingResponseMapper.this.map(event, this.reasoning, this.pending,
-					this.refusal, this.output);
+					this.refusal, this.output, this.parts);
 		}
 
 		private synchronized Mono<ChatResponse> complete() {
@@ -277,6 +275,7 @@ public final class OpenRouterResponsesStreamingResponseMapper {
 			this.reasoning.clear();
 			this.refusal.clear();
 			this.output.clear();
+			this.parts.clear();
 		}
 
 	}

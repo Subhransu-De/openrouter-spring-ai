@@ -11,11 +11,13 @@ import de.subhransu.openrouter.springai.errors.OpenRouterDiagnosticSanitizer;
 import de.subhransu.openrouter.springai.errors.OpenRouterNonTransientApiException;
 import de.subhransu.openrouter.springai.errors.OpenRouterProtocolException;
 import de.subhransu.openrouter.springai.errors.OpenRouterTruncatedResponseException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import org.jspecify.annotations.Nullable;
 import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.part.MessagePart;
 import org.springframework.ai.chat.metadata.ChatGenerationMetadata;
 import org.springframework.ai.chat.metadata.ChatResponseMetadata;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -43,15 +45,15 @@ public final class OpenRouterResponsesResponseMapper {
 		Map<String, Object> properties = ReasoningMetadata.responses(response.output());
 		RefusalMetadata.put(properties, RefusalMetadata.responses(response.output()));
 		AssistantMessage assistantMessage = AssistantMessage.builder()
-			.content(text(response.output()))
+			.parts(parts(response.output()))
 			.properties(properties)
-			.toolCalls(toolCalls)
-			.media(GeneratedImageMapper.responsesMedia(response.output()))
 			.build();
 		String nativeReason = FinishReasonMapper.responses(response, response.status());
 		String finishReason = toolCalls.isEmpty() ? FinishReasonMapper.map(nativeReason) : "TOOL_CALLS";
 		ChatGenerationMetadata.Builder generationMetadataBuilder = ChatGenerationMetadata.builder();
 		generationMetadataBuilder.finishReason(finishReason);
+		generationMetadataBuilder
+			.finishReasonCategory(FinishReasonMapper.category(properties.get(RefusalMetadata.REFUSAL)));
 		ResponseValues.ifPresent(nativeReason,
 				value -> generationMetadataBuilder.metadata(OpenRouterMetadata.NATIVE_FINISH_REASON, value));
 		ResponseValues.ifPresent(response.status(),
@@ -125,12 +127,25 @@ public final class OpenRouterResponsesResponseMapper {
 						+ ", incomplete reason=" + sanitizer.sanitize(reason));
 			}
 		}
-		return calls.stream()
-			.map(item -> new AssistantMessage.ToolCall(
-					ResponseValues.RESPONSES.requiredText(item.callId(), "tool call id"), "function",
-					ResponseValues.RESPONSES.requiredText(item.name(), "tool call name"),
-					ResponseValues.RESPONSES.required(item.arguments(), "tool call arguments")))
-			.toList();
+		return calls.stream().map(OpenRouterResponsesResponseMapper::toolCall).toList();
+	}
+
+	static AssistantMessage.ToolCall toolCall(ResponsesOutputItem item) {
+		return new AssistantMessage.ToolCall(ResponseValues.RESPONSES.requiredText(item.callId(), "tool call id"),
+				"function", ResponseValues.RESPONSES.requiredText(item.name(), "tool call name"),
+				ResponseValues.RESPONSES.required(item.arguments(), "tool call arguments"));
+	}
+
+	// One part per output item, in output order, so replay keeps the transcript order.
+	static List<MessagePart> parts(@Nullable List<? extends @Nullable ResponsesOutputItem> output) {
+		List<MessagePart> parts = new ArrayList<>();
+		for (ResponsesOutputItem item : ResponseValues.RESPONSES.<ResponsesOutputItem>items(output, "output item")) {
+			MessagePart part = MessageParts.responses(item);
+			if (part != null) {
+				parts.add(part);
+			}
+		}
+		return MessageParts.orEmptyText(parts);
 	}
 
 	static String text(@Nullable List<? extends @Nullable ResponsesOutputItem> output) {

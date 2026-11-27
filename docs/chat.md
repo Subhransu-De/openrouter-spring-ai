@@ -22,6 +22,8 @@ Text arrives as server-sent events.
 Flux<String> tokens = chatClient.prompt().user("Tell a short story.").stream().content();
 ```
 
+Chunks follow Spring AI's streaming contract for message parts: every chunk carries the response id, and reasoning, text and tool-call argument deltas are partial parts with a part index. Spring AI's `MessageAggregator` rebuilds the message that `call()` returns. A partial `ToolCallPart` only shows a call while the model writes it; it is not a tool call, and the complete call follows once, at the same index. Streamed media stays on its chunk, as in Spring AI's own models.
+
 ### Per-request options
 
 Unset fields keep the defaults.
@@ -63,7 +65,7 @@ Answer answer =
 
 ### Reasoning
 
-Read the model's thinking separately.
+Reasoning is a `ReasoningPart` of the assistant message, in order with the text and tool calls.
 
 ```java
 ChatResponse response =
@@ -78,8 +80,18 @@ ChatResponse response =
                         .build()))
         .call()
         .chatResponse();
-String thinking = OpenRouterMetadata.reasoning(response.getResult()).orElse("");
+String thinking =
+    response.getResult().getOutput().getReasoning().stream()
+        .map(ReasoningPart::text)
+        .filter(Objects::nonNull)
+        .collect(Collectors.joining());
 ```
+
+The part's payload holds what the provider needs on the next turn: the `reasoning_details` in Chat Completions mode, signatures and encrypted entries included, or the reasoning output item in Responses mode. Send the assistant message back as it is, for example through Spring AI session memory, and the library replays the reasoning unchanged, which Anthropic and Gemini models need for tool loops.
+
+- Reasoning that another provider signed is not replayed, as in Spring AI's OpenAI models. In Chat Completions mode, unsigned reasoning text from anywhere is sent as `reasoning`. Responses mode only replays reasoning that it produced.
+- A message without reasoning parts, such as one stored by 0.3.0, replays the `openrouter.reasoning*` and `openrouter.responses.*` metadata keys. Those keys are still written in 0.4.0, but are deprecated.
+- A refusal comes with an ordinary `stop` finish reason, so the library reports its finish reason category as `FILTERED`.
 
 ## Tools
 
@@ -130,6 +142,8 @@ String answer =
         .call()
         .content();
 ```
+
+Each output item becomes one part, in order, and carries the item, so an assistant message replays its reasoning, messages and calls verbatim. Server-side items such as a web search call are kept as an `UnknownPart` and replayed too. A text or tool call part that you replace is rebuilt instead.
 
 ### Log probabilities
 

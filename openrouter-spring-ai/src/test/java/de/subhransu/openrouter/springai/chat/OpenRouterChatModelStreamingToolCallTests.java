@@ -93,7 +93,7 @@ class OpenRouterChatModelStreamingToolCallTests {
 			.openRouterApi(api)
 			.toolCallAggregationMaxChunks(1300)
 			.build();
-		StepVerifier.create(model.stream(new Prompt("synthetic request"))).assertNext(response -> {
+		StepVerifier.create(ToolCallDeltas.skip(model.stream(new Prompt("synthetic request")))).assertNext(response -> {
 			assertThat(response.getResult().getOutput().getToolCalls()).hasSize(toolCount).allSatisfy(call -> {
 				assertThat(call.arguments()).isEqualTo(arguments);
 				assertThat(call.name()).startsWith("lookup_");

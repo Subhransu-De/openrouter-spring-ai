@@ -1,6 +1,7 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
 import org.jspecify.annotations.Nullable;
+import org.springframework.ai.chat.metadata.FinishReasonCategory;
 import org.springframework.util.StringUtils;
 import de.subhransu.openrouter.springai.api.dto.ResponsesResult;
 
@@ -17,6 +18,16 @@ final class FinishReasonMapper {
 		String status = response != null && response.status() != null ? response.status() : fallbackStatus;
 		var details = response != null ? response.incompleteDetails() : null;
 		return "incomplete".equals(status) && details != null && details.reason() != null ? details.reason() : status;
+	}
+
+	/**
+	 * A refusal comes with an ordinary {@code stop}, which Spring AI would read as
+	 * {@link FinishReasonCategory#COMPLETED}; like {@code OpenAiChatModel}, report it as
+	 * {@link FinishReasonCategory#FILTERED}. {@code null} derives the category from the
+	 * finish reason.
+	 */
+	static @Nullable FinishReasonCategory category(@Nullable Object refusal) {
+		return refusal instanceof String text && StringUtils.hasText(text) ? FinishReasonCategory.FILTERED : null;
 	}
 
 	static @Nullable String map(@Nullable String finishReason) {

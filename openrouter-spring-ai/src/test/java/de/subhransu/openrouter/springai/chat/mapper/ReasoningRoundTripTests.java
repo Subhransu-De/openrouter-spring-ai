@@ -177,7 +177,11 @@ class ReasoningRoundTripTests {
 					null, null, null, null, null, null, 1, 0));
 		}
 		Flux<ResponsesStreamEvent> stream = events
-			.concatWithValues(new ResponsesStreamEvent("response.completed", null, null, wire, null));
+			.concatWithValues(new ResponsesStreamEvent("response.completed", null, null, wire, null))
+			// The wire opens every stream with the response id.
+			.startWith(this.mapper.readValue(
+					"{\"type\":\"response.created\",\"response\":{\"id\":\"resp_1\",\"status\":\"in_progress\"}}",
+					ResponsesStreamEvent.class));
 		AtomicReference<ChatResponse> result = new AtomicReference<>();
 		new MessageAggregator().aggregate(new OpenRouterResponsesStreamingResponseMapper().map(stream), result::set)
 			.blockLast();

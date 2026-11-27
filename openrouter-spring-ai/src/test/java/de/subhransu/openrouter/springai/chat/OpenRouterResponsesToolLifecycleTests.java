@@ -101,8 +101,6 @@ class OpenRouterResponsesToolLifecycleTests {
 		else {
 			verify(this.api, times(2)).responses(requests.capture());
 		}
-		assertThat((List<?>) requests.getAllValues().get(1).input())
-			.anySatisfy(item -> assertThat(item).isEqualTo(reasoning));
 		var mapper = JsonMapper.builder().build();
 		var input = mapper.readTree(mapper.writeValueAsString(requests.getAllValues().get(1))).get("input");
 		assertThat(input.get(1)).isEqualTo(mapper.valueToTree(reasoning));

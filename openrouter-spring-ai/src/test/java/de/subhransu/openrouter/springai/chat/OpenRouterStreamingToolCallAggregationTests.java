@@ -91,7 +91,9 @@ class OpenRouterStreamingToolCallAggregationTests {
 			.thenReturn(Flux.just(chunk(toolFragmentChoice(0, "call-1", WEATHER_TOOL, "{\"city\":")),
 					chunk(toolFragmentChoice(0, null, null, "\"Berlin\"}")), chunk(finishChoice("tool_calls"))));
 
-		List<ChatResponse> responses = model(api).stream(prompt()).collectList().block(Duration.ofSeconds(5));
+		List<ChatResponse> responses = ToolCallDeltas.skip(model(api).stream(prompt()))
+			.collectList()
+			.block(Duration.ofSeconds(5));
 
 		assertThat(responses).hasSize(1);
 		ChatResponse merged = responses.get(0);
@@ -114,7 +116,9 @@ class OpenRouterStreamingToolCallAggregationTests {
 					chunk(toolFragmentChoice(0, null, null, "\"Berlin\"}")),
 					chunk(toolFragmentChoice(1, null, null, "\"UTC\"}")), chunk(finishChoice("tool_calls"))));
 
-		List<ChatResponse> responses = model(api).stream(prompt()).collectList().block(Duration.ofSeconds(5));
+		List<ChatResponse> responses = ToolCallDeltas.skip(model(api).stream(prompt()))
+			.collectList()
+			.block(Duration.ofSeconds(5));
 
 		assertThat(responses).hasSize(1);
 		List<AssistantMessage.ToolCall> toolCalls = responses.get(0).getResult().getOutput().getToolCalls();
@@ -134,7 +138,9 @@ class OpenRouterStreamingToolCallAggregationTests {
 			.thenReturn(Flux.just(chunk(textChoice("Let me ")), chunk(textChoice("check.")),
 					chunk(toolFragmentChoice(0, "call-1", WEATHER_TOOL, "{}")), chunk(finishChoice("tool_calls"))));
 
-		List<ChatResponse> responses = model(api).stream(prompt()).collectList().block(Duration.ofSeconds(5));
+		List<ChatResponse> responses = ToolCallDeltas.skip(model(api).stream(prompt()))
+			.collectList()
+			.block(Duration.ofSeconds(5));
 
 		// Text still streams chunk-by-chunk; only the tool-call fragments collapse.
 		assertThat(responses).hasSize(3);
@@ -154,7 +160,9 @@ class OpenRouterStreamingToolCallAggregationTests {
 			.thenReturn(Flux.just(chunk(toolFragmentChoice(0, "call-1", WEATHER_TOOL, "{}")),
 					chunk(finishChoice("tool_calls")), usageChunk));
 
-		List<ChatResponse> responses = model(api).stream(prompt()).collectList().block(Duration.ofSeconds(5));
+		List<ChatResponse> responses = ToolCallDeltas.skip(model(api).stream(prompt()))
+			.collectList()
+			.block(Duration.ofSeconds(5));
 
 		assertThat(responses).hasSize(2);
 		assertThat(responses.get(0).hasToolCalls()).isTrue();
@@ -176,7 +184,9 @@ class OpenRouterStreamingToolCallAggregationTests {
 		when(api.chatCompletionStream(any()))
 			.thenReturn(Flux.just(chunk(idFragment), chunk(continuationFragment), chunk(finishChoice("tool_calls"))));
 
-		List<ChatResponse> responses = model(api).stream(prompt()).collectList().block(Duration.ofSeconds(5));
+		List<ChatResponse> responses = ToolCallDeltas.skip(model(api).stream(prompt()))
+			.collectList()
+			.block(Duration.ofSeconds(5));
 
 		assertThat(responses).hasSize(1);
 		List<AssistantMessage.ToolCall> toolCalls = responses.get(0).getResult().getOutput().getToolCalls();
@@ -222,7 +232,7 @@ class OpenRouterStreamingToolCallAggregationTests {
 		OpenRouterApi api = mock(OpenRouterApi.class);
 		when(api.chatCompletionStream(any())).thenReturn(fragmentedToolCall(arguments, 4));
 
-		StepVerifier.create(model(api).stream(prompt())).assertNext(response -> {
+		StepVerifier.create(ToolCallDeltas.skip(model(api).stream(prompt()))).assertNext(response -> {
 			AssistantMessage.ToolCall toolCall = response.getResult().getOutput().getToolCalls().get(0);
 			assertThat(toolCall.name()).isEqualTo(WEATHER_TOOL);
 			assertThat(toolCall.arguments()).isEqualTo(arguments);
@@ -263,7 +273,7 @@ class OpenRouterStreamingToolCallAggregationTests {
 		OpenRouterApi api = mock(OpenRouterApi.class);
 		when(api.chatCompletionStream(any())).thenReturn(fragmentedToolCall(noteArguments(1_200_000), 4_000));
 
-		StepVerifier.create(model(api).stream(prompt()))
+		StepVerifier.create(ToolCallDeltas.skip(model(api).stream(prompt())))
 			.expectErrorSatisfies(error -> assertThat(error)
 				.isInstanceOfSatisfying(OpenRouterLimitExceededException.class, failure -> {
 					assertThat(failure.getLimit()).isEqualTo(Limit.STREAMING_TOOL_CALL_BYTES);
@@ -286,7 +296,7 @@ class OpenRouterStreamingToolCallAggregationTests {
 					null, null))
 			.concatWith(Flux.just(chunk(finishChoice("tool_calls")))));
 
-		StepVerifier.create(model(api).stream(prompt()))
+		StepVerifier.create(ToolCallDeltas.skip(model(api).stream(prompt())))
 			.expectErrorSatisfies(error -> assertThat(error)
 				.isInstanceOfSatisfying(OpenRouterLimitExceededException.class, failure -> {
 					assertThat(failure.getLimit()).isEqualTo(Limit.STREAMING_TOOL_CALL_CHUNKS);
@@ -308,7 +318,7 @@ class OpenRouterStreamingToolCallAggregationTests {
 					wireChunk("{\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}],"
 							+ "\"usage\":{\"total_tokens\":15,\"cost\":0.2},\"marker\":\"newer\"}")));
 
-		StepVerifier.create(model(api).stream(prompt())).assertNext(response -> {
+		StepVerifier.create(ToolCallDeltas.skip(model(api).stream(prompt()))).assertNext(response -> {
 			assertThat(response.hasToolCalls()).isTrue();
 			assertUsage(response, 15, 0.2);
 			assertThat(responseExtensions(response)).containsEntry("marker", "newer");
@@ -327,7 +337,7 @@ class OpenRouterStreamingToolCallAggregationTests {
 				wireChunk("{\"choices\":[],\"usage\":{\"total_tokens\":12,\"cost\":0.1},\"marker\":\"newer\"}"),
 				chunk(finishChoice("tool_calls"))));
 
-		StepVerifier.create(model(api).stream(prompt())).assertNext(response -> {
+		StepVerifier.create(ToolCallDeltas.skip(model(api).stream(prompt()))).assertNext(response -> {
 			assertThat(response.hasToolCalls()).isTrue();
 			assertUsage(response, 12, 0.1);
 			assertThat(responseExtensions(response)).containsEntry("marker", "newer");
@@ -344,7 +354,9 @@ class OpenRouterStreamingToolCallAggregationTests {
 				wireChunk("{\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],"
 						+ "\"usage\":{\"total_tokens\":15,\"cost\":0.2}}")));
 
-		List<ChatResponse> responses = model(api).stream(prompt()).collectList().block(Duration.ofSeconds(5));
+		List<ChatResponse> responses = ToolCallDeltas.skip(model(api).stream(prompt()))
+			.collectList()
+			.block(Duration.ofSeconds(5));
 
 		assertThat(responses).filteredOn(response -> response.getMetadata().getUsage() instanceof OpenRouterUsage)
 			.last()
@@ -384,7 +396,9 @@ class OpenRouterStreamingToolCallAggregationTests {
 			.observationRegistry(observationRegistry)
 			.build();
 
-		List<ChatResponse> responses = model.stream(prompt()).collectList().block(Duration.ofSeconds(5));
+		List<ChatResponse> responses = ToolCallDeltas.skip(model.stream(prompt()))
+			.collectList()
+			.block(Duration.ofSeconds(5));
 
 		assertThat(responses).flatExtracting(ChatResponse::getResults)
 			.extracting(generation -> generation.getMetadata().<Integer>get("openrouter.choice_index"))

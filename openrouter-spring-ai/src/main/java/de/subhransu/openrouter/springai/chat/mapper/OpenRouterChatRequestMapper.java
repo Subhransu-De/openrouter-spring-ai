@@ -1,6 +1,13 @@
 package de.subhransu.openrouter.springai.chat.mapper;
 
 import org.jspecify.annotations.Nullable;
+import org.springframework.ai.chat.messages.part.MediaPart;
+import org.springframework.ai.chat.messages.part.MessagePart;
+import org.springframework.ai.chat.messages.part.OpaquePayload;
+import org.springframework.ai.chat.messages.part.ReasoningPart;
+import org.springframework.ai.chat.messages.part.StreamingParts;
+import org.springframework.ai.chat.messages.part.TextPart;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import de.subhransu.openrouter.springai.api.dto.AudioConfig;
 import de.subhransu.openrouter.springai.api.dto.ChatCompletionRequest;
@@ -100,15 +107,61 @@ public final class OpenRouterChatRequestMapper {
 				}
 				continue;
 			}
+			Reasoning reasoning = message instanceof AssistantMessage assistant ? reasoning(assistant)
+					: new Reasoning(null, null);
 			mapped.add(new ChatMessage(mapRole(message.getMessageType()), mapContent(message), null, null,
-					mapAssistantToolCalls(message), mapAssistantImages(message),
-					message instanceof AssistantMessage
-							? (String) message.getMetadata().get(ReasoningMetadata.REASONING) : null,
-					message instanceof AssistantMessage ? ReasoningMetadata.details(message.getMetadata()) : null,
+					mapAssistantToolCalls(message), mapAssistantImages(message), reasoning.text(), reasoning.details(),
 					message instanceof AssistantMessage ? (String) message.getMetadata().get(RefusalMetadata.REFUSAL)
 							: null));
 		}
 		return mapped;
+	}
+
+	/**
+	 * The reasoning to send back with an assistant message: the text of its reasoning
+	 * parts and the {@code reasoning_details} of their Chat Completions payloads. When
+	 * another provider signed any of the parts, none is sent, as in Spring AI's
+	 * {@code OpenAiChatModel}: signed reasoning is only valid with its payload, which
+	 * this API cannot carry. A message without reasoning parts, such as one stored by
+	 * 0.3.0, falls back to the legacy metadata keys.
+	 */
+	private Reasoning reasoning(AssistantMessage message) {
+		List<ReasoningPart> parts = message.getReasoning()
+			.stream()
+			.filter(part -> !StreamingParts.isPartial(part))
+			.toList();
+		if (parts.isEmpty()) {
+			Object text = message.getMetadata().get(ReasoningMetadata.REASONING);
+			Object details = ReasoningMetadata.details(message.getMetadata());
+			return new Reasoning(text instanceof String value ? value : null,
+					details != null ? jsonList(details) : null);
+		}
+		if (parts.stream().anyMatch(part -> part.payload() != null && !MessageParts.isChatPayload(part.payload()))) {
+			return new Reasoning(null, null);
+		}
+		StringBuilder text = new StringBuilder();
+		List<@Nullable JsonNode> details = new ArrayList<>();
+		for (ReasoningPart part : parts) {
+			if (part.text() != null) {
+				text.append(part.text());
+			}
+			OpaquePayload payload = part.payload();
+			if (payload != null) {
+				details.addAll(jsonList(this.objectMapper.readTree(payload.data())));
+			}
+		}
+		return new Reasoning(text.isEmpty() ? null : text.toString(), details.isEmpty() ? null : details);
+	}
+
+	// Stored messages hold Jackson nodes, or plain maps and lists after a JSON round
+	// trip.
+	private List<@Nullable JsonNode> jsonList(Object value) {
+		JsonNode node = this.objectMapper.valueToTree(value);
+		List<@Nullable JsonNode> items = new ArrayList<>();
+		if (node.isArray()) {
+			node.forEach(items::add);
+		}
+		return items;
 	}
 
 	// Unmarked text-only messages keep the plain-string content shape. Cache
@@ -126,12 +179,15 @@ public final class OpenRouterChatRequestMapper {
 		if (!(message instanceof UserMessage userMessage) || CollectionUtils.isEmpty(userMessage.getMedia())) {
 			return message.getText();
 		}
+		// Text and media keep their order in the message.
 		List<ContentPart> parts = new ArrayList<>();
-		if (StringUtils.hasText(userMessage.getText())) {
-			parts.add(ContentPart.text(userMessage.getText()));
-		}
-		for (Media media : userMessage.getMedia()) {
-			parts.add(MediaContentMapper.chat(media));
+		for (MessagePart part : userMessage.getParts()) {
+			if (part instanceof TextPart text && StringUtils.hasText(text.text())) {
+				parts.add(ContentPart.text(text.text()));
+			}
+			else if (part instanceof MediaPart media) {
+				parts.add(MediaContentMapper.chat(media.media()));
+			}
 		}
 		return parts;
 	}
@@ -196,6 +252,9 @@ public final class OpenRouterChatRequestMapper {
 		}
 		return new ReasoningOptions(reasoning.effort(), reasoning.maxTokens(), reasoning.exclude(),
 				reasoning.enabled());
+	}
+
+	private record Reasoning(@Nullable String text, @Nullable List<@Nullable JsonNode> details) {
 	}
 
 }

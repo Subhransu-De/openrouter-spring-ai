@@ -12,6 +12,7 @@ dependencies {
 
 	testImplementation("org.jetbrains.kotlin:kotlin-compiler-embeddable")
 	testImplementation("org.springframework.ai:spring-ai-client-chat")
+	testImplementation("org.springframework.ai:spring-ai-session")
 	testImplementation("io.micrometer:micrometer-observation-test")
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
 	testImplementation("ch.qos.logback:logback-classic")
